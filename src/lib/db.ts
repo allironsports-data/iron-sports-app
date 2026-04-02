@@ -22,11 +22,9 @@ function dbToPlayer(row: Record<string, unknown>): Player {
       const raw = (row.info as Record<string, unknown>) ?? {}
       return {
         family: (raw.family as string) ?? '',
-        languages: Array.isArray(raw.languages) ? raw.languages as string[] : [],
         personality: (raw.personality as string) ?? '',
-        interests: (raw.interests as string) ?? '',
-        location: (raw.location as string) ?? '',
-        notes: (raw.notes as string) ?? '',
+        phone: (raw.phone as string) ?? '',
+        passportUrl: (raw.passportUrl as string) ?? '',
       }
     })(),
   }
@@ -47,6 +45,17 @@ function playerToDb(p: Partial<Player>) {
     contract_history: p.contractHistory,
     info: p.info,
   }
+}
+
+// ── PASSPORT UPLOAD ──────────────────────────────────────────
+
+export async function uploadPassport(playerId: string, file: File): Promise<string> {
+  const ext = file.name.split('.').pop()
+  const path = `passports/${playerId}.${ext}`
+  const { error } = await supabase.storage.from('attachments').upload(path, file, { upsert: true })
+  if (error) throw error
+  const { data } = supabase.storage.from('attachments').getPublicUrl(path)
+  return data.publicUrl
 }
 
 // ── PLAYERS ──────────────────────────────────────────────────

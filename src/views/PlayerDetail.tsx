@@ -133,6 +133,11 @@ export function PlayerDetail({
                     Partner: {player.partner}
                   </span>
                 )}
+                {player.info.phone && (
+                  <a href={`tel:${player.info.phone}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100">
+                    📞 {player.info.phone}
+                  </a>
+                )}
               </div>
             </div>
           </div>
@@ -656,18 +661,14 @@ function ContractTab({ player, onUpdate }: { player: Player; onUpdate: (p: Playe
                 const file = e.target.files?.[0];
                 if (!file) return;
                 const reader = new FileReader();
-                reader.onload = (ev) => {
-                  const base64 = (ev.target?.result as string).split(",")[1];
+                reader.onload = (_ev) => {
                   onUpdate({
                     ...player,
                     clubContract: {
                       ...player.clubContract,
                       notes: (player.clubContract.notes || "") + `\n[PDF: ${file.name}]`,
                     },
-                    info: {
-                      ...player.info,
-                      notes: player.info.notes + `\n__CONTRACT_PDF__${file.name}__${base64}`,
-                    },
+                    info: { ...player.info },
                   });
                 };
                 reader.readAsDataURL(file);
@@ -885,35 +886,45 @@ function AddPerformanceModal({ profiles, onClose, onAdd }: {
 function InfoTab({ player, onUpdate }: { player: Player; onUpdate: (p: Player) => void }) {
   const [editing, setEditing] = useState(false);
   const [info, setInfo] = useState(player.info);
+  const [uploading, setUploading] = useState(false);
+  const passportRef = useRef<HTMLInputElement>(null);
+
+  const handlePassportUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const { uploadPassport } = await import('../lib/db');
+      const url = await uploadPassport(player.id, file);
+      const updated = { ...player, info: { ...player.info, passportUrl: url } };
+      onUpdate(updated);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   if (editing) {
     return (
       <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-slate-800">Editar información personal</h3>
+          <h3 className="text-sm font-semibold text-slate-800">Editar info / entorno</h3>
           <div className="flex gap-2">
             <button onClick={() => setEditing(false)} className="text-xs px-3 py-1.5 rounded border border-slate-200 text-slate-500">Cancelar</button>
             <button onClick={() => { onUpdate({ ...player, info }); setEditing(false); }}
               className="text-xs px-3 py-1.5 rounded text-white" style={{ background: PRIMARY }}>Guardar</button>
           </div>
         </div>
+        <TF label="Teléfono" value={info.phone ?? ''} onChange={(v) => setInfo({ ...info, phone: v })} />
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">Familia</label>
-          <textarea value={info.family} onChange={(e) => setInfo({ ...info, family: e.target.value })} rows={2}
+          <textarea value={info.family} onChange={(e) => setInfo({ ...info, family: e.target.value })} rows={3}
             className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 resize-none" />
         </div>
-        <TF label="Idiomas (separados por coma)" value={info.languages.join(", ")}
-          onChange={(v) => setInfo({ ...info, languages: v.split(",").map((s) => s.trim()).filter(Boolean) })} />
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">Personalidad</label>
-          <textarea value={info.personality} onChange={(e) => setInfo({ ...info, personality: e.target.value })} rows={2}
-            className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 resize-none" />
-        </div>
-        <TF label="Intereses" value={info.interests} onChange={(v) => setInfo({ ...info, interests: v })} />
-        <TF label="Ubicación" value={info.location} onChange={(v) => setInfo({ ...info, location: v })} />
-        <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">Notas internas</label>
-          <textarea value={info.notes} onChange={(e) => setInfo({ ...info, notes: e.target.value })} rows={2}
+          <textarea value={info.personality} onChange={(e) => setInfo({ ...info, personality: e.target.value })} rows={3}
             className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 resize-none" />
         </div>
       </div>
@@ -922,26 +933,49 @@ function InfoTab({ player, onUpdate }: { player: Player; onUpdate: (p: Player) =
 
   const i = player.info;
   return (
-    <div className="bg-white border border-slate-200 rounded-lg p-4">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-slate-800">Información personal y entorno</h3>
+    <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-slate-800">Info / Entorno</h3>
         <button onClick={() => { setInfo(player.info); setEditing(true); }}
           className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700">
           <Edit3 className="w-3 h-3" />Editar
         </button>
       </div>
-      <div className="space-y-4">
-        <IF label="Familia" value={i.family} />
-        <IF label="Idiomas" value={i.languages.length > 0 ? i.languages.join(", ") : "—"} />
-        <IF label="Personalidad" value={i.personality} />
-        <IF label="Intereses" value={i.interests} />
-        <IF label="Ubicación" value={i.location} />
-        {i.notes && (
-          <div className="pt-3 mt-3 border-t border-slate-100">
-            <p className="text-xs font-medium text-slate-500 mb-1">Notas internas</p>
-            <p className="text-sm text-slate-700">{i.notes}</p>
+
+      {/* Phone */}
+      {i.phone && (
+        <div>
+          <p className="text-xs font-medium text-slate-500 mb-0.5">Teléfono</p>
+          <a href={`tel:${i.phone}`} className="text-sm text-blue-600 hover:underline">{i.phone}</a>
+        </div>
+      )}
+
+      <IF label="Familia" value={i.family} />
+      <IF label="Personalidad" value={i.personality} />
+
+      {/* Passport */}
+      <div>
+        <p className="text-xs font-medium text-slate-500 mb-1">Pasaporte</p>
+        {i.passportUrl ? (
+          <div className="flex items-center gap-2">
+            <a href={i.passportUrl} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
+              <Download className="w-3 h-3" /> Ver pasaporte
+            </a>
+            <button onClick={() => passportRef.current?.click()}
+              className="text-xs text-slate-400 hover:text-slate-600">
+              (reemplazar)
+            </button>
           </div>
+        ) : (
+          <button onClick={() => passportRef.current?.click()}
+            disabled={uploading}
+            className="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded border border-slate-200 text-slate-500 hover:text-slate-700 disabled:opacity-50">
+            <Paperclip className="w-3 h-3" />
+            {uploading ? 'Subiendo...' : 'Subir pasaporte (PDF/imagen)'}
+          </button>
         )}
+        <input ref={passportRef} type="file" accept=".pdf,image/*" className="hidden" onChange={handlePassportUpload} />
       </div>
     </div>
   );
@@ -1019,6 +1053,8 @@ function EditPlayerModal({ player, profiles, onClose, onSave }: {
   const [releaseClause, setReleaseClause] = useState(player.clubContract.releaseClause ?? "");
   const [commission, setCommission] = useState(player.clubContract.agentCommission ?? "");
 
+  const [phone, setPhone] = useState(player.info.phone ?? "");
+
   // Clubs
   const [club1, setClub1] = useState(player.clubs[0]?.name ?? "");
   const [club2, setClub2] = useState(player.clubs[1]?.name ?? "");
@@ -1044,6 +1080,7 @@ function EditPlayerModal({ player, profiles, onClose, onSave }: {
       clubs,
       partner: partner || undefined,
       managedBy: [managed1, managed2].filter(Boolean),
+      info: { ...player.info, phone },
       representationContract: { ...player.representationContract, start: reprStart, end: reprEnd },
       clubContract: {
         ...player.clubContract,
@@ -1072,6 +1109,7 @@ function EditPlayerModal({ player, profiles, onClose, onSave }: {
             <EF label="Posición principal" value={pos1} onChange={setPos1} />
             <EF label="Posición secundaria" value={pos2} onChange={setPos2} />
           </div>
+          <EF label="Teléfono" value={phone} onChange={setPhone} type="tel" />
 
           <div className="pt-1 border-t border-slate-100">
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Club(s)</p>

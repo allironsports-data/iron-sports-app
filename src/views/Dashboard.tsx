@@ -372,7 +372,7 @@ function AddPlayerModal({
       },
       contractHistory: [],
       performance: [],
-      info: { family: "", languages: [], personality: "", interests: "", location: "", notes: "" },
+      info: { family: "", personality: "", phone: "", passportUrl: "" },
     });
   };
 

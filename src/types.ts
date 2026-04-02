@@ -79,11 +79,9 @@ export interface PerformanceNote {
 // ---- Player personal info ----
 export interface PlayerInfo {
   family: string;
-  languages: string[];
   personality: string;
-  interests: string;
-  location: string;
-  notes: string;
+  phone?: string;
+  passportUrl?: string; // Supabase Storage path
 }
 
 // ---- Player ----
