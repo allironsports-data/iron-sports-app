@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import logoImg from '../assets/logo.jpg';
+import logoImg from '../assets/logo.jpeg';
 import type {
   Player, Task, TaskComment, TaskAttachment,
   PerformanceNote,

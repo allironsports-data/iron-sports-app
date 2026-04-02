@@ -1,5 +1,5 @@
 import { useState } from "react";
-import logoImg from '../assets/logo.jpg';
+import logoImg from '../assets/logo.jpeg';
 import type { Player, Task } from "../types";
 import { calcAge, clubsLabel } from "../types";
 import type { Profile } from "../contexts/AuthContext";

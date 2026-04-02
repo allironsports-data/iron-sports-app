@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import logoImg from '../assets/logo.jpg'
+import logoImg from '../assets/logo.jpeg'
 import type { Profile } from '../contexts/AuthContext'
 import { updateProfile } from '../lib/db'
 import { supabase } from '../lib/supabase'
