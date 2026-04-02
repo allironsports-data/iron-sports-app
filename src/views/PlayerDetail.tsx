@@ -39,6 +39,7 @@ export function PlayerDetail({
 }: Props) {
   const [activeTab, setActiveTab] = useState<TabId>("tareas");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showEditPlayer, setShowEditPlayer] = useState(false);
 
   const pendingCount = tasks.filter((t) => t.status !== "completada").length;
   const tabs: { id: TabId; label: string; icon: React.ReactNode; count?: number }[] = [
@@ -89,15 +90,24 @@ export function PlayerDetail({
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-2 mb-2">
                 <h1 className="text-lg font-semibold text-slate-900">{player.name}</h1>
-                {onDeletePlayer && currentProfile.is_admin && (
+                <div className="flex items-center gap-2">
                   <button
-                    onClick={() => setShowDeleteConfirm(true)}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
+                    onClick={() => setShowEditPlayer(true)}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-slate-600 hover:bg-slate-100 transition-colors"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    Eliminar
+                    <Edit3 className="w-3.5 h-3.5" />
+                    Editar
                   </button>
-                )}
+                  {onDeletePlayer && currentProfile.is_admin && (
+                    <button
+                      onClick={() => setShowDeleteConfirm(true)}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Eliminar
+                    </button>
+                  )}
+                </div>
               </div>
               <p className="text-sm text-slate-500 mt-0.5">
                 {player.positions.join(" / ")}
@@ -163,6 +173,15 @@ export function PlayerDetail({
           <InfoTab player={player} onUpdate={onUpdatePlayer} />
         )}
       </main>
+
+      {showEditPlayer && (
+        <EditPlayerModal
+          player={player}
+          profiles={profiles}
+          onClose={() => setShowEditPlayer(false)}
+          onSave={(updated) => { onUpdatePlayer(updated); setShowEditPlayer(false); }}
+        />
+      )}
 
       {showDeleteConfirm && onDeletePlayer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
@@ -952,6 +971,158 @@ function TF({ label, value, onChange, type = "text", required = false }: {
       <label className="block text-xs font-medium text-slate-600 mb-1">{label}</label>
       <input type={type} value={value} onChange={(e) => onChange(e.target.value)} required={required}
         className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2" />
+    </div>
+  );
+}
+
+/* ---- Edit Player Modal ---- */
+function EF({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (v: string) => void; type?: string }) {
+  return (
+    <div>
+      <label className="block text-xs font-medium text-slate-600 mb-1">{label}</label>
+      <input type={type} value={value} onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2" />
+    </div>
+  );
+}
+
+function ESel({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: Profile[] }) {
+  return (
+    <div>
+      <label className="block text-xs font-medium text-slate-600 mb-1">{label}</label>
+      <select value={value} onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
+        <option value="">—</option>
+        {options.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+      </select>
+    </div>
+  );
+}
+
+function EditPlayerModal({ player, profiles, onClose, onSave }: {
+  player: Player; profiles: Profile[];
+  onClose: () => void; onSave: (p: Player) => void;
+}) {
+  const [name, setName] = useState(player.name);
+  const [birthDate, setBirthDate] = useState(player.birthDate ?? "");
+  const [pos1, setPos1] = useState(player.positions[0] ?? "");
+  const [pos2, setPos2] = useState(player.positions[1] ?? "");
+  const [nationality, setNationality] = useState(player.nationality);
+  const [partner, setPartner] = useState(player.partner ?? "");
+  const [managed1, setManaged1] = useState(player.managedBy[0] ?? "");
+  const [managed2, setManaged2] = useState(player.managedBy[1] ?? "");
+  const [reprStart, setReprStart] = useState(player.representationContract.start ?? "");
+  const [reprEnd, setReprEnd] = useState(player.representationContract.end ?? "");
+  const [clubEnd, setClubEnd] = useState(player.clubContract.endDate ?? "");
+  const [optYears, setOptYears] = useState(player.clubContract.optionalYears?.toString() ?? "");
+  const [releaseClause, setReleaseClause] = useState(player.clubContract.releaseClause ?? "");
+  const [commission, setCommission] = useState(player.clubContract.agentCommission ?? "");
+
+  // Clubs
+  const [club1, setClub1] = useState(player.clubs[0]?.name ?? "");
+  const [club2, setClub2] = useState(player.clubs[1]?.name ?? "");
+  const [isLoan, setIsLoan] = useState(player.clubs.some((c) => c.type === "cedido_en" || c.type === "propietario"));
+
+  const handleSave = () => {
+    const clubs = [];
+    if (isLoan && club1 && club2) {
+      clubs.push({ name: club1, type: "propietario" as const });
+      clubs.push({ name: club2, type: "cedido_en" as const });
+    } else if (club1 && club2) {
+      clubs.push({ name: club1, type: "compartido" as const });
+      clubs.push({ name: club2, type: "compartido" as const });
+    } else if (club1) {
+      clubs.push({ name: club1, type: "principal" as const });
+    }
+    onSave({
+      ...player,
+      name,
+      birthDate,
+      positions: [pos1, pos2].filter(Boolean),
+      nationality,
+      clubs,
+      partner: partner || undefined,
+      managedBy: [managed1, managed2].filter(Boolean),
+      representationContract: { ...player.representationContract, start: reprStart, end: reprEnd },
+      clubContract: {
+        ...player.clubContract,
+        endDate: clubEnd,
+        optionalYears: optYears ? parseInt(optYears) : undefined,
+        releaseClause: releaseClause || undefined,
+        agentCommission: commission || undefined,
+      },
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+      <div className="bg-white rounded-lg border border-slate-200 shadow-lg w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white">
+          <h2 className="text-sm font-semibold text-slate-800">Editar jugador</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-4 space-y-3">
+          <EF label="Nombre completo" value={name} onChange={setName} />
+          <div className="grid grid-cols-2 gap-3">
+            <EF label="Fecha de nacimiento" value={birthDate} onChange={setBirthDate} type="date" />
+            <EF label="Nacionalidad" value={nationality} onChange={setNationality} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <EF label="Posición principal" value={pos1} onChange={setPos1} />
+            <EF label="Posición secundaria" value={pos2} onChange={setPos2} />
+          </div>
+
+          <div className="pt-1 border-t border-slate-100">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Club(s)</p>
+            <div className="flex items-center gap-2 mb-2">
+              <input type="checkbox" id="editIsLoan" checked={isLoan} onChange={(e) => setIsLoan(e.target.checked)} className="rounded" />
+              <label htmlFor="editIsLoan" className="text-xs text-slate-600">Jugador cedido</label>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <EF label={isLoan ? "Club propietario" : "Club principal"} value={club1} onChange={setClub1} />
+              <EF label={isLoan ? "Club donde juega" : "Segundo equipo (opcional)"} value={club2} onChange={setClub2} />
+            </div>
+          </div>
+
+          <div className="pt-1 border-t border-slate-100">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Contrato de representación</p>
+            <div className="grid grid-cols-2 gap-3">
+              <EF label="Inicio" value={reprStart} onChange={setReprStart} type="date" />
+              <EF label="Fin" value={reprEnd} onChange={setReprEnd} type="date" />
+            </div>
+          </div>
+
+          <div className="pt-1 border-t border-slate-100">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Contrato con club</p>
+            <div className="grid grid-cols-2 gap-3">
+              <EF label="Fin de contrato" value={clubEnd} onChange={setClubEnd} type="date" />
+              <EF label="Años opcionales" value={optYears} onChange={setOptYears} type="number" />
+              <EF label="Cláusula de rescisión" value={releaseClause} onChange={setReleaseClause} />
+              <EF label="Comisión agente" value={commission} onChange={setCommission} />
+            </div>
+          </div>
+
+          <div className="pt-1 border-t border-slate-100">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Equipo</p>
+            <div className="grid grid-cols-3 gap-3">
+              <ESel label="Encargado 1" value={managed1} onChange={setManaged1} options={profiles} />
+              <ESel label="Encargado 2" value={managed2} onChange={setManaged2} options={profiles} />
+              <EF label="Partner" value={partner} onChange={setPartner} />
+            </div>
+          </div>
+
+          <div className="pt-2 flex gap-2">
+            <button onClick={onClose} className="flex-1 rounded-md border border-slate-200 text-slate-600 text-sm py-2">Cancelar</button>
+            <button
+              onClick={handleSave}
+              className="flex-1 rounded-md text-white text-sm font-medium py-2 transition-colors"
+              style={{ background: PRIMARY }}
+            >
+              Guardar cambios
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

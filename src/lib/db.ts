@@ -18,7 +18,17 @@ function dbToPlayer(row: Record<string, unknown>): Player {
     clubContract: (row.club_contract as Player['clubContract']) ?? { endDate: '' },
     contractHistory: (row.contract_history as Player['contractHistory']) ?? [],
     performance: [],
-    info: (row.info as Player['info']) ?? { family: '', languages: [], personality: '', interests: '', location: '', notes: '' },
+    info: (() => {
+      const raw = (row.info as Record<string, unknown>) ?? {}
+      return {
+        family: (raw.family as string) ?? '',
+        languages: Array.isArray(raw.languages) ? raw.languages as string[] : [],
+        personality: (raw.personality as string) ?? '',
+        interests: (raw.interests as string) ?? '',
+        location: (raw.location as string) ?? '',
+        notes: (raw.notes as string) ?? '',
+      }
+    })(),
   }
 }
 

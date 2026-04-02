@@ -38,6 +38,7 @@ export function Dashboard({
 }: Props) {
   const [search, setSearch] = useState("");
   const [showAddPlayer, setShowAddPlayer] = useState(false);
+  const [managerFilter, setManagerFilter] = useState<string>("all");
 
   const pendingTasks = tasks.filter((t) => t.status !== "completada");
   const urgentTasks = tasks.filter(
@@ -45,12 +46,15 @@ export function Dashboard({
   );
   const myTasks = pendingTasks.filter((t) => t.assigneeId === currentProfile.id);
 
-  const filtered = players.filter(
-    (p) =>
+  const filtered = players.filter((p) => {
+    const matchSearch =
       p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.positions[0].toLowerCase().includes(search.toLowerCase()) ||
-      p.clubs.some((c) => c.name.toLowerCase().includes(search.toLowerCase()))
-  );
+      (p.positions[0] ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      p.clubs.some((c) => c.name.toLowerCase().includes(search.toLowerCase()));
+    const matchManager =
+      managerFilter === "all" || p.managedBy.includes(managerFilter);
+    return matchSearch && matchManager;
+  });
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -146,24 +150,50 @@ export function Dashboard({
         )}
 
         {/* Players list */}
-        <div className="flex items-center justify-between mb-3 gap-3">
-          <div className="relative flex-1 max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar jugador, club, posición..."
-              className="w-full pl-9 pr-3 py-2 text-sm rounded-md border border-slate-200 bg-white focus:outline-none focus:ring-2"
-            />
+        <div className="flex flex-col gap-2 mb-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="relative flex-1 max-w-xs">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar jugador, club, posición..."
+                className="w-full pl-9 pr-3 py-2 text-sm rounded-md border border-slate-200 bg-white focus:outline-none focus:ring-2"
+              />
+            </div>
+            <button
+              onClick={() => setShowAddPlayer(true)}
+              className="inline-flex items-center gap-1.5 rounded-md text-white text-sm font-medium px-3 py-2 transition-colors"
+              style={{ background: PRIMARY }}
+            >
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">Nuevo jugador</span>
+            </button>
           </div>
-          <button
-            onClick={() => setShowAddPlayer(true)}
-            className="inline-flex items-center gap-1.5 rounded-md text-white text-sm font-medium px-3 py-2 transition-colors"
-            style={{ background: PRIMARY }}
-          >
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">Nuevo jugador</span>
-          </button>
+          {/* Manager filter */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => setManagerFilter("all")}
+              className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${managerFilter === "all" ? "text-white border-transparent" : "border-slate-200 text-slate-500 hover:text-slate-700 bg-white"}`}
+              style={managerFilter === "all" ? { background: PRIMARY } : {}}
+            >
+              Todos ({players.length})
+            </button>
+            {profiles.map((m) => {
+              const count = players.filter((p) => p.managedBy.includes(m.id)).length;
+              if (count === 0) return null;
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => setManagerFilter(managerFilter === m.id ? "all" : m.id)}
+                  className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${managerFilter === m.id ? "text-white border-transparent" : "border-slate-200 text-slate-500 hover:text-slate-700 bg-white"}`}
+                  style={managerFilter === m.id ? { background: PRIMARY } : {}}
+                >
+                  {m.avatar} {m.name.split(" ")[0]} ({count})
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <div className="grid gap-2.5">
