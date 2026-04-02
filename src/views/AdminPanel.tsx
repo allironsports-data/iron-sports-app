@@ -73,7 +73,7 @@ export function AdminPanel({ profiles, onBack, onRefresh, onLogout }: Props) {
     if (!newPassword || newPassword.length < 6) return
     setResetStatus('saving')
     try {
-      const { error } = await supabase.rpc('admin_update_user_password', {
+      const { error } = await supabase.rpc('update_user_password', {
         target_user_id: profileId,
         new_password: newPassword,
       })
@@ -81,8 +81,6 @@ export function AdminPanel({ profiles, onBack, onRefresh, onLogout }: Props) {
       setResetStatus('ok')
       setTimeout(() => { setResetStatus('idle'); setResetId(null); setNewPassword('') }, 2000)
     } catch {
-      // Fallback: update via profiles table note (password change needs service role)
-      // Show instructions instead
       setResetStatus('error')
       setTimeout(() => setResetStatus('idle'), 3000)
     }
@@ -90,7 +88,10 @@ export function AdminPanel({ profiles, onBack, onRefresh, onLogout }: Props) {
 
   const handleDeleteUser = async (p: Profile) => {
     try {
-      await supabase.from('profiles').delete().eq('id', p.id)
+      const { error } = await supabase.rpc('delete_user', {
+        target_user_id: p.id,
+      })
+      if (error) throw error
       setDeleteId(null)
       await onRefresh()
     } catch {
