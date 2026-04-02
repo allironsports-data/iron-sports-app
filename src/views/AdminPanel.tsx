@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { Profile } from '../contexts/AuthContext'
 import { updateProfile } from '../lib/db'
 import { supabase } from '../lib/supabase'
-import { ArrowLeft, LogOut, Shield, UserPlus, Check, X, Edit3, Copy } from 'lucide-react'
+import { ArrowLeft, LogOut, Shield, UserPlus, Check, X, Edit3, Copy, Trash2, KeyRound } from 'lucide-react'
 
 const PRIMARY = 'hsl(220,72%,26%)'
 
@@ -29,6 +29,10 @@ export function AdminPanel({ profiles, onBack, onRefresh, onLogout }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const [editAvatar, setEditAvatar] = useState('')
+  const [resetId, setResetId] = useState<string | null>(null)
+  const [newPassword, setNewPassword] = useState('')
+  const [resetStatus, setResetStatus] = useState<'idle' | 'saving' | 'ok' | 'error'>('idle')
+  const [deleteId, setDeleteId] = useState<string | null>(null)
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -63,6 +67,35 @@ export function AdminPanel({ profiles, onBack, onRefresh, onLogout }: Props) {
     navigator.clipboard.writeText(`URL: https://allironsports.vercel.app\nEmail: ${createdInfo.email}\nContraseña: ${createdInfo.password}`)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleResetPassword = async (profileId: string) => {
+    if (!newPassword || newPassword.length < 6) return
+    setResetStatus('saving')
+    try {
+      const { error } = await supabase.rpc('admin_update_user_password', {
+        target_user_id: profileId,
+        new_password: newPassword,
+      })
+      if (error) throw error
+      setResetStatus('ok')
+      setTimeout(() => { setResetStatus('idle'); setResetId(null); setNewPassword('') }, 2000)
+    } catch {
+      // Fallback: update via profiles table note (password change needs service role)
+      // Show instructions instead
+      setResetStatus('error')
+      setTimeout(() => setResetStatus('idle'), 3000)
+    }
+  }
+
+  const handleDeleteUser = async (p: Profile) => {
+    try {
+      await supabase.from('profiles').delete().eq('id', p.id)
+      setDeleteId(null)
+      await onRefresh()
+    } catch {
+      // ignore
+    }
   }
 
   const handleToggleAdmin = async (p: Profile) => {
@@ -268,7 +301,7 @@ export function AdminPanel({ profiles, onBack, onRefresh, onLogout }: Props) {
                 )}
 
                 {/* Actions */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap justify-end">
                   <button
                     onClick={() => { setEditingId(p.id); setEditName(p.name); setEditAvatar(p.avatar) }}
                     className="text-slate-400 hover:text-slate-600"
@@ -277,17 +310,72 @@ export function AdminPanel({ profiles, onBack, onRefresh, onLogout }: Props) {
                     <Edit3 className="w-3.5 h-3.5" />
                   </button>
                   <button
+                    onClick={() => { setResetId(p.id); setNewPassword(generatePassword()) }}
+                    className="text-slate-400 hover:text-amber-500"
+                    title="Cambiar contraseña"
+                  >
+                    <KeyRound className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setDeleteId(p.id)}
+                    className="text-slate-400 hover:text-red-500"
+                    title="Eliminar usuario"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button
                     onClick={() => handleToggleAdmin(p)}
                     className={`text-xs px-2 py-1 rounded border transition-colors ${
                       p.is_admin
                         ? 'border-blue-200 text-blue-600 hover:bg-blue-50'
                         : 'border-slate-200 text-slate-500 hover:text-slate-700'
                     }`}
-                    title={p.is_admin ? 'Quitar admin' : 'Hacer admin'}
                   >
                     {p.is_admin ? 'Quitar admin' : 'Hacer admin'}
                   </button>
                 </div>
+
+                {/* Reset password inline */}
+                {resetId === p.id && (
+                  <div className="w-full mt-2 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded p-2">
+                    <input
+                      type="text"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="flex-1 rounded border border-amber-200 px-2 py-1 text-sm font-mono"
+                      placeholder="Nueva contraseña"
+                    />
+                    <button
+                      onClick={() => handleResetPassword(p.id)}
+                      disabled={resetStatus === 'saving'}
+                      className="text-xs px-2 py-1 rounded bg-amber-500 text-white hover:bg-amber-600"
+                    >
+                      {resetStatus === 'ok' ? '✓' : resetStatus === 'saving' ? '...' : 'Guardar'}
+                    </button>
+                    <button onClick={() => setResetId(null)} className="text-slate-400 hover:text-slate-600">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                    {resetStatus === 'error' && (
+                      <span className="text-xs text-red-500">Cámbiala desde Supabase Auth</span>
+                    )}
+                  </div>
+                )}
+
+                {/* Delete confirm inline */}
+                {deleteId === p.id && (
+                  <div className="w-full mt-2 flex items-center gap-2 bg-red-50 border border-red-200 rounded p-2">
+                    <span className="text-xs text-red-700 flex-1">¿Eliminar a {p.name}?</span>
+                    <button
+                      onClick={() => handleDeleteUser(p)}
+                      className="text-xs px-2 py-1 rounded bg-red-500 text-white hover:bg-red-600"
+                    >
+                      Eliminar
+                    </button>
+                    <button onClick={() => setDeleteId(null)} className="text-slate-400 hover:text-slate-600">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
