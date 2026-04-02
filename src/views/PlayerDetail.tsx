@@ -260,6 +260,7 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
   onUpdateTask: (task: Task) => void; onDeleteTask: (taskId: string) => void;
 }) {
   const [showAdd, setShowAdd] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [filter, setFilter] = useState<"todas" | "pendiente" | "en_progreso" | "completada">("todas");
   const [expandedTask, setExpandedTask] = useState<string | null>(null);
 
@@ -356,6 +357,9 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
                       <MessageSquare className="w-3.5 h-3.5" />
                       {task.comments.length > 0 && <span>{task.comments.length}</span>}
                     </button>
+                    <button onClick={() => setEditingTask(task)} className="text-slate-300 hover:text-blue-500 transition-colors" title="Editar tarea">
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
                     <button onClick={() => onDeleteTask(task.id)} className="text-slate-300 hover:text-red-400 transition-colors">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -421,6 +425,16 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
         <AddTaskModal profiles={profiles} tasks={tasks} playerId={player.id}
           onClose={() => setShowAdd(false)}
           onAdd={(t) => { onAddTask(t); setShowAdd(false); }}
+        />
+      )}
+
+      {editingTask && (
+        <EditTaskModal
+          task={editingTask}
+          profiles={profiles}
+          tasks={tasks}
+          onClose={() => setEditingTask(null)}
+          onSave={(updated) => { onUpdateTask(updated); setEditingTask(null); }}
         />
       )}
     </div>
@@ -505,6 +519,94 @@ function CommentInput({ currentProfile, onSubmit }: {
         </button>
       </div>
     </form>
+  );
+}
+
+function EditTaskModal({ task, profiles, tasks, onClose, onSave }: {
+  task: Task; profiles: Profile[]; tasks: Task[];
+  onClose: () => void; onSave: (t: Task) => void;
+}) {
+  const [title, setTitle] = useState(task.title);
+  const [desc, setDesc] = useState(task.description ?? "");
+  const [assignee, setAssignee] = useState(task.assigneeId ?? "");
+  const [priority, setPriority] = useState<"alta" | "media" | "baja">(task.priority);
+  const [status, setStatus] = useState<Task["status"]>(task.status);
+  const [dueDate, setDueDate] = useState(task.dueDate);
+  const [depends, setDepends] = useState(task.dependsOnId ?? "");
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-0 sm:p-4">
+      <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-md max-h-[92vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white">
+          <h2 className="text-sm font-semibold text-slate-800">Editar tarea</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+        </div>
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          onSave({ ...task, title, description: desc, assigneeId: assignee,
+            dependsOnId: depends || undefined, status, priority, dueDate });
+        }} className="p-4 space-y-3 pb-8">
+          <TF label="Título" value={title} onChange={setTitle} required />
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Descripción</label>
+            <textarea value={desc} onChange={(e) => setDesc(e.target.value)} rows={2}
+              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 resize-none" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Responsable</label>
+              <select value={assignee} onChange={(e) => setAssignee(e.target.value)} required
+                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
+                <option value="">—</option>
+                {profiles.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Prioridad</label>
+              <select value={priority} onChange={(e) => setPriority(e.target.value as "alta" | "media" | "baja")}
+                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
+                <option value="alta">Alta</option>
+                <option value="media">Media</option>
+                <option value="baja">Baja</option>
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Estado</label>
+              <select value={status} onChange={(e) => setStatus(e.target.value as Task["status"])}
+                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
+                <option value="pendiente">Pendiente</option>
+                <option value="en_progreso">En progreso</option>
+                <option value="completada">Completada</option>
+              </select>
+            </div>
+            <TF label="Fecha límite" value={dueDate} onChange={setDueDate} type="date" required />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Depende de</label>
+            <select value={depends} onChange={(e) => setDepends(e.target.value)}
+              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
+              <option value="">Ninguna</option>
+              {tasks.filter((t) => t.id !== task.id && t.status !== "completada").map((t) => (
+                <option key={t.id} value={t.id}>{t.title}</option>
+              ))}
+            </select>
+          </div>
+          <div className="pt-2 flex gap-2">
+            <button type="button" onClick={onClose}
+              className="flex-1 rounded-md border border-slate-200 text-slate-600 text-sm font-medium py-2 hover:bg-slate-50 transition-colors">
+              Cancelar
+            </button>
+            <button type="submit" disabled={!title || !assignee || !dueDate}
+              className="flex-1 rounded-md text-white text-sm font-medium py-2 disabled:opacity-40 transition-colors"
+              style={{ background: PRIMARY }}>
+              Guardar
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
 

@@ -88,7 +88,7 @@ export async function deletePlayers(ids: string[]): Promise<void> {
 }
 
 export async function assignManagerToPlayers(playerIds: string[], managerId: string): Promise<void> {
-  // For each player, add the manager to managed_by if not already there
+  // Sets managerId as manager 1 (index 0), preserves manager 2 (index 1) if it exists
   const { data, error } = await supabase
     .from('players')
     .select('id, managed_by')
@@ -97,7 +97,8 @@ export async function assignManagerToPlayers(playerIds: string[], managerId: str
 
   const updates = (data ?? []).map((row) => {
     const current: string[] = (row.managed_by as string[]) ?? []
-    const updated = current.includes(managerId) ? current : [...current, managerId]
+    const manager2 = current[1] ?? null
+    const updated = manager2 ? [managerId, manager2] : [managerId]
     return supabase.from('players').update({ managed_by: updated }).eq('id', row.id)
   })
   await Promise.all(updates)
