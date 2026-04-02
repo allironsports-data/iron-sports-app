@@ -12,6 +12,10 @@ import {
   Plus,
   Search,
   X,
+  Trash2,
+  UserPlus,
+  CheckSquare,
+  Square,
 } from "lucide-react";
 
 const PRIMARY = "hsl(220,72%,26%)";
@@ -25,6 +29,8 @@ interface Props {
   onLogout: () => void;
   onAddPlayer: (player: Player) => void;
   onAdmin?: () => void;
+  onBulkDelete?: (ids: string[]) => Promise<void>;
+  onBulkAssignManager?: (playerIds: string[], managerId: string) => Promise<void>;
 }
 
 export function Dashboard({
@@ -36,10 +42,18 @@ export function Dashboard({
   onLogout,
   onAddPlayer,
   onAdmin,
+  onBulkDelete,
+  onBulkAssignManager,
 }: Props) {
   const [search, setSearch] = useState("");
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [managerFilter, setManagerFilter] = useState<string>("all");
+
+  // Bulk select state
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [showAssignModal, setShowAssignModal] = useState(false);
 
   const pendingTasks = tasks.filter((t) => t.status !== "completada");
   const urgentTasks = tasks.filter(
@@ -57,17 +71,63 @@ export function Dashboard({
     return matchSearch && matchManager;
   });
 
+  const toggleSelect = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selected.size === filtered.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(filtered.map((p) => p.id)));
+    }
+  };
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelected(new Set());
+  };
+
+  const handleBulkDelete = async () => {
+    if (!onBulkDelete || selected.size === 0) return;
+    if (!confirm(`¿Eliminar ${selected.size} jugador${selected.size > 1 ? "es" : ""}? Esta acción no se puede deshacer.`)) return;
+    setBulkLoading(true);
+    try {
+      await onBulkDelete(Array.from(selected));
+      exitSelectMode();
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  const handleBulkAssign = async (managerId: string) => {
+    if (!onBulkAssignManager || selected.size === 0) return;
+    setBulkLoading(true);
+    try {
+      await onBulkAssignManager(Array.from(selected), managerId);
+      setShowAssignModal(false);
+      exitSelectMode();
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  const canBulkAction = (onBulkDelete || onBulkAssignManager) && currentProfile.is_admin;
+
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div
-              className="w-8 h-8 rounded-lg overflow-hidden bg-white flex-shrink-0"
-            >
+            <div className="w-8 h-8 rounded-lg overflow-hidden bg-white flex-shrink-0">
               <img src={logoImg} className="w-full h-full object-contain p-0.5" alt="AIS" />
-</div>
+            </div>
             <div>
               <span className="font-black text-sm tracking-tight text-slate-900 uppercase">
                 All Iron Sports
@@ -78,12 +138,12 @@ export function Dashboard({
               </span>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <div className="text-right hidden sm:block">
               <p className="text-sm font-medium text-slate-700">{currentProfile.name}</p>
             </div>
             <div
-              className="w-8 h-8 rounded-full text-white text-[10px] font-bold flex items-center justify-center"
+              className="w-8 h-8 rounded-full text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0"
               style={{ background: PRIMARY }}
             >
               {currentProfile.avatar}
@@ -99,7 +159,7 @@ export function Dashboard({
             )}
             <button
               onClick={onLogout}
-              className="text-slate-400 hover:text-slate-600 transition-colors"
+              className="text-slate-400 hover:text-slate-600 transition-colors p-1"
             >
               <LogOut className="w-4 h-4" />
             </button>
@@ -107,9 +167,9 @@ export function Dashboard({
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
         {/* Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-4 sm:mb-6">
           <StatCard icon={<Users className="w-4 h-4" />} label="Jugadores" value={players.length} color="blue" />
           <StatCard icon={<ClipboardList className="w-4 h-4" />} label="Tareas pendientes" value={pendingTasks.length} color="amber" />
           <StatCard icon={<AlertTriangle className="w-4 h-4" />} label="Urgentes" value={urgentTasks.length} color="red" />
@@ -118,7 +178,7 @@ export function Dashboard({
 
         {/* My tasks */}
         {myTasks.length > 0 && (
-          <div className="mb-6 bg-white border border-slate-200 rounded-lg overflow-hidden">
+          <div className="mb-4 sm:mb-6 bg-white border border-slate-200 rounded-lg overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-100">
               <h2 className="text-sm font-semibold text-slate-800">Mis tareas pendientes</h2>
             </div>
@@ -130,7 +190,7 @@ export function Dashboard({
                   <button
                     key={task.id}
                     onClick={() => onSelectPlayer(task.playerId)}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-50 transition-colors"
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 active:bg-slate-100 transition-colors"
                   >
                     <span
                       className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
@@ -139,7 +199,7 @@ export function Dashboard({
                     />
                     <span className="flex-1 text-sm text-slate-700 truncate">{task.title}</span>
                     <span className="text-xs text-slate-400 hidden sm:block">{player?.name}</span>
-                    <span className={`text-xs ${isOverdue ? "text-red-500 font-medium" : "text-slate-400"}`}>
+                    <span className={`text-xs flex-shrink-0 ${isOverdue ? "text-red-500 font-medium" : "text-slate-400"}`}>
                       {new Date(task.dueDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
                     </span>
                   </button>
@@ -149,29 +209,50 @@ export function Dashboard({
           </div>
         )}
 
-        {/* Players list */}
+        {/* Players list header */}
         <div className="flex flex-col gap-2 mb-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="relative flex-1 max-w-xs">
+          <div className="flex items-center justify-between gap-2">
+            <div className="relative flex-1 min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar jugador, club, posición..."
-                className="w-full pl-9 pr-3 py-2 text-sm rounded-md border border-slate-200 bg-white focus:outline-none focus:ring-2"
+                placeholder="Buscar jugador, club…"
+                className="w-full pl-9 pr-3 py-2 text-sm rounded-md border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-200"
               />
             </div>
-            <button
-              onClick={() => setShowAddPlayer(true)}
-              className="inline-flex items-center gap-1.5 rounded-md text-white text-sm font-medium px-3 py-2 transition-colors"
-              style={{ background: PRIMARY }}
-            >
-              <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">Nuevo jugador</span>
-            </button>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {canBulkAction && !selectMode && (
+                <button
+                  onClick={() => setSelectMode(true)}
+                  className="inline-flex items-center gap-1.5 rounded-md text-slate-600 bg-white border border-slate-200 text-sm font-medium px-3 py-2 hover:bg-slate-50 transition-colors"
+                >
+                  <CheckSquare className="w-4 h-4" />
+                  <span className="hidden sm:inline">Seleccionar</span>
+                </button>
+              )}
+              {selectMode && (
+                <button
+                  onClick={exitSelectMode}
+                  className="inline-flex items-center gap-1.5 rounded-md text-slate-600 bg-white border border-slate-200 text-sm font-medium px-3 py-2 hover:bg-slate-50 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                  <span className="hidden sm:inline">Cancelar</span>
+                </button>
+              )}
+              <button
+                onClick={() => setShowAddPlayer(true)}
+                className="inline-flex items-center gap-1.5 rounded-md text-white text-sm font-medium px-3 py-2 transition-colors flex-shrink-0"
+                style={{ background: PRIMARY }}
+              >
+                <Plus className="w-4 h-4" />
+                <span className="hidden sm:inline">Nuevo jugador</span>
+              </button>
+            </div>
           </div>
+
           {/* Manager filter */}
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <button
               onClick={() => setManagerFilter("all")}
               className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${managerFilter === "all" ? "text-white border-transparent" : "border-slate-200 text-slate-500 hover:text-slate-700 bg-white"}`}
@@ -194,16 +275,31 @@ export function Dashboard({
               );
             })}
           </div>
+
+          {/* Select-all row */}
+          {selectMode && (
+            <div className="flex items-center gap-3 px-1">
+              <button onClick={toggleSelectAll} className="flex items-center gap-2 text-xs text-slate-500 hover:text-slate-700">
+                {selected.size === filtered.length && filtered.length > 0
+                  ? <CheckSquare className="w-4 h-4 text-blue-600" />
+                  : <Square className="w-4 h-4" />}
+                {selected.size === filtered.length && filtered.length > 0 ? "Deseleccionar todos" : "Seleccionar todos"}
+              </button>
+              {selected.size > 0 && (
+                <span className="text-xs text-slate-400">{selected.size} seleccionado{selected.size > 1 ? "s" : ""}</span>
+              )}
+            </div>
+          )}
         </div>
 
-        <div className="grid gap-2.5">
+        {/* Player cards */}
+        <div className="grid gap-2">
           {filtered.map((player) => {
             const playerTasks = tasks.filter(
               (t) => t.playerId === player.id && t.status !== "completada"
             );
             const urgent = playerTasks.filter((t) => t.priority === "alta");
             const age = calcAge(player.birthDate);
-            // contract warning: rep contract expires in < 12 months
             const repDaysLeft = Math.ceil(
               (new Date(player.representationContract.end).getTime() - Date.now()) /
                 (1000 * 60 * 60 * 24)
@@ -212,68 +308,90 @@ export function Dashboard({
               .map((id) => profiles.find((m) => m.id === id))
               .filter(Boolean) as Profile[];
 
+            const isSelected = selected.has(player.id);
+
             return (
-              <button
+              <div
                 key={player.id}
-                onClick={() => onSelectPlayer(player.id)}
-                className="w-full bg-white border border-slate-200 rounded-lg p-4 text-left hover:border-slate-300 hover:shadow-sm transition-all group"
+                className={`bg-white border rounded-lg transition-all ${
+                  isSelected ? "border-blue-400 ring-1 ring-blue-300" : "border-slate-200 hover:border-slate-300 hover:shadow-sm"
+                }`}
               >
-                <div className="flex items-center gap-4">
-                  {/* Avatar */}
-                  <div className="w-12 h-12 rounded-lg bg-slate-100 flex items-center justify-center text-base font-bold text-slate-400 flex-shrink-0">
-                    {player.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
-                  </div>
+                <div className="flex items-center gap-3 p-3 sm:p-4">
+                  {/* Checkbox (select mode) */}
+                  {selectMode && (
+                    <button
+                      onClick={() => toggleSelect(player.id)}
+                      className="flex-shrink-0 text-slate-400 hover:text-blue-600 transition-colors p-1"
+                    >
+                      {isSelected
+                        ? <CheckSquare className="w-5 h-5 text-blue-600" />
+                        : <Square className="w-5 h-5" />}
+                    </button>
+                  )}
 
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-sm font-semibold text-slate-900">{player.name}</h3>
-                      {repDaysLeft < 365 && repDaysLeft > 0 && (
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-50 text-red-600 border border-red-100">
-                          Repr. &lt;1 año
-                        </span>
-                      )}
+                  {/* Card content — clickable */}
+                  <button
+                    onClick={() => selectMode ? toggleSelect(player.id) : onSelectPlayer(player.id)}
+                    className="flex-1 flex items-center gap-3 sm:gap-4 text-left min-w-0 group"
+                  >
+                    {/* Avatar */}
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-slate-100 flex items-center justify-center text-sm sm:text-base font-bold text-slate-400 flex-shrink-0">
+                      {player.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
                     </div>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      {player.positions[0]}
-                      {player.positions[1] && ` / ${player.positions[1]}`}
-                      {" · "}
-                      {clubsLabel(player.clubs)}
-                      {" · "}
-                      {age} años · {player.nationality}
-                    </p>
-                    {/* Managers + partner */}
-                    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                      {managers.map((m) => (
-                        <span
-                          key={m.id}
-                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600"
-                        >
-                          {m.avatar}
-                        </span>
-                      ))}
-                      {player.partner && (
-                        <span className="text-[10px] text-slate-400">
-                          · Partner: {player.partner}
-                        </span>
-                      )}
-                    </div>
-                  </div>
 
-                  {/* Task count */}
-                  <div className="flex items-center gap-3 flex-shrink-0">
-                    {playerTasks.length > 0 && (
-                      <div className="text-right">
-                        <p className="text-sm font-semibold text-slate-700">{playerTasks.length}</p>
-                        <p className="text-[10px] text-slate-400">
-                          {urgent.length > 0 ? `${urgent.length} urgente${urgent.length > 1 ? "s" : ""}` : "tareas"}
-                        </p>
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-sm font-semibold text-slate-900 truncate">{player.name}</h3>
+                        {repDaysLeft < 365 && repDaysLeft > 0 && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-50 text-red-600 border border-red-100 flex-shrink-0">
+                            Repr. &lt;1 año
+                          </span>
+                        )}
                       </div>
-                    )}
-                    <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-500 transition-colors" />
-                  </div>
+                      <p className="text-xs text-slate-500 mt-0.5 truncate">
+                        {player.positions[0]}
+                        {player.positions[1] && ` / ${player.positions[1]}`}
+                        {" · "}
+                        {clubsLabel(player.clubs)}
+                        {" · "}
+                        {age} años · {player.nationality}
+                      </p>
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        {managers.map((m) => (
+                          <span
+                            key={m.id}
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600"
+                          >
+                            {m.avatar}
+                          </span>
+                        ))}
+                        {player.partner && (
+                          <span className="text-[10px] text-slate-400 truncate">
+                            · {player.partner}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Tasks + chevron */}
+                    <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+                      {playerTasks.length > 0 && (
+                        <div className="text-right">
+                          <p className="text-sm font-semibold text-slate-700">{playerTasks.length}</p>
+                          <p className="text-[10px] text-slate-400">
+                            {urgent.length > 0 ? `${urgent.length} urg.` : "tareas"}
+                          </p>
+                        </div>
+                      )}
+                      {!selectMode && (
+                        <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-500 transition-colors" />
+                      )}
+                    </div>
+                  </button>
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>
@@ -285,11 +403,57 @@ export function Dashboard({
         )}
       </main>
 
+      {/* Bulk action toolbar */}
+      {selectMode && selected.size > 0 && (
+        <div className="fixed bottom-0 inset-x-0 z-20 bg-white border-t border-slate-200 shadow-lg">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
+            <span className="text-sm font-medium text-slate-700">
+              {selected.size} jugador{selected.size > 1 ? "es" : ""} seleccionado{selected.size > 1 ? "s" : ""}
+            </span>
+            <div className="flex items-center gap-2">
+              {onBulkAssignManager && (
+                <button
+                  onClick={() => setShowAssignModal(true)}
+                  disabled={bulkLoading}
+                  className="inline-flex items-center gap-1.5 rounded-md text-white text-sm font-medium px-3 py-2 disabled:opacity-40 transition-colors"
+                  style={{ background: PRIMARY }}
+                >
+                  <UserPlus className="w-4 h-4" />
+                  <span>Asignar manager</span>
+                </button>
+              )}
+              {onBulkDelete && (
+                <button
+                  onClick={handleBulkDelete}
+                  disabled={bulkLoading}
+                  className="inline-flex items-center gap-1.5 rounded-md text-white text-sm font-medium px-3 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-40 transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>{bulkLoading ? "Borrando…" : "Borrar"}</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add player modal */}
       {showAddPlayer && (
         <AddPlayerModal
           profiles={profiles}
           onClose={() => setShowAddPlayer(false)}
           onAdd={(p) => { onAddPlayer(p); setShowAddPlayer(false); }}
+        />
+      )}
+
+      {/* Bulk assign manager modal */}
+      {showAssignModal && (
+        <AssignManagerModal
+          profiles={profiles}
+          count={selected.size}
+          loading={bulkLoading}
+          onClose={() => setShowAssignModal(false)}
+          onAssign={handleBulkAssign}
         />
       )}
     </div>
@@ -310,9 +474,58 @@ function StatCard({ icon, label, value, color }: {
     <div className="bg-white border border-slate-200 rounded-lg p-3">
       <div className="flex items-center gap-2 mb-1">
         <div className={`w-6 h-6 rounded flex items-center justify-center ${colors[color]}`}>{icon}</div>
-        <span className="text-xs text-slate-500">{label}</span>
+        <span className="text-xs text-slate-500 truncate">{label}</span>
       </div>
       <p className="text-2xl font-semibold text-slate-900">{value}</p>
+    </div>
+  );
+}
+
+function AssignManagerModal({
+  profiles,
+  count,
+  loading,
+  onClose,
+  onAssign,
+}: {
+  profiles: Profile[];
+  count: number;
+  loading: boolean;
+  onClose: () => void;
+  onAssign: (managerId: string) => void;
+}) {
+  const [managerId, setManagerId] = useState("");
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-0 sm:p-4">
+      <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-sm">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+          <h2 className="text-sm font-semibold text-slate-800">Asignar manager a {count} jugador{count > 1 ? "es" : ""}</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-4 space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Selecciona un manager</label>
+            <select
+              value={managerId}
+              onChange={(e) => setManagerId(e.target.value)}
+              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+            >
+              <option value="">— Elige manager —</option>
+              {profiles.map((m) => (
+                <option key={m.id} value={m.id}>{m.avatar} {m.name}</option>
+              ))}
+            </select>
+          </div>
+          <button
+            onClick={() => managerId && onAssign(managerId)}
+            disabled={!managerId || loading}
+            className="w-full rounded-md text-white text-sm font-medium py-2 disabled:opacity-40 transition-colors"
+            style={{ background: PRIMARY }}
+          >
+            {loading ? "Asignando…" : "Asignar"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -377,13 +590,13 @@ function AddPlayerModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="bg-white rounded-lg border border-slate-200 shadow-lg w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-0 sm:p-4">
+      <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-lg max-h-[92vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white">
           <h2 className="text-sm font-semibold text-slate-800">Nuevo jugador</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
         </div>
-        <form onSubmit={handleSubmit} className="p-4 space-y-3">
+        <form onSubmit={handleSubmit} className="p-4 space-y-3 pb-8">
           <F label="Nombre completo" value={name} onChange={setName} required />
           <div className="grid grid-cols-2 gap-3">
             <F label="Fecha de nacimiento" value={birthDate} onChange={setBirthDate} type="date" required />
@@ -391,7 +604,7 @@ function AddPlayerModal({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <F label="Posición principal" value={pos1} onChange={setPos1} required />
-            <F label="Posición secundaria (opcional)" value={pos2} onChange={setPos2} />
+            <F label="Posición secundaria" value={pos2} onChange={setPos2} />
           </div>
 
           <div className="pt-1 border-t border-slate-100">
@@ -402,13 +615,13 @@ function AddPlayerModal({
             </div>
             {isLoan ? (
               <div className="grid grid-cols-2 gap-3">
-                <F label="Club propietario (origen)" value={club1} onChange={setClub1} />
-                <F label="Club donde juega (destino)" value={club2} onChange={setClub2} />
+                <F label="Club propietario" value={club1} onChange={setClub1} />
+                <F label="Club donde juega" value={club2} onChange={setClub2} />
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3">
                 <F label="Club (principal)" value={club1} onChange={setClub1} />
-                <F label="Segundo equipo (opcional)" value={club2} onChange={setClub2} />
+                <F label="Segundo club (opcional)" value={club2} onChange={setClub2} />
               </div>
             )}
           </div>
@@ -442,7 +655,7 @@ function AddPlayerModal({
             <button
               type="submit"
               disabled={!name || !pos1 || !birthDate}
-              className="w-full rounded-md text-white text-sm font-medium py-2 disabled:opacity-40 transition-colors"
+              className="w-full rounded-md text-white text-sm font-medium py-2.5 disabled:opacity-40 transition-colors"
               style={{ background: PRIMARY }}
             >
               Añadir jugador
@@ -465,7 +678,7 @@ function F({ label, value, onChange, type = "text", required = false }: {
         value={value}
         onChange={(e) => onChange(e.target.value)}
         required={required}
-        className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2"
+        className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
       />
     </div>
   );
@@ -480,7 +693,7 @@ function Sel({ label, value, onChange, options }: {
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2"
+        className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
       >
         <option value="">—</option>
         {options.map((m) => (

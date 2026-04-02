@@ -65,6 +65,22 @@ export default function App() {
     setSelectedPlayerId(null)
   }
 
+  const handleBulkDelete = async (ids: string[]) => {
+    await db.deletePlayers(ids)
+    setPlayers((prev) => prev.filter((p) => !ids.includes(p.id)))
+  }
+
+  const handleBulkAssignManager = async (playerIds: string[], managerId: string) => {
+    await db.assignManagerToPlayers(playerIds, managerId)
+    setPlayers((prev) =>
+      prev.map((p) => {
+        if (!playerIds.includes(p.id)) return p
+        const updated = p.managedBy.includes(managerId) ? p.managedBy : [...p.managedBy, managerId]
+        return { ...p, managedBy: updated }
+      })
+    )
+  }
+
   const handleAddTask = async (task: Task) => {
     const saved = await db.createTask(task)
     setTasks((prev) => [...prev, saved])
@@ -129,6 +145,8 @@ export default function App() {
       onLogout={signOut}
       onAddPlayer={handleAddPlayer}
       onAdmin={profile.is_admin ? () => setShowAdmin(true) : undefined}
+      onBulkDelete={profile.is_admin ? handleBulkDelete : undefined}
+      onBulkAssignManager={profile.is_admin ? handleBulkAssignManager : undefined}
     />
   )
 }

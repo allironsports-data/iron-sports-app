@@ -82,6 +82,27 @@ export async function deletePlayer(id: string): Promise<void> {
   if (error) throw error
 }
 
+export async function deletePlayers(ids: string[]): Promise<void> {
+  const { error } = await supabase.from('players').delete().in('id', ids)
+  if (error) throw error
+}
+
+export async function assignManagerToPlayers(playerIds: string[], managerId: string): Promise<void> {
+  // For each player, add the manager to managed_by if not already there
+  const { data, error } = await supabase
+    .from('players')
+    .select('id, managed_by')
+    .in('id', playerIds)
+  if (error) throw error
+
+  const updates = (data ?? []).map((row) => {
+    const current: string[] = (row.managed_by as string[]) ?? []
+    const updated = current.includes(managerId) ? current : [...current, managerId]
+    return supabase.from('players').update({ managed_by: updated }).eq('id', row.id)
+  })
+  await Promise.all(updates)
+}
+
 // ── TASKS ────────────────────────────────────────────────────
 
 function dbToTask(row: Record<string, unknown>): Task {
