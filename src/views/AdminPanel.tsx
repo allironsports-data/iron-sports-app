@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import logoImg from '../assets/logo.jpg'
 import type { Profile } from '../contexts/AuthContext'
 import { updateProfile } from '../lib/db'
 import { supabase } from '../lib/supabase'
@@ -119,8 +120,8 @@ export function AdminPanel({ profiles, onBack, onRefresh, onLogout }: Props) {
             <button onClick={onBack} className="text-slate-400 hover:text-slate-600">
               <ArrowLeft className="w-5 h-5" />
             </button>
-            <div className="w-8 h-8 rounded-lg text-white flex items-center justify-center text-xs font-black" style={{ background: PRIMARY }}>
-              AI
+            <div className="w-8 h-8 rounded-lg overflow-hidden bg-white flex-shrink-0">
+              <img src={logoImg} className="w-full h-full object-contain p-0.5" alt="AIS" />
             </div>
             <span className="font-semibold text-slate-900 text-sm">Panel de administración</span>
           </div>

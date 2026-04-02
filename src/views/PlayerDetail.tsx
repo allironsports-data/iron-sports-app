@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import logoImg from '../assets/logo.jpg';
 import type {
   Player, Task, TaskComment, TaskAttachment,
   PerformanceNote,
@@ -60,7 +61,7 @@ export function PlayerDetail({
             <button onClick={onBack} className="text-slate-400 hover:text-slate-600 transition-colors">
               <ArrowLeft className="w-5 h-5" />
             </button>
-            <div className="w-8 h-8 rounded-lg text-white flex items-center justify-center text-xs font-black" style={{ background: PRIMARY }}>AI</div>
+            <div className="w-8 h-8 rounded-lg overflow-hidden bg-white flex-shrink-0"><img src={logoImg} className="w-full h-full object-contain p-0.5" alt="AIS" /></div>
             <span className="font-semibold text-slate-900 text-sm">{player.name}</span>
           </div>
           <div className="flex items-center gap-3">

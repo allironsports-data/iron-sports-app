@@ -1,4 +1,5 @@
 import { useState } from "react";
+import logoImg from '../assets/logo.jpg';
 import type { Player, Task } from "../types";
 import { calcAge, clubsLabel } from "../types";
 import type { Profile } from "../contexts/AuthContext";
@@ -63,11 +64,10 @@ export function Dashboard({
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div
-              className="w-8 h-8 rounded-lg text-white flex items-center justify-center text-xs font-black"
-              style={{ background: PRIMARY }}
+              className="w-8 h-8 rounded-lg overflow-hidden bg-white flex-shrink-0"
             >
-              AI
-            </div>
+              <img src={logoImg} className="w-full h-full object-contain p-0.5" alt="AIS" />
+</div>
             <div>
               <span className="font-black text-sm tracking-tight text-slate-900 uppercase">
                 All Iron Sports

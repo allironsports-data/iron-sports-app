@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import logoImg from '../assets/logo.jpg'
 
 interface Props {
   onLogin: (email: string, password: string) => Promise<string | null>
@@ -23,11 +24,8 @@ export function LoginScreen({ onLogin }: Props) {
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div
-            className="inline-flex items-center justify-center w-16 h-16 rounded-xl text-white mb-4 text-xl font-black"
-            style={{ background: 'hsl(220,72%,26%)' }}
-          >
-            AI
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-white shadow mb-4 overflow-hidden">
+            <img src={logoImg} className="w-full h-full object-contain p-1" alt="All Iron Sports" />
           </div>
           <h1 className="text-2xl font-black tracking-tight text-slate-900 uppercase">
             All Iron Sports
