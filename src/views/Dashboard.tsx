@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import * as db from '../lib/db';
 import logoImg from '../assets/logo.jpeg';
 import type { Player, Task } from "../types";
 import { calcAge, clubsLabel } from "../types";
@@ -759,8 +760,16 @@ export function Dashboard({
           task={detailTask}
           player={players.find((p) => p.id === detailTask.playerId)}
           profiles={profiles}
+          currentProfileId={currentProfile.id}
           onClose={() => setDetailTask(null)}
           onUpdate={(updated) => {
+            if (detailTask.playerId === "general" || detailTask.playerId === "") {
+              if (onUpdateGeneralTask) onUpdateGeneralTask(updated);
+            } else {
+              if (onUpdateTask) onUpdateTask(updated);
+            }
+          }}
+          onSaveAndClose={(updated) => {
             if (detailTask.playerId === "general" || detailTask.playerId === "") {
               if (onUpdateGeneralTask) onUpdateGeneralTask(updated);
             } else {
@@ -829,37 +838,56 @@ function TaskRow({ task, players, profiles, onCycleStatus, onOpenDetail, complet
   );
 }
 
-function TaskDetailModal({ task, player, profiles, onClose, onUpdate, onDelete }: {
+function TaskDetailModal({ task, player, profiles, currentProfileId, onClose, onUpdate, onSaveAndClose, onDelete }: {
   task: Task;
   player: Player | undefined;
   profiles: Profile[];
+  currentProfileId: string;
   onClose: () => void;
   onUpdate: (task: Task) => void;
+  onSaveAndClose: (task: Task) => void;
   onDelete: (taskId: string) => void;
 }) {
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description);
   const [status, setStatus] = useState<"pendiente" | "en_progreso" | "completada">(task.status);
   const [commentText, setCommentText] = useState("");
+  const [localComments, setLocalComments] = useState(task.comments ?? []);
+  const [sendingComment, setSendingComment] = useState(false);
   const assignee = profiles.find((p) => p.id === task.assigneeId);
 
+  const loadComments = useCallback(async () => {
+    try {
+      const fetched = await db.fetchComments(task.id);
+      setLocalComments(fetched);
+    } catch {
+      // silently ignore
+    }
+  }, [task.id]);
+
+  useEffect(() => { loadComments(); }, [loadComments]);
+
   const handleSave = () => {
-    onUpdate({
-      ...task,
-      title,
-      description,
-      status,
-    });
+    onSaveAndClose({ ...task, title, description, status });
   };
 
   const handleStatusChange = (newStatus: "pendiente" | "en_progreso" | "completada") => {
     setStatus(newStatus);
-    onUpdate({
-      ...task,
-      title,
-      description,
-      status: newStatus,
-    });
+    onUpdate({ ...task, title, description, status: newStatus });
+  };
+
+  const handleSendComment = async () => {
+    if (!commentText.trim()) return;
+    setSendingComment(true);
+    try {
+      const newComment = await db.createComment(task.id, currentProfileId, commentText.trim());
+      setLocalComments((prev) => [...prev, newComment]);
+      setCommentText("");
+    } catch (e) {
+      console.error("Error enviando comentario:", e);
+    } finally {
+      setSendingComment(false);
+    }
   };
 
   return (
@@ -964,11 +992,11 @@ function TaskDetailModal({ task, player, profiles, onClose, onUpdate, onDelete }
           </div>
 
           {/* Comments */}
-          {task.comments && task.comments.length > 0 && (
+          {localComments.length > 0 && (
             <div className="border-t border-slate-100 pt-3">
               <p className="text-xs font-medium text-slate-600 mb-2">Comentarios</p>
               <div className="space-y-2 max-h-32 overflow-y-auto">
-                {task.comments.map((comment) => {
+                {localComments.map((comment) => {
                   const commentAuthor = profiles.find((p) => p.id === comment.authorId);
                   return (
                     <div key={comment.id} className="bg-slate-50 rounded-md p-2">
@@ -994,14 +1022,17 @@ function TaskDetailModal({ task, player, profiles, onClose, onUpdate, onDelete }
                 type="text"
                 value={commentText}
                 onChange={(e) => setCommentText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && commentText.trim()) handleSendComment(); }}
                 placeholder="Escribe un comentario…"
                 className="flex-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-200"
               />
               <button
-                disabled={!commentText}
-                className="rounded-md bg-slate-200 text-slate-700 text-xs font-medium px-2.5 py-1.5 disabled:opacity-40 transition-colors hover:bg-slate-300"
+                onClick={handleSendComment}
+                disabled={!commentText.trim() || sendingComment}
+                className="rounded-md text-white text-xs font-medium px-2.5 py-1.5 disabled:opacity-40 transition-colors"
+                style={{ background: PRIMARY }}
               >
-                Enviar
+                {sendingComment ? "…" : "Enviar"}
               </button>
             </div>
           </div>
