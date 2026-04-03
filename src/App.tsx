@@ -176,7 +176,6 @@ export default function App() {
       <PlayersTable
         players={players}
         profiles={profiles}
-        currentProfile={profile}
         onUpdatePlayer={handleUpdatePlayer}
         onBack={() => setShowTable(false)}
         onLogout={signOut}

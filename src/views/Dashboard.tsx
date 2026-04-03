@@ -19,8 +19,6 @@ import {
   Bell,
   Cake,
   Calendar,
-  ListTodo,
-  Edit3,
   BarChart3,
   ChevronRight,
 } from "lucide-react";
@@ -751,7 +749,6 @@ export function Dashboard({
           task={detailTask}
           player={players.find((p) => p.id === detailTask.playerId)}
           profiles={profiles}
-          currentProfile={currentProfile}
           onClose={() => setDetailTask(null)}
           onUpdate={(updated) => {
             if (detailTask.playerId === "general" || detailTask.playerId === "") {
@@ -822,11 +819,10 @@ function TaskRow({ task, players, profiles, onCycleStatus, onOpenDetail, complet
   );
 }
 
-function TaskDetailModal({ task, player, profiles, currentProfile, onClose, onUpdate, onDelete }: {
+function TaskDetailModal({ task, player, profiles, onClose, onUpdate, onDelete }: {
   task: Task;
   player: Player | undefined;
   profiles: Profile[];
-  currentProfile: Profile;
   onClose: () => void;
   onUpdate: (task: Task) => void;
   onDelete: (taskId: string) => void;

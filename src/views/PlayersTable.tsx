@@ -9,7 +9,6 @@ const PRIMARY = "hsl(220,72%,26%)";
 interface Props {
   players: Player[];
   profiles: Profile[];
-  currentProfile: Profile;
   onUpdatePlayer: (player: Player) => void;
   onBack: () => void;
   onLogout: () => void;
@@ -32,7 +31,7 @@ type ColumnDef = {
   options?: string[];
 };
 
-export function PlayersTable({ players, profiles, currentProfile, onUpdatePlayer, onBack, onLogout, onAdmin }: Props) {
+export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onLogout, onAdmin }: Props) {
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<EditingCell | null>(null);
   const [editValue, setEditValue] = useState("");
