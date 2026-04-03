@@ -69,7 +69,7 @@ export default function App() {
     if (!user || !profile) return
 
     const channel = supabase.channel('task-notifications')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tasks' }, (payload) => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tasks' }, (payload: { new: Record<string, unknown> }) => {
         const row = payload.new as Record<string, unknown>
         const playerId = row.player_id as string
         const title = row.title as string
@@ -84,7 +84,7 @@ export default function App() {
           return prev
         })
       })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tasks' }, (payload) => {
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tasks' }, (payload: { new: Record<string, unknown> }) => {
         const row = payload.new as Record<string, unknown>
         const playerId = row.player_id as string
         const title = row.title as string

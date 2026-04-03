@@ -108,7 +108,7 @@ export async function assignManagerToPlayers(playerIds: string[], managerId: str
     .in('id', playerIds)
   if (error) throw error
 
-  const updates = (data ?? []).map((row) => {
+  const updates = (data ?? []).map((row: Record<string, unknown>) => {
     const current: string[] = (row.managed_by as string[]) ?? []
     const manager2 = current[1] ?? null
     const updated = manager2 ? [managerId, manager2] : [managerId]
@@ -199,8 +199,8 @@ export async function fetchComments(taskId: string): Promise<TaskComment[]> {
     .eq('task_id', taskId)
     .order('created_at')
   if (error) throw error
-  return (data ?? []).map((row) => ({
-    ...dbToComment(row),
+  return (data ?? []).map((row: Record<string, unknown>) => ({
+    ...dbToComment(row as Record<string, unknown>),
     attachments: ((row.task_attachments as Record<string, unknown>[]) ?? []).map((a) => ({
       id: a.id as string,
       name: a.file_name as string,
