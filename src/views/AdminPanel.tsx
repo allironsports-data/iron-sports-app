@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import logoImg from '../assets/logo.jpeg'
 import type { Profile } from '../contexts/AuthContext'
+import type { Task, Player } from '../types'
 import { updateProfile } from '../lib/db'
 import { supabase } from '../lib/supabase'
-import { ArrowLeft, LogOut, Shield, UserPlus, Check, X, Edit3, Copy, Trash2, KeyRound } from 'lucide-react'
+import { ArrowLeft, LogOut, Shield, UserPlus, Check, X, Edit3, Copy, Trash2, KeyRound, AlertTriangle, BarChart3 } from 'lucide-react'
 
 const PRIMARY = 'hsl(220,72%,26%)'
 
@@ -14,12 +15,14 @@ function generatePassword() {
 
 interface Props {
   profiles: Profile[]
+  tasks: Task[]
+  players: Player[]
   onBack: () => void
   onRefresh: () => Promise<void>
   onLogout: () => void
 }
 
-export function AdminPanel({ profiles, onBack, onRefresh, onLogout }: Props) {
+export function AdminPanel({ profiles, tasks, players, onBack, onRefresh, onLogout }: Props) {
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteName, setInviteName] = useState('')
   const [inviteAvatar, setInviteAvatar] = useState('')
@@ -242,6 +245,55 @@ export function AdminPanel({ profiles, onBack, onRefresh, onLogout }: Props) {
           <p className="text-xs text-slate-400 mt-3">
             Sin emails — tú compartes la contraseña directamente con el miembro. Pueden cambiarla después.
           </p>
+        </div>
+
+        {/* Task Tracking Section */}
+        <div className="bg-white border border-slate-200 rounded-lg p-5">
+          <h2 className="text-sm font-semibold text-slate-800 mb-4 flex items-center gap-2">
+            <BarChart3 className="w-4 h-4" />
+            Seguimiento de tareas
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {profiles.map(p => {
+              const assigned = tasks.filter(t => t.assigneeId === p.id);
+              const completed = assigned.filter(t => t.status === 'completada');
+              const pending = assigned.filter(t => t.status !== 'completada');
+              const overdue = pending.filter(t => t.dueDate && new Date(t.dueDate) < new Date());
+              const managedCount = players.filter(pl => pl.managedBy.includes(p.id)).length;
+
+              return (
+                <div key={p.id} className="bg-white border border-slate-200 rounded-lg p-4">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-9 h-9 rounded-full text-white text-xs font-bold flex items-center justify-center" style={{ background: PRIMARY }}>{p.avatar}</div>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">{p.name}</p>
+                      <p className="text-xs text-slate-400">{managedCount} jugador{managedCount !== 1 ? 'es' : ''}</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-slate-50 rounded-lg p-2">
+                      <p className="text-lg font-bold text-slate-800">{assigned.length}</p>
+                      <p className="text-[10px] text-slate-500">Total</p>
+                    </div>
+                    <div className="bg-emerald-50 rounded-lg p-2">
+                      <p className="text-lg font-bold text-emerald-600">{completed.length}</p>
+                      <p className="text-[10px] text-emerald-600">Completadas</p>
+                    </div>
+                    <div className="bg-amber-50 rounded-lg p-2">
+                      <p className="text-lg font-bold text-amber-600">{pending.length}</p>
+                      <p className="text-[10px] text-amber-600">Pendientes</p>
+                    </div>
+                  </div>
+                  {overdue.length > 0 && (
+                    <div className="mt-2 flex items-center gap-1.5 text-xs text-red-600 bg-red-50 rounded px-2 py-1">
+                      <AlertTriangle className="w-3 h-3" />
+                      <span>{overdue.length} tarea{overdue.length > 1 ? 's' : ''} vencida{overdue.length > 1 ? 's' : ''}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {/* Team members list */}

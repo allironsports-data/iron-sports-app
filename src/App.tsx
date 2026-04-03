@@ -171,6 +171,8 @@ export default function App() {
     return (
       <AdminPanel
         profiles={profiles}
+        tasks={tasks}
+        players={players}
         onBack={() => setShowAdmin(false)}
         onRefresh={handleRefreshProfiles}
         onLogout={signOut}
@@ -213,6 +215,9 @@ export default function App() {
       onBulkAssignManager={profile.is_admin ? handleBulkAssignManager : undefined}
       notifications={notifications}
       onDismissNotification={dismissNotification}
+      onAddGeneralTask={handleAddTask}
+      onUpdateGeneralTask={handleUpdateTask}
+      onDeleteGeneralTask={handleDeleteTask}
     />
   )
 }
