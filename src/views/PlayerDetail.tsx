@@ -6,11 +6,12 @@ import type {
 } from "../types";
 import { calcAge } from "../types";
 import type { Profile } from "../contexts/AuthContext";
+import { uploadContractPdf } from "../lib/db";
 import {
   ArrowLeft, LogOut, ClipboardList, FileText,
   TrendingUp, User, Plus, X, Calendar, AlertCircle,
   Clock, CheckCircle2, Trash2, Edit3, Star, Users,
-  MessageSquare, Paperclip, Send, Download,
+  MessageSquare, Paperclip, Send, Download, ExternalLink,
 } from "lucide-react";
 
 const PRIMARY = "hsl(220,72%,26%)";
@@ -313,7 +314,7 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
         {sorted.map((task) => {
           const assignee = profiles.find((m) => m.id === task.assigneeId);
           const dependency = task.dependsOnId ? allTasks.find((t) => t.id === task.dependsOnId) : null;
-          const isOverdue = task.status !== "completada" && new Date(task.dueDate) < new Date();
+          const isOverdue = task.status !== "completada" && !!task.dueDate && new Date(task.dueDate) < new Date();
           const isExpanded = expandedTask === task.id;
 
           return (
@@ -341,11 +342,22 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
                           {assignee.name}
                         </span>
                       )}
-                      <span className={`inline-flex items-center gap-1 text-xs ${isOverdue ? "text-red-500 font-medium" : "text-slate-400"}`}>
-                        <Calendar className="w-3 h-3" />
-                        {new Date(task.dueDate).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" })}
-                        {isOverdue && " (vencida)"}
-                      </span>
+                      {(task.watchers ?? []).map((wId) => {
+                        const w = profiles.find((m) => m.id === wId);
+                        return w ? (
+                          <span key={wId} className="inline-flex items-center gap-1 text-xs text-slate-400">
+                            <span className="w-4 h-4 rounded-full bg-blue-50 text-[9px] font-semibold flex items-center justify-center text-blue-600">{w.avatar}</span>
+                            {w.name}
+                          </span>
+                        ) : null;
+                      })}
+                      {task.dueDate && (
+                        <span className={`inline-flex items-center gap-1 text-xs ${isOverdue ? "text-red-500 font-medium" : "text-slate-400"}`}>
+                          <Calendar className="w-3 h-3" />
+                          {new Date(task.dueDate).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" })}
+                          {isOverdue && " (vencida)"}
+                        </span>
+                      )}
                       {dependency && <span className="text-xs text-slate-400">Depende de: {dependency.title}</span>}
                     </div>
                   </div>
@@ -529,9 +541,11 @@ function EditTaskModal({ task, profiles, tasks, onClose, onSave }: {
   const [title, setTitle] = useState(task.title);
   const [desc, setDesc] = useState(task.description ?? "");
   const [assignee, setAssignee] = useState(task.assigneeId ?? "");
+  const [watcher1, setWatcher1] = useState((task.watchers ?? [])[0] ?? "");
+  const [watcher2, setWatcher2] = useState((task.watchers ?? [])[1] ?? "");
   const [priority, setPriority] = useState<"alta" | "media" | "baja">(task.priority);
   const [status, setStatus] = useState<Task["status"]>(task.status);
-  const [dueDate, setDueDate] = useState(task.dueDate);
+  const [dueDate, setDueDate] = useState(task.dueDate ?? "");
   const [depends, setDepends] = useState(task.dependsOnId ?? "");
 
   return (
@@ -544,7 +558,8 @@ function EditTaskModal({ task, profiles, tasks, onClose, onSave }: {
         <form onSubmit={(e) => {
           e.preventDefault();
           onSave({ ...task, title, description: desc, assigneeId: assignee,
-            dependsOnId: depends || undefined, status, priority, dueDate });
+            watchers: [watcher1, watcher2].filter(Boolean),
+            dependsOnId: depends || undefined, status, priority, dueDate: dueDate || undefined });
         }} className="p-4 space-y-3 pb-8">
           <TF label="Título" value={title} onChange={setTitle} required />
           <div>
@@ -573,6 +588,24 @@ function EditTaskModal({ task, profiles, tasks, onClose, onSave }: {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Encargado 1</label>
+              <select value={watcher1} onChange={(e) => setWatcher1(e.target.value)}
+                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
+                <option value="">— Opcional —</option>
+                {profiles.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Encargado 2</label>
+              <select value={watcher2} onChange={(e) => setWatcher2(e.target.value)}
+                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
+                <option value="">— Opcional —</option>
+                {profiles.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Estado</label>
               <select value={status} onChange={(e) => setStatus(e.target.value as Task["status"])}
                 className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
@@ -581,7 +614,7 @@ function EditTaskModal({ task, profiles, tasks, onClose, onSave }: {
                 <option value="completada">Completada</option>
               </select>
             </div>
-            <TF label="Fecha límite" value={dueDate} onChange={setDueDate} type="date" required />
+            <TF label="Fecha límite (opcional)" value={dueDate} onChange={setDueDate} type="date" />
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Depende de</label>
@@ -598,7 +631,7 @@ function EditTaskModal({ task, profiles, tasks, onClose, onSave }: {
               className="flex-1 rounded-md border border-slate-200 text-slate-600 text-sm font-medium py-2 hover:bg-slate-50 transition-colors">
               Cancelar
             </button>
-            <button type="submit" disabled={!title || !assignee || !dueDate}
+            <button type="submit" disabled={!title || !assignee}
               className="flex-1 rounded-md text-white text-sm font-medium py-2 disabled:opacity-40 transition-colors"
               style={{ background: PRIMARY }}>
               Guardar
@@ -617,23 +650,26 @@ function AddTaskModal({ profiles, tasks, playerId, onClose, onAdd }: {
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
   const [assignee, setAssignee] = useState("");
+  const [watcher1, setWatcher1] = useState("");
+  const [watcher2, setWatcher2] = useState("");
   const [priority, setPriority] = useState<"alta" | "media" | "baja">("media");
   const [dueDate, setDueDate] = useState("");
   const [depends, setDepends] = useState("");
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="bg-white rounded-lg border border-slate-200 shadow-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-0 sm:p-4">
+      <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-md max-h-[92vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white">
           <h2 className="text-sm font-semibold text-slate-800">Nueva tarea</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
         </div>
         <form onSubmit={(e) => {
           e.preventDefault();
           onAdd({ id: "t" + Date.now(), playerId, title, description: desc, assigneeId: assignee,
-            dependsOnId: depends || undefined, status: "pendiente", priority, dueDate,
+            watchers: [watcher1, watcher2].filter(Boolean),
+            dependsOnId: depends || undefined, status: "pendiente", priority, dueDate: dueDate || undefined,
             createdAt: new Date().toISOString().split("T")[0], comments: [] });
-        }} className="p-4 space-y-3">
+        }} className="p-4 space-y-3 pb-8">
           <TF label="Título" value={title} onChange={setTitle} required />
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Descripción</label>
@@ -660,7 +696,25 @@ function AddTaskModal({ profiles, tasks, playerId, onClose, onAdd }: {
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <TF label="Fecha límite" value={dueDate} onChange={setDueDate} type="date" required />
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Encargado 1</label>
+              <select value={watcher1} onChange={(e) => setWatcher1(e.target.value)}
+                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
+                <option value="">— Opcional —</option>
+                {profiles.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Encargado 2</label>
+              <select value={watcher2} onChange={(e) => setWatcher2(e.target.value)}
+                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
+                <option value="">— Opcional —</option>
+                {profiles.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <TF label="Fecha límite (opcional)" value={dueDate} onChange={setDueDate} type="date" />
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Depende de</label>
               <select value={depends} onChange={(e) => setDepends(e.target.value)}
@@ -671,7 +725,7 @@ function AddTaskModal({ profiles, tasks, playerId, onClose, onAdd }: {
             </div>
           </div>
           <div className="pt-2">
-            <button type="submit" disabled={!title || !assignee || !dueDate}
+            <button type="submit" disabled={!title || !assignee}
               className="w-full rounded-md text-white text-sm font-medium py-2 disabled:opacity-40 transition-colors"
               style={{ background: PRIMARY }}>
               Crear tarea
@@ -759,21 +813,22 @@ function ContractTab({ player, onUpdate }: { player: Player; onUpdate: (p: Playe
               <Paperclip className="w-3 h-3" />Subir PDF
             </button>
             <input ref={fileRef} type="file" accept=".pdf" className="hidden"
-              onChange={(e) => {
+              onChange={async (e) => {
                 const file = e.target.files?.[0];
                 if (!file) return;
-                const reader = new FileReader();
-                reader.onload = (_ev) => {
+                try {
+                  const url = await uploadContractPdf(player.id, file);
                   onUpdate({
                     ...player,
                     clubContract: {
                       ...player.clubContract,
-                      notes: (player.clubContract.notes || "") + `\n[PDF: ${file.name}]`,
+                      notes: (player.clubContract.notes || "") + `\n[PDF: ${file.name}](${url})`,
                     },
                     info: { ...player.info },
                   });
-                };
-                reader.readAsDataURL(file);
+                } catch (err) {
+                  alert("Error al subir PDF: " + (err as Error).message);
+                }
                 e.target.value = "";
               }}
             />
@@ -822,8 +877,21 @@ function ContractTab({ player, onUpdate }: { player: Player; onUpdate: (p: Playe
             <DF label="Bonus" value={player.clubContract.bonuses || "—"} />
             {player.clubContract.notes && (
               <div className="col-span-full">
-                <p className="text-xs text-slate-400 mb-0.5">Notas</p>
-                <p className="text-sm text-slate-700 whitespace-pre-line">{player.clubContract.notes}</p>
+                <p className="text-xs text-slate-400 mb-0.5">Notas / Documentos</p>
+                <div className="text-sm text-slate-700 whitespace-pre-line">
+                  {player.clubContract.notes.split("\n").map((line, i) => {
+                    const pdfMatch = line.match(/\[PDF: (.+?)\]\((.+?)\)/);
+                    if (pdfMatch) {
+                      return (
+                        <a key={i} href={pdfMatch[2]} target="_blank" rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 text-xs">
+                          <ExternalLink className="w-3 h-3" />{pdfMatch[1]}
+                        </a>
+                      );
+                    }
+                    return line ? <span key={i}>{line}<br/></span> : null;
+                  })}
+                </div>
               </div>
             )}
           </div>

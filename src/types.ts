@@ -42,10 +42,11 @@ export interface Task {
   title: string;
   description: string;
   assigneeId: string;
+  watchers?: string[];        // up to 2 additional encargados
   dependsOnId?: string;
   status: "pendiente" | "en_progreso" | "completada";
   priority: "alta" | "media" | "baja";
-  dueDate: string;
+  dueDate?: string;           // optional
   createdAt: string;
   comments: TaskComment[];
 }

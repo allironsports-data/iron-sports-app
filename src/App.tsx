@@ -1,12 +1,21 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from './contexts/AuthContext'
 import type { Player, Task } from './types'
 import * as db from './lib/db'
+import { supabase } from './lib/supabase'
 import type { Profile } from './contexts/AuthContext'
 import { LoginScreen } from './views/LoginScreen'
 import { Dashboard } from './views/Dashboard'
 import { PlayerDetail } from './views/PlayerDetail'
 import { AdminPanel } from './views/AdminPanel'
+
+export interface AppNotification {
+  id: string
+  message: string
+  type: 'task_new' | 'task_done' | 'birthday'
+  playerId?: string
+  ts: number
+}
 
 function Spinner() {
   return (
@@ -25,6 +34,18 @@ export default function App() {
   const [dataLoading, setDataLoading] = useState(false)
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
   const [showAdmin, setShowAdmin] = useState(false)
+  const [notifications, setNotifications] = useState<AppNotification[]>([])
+
+  const addNotification = useCallback((msg: string, type: AppNotification['type'], playerId?: string) => {
+    setNotifications((prev) => [
+      { id: 'n' + Date.now() + Math.random(), message: msg, type, playerId, ts: Date.now() },
+      ...prev,
+    ].slice(0, 50))
+  }, [])
+
+  const dismissNotification = useCallback((id: string) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id))
+  }, [])
 
   // Load all data once authenticated
   useEffect(() => {
@@ -40,6 +61,48 @@ export default function App() {
       setProfiles(pr as Profile[])
     }).finally(() => setDataLoading(false))
   }, [user])
+
+  // Supabase realtime: listen for task changes from other users
+  useEffect(() => {
+    if (!user || !profile) return
+
+    const channel = supabase.channel('task-notifications')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tasks' }, (payload) => {
+        const row = payload.new as Record<string, unknown>
+        const playerId = row.player_id as string
+        const title = row.title as string
+        // Refresh tasks
+        db.fetchTasks().then((t) => setTasks(t))
+        // Check if player is managed by current user
+        setPlayers((prev) => {
+          const p = prev.find((pl) => pl.id === playerId)
+          if (p && p.managedBy.includes(profile.id)) {
+            addNotification(`Nueva tarea: "${title}" para ${p.name}`, 'task_new', playerId)
+          }
+          return prev
+        })
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tasks' }, (payload) => {
+        const row = payload.new as Record<string, unknown>
+        const playerId = row.player_id as string
+        const title = row.title as string
+        const status = row.status as string
+        // Refresh tasks
+        db.fetchTasks().then((t) => setTasks(t))
+        if (status === 'completada') {
+          setPlayers((prev) => {
+            const p = prev.find((pl) => pl.id === playerId)
+            if (p && p.managedBy.includes(profile.id)) {
+              addNotification(`Tarea completada: "${title}" de ${p.name}`, 'task_done', playerId)
+            }
+            return prev
+          })
+        }
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [user, profile, addNotification])
 
   if (loading) return <Spinner />
   if (!user || !profile) return <LoginScreen onLogin={signIn} />
@@ -75,7 +138,8 @@ export default function App() {
     setPlayers((prev) =>
       prev.map((p) => {
         if (!playerIds.includes(p.id)) return p
-        const updated = p.managedBy.includes(managerId) ? p.managedBy : [...p.managedBy, managerId]
+        const manager2 = p.managedBy[1] ?? null
+        const updated = manager2 ? [managerId, manager2] : [managerId]
         return { ...p, managedBy: updated }
       })
     )
@@ -147,6 +211,8 @@ export default function App() {
       onAdmin={profile.is_admin ? () => setShowAdmin(true) : undefined}
       onBulkDelete={profile.is_admin ? handleBulkDelete : undefined}
       onBulkAssignManager={profile.is_admin ? handleBulkAssignManager : undefined}
+      notifications={notifications}
+      onDismissNotification={dismissNotification}
     />
   )
 }

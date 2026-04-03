@@ -58,6 +58,17 @@ export async function uploadPassport(playerId: string, file: File): Promise<stri
   return data.publicUrl
 }
 
+// ── CONTRACT PDF UPLOAD ─────────────────────────────────────
+
+export async function uploadContractPdf(playerId: string, file: File): Promise<string> {
+  const ext = file.name.split('.').pop()
+  const path = `contracts/${playerId}_${Date.now()}.${ext}`
+  const { error } = await supabase.storage.from('attachments').upload(path, file, { upsert: true })
+  if (error) throw error
+  const { data } = supabase.storage.from('attachments').getPublicUrl(path)
+  return data.publicUrl
+}
+
 // ── PLAYERS ──────────────────────────────────────────────────
 
 export async function fetchPlayers(): Promise<Player[]> {
@@ -113,10 +124,11 @@ function dbToTask(row: Record<string, unknown>): Task {
     title: row.title as string,
     description: (row.description as string) ?? '',
     assigneeId: (row.assignee_id as string) ?? '',
+    watchers: (row.watchers as string[]) ?? [],
     dependsOnId: row.depends_on_id as string | undefined,
     status: row.status as Task['status'],
     priority: row.priority as Task['priority'],
-    dueDate: row.due_date as string,
+    dueDate: (row.due_date as string) ?? undefined,
     createdAt: row.created_at as string,
     comments: [],
   }
@@ -136,10 +148,11 @@ export async function createTask(t: Task): Promise<Task> {
     title: t.title,
     description: t.description,
     assignee_id: t.assigneeId || null,
+    watchers: t.watchers ?? [],
     depends_on_id: t.dependsOnId || null,
     status: t.status,
     priority: t.priority,
-    due_date: t.dueDate,
+    due_date: t.dueDate || null,
   }).select().single()
   if (error) throw error
   return dbToTask(data)
@@ -150,10 +163,11 @@ export async function updateTask(t: Task): Promise<void> {
     title: t.title,
     description: t.description,
     assignee_id: t.assigneeId || null,
+    watchers: t.watchers ?? [],
     depends_on_id: t.dependsOnId || null,
     status: t.status,
     priority: t.priority,
-    due_date: t.dueDate,
+    due_date: t.dueDate || null,
   }).eq('id', t.id)
   if (error) throw error
 }
