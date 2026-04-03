@@ -434,7 +434,7 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
       )}
 
       {showAdd && (
-        <AddTaskModal profiles={profiles} tasks={tasks} playerId={player.id}
+        <AddTaskModal profiles={profiles} tasks={tasks} playerId={player.id} player={player}
           onClose={() => setShowAdd(false)}
           onAdd={(t) => { onAddTask(t); setShowAdd(false); }}
         />
@@ -445,6 +445,7 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
           task={editingTask}
           profiles={profiles}
           tasks={tasks}
+          player={player}
           onClose={() => setEditingTask(null)}
           onSave={(updated) => { onUpdateTask(updated); setEditingTask(null); }}
         />
@@ -534,19 +535,21 @@ function CommentInput({ currentProfile, onSubmit }: {
   );
 }
 
-function EditTaskModal({ task, profiles, tasks, onClose, onSave }: {
-  task: Task; profiles: Profile[]; tasks: Task[];
+function EditTaskModal({ task, profiles, tasks, player, onClose, onSave }: {
+  task: Task; profiles: Profile[]; tasks: Task[]; player: Player;
   onClose: () => void; onSave: (t: Task) => void;
 }) {
   const [title, setTitle] = useState(task.title);
   const [desc, setDesc] = useState(task.description ?? "");
   const [assignee, setAssignee] = useState(task.assigneeId ?? "");
-  const [watcher1, setWatcher1] = useState((task.watchers ?? [])[0] ?? "");
-  const [watcher2, setWatcher2] = useState((task.watchers ?? [])[1] ?? "");
+  // Find extra watcher (one that's not in player.managedBy)
+  const existingExtra = (task.watchers ?? []).find((w) => !player.managedBy.includes(w)) ?? "";
+  const [extraWatcher, setExtraWatcher] = useState(existingExtra);
   const [priority, setPriority] = useState<"alta" | "media" | "baja">(task.priority);
   const [status, setStatus] = useState<Task["status"]>(task.status);
   const [dueDate, setDueDate] = useState(task.dueDate ?? "");
   const [depends, setDepends] = useState(task.dependsOnId ?? "");
+  const playerManagers = player.managedBy.map((id) => profiles.find((m) => m.id === id)).filter(Boolean) as Profile[];
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-0 sm:p-4">
@@ -557,8 +560,10 @@ function EditTaskModal({ task, profiles, tasks, onClose, onSave }: {
         </div>
         <form onSubmit={(e) => {
           e.preventDefault();
+          const watchers = [...player.managedBy];
+          if (extraWatcher && !watchers.includes(extraWatcher)) watchers.push(extraWatcher);
           onSave({ ...task, title, description: desc, assigneeId: assignee,
-            watchers: [watcher1, watcher2].filter(Boolean),
+            watchers,
             dependsOnId: depends || undefined, status, priority, dueDate: dueDate || undefined });
         }} className="p-4 space-y-3 pb-8">
           <TF label="Título" value={title} onChange={setTitle} required />
@@ -586,23 +591,26 @@ function EditTaskModal({ task, profiles, tasks, onClose, onSave }: {
               </select>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Encargado 1</label>
-              <select value={watcher1} onChange={(e) => setWatcher1(e.target.value)}
-                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
-                <option value="">— Opcional —</option>
-                {profiles.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </select>
+          {/* Auto-notified managers */}
+          <div className="bg-slate-50 rounded-md p-2.5">
+            <p className="text-xs font-medium text-slate-500 mb-1">Se notificará automáticamente a:</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              {playerManagers.length > 0 ? playerManagers.map((m) => (
+                <span key={m.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-slate-200 text-xs text-slate-600">
+                  {m.avatar} {m.name}
+                </span>
+              )) : <span className="text-xs text-slate-400">Sin managers asignados</span>}
             </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Encargado 2</label>
-              <select value={watcher2} onChange={(e) => setWatcher2(e.target.value)}
-                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
-                <option value="">— Opcional —</option>
-                {profiles.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </select>
-            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Notificar también a (opcional)</label>
+            <select value={extraWatcher} onChange={(e) => setExtraWatcher(e.target.value)}
+              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
+              <option value="">— Nadie más —</option>
+              {profiles.filter((m) => !player.managedBy.includes(m.id)).map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -643,18 +651,19 @@ function EditTaskModal({ task, profiles, tasks, onClose, onSave }: {
   );
 }
 
-function AddTaskModal({ profiles, tasks, playerId, onClose, onAdd }: {
-  profiles: Profile[]; tasks: Task[]; playerId: string;
+function AddTaskModal({ profiles, tasks, playerId, player, onClose, onAdd }: {
+  profiles: Profile[]; tasks: Task[]; playerId: string; player: Player;
   onClose: () => void; onAdd: (t: Task) => void;
 }) {
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
   const [assignee, setAssignee] = useState("");
-  const [watcher1, setWatcher1] = useState("");
-  const [watcher2, setWatcher2] = useState("");
+  const [extraWatcher, setExtraWatcher] = useState("");
   const [priority, setPriority] = useState<"alta" | "media" | "baja">("media");
   const [dueDate, setDueDate] = useState("");
   const [depends, setDepends] = useState("");
+
+  const playerManagers = player.managedBy.map((id) => profiles.find((m) => m.id === id)).filter(Boolean) as Profile[];
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-0 sm:p-4">
@@ -665,8 +674,10 @@ function AddTaskModal({ profiles, tasks, playerId, onClose, onAdd }: {
         </div>
         <form onSubmit={(e) => {
           e.preventDefault();
+          const watchers = [...player.managedBy];
+          if (extraWatcher && !watchers.includes(extraWatcher)) watchers.push(extraWatcher);
           onAdd({ id: "t" + Date.now(), playerId, title, description: desc, assigneeId: assignee,
-            watchers: [watcher1, watcher2].filter(Boolean),
+            watchers,
             dependsOnId: depends || undefined, status: "pendiente", priority, dueDate: dueDate || undefined,
             createdAt: new Date().toISOString().split("T")[0], comments: [] });
         }} className="p-4 space-y-3 pb-8">
@@ -695,23 +706,26 @@ function AddTaskModal({ profiles, tasks, playerId, onClose, onAdd }: {
               </select>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Encargado 1</label>
-              <select value={watcher1} onChange={(e) => setWatcher1(e.target.value)}
-                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
-                <option value="">— Opcional —</option>
-                {profiles.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </select>
+          {/* Auto-notified managers */}
+          <div className="bg-slate-50 rounded-md p-2.5">
+            <p className="text-xs font-medium text-slate-500 mb-1">Se notificará automáticamente a:</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              {playerManagers.length > 0 ? playerManagers.map((m) => (
+                <span key={m.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-slate-200 text-xs text-slate-600">
+                  {m.avatar} {m.name}
+                </span>
+              )) : <span className="text-xs text-slate-400">Sin managers asignados</span>}
             </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Encargado 2</label>
-              <select value={watcher2} onChange={(e) => setWatcher2(e.target.value)}
-                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
-                <option value="">— Opcional —</option>
-                {profiles.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </select>
-            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Notificar también a (opcional)</label>
+            <select value={extraWatcher} onChange={(e) => setExtraWatcher(e.target.value)}
+              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
+              <option value="">— Nadie más —</option>
+              {profiles.filter((m) => !player.managedBy.includes(m.id)).map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <TF label="Fecha límite (opcional)" value={dueDate} onChange={setDueDate} type="date" />

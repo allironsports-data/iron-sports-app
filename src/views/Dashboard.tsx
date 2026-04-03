@@ -97,10 +97,7 @@ export function Dashboard({
   const urgentTasks = tasks.filter(
     (t) => t.priority === "alta" && t.status !== "completada"
   );
-  const myTasks = pendingTasks.filter((t) =>
-    t.assigneeId === currentProfile.id ||
-    (t.watchers ?? []).includes(currentProfile.id)
-  );
+  const myTasks = pendingTasks.filter((t) => t.assigneeId === currentProfile.id);
 
   // Birthdays
   const birthdaysToday = players.filter((p) => isBirthdayToday(p.birthDate));
