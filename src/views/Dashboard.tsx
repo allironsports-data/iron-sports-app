@@ -20,6 +20,7 @@ import {
   Cake,
   Calendar,
   ListTodo,
+  Edit3,
 } from "lucide-react";
 
 const PRIMARY = "hsl(220,72%,26%)";
@@ -38,6 +39,7 @@ interface Props {
   notifications?: AppNotification[];
   onDismissNotification?: (id: string) => void;
   onAddGeneralTask?: (task: Task) => void;
+  onUpdateGeneralTask?: (task: Task) => void;
   onDeleteGeneralTask?: (taskId: string) => void;
 }
 
@@ -72,11 +74,13 @@ export function Dashboard({
   notifications = [],
   onDismissNotification,
   onAddGeneralTask,
+  onUpdateGeneralTask,
   onDeleteGeneralTask,
 }: Props) {
   const [search, setSearch] = useState("");
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [showAddGeneralTask, setShowAddGeneralTask] = useState(false);
+  const [editingGeneralTask, setEditingGeneralTask] = useState<Task | null>(null);
   const [managerFilter, setManagerFilter] = useState<string>("all");
   const [taskView, setTaskView] = useState<"pending" | "urgent" | "mine" | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -389,32 +393,25 @@ export function Dashboard({
               {generalTasks.slice(0, 10).map((task) => {
                 const assignee = profiles.find((m) => m.id === task.assigneeId);
                 const isOverdue = task.dueDate && new Date(task.dueDate) < new Date();
+                const statusColor = task.status === 'completada' ? 'bg-emerald-500' : task.priority === "alta" ? "bg-red-500" : task.priority === "media" ? "bg-amber-400" : "bg-slate-300";
                 return (
-                  <div
+                  <button
                     key={task.id}
-                    className="w-full flex items-center gap-3 px-3 sm:px-4 py-3 text-left hover:bg-slate-50 transition-colors"
+                    onClick={() => setEditingGeneralTask(task)}
+                    className="w-full flex items-center gap-3 px-3 sm:px-4 py-3 text-left hover:bg-slate-50 active:bg-slate-100 transition-colors"
                   >
-                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                      task.priority === "alta" ? "bg-red-500" : task.priority === "media" ? "bg-amber-400" : "bg-slate-300"
-                    }`} />
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${statusColor}`} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-slate-700 truncate">{task.title}</p>
-                      <p className="text-xs text-slate-400">{assignee?.name ?? "Sin asignar"}</p>
+                      <p className={`text-sm font-medium truncate ${task.status === 'completada' ? 'text-slate-400 line-through' : 'text-slate-700'}`}>{task.title}</p>
+                      <p className="text-xs text-slate-400">{assignee?.name ?? "Sin asignar"}{task.status === 'en_progreso' ? ' · En progreso' : ''}</p>
                     </div>
                     {task.dueDate && (
-                      <span className={`text-xs flex-shrink-0 ${isOverdue ? "text-red-500 font-medium" : "text-slate-400"}`}>
+                      <span className={`text-xs flex-shrink-0 ${isOverdue && task.status !== 'completada' ? "text-red-500 font-medium" : "text-slate-400"}`}>
                         {new Date(task.dueDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
                       </span>
                     )}
-                    {onDeleteGeneralTask && (
-                      <button
-                        onClick={() => onDeleteGeneralTask(task.id)}
-                        className="text-slate-300 hover:text-red-600 transition-colors p-1 flex-shrink-0"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
+                    <Edit3 className="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />
+                  </button>
                 );
               })}
             </div>
@@ -487,15 +484,17 @@ export function Dashboard({
         </div>
 
         {/* Player cards grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           {filtered.map((player) => {
             const playerTasks = tasks.filter((t) => t.playerId === player.id && t.status !== "completada");
             const urgent = playerTasks.filter((t) => t.priority === "alta");
             const age = calcAge(player.birthDate);
             const repEnd = new Date(player.representationContract.end).getTime();
             const repDaysLeft = Math.ceil((repEnd - Date.now()) / (1000*60*60*24));
+            const repEndStr = player.representationContract.end ? new Date(player.representationContract.end).toLocaleDateString("es-ES", { month: "short", year: "numeric" }) : "—";
             const clubEnd = new Date(player.clubContract.endDate).getTime();
             const clubDaysLeft = Math.ceil((clubEnd - Date.now()) / (1000*60*60*24));
+            const clubEndStr = player.clubContract.endDate ? new Date(player.clubContract.endDate).toLocaleDateString("es-ES", { month: "short", year: "numeric" }) : "—";
             const managers = player.managedBy.map((id) => profiles.find((m) => m.id === id)).filter(Boolean) as Profile[];
             const isSelected = selected.has(player.id);
             const isBday = isBirthdayToday(player.birthDate);
@@ -503,39 +502,59 @@ export function Dashboard({
             return (
               <div
                 key={player.id}
-                className="bg-white border rounded-lg p-3 sm:p-4 text-center cursor-pointer transition-all hover:border-slate-300 hover:shadow-sm relative"
+                className={`bg-white border rounded-xl p-4 sm:p-5 cursor-pointer transition-all hover:shadow-md relative ${
+                  isSelected ? "border-blue-400 ring-2 ring-blue-200" : "border-slate-200 hover:border-slate-300"
+                }`}
                 onClick={() => selectMode ? toggleSelect(player.id) : onSelectPlayer(player.id)}
               >
                 {selectMode && (
-                  <div className="absolute top-1.5 right-1.5 z-10">
-                    {isSelected ? <CheckSquare className="w-4 h-4 text-blue-600" /> : <Square className="w-4 h-4 text-slate-300" />}
+                  <div className="absolute top-3 right-3 z-10">
+                    {isSelected ? <CheckSquare className="w-5 h-5 text-blue-600" /> : <Square className="w-5 h-5 text-slate-300" />}
                   </div>
                 )}
-                {isBday && <span className="absolute top-1 left-1.5 text-sm">🎂</span>}
-                <p className="text-sm sm:text-[15px] font-bold text-slate-900 truncate leading-tight">{player.name}</p>
-                <p className="text-[11px] sm:text-xs text-slate-500 truncate mt-1">
-                  {player.positions[0]} · {clubsLabel(player.clubs)}
+                {isBday && <span className="absolute top-2 left-3 text-base">🎂</span>}
+
+                {/* Name & basic info */}
+                <h3 className="text-base sm:text-lg font-bold text-slate-900 truncate">{player.name}</h3>
+                <p className="text-sm text-slate-500 truncate mt-0.5">
+                  {player.positions[0]}{player.positions[1] ? ` / ${player.positions[1]}` : ''} · {clubsLabel(player.clubs)}
                 </p>
-                <p className="text-[11px] sm:text-xs text-slate-400 truncate">
+                <p className="text-sm text-slate-400">
                   {age} años · {player.nationality}
                 </p>
-                <div className="flex items-center justify-center gap-1 mt-2 flex-wrap">
-                  {managers.map(m => <span key={m.id} className="w-5 h-5 rounded-full text-[8px] font-bold flex items-center justify-center text-white" style={{ background: PRIMARY }}>{m.avatar}</span>)}
-                  {repDaysLeft < 365 && repDaysLeft > 0 && <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-red-50 text-red-600 border border-red-100">Repr.</span>}
-                  {clubDaysLeft < 365 && clubDaysLeft > 0 && <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-amber-50 text-amber-600 border border-amber-100">Club</span>}
+
+                {/* Contracts row */}
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <div className={`rounded-lg px-2.5 py-1.5 ${repDaysLeft < 365 && repDaysLeft > 0 ? 'bg-red-50 border border-red-100' : 'bg-slate-50'}`}>
+                    <p className="text-[10px] text-slate-400 uppercase tracking-wide">Repr.</p>
+                    <p className={`text-xs font-semibold ${repDaysLeft < 365 && repDaysLeft > 0 ? 'text-red-600' : 'text-slate-700'}`}>{repEndStr}</p>
+                  </div>
+                  <div className={`rounded-lg px-2.5 py-1.5 ${clubDaysLeft < 365 && clubDaysLeft > 0 ? 'bg-amber-50 border border-amber-100' : 'bg-slate-50'}`}>
+                    <p className="text-[10px] text-slate-400 uppercase tracking-wide">Club</p>
+                    <p className={`text-xs font-semibold ${clubDaysLeft < 365 && clubDaysLeft > 0 ? 'text-amber-600' : 'text-slate-700'}`}>{clubEndStr}</p>
+                  </div>
                 </div>
-                {playerTasks.length > 0 && (
-                  <div className="mt-2 flex items-center justify-center gap-1">
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                      {playerTasks.length} tarea{playerTasks.length > 1 ? 's' : ''}
-                    </span>
+
+                {/* Bottom row: managers + tasks */}
+                <div className="mt-3 flex items-center justify-between">
+                  <div className="flex items-center gap-1">
+                    {managers.map(m => (
+                      <span key={m.id} className="w-6 h-6 rounded-full text-[9px] font-bold flex items-center justify-center text-white" style={{ background: PRIMARY }}>{m.avatar}</span>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {playerTasks.length > 0 && (
+                      <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                        {playerTasks.length} tarea{playerTasks.length > 1 ? 's' : ''}
+                      </span>
+                    )}
                     {urgent.length > 0 && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-50 text-red-600 border border-red-200">
+                      <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-600 border border-red-200">
                         {urgent.length} urg.
                       </span>
                     )}
                   </div>
-                )}
+                </div>
               </div>
             );
           })}
@@ -583,6 +602,22 @@ export function Dashboard({
       {showAddGeneralTask && onAddGeneralTask && (
         <AddGeneralTaskModal profiles={profiles} onClose={() => setShowAddGeneralTask(false)}
           onAdd={(t) => { onAddGeneralTask(t); setShowAddGeneralTask(false); }} />
+      )}
+
+      {editingGeneralTask && (
+        <EditGeneralTaskModal
+          task={editingGeneralTask}
+          profiles={profiles}
+          onClose={() => setEditingGeneralTask(null)}
+          onUpdate={(updated) => {
+            if (onUpdateGeneralTask) onUpdateGeneralTask(updated);
+            setEditingGeneralTask(null);
+          }}
+          onDelete={onDeleteGeneralTask ? (id) => {
+            onDeleteGeneralTask(id);
+            setEditingGeneralTask(null);
+          } : undefined}
+        />
       )}
     </div>
   );
@@ -822,6 +857,98 @@ function AddGeneralTaskModal({ profiles, onClose, onAdd }: {
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+function EditGeneralTaskModal({ task, profiles, onClose, onUpdate, onDelete }: {
+  task: Task; profiles: Profile[]; onClose: () => void;
+  onUpdate: (task: Task) => void; onDelete?: (id: string) => void;
+}) {
+  const [title, setTitle] = useState(task.title);
+  const [description, setDescription] = useState(task.description);
+  const [assigneeId, setAssigneeId] = useState(task.assigneeId);
+  const [priority, setPriority] = useState<"alta" | "media" | "baja">(task.priority);
+  const [status, setStatus] = useState<"pendiente" | "en_progreso" | "completada">(task.status);
+  const [dueDate, setDueDate] = useState(task.dueDate ?? "");
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    onUpdate({
+      ...task,
+      title,
+      description,
+      assigneeId,
+      priority,
+      status,
+      dueDate: dueDate || undefined,
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-0 sm:p-4">
+      <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-md max-h-[92vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white z-10">
+          <h2 className="text-sm font-semibold text-slate-800">Editar tarea general</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+        </div>
+        <form onSubmit={handleSave} className="p-4 space-y-3 pb-8">
+          <F label="Título" value={title} onChange={setTitle} required />
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Descripción</label>
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)}
+              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none h-24" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Estado</label>
+              <select value={status} onChange={(e) => setStatus(e.target.value as typeof status)}
+                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
+                <option value="pendiente">Pendiente</option>
+                <option value="en_progreso">En progreso</option>
+                <option value="completada">Completada</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Prioridad</label>
+              <select value={priority} onChange={(e) => setPriority(e.target.value as typeof priority)}
+                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
+                <option value="baja">Baja</option>
+                <option value="media">Media</option>
+                <option value="alta">Alta</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Asignado a</label>
+            <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}
+              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
+              <option value="">— Sin asignar —</option>
+              {profiles.map((m) => <option key={m.id} value={m.id}>{m.avatar} {m.name}</option>)}
+            </select>
+          </div>
+          <F label="Fecha de vencimiento" value={dueDate} onChange={setDueDate} type="date" />
+          <div className="pt-2 flex gap-2">
+            <button type="submit" disabled={!title}
+              className="flex-1 rounded-md text-white text-sm font-medium py-2.5 disabled:opacity-40 transition-colors"
+              style={{ background: PRIMARY }}>
+              Guardar cambios
+            </button>
+            {onDelete && (
+              <button type="button" onClick={() => { if (confirm("¿Eliminar esta tarea?")) onDelete(task.id); }}
+                className="rounded-md text-red-600 border border-red-200 text-sm font-medium px-4 py-2.5 hover:bg-red-50 transition-colors">
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </form>
+        {/* Task info */}
+        <div className="px-4 pb-4 border-t border-slate-100 pt-3">
+          <p className="text-[10px] text-slate-400">
+            Creada: {new Date(task.createdAt).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}
+          </p>
+        </div>
       </div>
     </div>
   );
