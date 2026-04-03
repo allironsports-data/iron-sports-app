@@ -1,19 +1,15 @@
 import { useState } from "react";
-import type { Player, Task } from "../types";
+import type { Player } from "../types";
 import { calcAge } from "../types";
 import type { Profile } from "../contexts/AuthContext";
 import logoImg from '../assets/logo.jpeg';
 import {
-  ArrowLeft, LogOut, Users, FileText, BarChart3, AlertTriangle, Shield,
+  ArrowLeft, LogOut, Users, FileText, AlertTriangle, Shield,
 } from "lucide-react";
-
-const PRIMARY = "hsl(220,72%,26%)";
 
 interface Props {
   players: Player[];
-  tasks: Task[];
   profiles: Profile[];
-  currentProfile: Profile;
   onBack: () => void;
   onLogout: () => void;
   onAdmin?: () => void;
@@ -21,7 +17,7 @@ interface Props {
 
 type TabId = "plantilla" | "contratos";
 
-export function OverviewPanel({ players, tasks, profiles, currentProfile, onBack, onLogout, onAdmin }: Props) {
+export function OverviewPanel({ players, profiles, onBack, onLogout, onAdmin }: Props) {
   const [tab, setTab] = useState<TabId>("plantilla");
 
   const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [

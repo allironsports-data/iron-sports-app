@@ -173,9 +173,7 @@ export default function App() {
     return (
       <OverviewPanel
         players={players}
-        tasks={tasks}
         profiles={profiles}
-        currentProfile={profile}
         onBack={() => setShowOverview(false)}
         onLogout={signOut}
         onAdmin={profile.is_admin ? () => { setShowOverview(false); setShowAdmin(true); } : undefined}

@@ -41,6 +41,7 @@ export const initialPlayers: Player[] = [
     contractHistory: [
       { club: "Betis Deportivo / Betis Juvenil", period: "2024–presente", type: "Cantera / Filial" },
     ],
+    clubInterests: [],
     performance: [],
     info: { family: "", personality: "", phone: "", passportUrl: "" },
   },

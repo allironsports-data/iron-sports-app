@@ -21,6 +21,7 @@ import {
   Calendar,
   ListTodo,
   Edit3,
+  BarChart3,
 } from "lucide-react";
 
 const PRIMARY = "hsl(220,72%,26%)";
@@ -41,6 +42,7 @@ interface Props {
   onAddGeneralTask?: (task: Task) => void;
   onUpdateGeneralTask?: (task: Task) => void;
   onDeleteGeneralTask?: (taskId: string) => void;
+  onOverview?: () => void;
 }
 
 // Birthday helpers
@@ -76,13 +78,14 @@ export function Dashboard({
   onAddGeneralTask,
   onUpdateGeneralTask,
   onDeleteGeneralTask,
+  onOverview,
 }: Props) {
   const [search, setSearch] = useState("");
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [showAddGeneralTask, setShowAddGeneralTask] = useState(false);
   const [editingGeneralTask, setEditingGeneralTask] = useState<Task | null>(null);
   const [managerFilter, setManagerFilter] = useState<string>("all");
-  const [taskView, setTaskView] = useState<"pending" | "urgent" | "mine" | null>(null);
+  const [taskView, setTaskView] = useState<"pending" | "urgent" | "mine" | "inprogress" | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
 
   // Bulk select state
@@ -106,6 +109,7 @@ export function Dashboard({
   const urgentTasks = tasks.filter(
     (t) => t.priority === "alta" && t.status !== "completada"
   );
+  const inProgressTasks = tasks.filter((t) => t.status === "en_progreso");
   const myTasks = pendingTasks.filter((t) => t.assigneeId === currentProfile.id);
   const generalTasks = tasks.filter((t) => t.playerId === "" || t.playerId === "general");
 
@@ -126,6 +130,7 @@ export function Dashboard({
   // Task view filtered tasks
   const viewTasks = taskView === "pending" ? pendingTasks
     : taskView === "urgent" ? urgentTasks
+    : taskView === "inprogress" ? inProgressTasks
     : taskView === "mine" ? myTasks
     : [];
 
@@ -214,6 +219,11 @@ export function Dashboard({
               className="w-8 h-8 rounded-full text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0"
               style={{ background: PRIMARY }}
             >{currentProfile.avatar}</div>
+            {onOverview && (
+              <button onClick={onOverview} className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors" title="Overview">
+                <BarChart3 className="w-4 h-4" />
+              </button>
+            )}
             {currentProfile.is_admin && onAdmin && (
               <button onClick={onAdmin} className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors" title="Admin">
                 <Users className="w-4 h-4" />
@@ -286,13 +296,15 @@ export function Dashboard({
         )}
 
         {/* Stats — clickable */}
-        <div className="grid grid-cols-2 gap-1.5 sm:gap-3 lg:grid-cols-4 mb-4 sm:mb-6">
+        <div className="grid grid-cols-2 gap-1.5 sm:gap-3 sm:grid-cols-3 lg:grid-cols-5 mb-4 sm:mb-6">
           <StatCard icon={<Users className="w-4 h-4" />} label="Jugadores" value={players.length} color="blue"
             onClick={() => setTaskView(null)} active={taskView === null} />
-          <StatCard icon={<ClipboardList className="w-4 h-4" />} label="Tareas pendientes" value={pendingTasks.length} color="amber"
+          <StatCard icon={<ClipboardList className="w-4 h-4" />} label="Pendientes" value={pendingTasks.length} color="amber"
             onClick={() => setTaskView(taskView === "pending" ? null : "pending")} active={taskView === "pending"} />
           <StatCard icon={<AlertTriangle className="w-4 h-4" />} label="Urgentes" value={urgentTasks.length} color="red"
             onClick={() => setTaskView(taskView === "urgent" ? null : "urgent")} active={taskView === "urgent"} />
+          <StatCard icon={<ClipboardList className="w-4 h-4" />} label="En proceso" value={inProgressTasks.length} color="purple"
+            onClick={() => setTaskView(taskView === "inprogress" ? null : "inprogress")} active={taskView === "inprogress"} />
           <StatCard icon={<ClipboardList className="w-4 h-4" />} label="Mis tareas" value={myTasks.length} color="green"
             onClick={() => setTaskView(taskView === "mine" ? null : "mine")} active={taskView === "mine"} />
         </div>
@@ -302,7 +314,7 @@ export function Dashboard({
           <div className="mb-4 sm:mb-6 bg-white border border-slate-200 rounded-lg overflow-hidden">
             <div className="px-3 sm:px-4 py-3 border-b border-slate-100 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-slate-800">
-                {taskView === "pending" ? "Todas las tareas pendientes" : taskView === "urgent" ? "Tareas urgentes" : "Mis tareas"}
+                {taskView === "pending" ? "Todas las tareas pendientes" : taskView === "urgent" ? "Tareas urgentes" : taskView === "inprogress" ? "Tareas en proceso" : "Mis tareas"}
               </h2>
               <button onClick={() => setTaskView(null)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
             </div>
@@ -525,13 +537,13 @@ export function Dashboard({
 
                 {/* Contracts row */}
                 <div className="mt-3 grid grid-cols-2 gap-2">
-                  <div className={`rounded-lg px-2.5 py-1.5 ${repDaysLeft < 365 && repDaysLeft > 0 ? 'bg-red-50 border border-red-100' : 'bg-slate-50'}`}>
+                  <div className={`rounded-lg px-2.5 py-1.5 ${repDaysLeft > 0 && repDaysLeft < 183 ? 'bg-red-50 border border-red-100' : repDaysLeft >= 183 && repDaysLeft < 365 ? 'bg-amber-50 border border-amber-100' : 'bg-slate-50'}`}>
                     <p className="text-[10px] text-slate-400 uppercase tracking-wide">Repr.</p>
-                    <p className={`text-xs font-semibold ${repDaysLeft < 365 && repDaysLeft > 0 ? 'text-red-600' : 'text-slate-700'}`}>{repEndStr}</p>
+                    <p className={`text-xs font-semibold ${repDaysLeft > 0 && repDaysLeft < 183 ? 'text-red-600' : repDaysLeft >= 183 && repDaysLeft < 365 ? 'text-amber-600' : 'text-slate-700'}`}>{repEndStr}</p>
                   </div>
-                  <div className={`rounded-lg px-2.5 py-1.5 ${clubDaysLeft < 365 && clubDaysLeft > 0 ? 'bg-amber-50 border border-amber-100' : 'bg-slate-50'}`}>
+                  <div className={`rounded-lg px-2.5 py-1.5 ${clubDaysLeft > 0 && clubDaysLeft < 183 ? 'bg-red-50 border border-red-100' : clubDaysLeft >= 183 && clubDaysLeft < 365 ? 'bg-amber-50 border border-amber-100' : 'bg-slate-50'}`}>
                     <p className="text-[10px] text-slate-400 uppercase tracking-wide">Club</p>
-                    <p className={`text-xs font-semibold ${clubDaysLeft < 365 && clubDaysLeft > 0 ? 'text-amber-600' : 'text-slate-700'}`}>{clubEndStr}</p>
+                    <p className={`text-xs font-semibold ${clubDaysLeft > 0 && clubDaysLeft < 183 ? 'text-red-600' : clubDaysLeft >= 183 && clubDaysLeft < 365 ? 'text-amber-600' : 'text-slate-700'}`}>{clubEndStr}</p>
                   </div>
                 </div>
 
@@ -625,7 +637,7 @@ export function Dashboard({
 
 function StatCard({ icon, label, value, color, onClick, active }: {
   icon: React.ReactNode; label: string; value: number;
-  color: "blue" | "amber" | "red" | "green";
+  color: "blue" | "amber" | "red" | "green" | "purple";
   onClick?: () => void; active?: boolean;
 }) {
   const colors = {
@@ -633,6 +645,7 @@ function StatCard({ icon, label, value, color, onClick, active }: {
     amber: "bg-amber-50 text-amber-600",
     red: "bg-red-50 text-red-600",
     green: "bg-emerald-50 text-emerald-600",
+    purple: "bg-violet-50 text-violet-600",
   };
   return (
     <button
@@ -718,7 +731,7 @@ function AddPlayerModal({ profiles, onClose, onAdd }: {
       managedBy: [managed1, managed2].filter(Boolean),
       representationContract: { start: reprStart, end: reprEnd },
       clubContract: { endDate: clubEnd, optionalYears: optYears ? parseInt(optYears) : undefined },
-      contractHistory: [], performance: [],
+      contractHistory: [], clubInterests: [], performance: [],
       info: { family: "", personality: "", phone: "", passportUrl: "" },
     });
   };

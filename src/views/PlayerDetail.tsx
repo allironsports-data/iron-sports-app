@@ -448,7 +448,6 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
                     </div>
                   )}
                   <CommentInput
-                    currentProfile={currentProfile}
                     onSubmit={(text) => handleAddComment(task, text)}
                   />
                 </div>
@@ -483,8 +482,7 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
   );
 }
 
-function CommentInput({ currentProfile, onSubmit }: {
-  currentProfile: Profile;
+function CommentInput({ onSubmit }: {
   onSubmit: (text: string) => void;
 }) {
   const [text, setText] = useState("");
