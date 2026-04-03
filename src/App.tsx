@@ -9,6 +9,7 @@ import { Dashboard } from './views/Dashboard'
 import { PlayerDetail } from './views/PlayerDetail'
 import { AdminPanel } from './views/AdminPanel'
 import { OverviewPanel } from './views/OverviewPanel'
+import { PlayersTable } from './views/PlayersTable'
 
 export interface AppNotification {
   id: string
@@ -36,6 +37,7 @@ export default function App() {
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
   const [showAdmin, setShowAdmin] = useState(false)
   const [showOverview, setShowOverview] = useState(false)
+  const [showTable, setShowTable] = useState(false)
   const [notifications, setNotifications] = useState<AppNotification[]>([])
 
   const addNotification = useCallback((msg: string, type: AppNotification['type'], playerId?: string) => {
@@ -169,7 +171,21 @@ export default function App() {
 
   // ── routing ─────────────────────────────────────────────────
 
-  if (showOverview) {
+  if (showTable && profile.is_admin) {
+    return (
+      <PlayersTable
+        players={players}
+        profiles={profiles}
+        currentProfile={profile}
+        onUpdatePlayer={handleUpdatePlayer}
+        onBack={() => setShowTable(false)}
+        onLogout={signOut}
+        onAdmin={() => { setShowTable(false); setShowAdmin(true); }}
+      />
+    )
+  }
+
+  if (showOverview && profile.is_admin) {
     return (
       <OverviewPanel
         players={players}
@@ -190,6 +206,7 @@ export default function App() {
         onBack={() => setShowAdmin(false)}
         onRefresh={handleRefreshProfiles}
         onLogout={signOut}
+        onOpenTable={() => { setShowAdmin(false); setShowTable(true); }}
       />
     )
   }
@@ -227,7 +244,7 @@ export default function App() {
       onAdmin={profile.is_admin ? () => setShowAdmin(true) : undefined}
       onBulkDelete={profile.is_admin ? handleBulkDelete : undefined}
       onBulkAssignManager={profile.is_admin ? handleBulkAssignManager : undefined}
-      onOverview={() => setShowOverview(true)}
+      onOverview={profile.is_admin ? () => setShowOverview(true) : undefined}
       notifications={notifications}
       onDismissNotification={dismissNotification}
       onAddGeneralTask={handleAddTask}

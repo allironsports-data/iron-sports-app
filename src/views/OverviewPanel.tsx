@@ -127,6 +127,7 @@ function PlantillaTab({ players, profiles }: { players: Player[]; profiles: Prof
     ...band,
     count: ages.filter((a) => a >= band.min && a <= band.max).length,
   }));
+  const totalPlayers = players.length || 1;
   const maxBandCount = Math.max(...ageDistribution.map((b) => b.count), 1);
 
   return (
@@ -142,17 +143,23 @@ function PlantillaTab({ players, profiles }: { players: Player[]; profiles: Prof
       {/* Age distribution bar */}
       <div className="bg-white border border-slate-200 rounded-lg p-4">
         <h3 className="text-sm font-semibold text-slate-800 mb-3">Distribución por edad</h3>
-        <div className="flex items-end gap-2 h-28">
-          {ageDistribution.map((band) => (
-            <div key={band.label} className="flex-1 flex flex-col items-center gap-1">
-              <span className="text-xs font-semibold text-slate-700">{band.count}</span>
-              <div
-                className="w-full rounded-t bg-blue-400 transition-all"
-                style={{ height: `${(band.count / maxBandCount) * 100}%`, minHeight: band.count > 0 ? '4px' : '0' }}
-              />
-              <span className="text-[10px] text-slate-400">{band.label}</span>
-            </div>
-          ))}
+        <div className="flex items-end gap-3 h-36">
+          {ageDistribution.map((band) => {
+            const pct = Math.round((band.count / totalPlayers) * 100);
+            return (
+              <div key={band.label} className="flex-1 flex flex-col items-center gap-1">
+                <span className="text-xs font-semibold text-slate-700">{band.count}</span>
+                <span className="text-[9px] text-slate-400">{pct}%</span>
+                <div className="w-full flex-1 flex flex-col justify-end">
+                  <div
+                    className="w-full rounded-t bg-blue-400 transition-all"
+                    style={{ height: `${(band.count / maxBandCount) * 80 + (band.count > 0 ? 8 : 0)}%` }}
+                  />
+                </div>
+                <span className="text-[10px] text-slate-500 font-medium">{band.label}</span>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -267,6 +274,18 @@ function ContratosTab({ players }: { players: Player[] }) {
     .sort((a, b) => new Date(a.clubContract.endDate).getTime() - new Date(b.clubContract.endDate).getTime());
 
   const daysLeft = (dateStr: string) => Math.ceil((new Date(dateStr).getTime() - now) / DAY);
+  const formatDaysLeft = (d: number) => {
+    if (d < 0) return 'Expirado';
+    if (d < 30) return `${d} días`;
+    const years = Math.floor(d / 365);
+    const months = Math.floor((d % 365) / 30);
+    const remainDays = d % 30;
+    const parts: string[] = [];
+    if (years > 0) parts.push(`${years}a`);
+    if (months > 0) parts.push(`${months}m`);
+    if (remainDays > 0 && years === 0) parts.push(`${remainDays}d`);
+    return parts.join(' ');
+  };
   const colorForDays = (d: number) =>
     d < 0 ? 'text-slate-400' : d < 183 ? 'text-red-600' : d < 365 ? 'text-amber-600' : 'text-emerald-600';
   const bgForDays = (d: number) =>
@@ -296,7 +315,7 @@ function ContratosTab({ players }: { players: Player[] }) {
                 <th className="text-left px-4 py-2 font-medium">Jugador</th>
                 <th className="text-left px-4 py-2 font-medium">Inicio</th>
                 <th className="text-left px-4 py-2 font-medium">Fin</th>
-                <th className="text-left px-4 py-2 font-medium">Días restantes</th>
+                <th className="text-left px-4 py-2 font-medium">Tiempo restante</th>
               </tr>
             </thead>
             <tbody>
@@ -313,7 +332,7 @@ function ContratosTab({ players }: { players: Player[] }) {
                     </td>
                     <td className="px-4 py-2">
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-semibold ${bgForDays(d)} ${colorForDays(d)}`}>
-                        {d < 0 ? 'Expirado' : `${d} días`}
+                        {formatDaysLeft(d)}
                         {d > 0 && d < 183 && <AlertTriangle className="w-3 h-3" />}
                       </span>
                     </td>
@@ -337,7 +356,7 @@ function ContratosTab({ players }: { players: Player[] }) {
                 <th className="text-left px-4 py-2 font-medium">Jugador</th>
                 <th className="text-left px-4 py-2 font-medium">Club</th>
                 <th className="text-left px-4 py-2 font-medium">Fin</th>
-                <th className="text-left px-4 py-2 font-medium">Días restantes</th>
+                <th className="text-left px-4 py-2 font-medium">Tiempo restante</th>
                 <th className="text-left px-4 py-2 font-medium">Cláusula</th>
               </tr>
             </thead>
@@ -354,7 +373,7 @@ function ContratosTab({ players }: { players: Player[] }) {
                     </td>
                     <td className="px-4 py-2">
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-semibold ${bgForDays(d)} ${colorForDays(d)}`}>
-                        {d < 0 ? 'Expirado' : `${d} días`}
+                        {formatDaysLeft(d)}
                         {d > 0 && d < 183 && <AlertTriangle className="w-3 h-3" />}
                       </span>
                     </td>

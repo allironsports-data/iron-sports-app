@@ -171,7 +171,7 @@ export function PlayerDetail({
             currentProfile={currentProfile} onAddTask={onAddTask} onUpdateTask={onUpdateTask} onDeleteTask={onDeleteTask} />
         )}
         {activeTab === "contrato" && (
-          <ContractTab player={player} onUpdate={onUpdatePlayer} />
+          <ContractTab player={player} onUpdate={onUpdatePlayer} isAdmin={currentProfile.is_admin} />
         )}
         {activeTab === "rendimiento" && (
           <PerformanceTab player={player} profiles={profiles} onUpdate={onUpdatePlayer} />
@@ -732,7 +732,7 @@ function AddTaskModal({ profiles, tasks, playerId, player, onClose, onAdd }: {
 }
 
 /* ========== CONTRACT TAB ========== */
-function ContractTab({ player, onUpdate }: { player: Player; onUpdate: (p: Player) => void }) {
+function ContractTab({ player, onUpdate, isAdmin }: { player: Player; onUpdate: (p: Player) => void; isAdmin: boolean }) {
   const [editingRepr, setEditingRepr] = useState(false);
   const [editingClub, setEditingClub] = useState(false);
   const [repr, setRepr] = useState(player.representationContract);
@@ -747,6 +747,7 @@ function ContractTab({ player, onUpdate }: { player: Player; onUpdate: (p: Playe
   return (
     <div className="space-y-4">
       {/* Representation contract */}
+      {isAdmin && (
       <div className="bg-white border border-slate-200 rounded-lg p-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-slate-800">Contrato de representación</h3>
@@ -793,6 +794,7 @@ function ContractTab({ player, onUpdate }: { player: Player; onUpdate: (p: Playe
           </div>
         )}
       </div>
+      )}
 
       {/* Club contract */}
       <div className="bg-white border border-slate-200 rounded-lg p-4">

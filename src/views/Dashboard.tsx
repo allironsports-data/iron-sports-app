@@ -22,6 +22,7 @@ import {
   ListTodo,
   Edit3,
   BarChart3,
+  ChevronRight,
 } from "lucide-react";
 
 const PRIMARY = "hsl(220,72%,26%)";
@@ -41,6 +42,7 @@ interface Props {
   onDismissNotification?: (id: string) => void;
   onAddGeneralTask?: (task: Task) => void;
   onUpdateGeneralTask?: (task: Task) => void;
+  onUpdateTask?: (task: Task) => void;
   onDeleteGeneralTask?: (taskId: string) => void;
   onOverview?: () => void;
 }
@@ -77,6 +79,7 @@ export function Dashboard({
   onDismissNotification,
   onAddGeneralTask,
   onUpdateGeneralTask,
+  onUpdateTask,
   onDeleteGeneralTask,
   onOverview,
 }: Props) {
@@ -85,8 +88,10 @@ export function Dashboard({
   const [showAddGeneralTask, setShowAddGeneralTask] = useState(false);
   const [editingGeneralTask, setEditingGeneralTask] = useState<Task | null>(null);
   const [managerFilter, setManagerFilter] = useState<string>("all");
-  const [taskView, setTaskView] = useState<"pending" | "urgent" | "mine" | "inprogress" | null>(null);
+  const [taskView, setTaskView] = useState<"pending" | "urgent" | "mine" | "inprogress" | null>("mine");
   const [showNotifications, setShowNotifications] = useState(false);
+  const [mineSubTab, setMineSubTab] = useState<"assigned" | "players" | "general">("assigned");
+  const [detailTask, setDetailTask] = useState<Task | null>(null);
 
   // Bulk select state
   const [selectMode, setSelectMode] = useState(false);
@@ -111,7 +116,18 @@ export function Dashboard({
   );
   const inProgressTasks = tasks.filter((t) => t.status === "en_progreso");
   const myTasks = pendingTasks.filter((t) => t.assigneeId === currentProfile.id);
-  const generalTasks = tasks.filter((t) => t.playerId === "" || t.playerId === "general");
+
+  // myPlayerTasks: tasks where task.playerId matches a player in currentProfile's managedBy, excluding myTasks
+  const myPlayerTasks = pendingTasks.filter((t) => {
+    if (t.assigneeId === currentProfile.id) return false; // already in myTasks
+    const player = players.find((p) => p.id === t.playerId);
+    return player && player.managedBy.includes(currentProfile.id);
+  });
+
+  // generalTasks: only visible to admins, non-completed
+  const generalTasks = currentProfile.is_admin
+    ? tasks.filter((t) => (t.playerId === "" || t.playerId === "general") && t.status !== "completada")
+    : [];
 
   // Birthdays
   const birthdaysToday = players.filter((p) => isBirthdayToday(p.birthDate));
@@ -161,6 +177,20 @@ export function Dashboard({
     if (!onBulkAssignManager || selected.size === 0) return;
     setBulkLoading(true);
     try { await onBulkAssignManager(Array.from(selected), managerId); setShowAssignModal(false); exitSelectMode(); } finally { setBulkLoading(false); }
+  };
+
+  const cycleTaskStatus = (task: Task) => {
+    const next: Record<string, Task["status"]> = {
+      "pendiente": "en_progreso",
+      "en_progreso": "completada",
+      "completada": "pendiente",
+    };
+    const updated = { ...task, status: next[task.status] ?? "pendiente" };
+    if (task.playerId === "general" || task.playerId === "") {
+      if (onUpdateGeneralTask) onUpdateGeneralTask(updated);
+    } else {
+      if (onUpdateTask) onUpdateTask(updated);
+    }
   };
 
   const canBulkAction = (onBulkDelete || onBulkAssignManager) && currentProfile.is_admin;
@@ -219,7 +249,7 @@ export function Dashboard({
               className="w-8 h-8 rounded-full text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0"
               style={{ background: PRIMARY }}
             >{currentProfile.avatar}</div>
-            {onOverview && (
+            {currentProfile.is_admin && onOverview && (
               <button onClick={onOverview} className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors" title="Overview">
                 <BarChart3 className="w-4 h-4" />
               </button>
@@ -309,12 +339,176 @@ export function Dashboard({
             onClick={() => setTaskView(taskView === "mine" ? null : "mine")} active={taskView === "mine"} />
         </div>
 
-        {/* Expanded task list view */}
-        {taskView && viewTasks.length > 0 && (
+        {/* Mine view — default and new design */}
+        {taskView === "mine" && (
+          <div className="mb-4 sm:mb-6 bg-white border border-slate-200 rounded-lg overflow-hidden">
+            <div className="px-3 sm:px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-slate-800">Mis tareas</h2>
+              {onAddGeneralTask && (
+                <button
+                  onClick={() => setShowAddGeneralTask(true)}
+                  className="inline-flex items-center gap-1 rounded text-slate-600 bg-slate-50 border border-slate-200 text-xs font-medium px-2 py-1 hover:bg-slate-100 transition-colors"
+                >
+                  <Plus className="w-3 h-3" /><span className="hidden sm:inline">Nueva tarea</span>
+                </button>
+              )}
+            </div>
+
+            {/* Sub-tabs */}
+            <div className="px-3 sm:px-4 py-2 border-b border-slate-100 flex gap-2 bg-slate-50">
+              <button
+                onClick={() => setMineSubTab("assigned")}
+                className={`text-xs font-medium px-3 py-1.5 rounded transition-colors ${
+                  mineSubTab === "assigned"
+                    ? "bg-white text-slate-900 border border-slate-200"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                Asignadas a mí ({myTasks.length})
+              </button>
+              <button
+                onClick={() => setMineSubTab("players")}
+                className={`text-xs font-medium px-3 py-1.5 rounded transition-colors ${
+                  mineSubTab === "players"
+                    ? "bg-white text-slate-900 border border-slate-200"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                De mis jugadores ({myPlayerTasks.length})
+              </button>
+              {currentProfile.is_admin && (
+                <button
+                  onClick={() => setMineSubTab("general")}
+                  className={`text-xs font-medium px-3 py-1.5 rounded transition-colors ${
+                    mineSubTab === "general"
+                      ? "bg-white text-slate-900 border border-slate-200"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  Generales ({generalTasks.length})
+                </button>
+              )}
+            </div>
+
+            {/* Task list for selected sub-tab */}
+            <div className="divide-y divide-slate-100 max-h-96 overflow-y-auto">
+              {mineSubTab === "assigned" && (
+                <>
+                  {myTasks.filter(t => t.status !== "completada").length === 0 ? (
+                    <div className="px-3 sm:px-4 py-6 text-center text-xs text-slate-400">Sin tareas asignadas</div>
+                  ) : (
+                    <>
+                      {myTasks.filter(t => t.status !== "completada").map((task) => (
+                        <TaskRow
+                          key={task.id}
+                          task={task}
+                          players={players}
+                          profiles={profiles}
+                          onCycleStatus={() => cycleTaskStatus(task)}
+                          onOpenDetail={() => setDetailTask(task)}
+                        />
+                      ))}
+                      {myTasks.filter(t => t.status === "completada").length > 0 && (
+                        <>
+                          {myTasks.filter(t => t.status === "completada").map((task) => (
+                            <TaskRow
+                              key={task.id}
+                              task={task}
+                              players={players}
+                              profiles={profiles}
+                              onCycleStatus={() => cycleTaskStatus(task)}
+                              onOpenDetail={() => setDetailTask(task)}
+                              completed
+                            />
+                          ))}
+                        </>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+
+              {mineSubTab === "players" && (
+                <>
+                  {myPlayerTasks.filter(t => t.status !== "completada").length === 0 ? (
+                    <div className="px-3 sm:px-4 py-6 text-center text-xs text-slate-400">Sin tareas de tus jugadores</div>
+                  ) : (
+                    <>
+                      {myPlayerTasks.filter(t => t.status !== "completada").map((task) => (
+                        <TaskRow
+                          key={task.id}
+                          task={task}
+                          players={players}
+                          profiles={profiles}
+                          onCycleStatus={() => cycleTaskStatus(task)}
+                          onOpenDetail={() => setDetailTask(task)}
+                        />
+                      ))}
+                      {myPlayerTasks.filter(t => t.status === "completada").length > 0 && (
+                        <>
+                          {myPlayerTasks.filter(t => t.status === "completada").map((task) => (
+                            <TaskRow
+                              key={task.id}
+                              task={task}
+                              players={players}
+                              profiles={profiles}
+                              onCycleStatus={() => cycleTaskStatus(task)}
+                              onOpenDetail={() => setDetailTask(task)}
+                              completed
+                            />
+                          ))}
+                        </>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+
+              {mineSubTab === "general" && currentProfile.is_admin && (
+                <>
+                  {generalTasks.filter(t => t.status !== "completada").length === 0 ? (
+                    <div className="px-3 sm:px-4 py-6 text-center text-xs text-slate-400">Sin tareas generales</div>
+                  ) : (
+                    <>
+                      {generalTasks.filter(t => t.status !== "completada").map((task) => (
+                        <TaskRow
+                          key={task.id}
+                          task={task}
+                          players={players}
+                          profiles={profiles}
+                          onCycleStatus={() => cycleTaskStatus(task)}
+                          onOpenDetail={() => setDetailTask(task)}
+                        />
+                      ))}
+                      {generalTasks.filter(t => t.status === "completada").length > 0 && (
+                        <>
+                          {generalTasks.filter(t => t.status === "completada").map((task) => (
+                            <TaskRow
+                              key={task.id}
+                              task={task}
+                              players={players}
+                              profiles={profiles}
+                              onCycleStatus={() => cycleTaskStatus(task)}
+                              onOpenDetail={() => setDetailTask(task)}
+                              completed
+                            />
+                          ))}
+                        </>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Expanded task list view for pending/urgent/inprogress */}
+        {(taskView === "pending" || taskView === "urgent" || taskView === "inprogress") && viewTasks.length > 0 && (
           <div className="mb-4 sm:mb-6 bg-white border border-slate-200 rounded-lg overflow-hidden">
             <div className="px-3 sm:px-4 py-3 border-b border-slate-100 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-slate-800">
-                {taskView === "pending" ? "Todas las tareas pendientes" : taskView === "urgent" ? "Tareas urgentes" : taskView === "inprogress" ? "Tareas en proceso" : "Mis tareas"}
+                {taskView === "pending" ? "Todas las tareas pendientes" : taskView === "urgent" ? "Tareas urgentes" : "Tareas en proceso"}
               </h2>
               <button onClick={() => setTaskView(null)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
             </div>
@@ -341,88 +535,6 @@ export function Dashboard({
                         {new Date(task.dueDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
                       </span>
                     )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* My tasks — only if no taskView is active */}
-        {!taskView && myTasks.length > 0 && (
-          <div className="mb-4 sm:mb-6 bg-white border border-slate-200 rounded-lg overflow-hidden">
-            <div className="px-3 sm:px-4 py-3 border-b border-slate-100">
-              <h2 className="text-sm font-semibold text-slate-800">Mis tareas pendientes</h2>
-            </div>
-            <div className="divide-y divide-slate-100">
-              {myTasks.slice(0, 5).map((task) => {
-                const player = players.find((p) => p.id === task.playerId);
-                const isOverdue = task.dueDate && new Date(task.dueDate) < new Date();
-                return (
-                  <button
-                    key={task.id}
-                    onClick={() => onSelectPlayer(task.playerId)}
-                    className="w-full flex items-center gap-3 px-3 sm:px-4 py-3 text-left hover:bg-slate-50 active:bg-slate-100 transition-colors"
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                      task.priority === "alta" ? "bg-red-500" : task.priority === "media" ? "bg-amber-400" : "bg-slate-300"
-                    }`} />
-                    <span className="flex-1 text-sm text-slate-700 truncate">{task.title}</span>
-                    <span className="text-xs text-slate-400 hidden sm:block">{player?.name}</span>
-                    {task.dueDate && (
-                      <span className={`text-xs flex-shrink-0 ${isOverdue ? "text-red-500 font-medium" : "text-slate-400"}`}>
-                        {new Date(task.dueDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* General tasks section */}
-        {(generalTasks.length > 0 || onAddGeneralTask) && !taskView && (
-          <div className="mb-4 sm:mb-6 bg-white border border-slate-200 rounded-lg overflow-hidden">
-            <div className="px-3 sm:px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
-                <ListTodo className="w-4 h-4 text-slate-400" />
-                Tareas generales{generalTasks.length > 0 ? ` (${generalTasks.length})` : ''}
-              </h2>
-              {onAddGeneralTask && (
-                <button
-                  onClick={() => setShowAddGeneralTask(true)}
-                  className="inline-flex items-center gap-1 rounded text-slate-600 bg-slate-50 border border-slate-200 text-xs font-medium px-2 py-1 hover:bg-slate-100 transition-colors"
-                >
-                  <Plus className="w-3 h-3" /><span className="hidden sm:inline">Nueva</span>
-                </button>
-              )}
-            </div>
-            {generalTasks.length === 0 && (
-              <div className="px-4 py-6 text-center text-xs text-slate-400">No hay tareas generales. Crea una con el botón de arriba.</div>
-            )}
-            <div className="divide-y divide-slate-100">
-              {generalTasks.slice(0, 10).map((task) => {
-                const assignee = profiles.find((m) => m.id === task.assigneeId);
-                const isOverdue = task.dueDate && new Date(task.dueDate) < new Date();
-                const statusColor = task.status === 'completada' ? 'bg-emerald-500' : task.priority === "alta" ? "bg-red-500" : task.priority === "media" ? "bg-amber-400" : "bg-slate-300";
-                return (
-                  <button
-                    key={task.id}
-                    onClick={() => setEditingGeneralTask(task)}
-                    className="w-full flex items-center gap-3 px-3 sm:px-4 py-3 text-left hover:bg-slate-50 active:bg-slate-100 transition-colors"
-                  >
-                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${statusColor}`} />
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm font-medium truncate ${task.status === 'completada' ? 'text-slate-400 line-through' : 'text-slate-700'}`}>{task.title}</p>
-                      <p className="text-xs text-slate-400">{assignee?.name ?? "Sin asignar"}{task.status === 'en_progreso' ? ' · En progreso' : ''}</p>
-                    </div>
-                    {task.dueDate && (
-                      <span className={`text-xs flex-shrink-0 ${isOverdue && task.status !== 'completada' ? "text-red-500 font-medium" : "text-slate-400"}`}>
-                        {new Date(task.dueDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
-                      </span>
-                    )}
-                    <Edit3 className="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />
                   </button>
                 );
               })}
@@ -537,10 +649,12 @@ export function Dashboard({
 
                 {/* Contracts row */}
                 <div className="mt-3 grid grid-cols-2 gap-2">
+                  {currentProfile.is_admin && (
                   <div className={`rounded-lg px-2.5 py-1.5 ${repDaysLeft > 0 && repDaysLeft < 183 ? 'bg-red-50 border border-red-100' : repDaysLeft >= 183 && repDaysLeft < 365 ? 'bg-amber-50 border border-amber-100' : 'bg-slate-50'}`}>
                     <p className="text-[10px] text-slate-400 uppercase tracking-wide">Repr.</p>
                     <p className={`text-xs font-semibold ${repDaysLeft > 0 && repDaysLeft < 183 ? 'text-red-600' : repDaysLeft >= 183 && repDaysLeft < 365 ? 'text-amber-600' : 'text-slate-700'}`}>{repEndStr}</p>
                   </div>
+                  )}
                   <div className={`rounded-lg px-2.5 py-1.5 ${clubDaysLeft > 0 && clubDaysLeft < 183 ? 'bg-red-50 border border-red-100' : clubDaysLeft >= 183 && clubDaysLeft < 365 ? 'bg-amber-50 border border-amber-100' : 'bg-slate-50'}`}>
                     <p className="text-[10px] text-slate-400 uppercase tracking-wide">Club</p>
                     <p className={`text-xs font-semibold ${clubDaysLeft > 0 && clubDaysLeft < 183 ? 'text-red-600' : clubDaysLeft >= 183 && clubDaysLeft < 365 ? 'text-amber-600' : 'text-slate-700'}`}>{clubEndStr}</p>
@@ -631,6 +745,283 @@ export function Dashboard({
           } : undefined}
         />
       )}
+
+      {detailTask && (
+        <TaskDetailModal
+          task={detailTask}
+          player={players.find((p) => p.id === detailTask.playerId)}
+          profiles={profiles}
+          currentProfile={currentProfile}
+          onClose={() => setDetailTask(null)}
+          onUpdate={(updated) => {
+            if (detailTask.playerId === "general" || detailTask.playerId === "") {
+              if (onUpdateGeneralTask) onUpdateGeneralTask(updated);
+            } else {
+              if (onUpdateTask) onUpdateTask(updated);
+            }
+            setDetailTask(null);
+          }}
+          onDelete={(taskId) => {
+            if (onDeleteGeneralTask) onDeleteGeneralTask(taskId);
+            setDetailTask(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function TaskRow({ task, players, profiles, onCycleStatus, onOpenDetail, completed = false }: {
+  task: Task;
+  players: Player[];
+  profiles: Profile[];
+  onCycleStatus: () => void;
+  onOpenDetail: () => void;
+  completed?: boolean;
+}) {
+  const player = players.find((p) => p.id === task.playerId);
+  const assignee = profiles.find((m) => m.id === task.assigneeId);
+  const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "completada";
+
+  const statusColor = task.status === "completada"
+    ? "bg-emerald-500"
+    : task.status === "en_progreso"
+    ? "bg-blue-500"
+    : task.priority === "alta"
+    ? "bg-red-500"
+    : task.priority === "media"
+    ? "bg-amber-400"
+    : "bg-slate-300";
+
+  return (
+    <div className={`flex items-center gap-3 px-3 sm:px-4 py-3 text-left hover:bg-slate-50 transition-colors ${
+      completed ? "opacity-50" : ""
+    }`}>
+      <button
+        onClick={onCycleStatus}
+        className={`w-2.5 h-2.5 rounded-full flex-shrink-0 hover:ring-2 hover:ring-offset-2 ${statusColor}`}
+        title="Cycle status"
+      />
+      <button onClick={onOpenDetail} className="flex-1 min-w-0 text-left">
+        <p className={`text-sm font-medium truncate ${completed ? "text-slate-400 line-through" : "text-slate-700"}`}>
+          {task.title}
+        </p>
+        <p className="text-xs text-slate-400">
+          {player?.name}{player?.name && assignee?.name ? " · " : ""}{assignee?.name}
+        </p>
+      </button>
+      {task.dueDate && (
+        <span className={`text-xs flex-shrink-0 ${isOverdue ? "text-red-500 font-medium" : "text-slate-400"}`}>
+          {new Date(task.dueDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
+        </span>
+      )}
+      <button onClick={onOpenDetail} className="p-1 text-slate-400 hover:text-slate-600 flex-shrink-0">
+        <ChevronRight className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
+
+function TaskDetailModal({ task, player, profiles, currentProfile, onClose, onUpdate, onDelete }: {
+  task: Task;
+  player: Player | undefined;
+  profiles: Profile[];
+  currentProfile: Profile;
+  onClose: () => void;
+  onUpdate: (task: Task) => void;
+  onDelete: (taskId: string) => void;
+}) {
+  const [title, setTitle] = useState(task.title);
+  const [description, setDescription] = useState(task.description);
+  const [status, setStatus] = useState<"pendiente" | "en_progreso" | "completada">(task.status);
+  const [commentText, setCommentText] = useState("");
+  const assignee = profiles.find((p) => p.id === task.assigneeId);
+
+  const handleSave = () => {
+    onUpdate({
+      ...task,
+      title,
+      description,
+      status,
+    });
+  };
+
+  const handleStatusChange = (newStatus: "pendiente" | "en_progreso" | "completada") => {
+    setStatus(newStatus);
+    onUpdate({
+      ...task,
+      title,
+      description,
+      status: newStatus,
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-0 sm:p-4">
+      <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-lg max-h-[92vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white z-10">
+          <h2 className="text-sm font-semibold text-slate-800">Detalles de tarea</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-4 space-y-4 pb-8">
+          {/* Title */}
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Título</label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+            />
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Descripción</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none h-20"
+            />
+          </div>
+
+          {/* Status buttons */}
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-2">Estado</label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleStatusChange("pendiente")}
+                className={`flex-1 px-3 py-2 rounded-md text-xs font-medium transition-colors ${
+                  status === "pendiente"
+                    ? "bg-slate-200 text-slate-900"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-150"
+                }`}
+              >
+                Pendiente
+              </button>
+              <button
+                onClick={() => handleStatusChange("en_progreso")}
+                className={`flex-1 px-3 py-2 rounded-md text-xs font-medium transition-colors ${
+                  status === "en_progreso"
+                    ? "bg-blue-200 text-blue-900"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-150"
+                }`}
+              >
+                En proceso
+              </button>
+              <button
+                onClick={() => handleStatusChange("completada")}
+                className={`flex-1 px-3 py-2 rounded-md text-xs font-medium transition-colors ${
+                  status === "completada"
+                    ? "bg-emerald-200 text-emerald-900"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-150"
+                }`}
+              >
+                Completada
+              </button>
+            </div>
+          </div>
+
+          {/* Metadata */}
+          <div className="border-t border-slate-100 pt-3">
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div>
+                <p className="text-slate-500">Prioridad</p>
+                <p className={`font-medium ${
+                  task.priority === "alta" ? "text-red-600" : task.priority === "media" ? "text-amber-600" : "text-slate-600"
+                }`}>
+                  {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-500">Asignado a</p>
+                <p className="font-medium text-slate-700">{assignee?.name ?? "Sin asignar"}</p>
+              </div>
+              {player && (
+                <div>
+                  <p className="text-slate-500">Jugador</p>
+                  <p className="font-medium text-slate-700">{player.name}</p>
+                </div>
+              )}
+              {task.dueDate && (
+                <div>
+                  <p className="text-slate-500">Vencimiento</p>
+                  <p className="font-medium text-slate-700">
+                    {new Date(task.dueDate).toLocaleDateString("es-ES")}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Comments */}
+          {task.comments && task.comments.length > 0 && (
+            <div className="border-t border-slate-100 pt-3">
+              <p className="text-xs font-medium text-slate-600 mb-2">Comentarios</p>
+              <div className="space-y-2 max-h-32 overflow-y-auto">
+                {task.comments.map((comment) => {
+                  const commentAuthor = profiles.find((p) => p.id === comment.authorId);
+                  return (
+                    <div key={comment.id} className="bg-slate-50 rounded-md p-2">
+                      <p className="text-[10px] font-medium text-slate-700">
+                        {commentAuthor?.name ?? "Desconocido"}
+                      </p>
+                      <p className="text-xs text-slate-600 mt-0.5">{comment.content}</p>
+                      <p className="text-[9px] text-slate-400 mt-1">
+                        {new Date(comment.createdAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Comment input */}
+          <div className="border-t border-slate-100 pt-3">
+            <label className="block text-xs font-medium text-slate-600 mb-1">Añadir comentario</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                placeholder="Escribe un comentario…"
+                className="flex-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-200"
+              />
+              <button
+                disabled={!commentText}
+                className="rounded-md bg-slate-200 text-slate-700 text-xs font-medium px-2.5 py-1.5 disabled:opacity-40 transition-colors hover:bg-slate-300"
+              >
+                Enviar
+              </button>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="pt-2 flex gap-2 border-t border-slate-100">
+            <button
+              onClick={handleSave}
+              className="flex-1 rounded-md text-white text-sm font-medium py-2.5 transition-colors"
+              style={{ background: PRIMARY }}
+            >
+              Guardar cambios
+            </button>
+            <button
+              onClick={() => {
+                if (confirm("¿Eliminar esta tarea?")) {
+                  onDelete(task.id);
+                }
+              }}
+              className="rounded-md text-red-600 border border-red-200 text-sm font-medium px-4 py-2.5 hover:bg-red-50 transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

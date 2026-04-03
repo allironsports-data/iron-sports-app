@@ -20,11 +20,12 @@ interface Props {
   onBack: () => void
   onRefresh: () => Promise<void>
   onLogout: () => void
+  onOpenTable?: () => void
 }
 
 type AdminTab = 'equipo' | 'tareas'
 
-export function AdminPanel({ profiles, tasks, players, onBack, onRefresh, onLogout }: Props) {
+export function AdminPanel({ profiles, tasks, players, onBack, onRefresh, onLogout, onOpenTable }: Props) {
   const [tab, setTab] = useState<AdminTab>('equipo')
 
   const tabs: { id: AdminTab; label: string; icon: React.ReactNode }[] = [
@@ -61,7 +62,7 @@ export function AdminPanel({ profiles, tasks, players, onBack, onRefresh, onLogo
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-6">
-        {tab === 'equipo' && <TeamTab profiles={profiles} players={players} onRefresh={onRefresh} />}
+        {tab === 'equipo' && <TeamTab profiles={profiles} players={players} onRefresh={onRefresh} onOpenTable={onOpenTable} />}
         {tab === 'tareas' && <TaskTrackingTab profiles={profiles} tasks={tasks} players={players} />}
       </main>
     </div>
@@ -69,7 +70,7 @@ export function AdminPanel({ profiles, tasks, players, onBack, onRefresh, onLogo
 }
 
 /* ========== TEAM TAB ========== */
-function TeamTab({ profiles, players, onRefresh }: { profiles: Profile[]; players: Player[]; onRefresh: () => Promise<void> }) {
+function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Profile[]; players: Player[]; onRefresh: () => Promise<void>; onOpenTable?: () => void }) {
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteName, setInviteName] = useState('')
   const [inviteAvatar, setInviteAvatar] = useState('')
@@ -319,6 +320,20 @@ function TeamTab({ profiles, players, onRefresh }: { profiles: Profile[]; player
           })}
         </div>
       </div>
+
+      {onOpenTable && (
+        <div className="bg-white border border-slate-200 rounded-lg p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-800">Tabla de jugadores</h2>
+              <p className="text-xs text-slate-400 mt-0.5">Edición rápida de datos de jugadores</p>
+            </div>
+            <button onClick={onOpenTable} className="inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg text-white font-medium" style={{ background: 'hsl(220,72%,26%)' }}>
+              Abrir tabla
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
