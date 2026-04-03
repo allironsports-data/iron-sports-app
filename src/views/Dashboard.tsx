@@ -770,6 +770,7 @@ function AddGeneralTaskModal({ profiles, onClose, onAdd }: {
       status: "pendiente",
       dueDate: dueDate || undefined,
       createdAt: new Date().toISOString(),
+      comments: [],
     });
   };
 
