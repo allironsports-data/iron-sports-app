@@ -503,7 +503,7 @@ export function Dashboard({
             return (
               <div
                 key={player.id}
-                className="bg-white border rounded-lg p-2.5 sm:p-3 text-center cursor-pointer transition-all hover:border-slate-300 hover:shadow-sm relative"
+                className="bg-white border rounded-lg p-3 sm:p-4 text-center cursor-pointer transition-all hover:border-slate-300 hover:shadow-sm relative"
                 onClick={() => selectMode ? toggleSelect(player.id) : onSelectPlayer(player.id)}
               >
                 {selectMode && (
@@ -511,23 +511,31 @@ export function Dashboard({
                     {isSelected ? <CheckSquare className="w-4 h-4 text-blue-600" /> : <Square className="w-4 h-4 text-slate-300" />}
                   </div>
                 )}
-                <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-lg bg-slate-100 flex items-center justify-center text-sm font-bold text-slate-400 mx-auto mb-1.5 relative">
-                  {player.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
-                  {isBday && <span className="absolute -top-1 -right-1 text-xs">🎂</span>}
-                </div>
-                <p className="text-xs sm:text-[13px] font-semibold text-slate-900 truncate">{player.name}</p>
-                <p className="text-[10px] sm:text-[11px] text-slate-500 truncate mt-0.5">
+                {isBday && <span className="absolute top-1 left-1.5 text-sm">🎂</span>}
+                <p className="text-sm sm:text-[15px] font-bold text-slate-900 truncate leading-tight">{player.name}</p>
+                <p className="text-[11px] sm:text-xs text-slate-500 truncate mt-1">
                   {player.positions[0]} · {clubsLabel(player.clubs)}
                 </p>
-                <p className="text-[10px] sm:text-[11px] text-slate-500 truncate">
+                <p className="text-[11px] sm:text-xs text-slate-400 truncate">
                   {age} años · {player.nationality}
                 </p>
-                <div className="flex items-center justify-center gap-1 mt-1.5 flex-wrap">
-                  {managers.map(m => <span key={m.id} className="w-5 h-5 rounded-full bg-slate-200 text-[8px] font-bold flex items-center justify-center text-slate-700">{m.avatar}</span>)}
+                <div className="flex items-center justify-center gap-1 mt-2 flex-wrap">
+                  {managers.map(m => <span key={m.id} className="w-5 h-5 rounded-full text-[8px] font-bold flex items-center justify-center text-white" style={{ background: PRIMARY }}>{m.avatar}</span>)}
                   {repDaysLeft < 365 && repDaysLeft > 0 && <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-red-50 text-red-600 border border-red-100">Repr.</span>}
                   {clubDaysLeft < 365 && clubDaysLeft > 0 && <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-amber-50 text-amber-600 border border-amber-100">Club</span>}
-                  {playerTasks.length > 0 && <span className="px-1.5 py-0.5 rounded-full text-[9px] bg-slate-100 text-slate-600">{playerTasks.length}{urgent.length > 0 ? ` · ${urgent.length} urg.` : ''}</span>}
                 </div>
+                {playerTasks.length > 0 && (
+                  <div className="mt-2 flex items-center justify-center gap-1">
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                      {playerTasks.length} tarea{playerTasks.length > 1 ? 's' : ''}
+                    </span>
+                    {urgent.length > 0 && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-50 text-red-600 border border-red-200">
+                        {urgent.length} urg.
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}

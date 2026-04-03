@@ -120,7 +120,7 @@ export async function assignManagerToPlayers(playerIds: string[], managerId: str
 function dbToTask(row: Record<string, unknown>): Task {
   return {
     id: row.id as string,
-    playerId: row.player_id as string,
+    playerId: (row.player_id as string) ?? 'general',
     title: row.title as string,
     description: (row.description as string) ?? '',
     assigneeId: (row.assignee_id as string) ?? '',
@@ -143,8 +143,9 @@ export async function fetchTasks(playerId?: string): Promise<Task[]> {
 }
 
 export async function createTask(t: Task): Promise<Task> {
+  const isGeneral = !t.playerId || t.playerId === 'general'
   const { data, error } = await supabase.from('tasks').insert({
-    player_id: t.playerId,
+    player_id: isGeneral ? null : t.playerId,
     title: t.title,
     description: t.description,
     assignee_id: t.assigneeId || null,
