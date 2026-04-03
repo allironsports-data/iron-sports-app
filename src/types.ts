@@ -110,6 +110,7 @@ export interface Player {
   name: string;
   birthDate: string;          // "YYYY-MM-DD"
   positions: string[];         // [primary, secondary?]
+  foot?: "derecho" | "izquierdo" | "ambidiestro";
   nationality: string;
   photo: string;
   clubs: PlayerClub[];         // one or more current clubs

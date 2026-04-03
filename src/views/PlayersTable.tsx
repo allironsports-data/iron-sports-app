@@ -51,17 +51,28 @@ export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onLogo
       setValue: (p, v) => ({ ...p, nationality: v }),
     },
     {
-      key: "birthDate", label: "Nacimiento", width: "min-w-[120px]", type: "date",
+      key: "birthDate", label: "Nacimiento", width: "min-w-[110px]", type: "date",
       getValue: (p) => p.birthDate,
       setValue: (p, v) => ({ ...p, birthDate: v }),
     },
     {
-      key: "position", label: "Posición", width: "min-w-[110px]",
-      getValue: (p) => p.positions[0] || "",
-      setValue: (p, v) => ({ ...p, positions: [v, ...(p.positions.slice(1))] }),
+      key: "foot", label: "Pie hábil", width: "min-w-[100px]", type: "select",
+      options: ["derecho", "izquierdo", "ambidiestro"],
+      getValue: (p) => p.foot || "",
+      setValue: (p, v) => ({ ...p, foot: (v || undefined) as Player["foot"] }),
     },
     {
-      key: "club", label: "Club", width: "min-w-[140px]",
+      key: "pos1", label: "Posición 1", width: "min-w-[110px]",
+      getValue: (p) => p.positions[0] || "",
+      setValue: (p, v) => ({ ...p, positions: [v, p.positions[1] || ""].filter(Boolean) }),
+    },
+    {
+      key: "pos2", label: "Posición 2", width: "min-w-[110px]",
+      getValue: (p) => p.positions[1] || "",
+      setValue: (p, v) => ({ ...p, positions: [p.positions[0] || "", v].filter(Boolean) }),
+    },
+    {
+      key: "club1", label: "Club 1", width: "min-w-[140px]",
       getValue: (p) => p.clubs[0]?.name || "",
       setValue: (p, v) => {
         const clubs = p.clubs.length > 0
@@ -71,12 +82,39 @@ export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onLogo
       },
     },
     {
-      key: "reprEnd", label: "Fin repr.", width: "min-w-[120px]", type: "date",
+      key: "club1type", label: "Tipo club 1", width: "min-w-[120px]", type: "select",
+      options: ["principal", "cedido_en", "propietario", "compartido"],
+      getValue: (p) => p.clubs[0]?.type || "",
+      setValue: (p, v) => {
+        const clubs = p.clubs.length > 0
+          ? [{ ...p.clubs[0], type: v as Player["clubs"][0]["type"] }, ...p.clubs.slice(1)]
+          : [{ name: "", type: v as Player["clubs"][0]["type"] }];
+        return { ...p, clubs };
+      },
+    },
+    {
+      key: "club2", label: "Club 2", width: "min-w-[140px]",
+      getValue: (p) => p.clubs[1]?.name || "",
+      setValue: (p, v) => {
+        if (!v) return { ...p, clubs: p.clubs.slice(0, 1) };
+        const clubs = p.clubs.length > 1
+          ? [p.clubs[0], { ...p.clubs[1], name: v }]
+          : [p.clubs[0] || { name: "", type: "principal" as const }, { name: v, type: "cedido_en" as const }];
+        return { ...p, clubs };
+      },
+    },
+    {
+      key: "reprStart", label: "Inicio repr.", width: "min-w-[110px]", type: "date",
+      getValue: (p) => p.representationContract.start,
+      setValue: (p, v) => ({ ...p, representationContract: { ...p.representationContract, start: v } }),
+    },
+    {
+      key: "reprEnd", label: "Fin repr.", width: "min-w-[110px]", type: "date",
       getValue: (p) => p.representationContract.end,
       setValue: (p, v) => ({ ...p, representationContract: { ...p.representationContract, end: v } }),
     },
     {
-      key: "clubEnd", label: "Fin club", width: "min-w-[120px]", type: "date",
+      key: "clubEnd", label: "Fin contrato club", width: "min-w-[130px]", type: "date",
       getValue: (p) => p.clubContract.endDate,
       setValue: (p, v) => ({ ...p, clubContract: { ...p.clubContract, endDate: v } }),
     },
@@ -86,7 +124,7 @@ export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onLogo
       setValue: (p, v) => ({ ...p, clubContract: { ...p.clubContract, releaseClause: v } }),
     },
     {
-      key: "agentCommission", label: "Comisión", width: "min-w-[90px]",
+      key: "agentCommission", label: "Comisión ag.", width: "min-w-[100px]",
       getValue: (p) => p.clubContract.agentCommission || "",
       setValue: (p, v) => ({ ...p, clubContract: { ...p.clubContract, agentCommission: v } }),
     },
