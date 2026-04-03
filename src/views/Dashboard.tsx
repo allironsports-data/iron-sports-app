@@ -1240,7 +1240,7 @@ function AddPlayerModal({ profiles, onClose, onAdd }: {
       managedBy: [managed1, managed2].filter(Boolean),
       representationContract: { start: reprStart, end: reprEnd },
       clubContract: { endDate: clubEnd, optionalYears: optYears ? parseInt(optYears) : undefined },
-      contractHistory: [], clubInterests: [], performance: [],
+      contractHistory: [], clubInterests: [], links: [], performance: [],
       info: { family: "", personality: "", phone: "", passportUrl: "" },
     });
   };
