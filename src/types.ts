@@ -89,6 +89,13 @@ export interface ClubInterest {
   source?: string;        // who reported it
 }
 
+// ---- Player link ----
+export interface PlayerLink {
+  id: string;
+  label: string;   // e.g. "Vídeo highlight", "Streamable", "Instagram"
+  url: string;
+}
+
 // ---- Player personal info ----
 export interface PlayerInfo {
   family: string;
@@ -114,6 +121,8 @@ export interface Player {
   clubInterests: ClubInterest[];
   performance: PerformanceNote[];
   info: PlayerInfo;
+  transfermarktUrl?: string;   // URL del perfil en Transfermarkt
+  links: PlayerLink[];         // enlaces adicionales (vídeos, redes, etc.)
 }
 
 // ---- Helpers ----

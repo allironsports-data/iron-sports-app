@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import logoImg from '../assets/logo.jpeg';
 import type {
   Player, Task, TaskComment,
-  PerformanceNote, ClubInterest,
+  PerformanceNote, ClubInterest, PlayerLink,
 } from "../types";
 import { calcAge } from "../types";
 import type { Profile } from "../contexts/AuthContext";
@@ -11,7 +11,7 @@ import {
   ArrowLeft, LogOut, ClipboardList, FileText,
   TrendingUp, User, Plus, X, Calendar, AlertCircle,
   Clock, CheckCircle2, Trash2, Edit3, Star, Users,
-  MessageSquare, Paperclip, Send, Download, ExternalLink,
+  MessageSquare, Paperclip, Send, Download, ExternalLink, Link2,
 } from "lucide-react";
 
 const PRIMARY = "hsl(220,72%,26%)";
@@ -177,7 +177,10 @@ export function PlayerDetail({
           <PerformanceTab player={player} profiles={profiles} onUpdate={onUpdatePlayer} />
         )}
         {activeTab === "info" && (
-          <InfoTab player={player} onUpdate={onUpdatePlayer} />
+          <div className="space-y-4">
+            <InfoTab player={player} onUpdate={onUpdatePlayer} />
+            <LinksSection player={player} onUpdate={onUpdatePlayer} />
+          </div>
         )}
       </main>
 
@@ -463,6 +466,7 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
 
       {showAdd && (
         <AddTaskModal profiles={profiles} tasks={tasks} playerId={player.id} player={player}
+          isAdmin={currentProfile.is_admin}
           onClose={() => setShowAdd(false)}
           onAdd={(t) => { onAddTask(t); setShowAdd(false); }}
         />
@@ -631,9 +635,9 @@ function EditTaskModal({ task, profiles, tasks, player, onClose, onSave }: {
   );
 }
 
-function AddTaskModal({ profiles, tasks, playerId, player, onClose, onAdd }: {
+function AddTaskModal({ profiles, tasks, playerId, player, isAdmin, onClose, onAdd }: {
   profiles: Profile[]; tasks: Task[]; playerId: string; player: Player;
-  onClose: () => void; onAdd: (t: Task) => void;
+  isAdmin: boolean; onClose: () => void; onAdd: (t: Task) => void;
 }) {
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
@@ -642,6 +646,7 @@ function AddTaskModal({ profiles, tasks, playerId, player, onClose, onAdd }: {
   const [priority, setPriority] = useState<"alta" | "media" | "baja">("media");
   const [dueDate, setDueDate] = useState("");
   const [depends, setDepends] = useState("");
+  const [adminOnly, setAdminOnly] = useState(false);
 
   const playerManagers = player.managedBy.map((id) => profiles.find((m) => m.id === id)).filter(Boolean) as Profile[];
 
@@ -659,7 +664,7 @@ function AddTaskModal({ profiles, tasks, playerId, player, onClose, onAdd }: {
           onAdd({ id: "t" + Date.now(), playerId, title, description: desc, assigneeId: assignee,
             watchers,
             dependsOnId: depends || undefined, status: "pendiente", priority, dueDate: dueDate || undefined,
-            createdAt: new Date().toISOString().split("T")[0], comments: [] });
+            createdAt: new Date().toISOString().split("T")[0], comments: [], adminOnly });
         }} className="p-4 space-y-3 pb-8">
           <TF label="Título" value={title} onChange={setTitle} required />
           <div>
@@ -718,6 +723,22 @@ function AddTaskModal({ profiles, tasks, playerId, player, onClose, onAdd }: {
               </select>
             </div>
           </div>
+          {isAdmin && (
+            <label className="flex items-center gap-2.5 cursor-pointer select-none py-1">
+              <input
+                type="checkbox"
+                checked={adminOnly}
+                onChange={(e) => setAdminOnly(e.target.checked)}
+                className="w-4 h-4 rounded accent-blue-600 cursor-pointer"
+              />
+              <span className="text-sm text-slate-700 font-medium">Solo para admins</span>
+              {adminOnly && (
+                <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 border border-amber-200 rounded px-1.5 py-0.5">
+                  Admin
+                </span>
+              )}
+            </label>
+          )}
           <div className="pt-2">
             <button type="submit" disabled={!title || !assignee}
               className="w-full rounded-md text-white text-sm font-medium py-2 disabled:opacity-40 transition-colors"
@@ -1253,6 +1274,126 @@ function InfoTab({ player, onUpdate }: { player: Player; onUpdate: (p: Player) =
           </button>
         )}
         <input ref={passportRef} type="file" accept=".pdf,image/*" className="hidden" onChange={handlePassportUpload} />
+      </div>
+    </div>
+  );
+}
+
+/* ========== LINKS SECTION (inside InfoTab) ========== */
+function LinksSection({ player, onUpdate }: { player: Player; onUpdate: (p: Player) => void }) {
+  const [tmUrl, setTmUrl] = useState(player.transfermarktUrl ?? "");
+  const [editingTm, setEditingTm] = useState(false);
+  const [newLabel, setNewLabel] = useState("");
+  const [newUrl, setNewUrl] = useState("");
+  const [showAddLink, setShowAddLink] = useState(false);
+
+  const saveTransfermarkt = () => {
+    onUpdate({ ...player, transfermarktUrl: tmUrl || undefined });
+    setEditingTm(false);
+  };
+
+  const addLink = () => {
+    if (!newLabel.trim() || !newUrl.trim()) return;
+    const link: PlayerLink = { id: Date.now().toString(), label: newLabel.trim(), url: newUrl.trim() };
+    onUpdate({ ...player, links: [...(player.links ?? []), link] });
+    setNewLabel(""); setNewUrl(""); setShowAddLink(false);
+  };
+
+  const removeLink = (id: string) => {
+    onUpdate({ ...player, links: (player.links ?? []).filter((l) => l.id !== id) });
+  };
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-4">
+      <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
+        <Link2 className="w-4 h-4 text-slate-400" /> Links y Transfermarkt
+      </h3>
+
+      {/* Transfermarkt */}
+      <div>
+        <p className="text-xs font-medium text-slate-500 mb-1">Transfermarkt</p>
+        {editingTm ? (
+          <div className="flex gap-2">
+            <input
+              type="url"
+              value={tmUrl}
+              onChange={(e) => setTmUrl(e.target.value)}
+              placeholder="https://www.transfermarkt.es/..."
+              className="flex-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+            />
+            <button onClick={saveTransfermarkt}
+              className="px-3 py-1.5 rounded-md text-xs font-medium text-white" style={{ background: PRIMARY }}>
+              Guardar
+            </button>
+            <button onClick={() => { setTmUrl(player.transfermarktUrl ?? ""); setEditingTm(false); }}
+              className="px-2 py-1.5 rounded-md text-xs text-slate-500 border border-slate-200">
+              ✕
+            </button>
+          </div>
+        ) : player.transfermarktUrl ? (
+          <div className="flex items-center gap-2">
+            <a href={player.transfermarktUrl} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 hover:underline font-medium">
+              <ExternalLink className="w-3.5 h-3.5" /> Ver perfil en Transfermarkt
+            </a>
+            <button onClick={() => setEditingTm(true)} className="text-xs text-slate-400 hover:text-slate-600">(editar)</button>
+          </div>
+        ) : (
+          <button onClick={() => setEditingTm(true)}
+            className="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded border border-slate-200 text-slate-500 hover:text-slate-700">
+            <Plus className="w-3 h-3" /> Añadir enlace de Transfermarkt
+          </button>
+        )}
+      </div>
+
+      {/* Custom links */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs font-medium text-slate-500">Otros enlaces</p>
+          <button onClick={() => setShowAddLink((v) => !v)}
+            className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700">
+            <Plus className="w-3 h-3" /> Añadir
+          </button>
+        </div>
+
+        {showAddLink && (
+          <div className="bg-slate-50 rounded-md p-3 mb-2 space-y-2">
+            <input type="text" value={newLabel} onChange={(e) => setNewLabel(e.target.value)}
+              placeholder="Nombre (ej. Vídeo Streamable, Instagram…)"
+              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+            <input type="url" value={newUrl} onChange={(e) => setNewUrl(e.target.value)}
+              placeholder="https://..."
+              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+            <div className="flex gap-2">
+              <button onClick={addLink} disabled={!newLabel.trim() || !newUrl.trim()}
+                className="px-3 py-1.5 rounded-md text-xs font-medium text-white disabled:opacity-40" style={{ background: PRIMARY }}>
+                Añadir enlace
+              </button>
+              <button onClick={() => setShowAddLink(false)} className="px-3 py-1.5 rounded-md text-xs border border-slate-200 text-slate-500">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {(player.links ?? []).length === 0 && !showAddLink && (
+          <p className="text-xs text-slate-400 italic">Sin enlaces añadidos</p>
+        )}
+        <div className="space-y-1.5">
+          {(player.links ?? []).map((link) => (
+            <div key={link.id} className="flex items-center gap-2">
+              <a href={link.url} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 hover:underline flex-1 min-w-0 truncate">
+                <ExternalLink className="w-3.5 h-3.5 flex-shrink-0" />
+                {link.label}
+              </a>
+              <button onClick={() => removeLink(link.id)}
+                className="p-1 text-slate-300 hover:text-red-500 flex-shrink-0">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

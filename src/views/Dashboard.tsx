@@ -97,6 +97,9 @@ export function Dashboard({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
+  const [showCompletedMine, setShowCompletedMine] = useState(false);
+  const [showCompletedPlayers, setShowCompletedPlayers] = useState(false);
+  const [showCompletedGeneral, setShowCompletedGeneral] = useState(false);
 
   // Toast auto-dismiss
   const [toasts, setToasts] = useState<AppNotification[]>([]);
@@ -114,27 +117,51 @@ export function Dashboard({
     (t) => t.priority === "alta" && t.status !== "completada"
   );
   const inProgressTasks = tasks.filter((t) => t.status === "en_progreso");
-  // myTasks: assigned to me, excluding adminOnly tasks if not admin
+
+  // myTasks: assigned to me (pending), excluding adminOnly tasks if not admin
   const myTasks = pendingTasks.filter((t) => {
     if (t.assigneeId !== currentProfile.id) return false;
     if (t.adminOnly && !currentProfile.is_admin) return false;
     return true;
   });
+  // completed version for display
+  const myTasksCompleted = tasks.filter((t) => {
+    if (t.status !== "completada") return false;
+    if (t.assigneeId !== currentProfile.id) return false;
+    if (t.adminOnly && !currentProfile.is_admin) return false;
+    return true;
+  });
 
-  // myPlayerTasks: tasks where task.playerId matches a player in currentProfile's managedBy, excluding myTasks
-  // also exclude adminOnly tasks if not admin
+  // myPlayerTasks: tasks for my managed players (pending), excluding my own assigned tasks
   const myPlayerTasks = pendingTasks.filter((t) => {
-    if (t.assigneeId === currentProfile.id) return false; // already in myTasks
+    if (t.assigneeId === currentProfile.id) return false;
+    if (t.adminOnly && !currentProfile.is_admin) return false;
+    const player = players.find((p) => p.id === t.playerId);
+    return player && player.managedBy.includes(currentProfile.id);
+  });
+  const myPlayerTasksCompleted = tasks.filter((t) => {
+    if (t.status !== "completada") return false;
+    if (t.assigneeId === currentProfile.id) return false;
     if (t.adminOnly && !currentProfile.is_admin) return false;
     const player = players.find((p) => p.id === t.playerId);
     return player && player.managedBy.includes(currentProfile.id);
   });
 
-  // generalTasks: non-completed general tasks; adminOnly ones only for admins
+  // generalTasks: general tasks assigned to ME (or unassigned) — shown in "Mis tareas > Generales"
+  // Tasks assigned to others only appear in the top stats (pendingTasks/urgentTasks)
   const generalTasks = tasks.filter((t) => {
     if (t.status === "completada") return false;
     if (t.playerId !== "" && t.playerId !== "general") return false;
     if (t.adminOnly && !currentProfile.is_admin) return false;
+    // Only show if assigned to me or unassigned
+    if (t.assigneeId && t.assigneeId !== currentProfile.id) return false;
+    return true;
+  });
+  const generalTasksCompleted = tasks.filter((t) => {
+    if (t.status !== "completada") return false;
+    if (t.playerId !== "" && t.playerId !== "general") return false;
+    if (t.adminOnly && !currentProfile.is_admin) return false;
+    if (t.assigneeId && t.assigneeId !== currentProfile.id) return false;
     return true;
   });
 
@@ -403,32 +430,26 @@ export function Dashboard({
             <div className="divide-y divide-slate-100 max-h-96 overflow-y-auto">
               {mineSubTab === "assigned" && (
                 <>
-                  {myTasks.filter(t => t.status !== "completada").length === 0 ? (
+                  {myTasks.length === 0 && myTasksCompleted.length === 0 ? (
                     <div className="px-3 sm:px-4 py-6 text-center text-xs text-slate-400">Sin tareas asignadas</div>
                   ) : (
                     <>
-                      {myTasks.filter(t => t.status !== "completada").map((task) => (
-                        <TaskRow
-                          key={task.id}
-                          task={task}
-                          players={players}
-                          profiles={profiles}
-                          onCycleStatus={() => cycleTaskStatus(task)}
-                          onOpenDetail={() => setDetailTask(task)}
-                        />
+                      {myTasks.map((task) => (
+                        <TaskRow key={task.id} task={task} players={players} profiles={profiles}
+                          onCycleStatus={() => cycleTaskStatus(task)} onOpenDetail={() => setDetailTask(task)} />
                       ))}
-                      {myTasks.filter(t => t.status === "completada").length > 0 && (
+                      {myTasksCompleted.length > 0 && (
                         <>
-                          {myTasks.filter(t => t.status === "completada").map((task) => (
-                            <TaskRow
-                              key={task.id}
-                              task={task}
-                              players={players}
-                              profiles={profiles}
-                              onCycleStatus={() => cycleTaskStatus(task)}
-                              onOpenDetail={() => setDetailTask(task)}
-                              completed
-                            />
+                          <button
+                            onClick={() => setShowCompletedMine((v) => !v)}
+                            className="w-full px-3 sm:px-4 py-2 text-left text-[11px] text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors flex items-center gap-1"
+                          >
+                            <ChevronRight className={`w-3 h-3 transition-transform ${showCompletedMine ? "rotate-90" : ""}`} />
+                            {showCompletedMine ? "Ocultar" : "Ver"} completadas ({myTasksCompleted.length})
+                          </button>
+                          {showCompletedMine && myTasksCompleted.map((task) => (
+                            <TaskRow key={task.id} task={task} players={players} profiles={profiles}
+                              onCycleStatus={() => cycleTaskStatus(task)} onOpenDetail={() => setDetailTask(task)} completed />
                           ))}
                         </>
                       )}
@@ -439,32 +460,26 @@ export function Dashboard({
 
               {mineSubTab === "players" && (
                 <>
-                  {myPlayerTasks.filter(t => t.status !== "completada").length === 0 ? (
+                  {myPlayerTasks.length === 0 && myPlayerTasksCompleted.length === 0 ? (
                     <div className="px-3 sm:px-4 py-6 text-center text-xs text-slate-400">Sin tareas de tus jugadores</div>
                   ) : (
                     <>
-                      {myPlayerTasks.filter(t => t.status !== "completada").map((task) => (
-                        <TaskRow
-                          key={task.id}
-                          task={task}
-                          players={players}
-                          profiles={profiles}
-                          onCycleStatus={() => cycleTaskStatus(task)}
-                          onOpenDetail={() => setDetailTask(task)}
-                        />
+                      {myPlayerTasks.map((task) => (
+                        <TaskRow key={task.id} task={task} players={players} profiles={profiles}
+                          onCycleStatus={() => cycleTaskStatus(task)} onOpenDetail={() => setDetailTask(task)} />
                       ))}
-                      {myPlayerTasks.filter(t => t.status === "completada").length > 0 && (
+                      {myPlayerTasksCompleted.length > 0 && (
                         <>
-                          {myPlayerTasks.filter(t => t.status === "completada").map((task) => (
-                            <TaskRow
-                              key={task.id}
-                              task={task}
-                              players={players}
-                              profiles={profiles}
-                              onCycleStatus={() => cycleTaskStatus(task)}
-                              onOpenDetail={() => setDetailTask(task)}
-                              completed
-                            />
+                          <button
+                            onClick={() => setShowCompletedPlayers((v) => !v)}
+                            className="w-full px-3 sm:px-4 py-2 text-left text-[11px] text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors flex items-center gap-1"
+                          >
+                            <ChevronRight className={`w-3 h-3 transition-transform ${showCompletedPlayers ? "rotate-90" : ""}`} />
+                            {showCompletedPlayers ? "Ocultar" : "Ver"} completadas ({myPlayerTasksCompleted.length})
+                          </button>
+                          {showCompletedPlayers && myPlayerTasksCompleted.map((task) => (
+                            <TaskRow key={task.id} task={task} players={players} profiles={profiles}
+                              onCycleStatus={() => cycleTaskStatus(task)} onOpenDetail={() => setDetailTask(task)} completed />
                           ))}
                         </>
                       )}
@@ -475,32 +490,26 @@ export function Dashboard({
 
               {mineSubTab === "general" && currentProfile.is_admin && (
                 <>
-                  {generalTasks.filter(t => t.status !== "completada").length === 0 ? (
+                  {generalTasks.length === 0 && generalTasksCompleted.length === 0 ? (
                     <div className="px-3 sm:px-4 py-6 text-center text-xs text-slate-400">Sin tareas generales</div>
                   ) : (
                     <>
-                      {generalTasks.filter(t => t.status !== "completada").map((task) => (
-                        <TaskRow
-                          key={task.id}
-                          task={task}
-                          players={players}
-                          profiles={profiles}
-                          onCycleStatus={() => cycleTaskStatus(task)}
-                          onOpenDetail={() => setDetailTask(task)}
-                        />
+                      {generalTasks.map((task) => (
+                        <TaskRow key={task.id} task={task} players={players} profiles={profiles}
+                          onCycleStatus={() => cycleTaskStatus(task)} onOpenDetail={() => setDetailTask(task)} />
                       ))}
-                      {generalTasks.filter(t => t.status === "completada").length > 0 && (
+                      {generalTasksCompleted.length > 0 && (
                         <>
-                          {generalTasks.filter(t => t.status === "completada").map((task) => (
-                            <TaskRow
-                              key={task.id}
-                              task={task}
-                              players={players}
-                              profiles={profiles}
-                              onCycleStatus={() => cycleTaskStatus(task)}
-                              onOpenDetail={() => setDetailTask(task)}
-                              completed
-                            />
+                          <button
+                            onClick={() => setShowCompletedGeneral((v) => !v)}
+                            className="w-full px-3 sm:px-4 py-2 text-left text-[11px] text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors flex items-center gap-1"
+                          >
+                            <ChevronRight className={`w-3 h-3 transition-transform ${showCompletedGeneral ? "rotate-90" : ""}`} />
+                            {showCompletedGeneral ? "Ocultar" : "Ver"} completadas ({generalTasksCompleted.length})
+                          </button>
+                          {showCompletedGeneral && generalTasksCompleted.map((task) => (
+                            <TaskRow key={task.id} task={task} players={players} profiles={profiles}
+                              onCycleStatus={() => cycleTaskStatus(task)} onOpenDetail={() => setDetailTask(task)} completed />
                           ))}
                         </>
                       )}
@@ -761,6 +770,7 @@ export function Dashboard({
           player={players.find((p) => p.id === detailTask.playerId)}
           profiles={profiles}
           currentProfileId={currentProfile.id}
+          onGoToPlayer={onSelectPlayer}
           onClose={() => setDetailTask(null)}
           onUpdate={(updated) => {
             if (detailTask.playerId === "general" || detailTask.playerId === "") {
@@ -809,18 +819,33 @@ function TaskRow({ task, players, profiles, onCycleStatus, onOpenDetail, complet
     ? "bg-amber-400"
     : "bg-slate-300";
 
+  const rowBg = task.adminOnly
+    ? completed
+      ? "bg-rose-50/40 opacity-50"
+      : "bg-rose-50 hover:bg-rose-100/70"
+    : completed
+      ? "opacity-50 hover:bg-slate-50"
+      : "hover:bg-slate-50";
+
   return (
-    <div className={`flex items-center gap-3 px-3 sm:px-4 py-3 text-left hover:bg-slate-50 transition-colors ${
-      completed ? "opacity-50" : ""
-    }`}>
+    <div className={`flex items-center gap-3 px-3 sm:px-4 py-3 text-left transition-colors ${rowBg}`}>
       <button
         onClick={onCycleStatus}
         className={`w-2.5 h-2.5 rounded-full flex-shrink-0 hover:ring-2 hover:ring-offset-2 ${statusColor}`}
-        title="Cycle status"
+        title={
+          task.status === "completada" ? "Completada — clic para reabrir"
+          : task.status === "en_progreso" ? "En progreso — clic para completar"
+          : task.priority === "alta" ? "Pendiente · Prioridad alta — clic para iniciar"
+          : task.priority === "media" ? "Pendiente · Prioridad media — clic para iniciar"
+          : "Pendiente · Prioridad baja — clic para iniciar"
+        }
       />
       <button onClick={onOpenDetail} className="flex-1 min-w-0 text-left">
         <p className={`text-sm font-medium truncate ${completed ? "text-slate-400 line-through" : "text-slate-700"}`}>
           {task.title}
+          {task.adminOnly && (
+            <span className="ml-1.5 text-[9px] font-bold uppercase tracking-wide text-rose-500 border border-rose-200 rounded px-1 py-px">admin</span>
+          )}
         </p>
         <p className="text-xs text-slate-400">
           {player?.name}{player?.name && assignee?.name ? " · " : ""}{assignee?.name}
@@ -838,7 +863,7 @@ function TaskRow({ task, players, profiles, onCycleStatus, onOpenDetail, complet
   );
 }
 
-function TaskDetailModal({ task, player, profiles, currentProfileId, onClose, onUpdate, onSaveAndClose, onDelete }: {
+function TaskDetailModal({ task, player, profiles, currentProfileId, onClose, onUpdate, onSaveAndClose, onDelete, onGoToPlayer }: {
   task: Task;
   player: Player | undefined;
   profiles: Profile[];
@@ -847,14 +872,16 @@ function TaskDetailModal({ task, player, profiles, currentProfileId, onClose, on
   onUpdate: (task: Task) => void;
   onSaveAndClose: (task: Task) => void;
   onDelete: (taskId: string) => void;
+  onGoToPlayer?: (playerId: string) => void;
 }) {
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description);
   const [status, setStatus] = useState<"pendiente" | "en_progreso" | "completada">(task.status);
+  const [assigneeId, setAssigneeId] = useState(task.assigneeId);
+  const [watchers, setWatchers] = useState<string[]>(task.watchers ?? []);
   const [commentText, setCommentText] = useState("");
   const [localComments, setLocalComments] = useState(task.comments ?? []);
   const [sendingComment, setSendingComment] = useState(false);
-  const assignee = profiles.find((p) => p.id === task.assigneeId);
 
   const loadComments = useCallback(async () => {
     try {
@@ -868,12 +895,18 @@ function TaskDetailModal({ task, player, profiles, currentProfileId, onClose, on
   useEffect(() => { loadComments(); }, [loadComments]);
 
   const handleSave = () => {
-    onSaveAndClose({ ...task, title, description, status });
+    onSaveAndClose({ ...task, title, description, status, assigneeId, watchers });
   };
 
   const handleStatusChange = (newStatus: "pendiente" | "en_progreso" | "completada") => {
     setStatus(newStatus);
-    onUpdate({ ...task, title, description, status: newStatus });
+    onUpdate({ ...task, title, description, status: newStatus, assigneeId, watchers });
+  };
+
+  const toggleWatcher = (profileId: string) => {
+    setWatchers((prev) =>
+      prev.includes(profileId) ? prev.filter((id) => id !== profileId) : [...prev, profileId]
+    );
   };
 
   const handleSendComment = async () => {
@@ -960,7 +993,26 @@ function TaskDetailModal({ task, player, profiles, currentProfileId, onClose, on
           </div>
 
           {/* Metadata */}
-          <div className="border-t border-slate-100 pt-3">
+          <div className="border-t border-slate-100 pt-3 space-y-3">
+            {/* Player link */}
+            {player && (
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Jugador</p>
+                {onGoToPlayer ? (
+                  <button
+                    onClick={() => { onGoToPlayer(player.id); onClose(); }}
+                    className="flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline transition-colors"
+                  >
+                    {player.name}
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                ) : (
+                  <p className="text-sm font-medium text-slate-700">{player.name}</p>
+                )}
+              </div>
+            )}
+
+            {/* Prioridad + vencimiento */}
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div>
                 <p className="text-slate-500">Prioridad</p>
@@ -970,16 +1022,6 @@ function TaskDetailModal({ task, player, profiles, currentProfileId, onClose, on
                   {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
                 </p>
               </div>
-              <div>
-                <p className="text-slate-500">Asignado a</p>
-                <p className="font-medium text-slate-700">{assignee?.name ?? "Sin asignar"}</p>
-              </div>
-              {player && (
-                <div>
-                  <p className="text-slate-500">Jugador</p>
-                  <p className="font-medium text-slate-700">{player.name}</p>
-                </div>
-              )}
               {task.dueDate && (
                 <div>
                   <p className="text-slate-500">Vencimiento</p>
@@ -988,6 +1030,45 @@ function TaskDetailModal({ task, player, profiles, currentProfileId, onClose, on
                   </p>
                 </div>
               )}
+            </div>
+
+            {/* Asignado a — editable */}
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Responsable</label>
+              <select
+                value={assigneeId}
+                onChange={(e) => setAssigneeId(e.target.value)}
+                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+              >
+                <option value="">— Sin asignar —</option>
+                {profiles.map((p) => (
+                  <option key={p.id} value={p.id}>{p.avatar} {p.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Adjuntados — editable */}
+            <div>
+              <p className="text-xs text-slate-500 mb-1.5">Adjuntados (también notificados)</p>
+              <div className="flex flex-wrap gap-1.5">
+                {profiles.map((p) => {
+                  const active = watchers.includes(p.id);
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => toggleWatcher(p.id)}
+                      className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border transition-colors ${
+                        active
+                          ? "bg-blue-100 border-blue-300 text-blue-800"
+                          : "bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300"
+                      }`}
+                    >
+                      {p.avatar} {p.name}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
