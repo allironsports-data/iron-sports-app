@@ -248,6 +248,7 @@ export default function App() {
       onDismissNotification={dismissNotification}
       onAddGeneralTask={handleAddTask}
       onUpdateGeneralTask={handleUpdateTask}
+      onUpdateTask={handleUpdateTask}
       onDeleteGeneralTask={handleDeleteTask}
     />
   )

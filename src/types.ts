@@ -50,6 +50,7 @@ export interface Task {
   dueDate?: string;           // optional
   createdAt: string;
   comments: TaskComment[];
+  adminOnly?: boolean;        // si true, solo visible para admins
 }
 
 // ---- Contracts ----

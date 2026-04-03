@@ -143,19 +143,18 @@ function PlantillaTab({ players, profiles }: { players: Player[]; profiles: Prof
       {/* Age distribution bar */}
       <div className="bg-white border border-slate-200 rounded-lg p-4">
         <h3 className="text-sm font-semibold text-slate-800 mb-3">Distribución por edad</h3>
-        <div className="flex items-end gap-3 h-36">
+        <div className="flex items-end gap-3">
           {ageDistribution.map((band) => {
             const pct = Math.round((band.count / totalPlayers) * 100);
+            const barHeight = band.count > 0 ? Math.max(Math.round((band.count / maxBandCount) * 120), 8) : 0;
             return (
               <div key={band.label} className="flex-1 flex flex-col items-center gap-1">
                 <span className="text-xs font-semibold text-slate-700">{band.count}</span>
                 <span className="text-[9px] text-slate-400">{pct}%</span>
-                <div className="w-full flex-1 flex flex-col justify-end">
-                  <div
-                    className="w-full rounded-t bg-blue-400 transition-all"
-                    style={{ height: `${(band.count / maxBandCount) * 80 + (band.count > 0 ? 8 : 0)}%` }}
-                  />
-                </div>
+                <div
+                  className="w-full rounded-t bg-blue-400 transition-all"
+                  style={{ height: `${barHeight}px` }}
+                />
                 <span className="text-[10px] text-slate-500 font-medium">{band.label}</span>
               </div>
             );

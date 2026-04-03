@@ -133,6 +133,7 @@ function dbToTask(row: Record<string, unknown>): Task {
     dueDate: (row.due_date as string) ?? undefined,
     createdAt: row.created_at as string,
     comments: [],
+    adminOnly: (row.admin_only as boolean) ?? false,
   }
 }
 
@@ -156,6 +157,7 @@ export async function createTask(t: Task): Promise<Task> {
     status: t.status,
     priority: t.priority,
     due_date: t.dueDate || null,
+    admin_only: t.adminOnly ?? false,
   }).select().single()
   if (error) throw error
   return dbToTask(data)
@@ -171,6 +173,7 @@ export async function updateTask(t: Task): Promise<void> {
     status: t.status,
     priority: t.priority,
     due_date: t.dueDate || null,
+    admin_only: t.adminOnly ?? false,
   }).eq('id', t.id)
   if (error) throw error
 }

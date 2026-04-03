@@ -113,19 +113,29 @@ export function Dashboard({
     (t) => t.priority === "alta" && t.status !== "completada"
   );
   const inProgressTasks = tasks.filter((t) => t.status === "en_progreso");
-  const myTasks = pendingTasks.filter((t) => t.assigneeId === currentProfile.id);
+  // myTasks: assigned to me, excluding adminOnly tasks if not admin
+  const myTasks = pendingTasks.filter((t) => {
+    if (t.assigneeId !== currentProfile.id) return false;
+    if (t.adminOnly && !currentProfile.is_admin) return false;
+    return true;
+  });
 
   // myPlayerTasks: tasks where task.playerId matches a player in currentProfile's managedBy, excluding myTasks
+  // also exclude adminOnly tasks if not admin
   const myPlayerTasks = pendingTasks.filter((t) => {
     if (t.assigneeId === currentProfile.id) return false; // already in myTasks
+    if (t.adminOnly && !currentProfile.is_admin) return false;
     const player = players.find((p) => p.id === t.playerId);
     return player && player.managedBy.includes(currentProfile.id);
   });
 
-  // generalTasks: only visible to admins, non-completed
-  const generalTasks = currentProfile.is_admin
-    ? tasks.filter((t) => (t.playerId === "" || t.playerId === "general") && t.status !== "completada")
-    : [];
+  // generalTasks: non-completed general tasks; adminOnly ones only for admins
+  const generalTasks = tasks.filter((t) => {
+    if (t.status === "completada") return false;
+    if (t.playerId !== "" && t.playerId !== "general") return false;
+    if (t.adminOnly && !currentProfile.is_admin) return false;
+    return true;
+  });
 
   // Birthdays
   const birthdaysToday = players.filter((p) => isBirthdayToday(p.birthDate));
@@ -1200,6 +1210,7 @@ function AddGeneralTaskModal({ profiles, onClose, onAdd }: {
   const [assigneeId, setAssigneeId] = useState("");
   const [priority, setPriority] = useState<"alta" | "media" | "baja">("media");
   const [dueDate, setDueDate] = useState("");
+  const [adminOnly, setAdminOnly] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1214,6 +1225,7 @@ function AddGeneralTaskModal({ profiles, onClose, onAdd }: {
       dueDate: dueDate || undefined,
       createdAt: new Date().toISOString(),
       comments: [],
+      adminOnly,
     });
   };
 
@@ -1249,6 +1261,21 @@ function AddGeneralTaskModal({ profiles, onClose, onAdd }: {
             </select>
           </div>
           <F label="Fecha de vencimiento" value={dueDate} onChange={setDueDate} type="date" />
+          {/* Admin-only toggle */}
+          <label className="flex items-center gap-2.5 cursor-pointer select-none py-1">
+            <input
+              type="checkbox"
+              checked={adminOnly}
+              onChange={(e) => setAdminOnly(e.target.checked)}
+              className="w-4 h-4 rounded accent-blue-600 cursor-pointer"
+            />
+            <span className="text-sm text-slate-700 font-medium">Solo para admins</span>
+            {adminOnly && (
+              <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 border border-amber-200 rounded px-1.5 py-0.5">
+                Admin
+              </span>
+            )}
+          </label>
           <div className="pt-2">
             <button type="submit" disabled={!title}
               className="w-full rounded-md text-white text-sm font-medium py-2.5 disabled:opacity-40 transition-colors"
