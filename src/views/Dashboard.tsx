@@ -9,7 +9,6 @@ import {
   Users,
   ClipboardList,
   AlertTriangle,
-  ChevronRight,
   Plus,
   Search,
   X,
@@ -39,7 +38,6 @@ interface Props {
   notifications?: AppNotification[];
   onDismissNotification?: (id: string) => void;
   onAddGeneralTask?: (task: Task) => void;
-  onUpdateGeneralTask?: (task: Task) => void;
   onDeleteGeneralTask?: (taskId: string) => void;
 }
 
@@ -74,7 +72,6 @@ export function Dashboard({
   notifications = [],
   onDismissNotification,
   onAddGeneralTask,
-  onUpdateGeneralTask,
   onDeleteGeneralTask,
 }: Props) {
   const [search, setSearch] = useState("");
@@ -773,7 +770,6 @@ function AddGeneralTaskModal({ profiles, onClose, onAdd }: {
       status: "pendiente",
       dueDate: dueDate || undefined,
       createdAt: new Date().toISOString(),
-      completedAt: undefined,
     });
   };
 
