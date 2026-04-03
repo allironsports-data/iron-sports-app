@@ -1,12 +1,12 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import logoImg from '../assets/logo.jpeg';
 import type {
-  Player, Task, TaskComment, TaskAttachment,
-  PerformanceNote,
+  Player, Task, TaskComment,
+  PerformanceNote, ClubInterest,
 } from "../types";
 import { calcAge } from "../types";
 import type { Profile } from "../contexts/AuthContext";
-import { uploadContractPdf } from "../lib/db";
+import { uploadContractPdf, fetchComments, createComment as dbCreateComment } from "../lib/db";
 import {
   ArrowLeft, LogOut, ClipboardList, FileText,
   TrendingUp, User, Plus, X, Calendar, AlertCircle,
@@ -264,6 +264,35 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [filter, setFilter] = useState<"todas" | "pendiente" | "en_progreso" | "completada">("todas");
   const [expandedTask, setExpandedTask] = useState<string | null>(null);
+  const [loadedComments, setLoadedComments] = useState<Record<string, TaskComment[]>>({});
+  const [commentLoading, setCommentLoading] = useState<string | null>(null);
+
+  // Load comments when a task is expanded
+  const loadComments = useCallback(async (taskId: string) => {
+    setCommentLoading(taskId);
+    try {
+      const comments = await fetchComments(taskId);
+      setLoadedComments((prev) => ({ ...prev, [taskId]: comments }));
+    } catch (err) {
+      console.error('Error loading comments:', err);
+    } finally {
+      setCommentLoading(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (expandedTask) loadComments(expandedTask);
+  }, [expandedTask, loadComments]);
+
+  const handleAddComment = async (task: Task, content: string) => {
+    try {
+      await dbCreateComment(task.id, currentProfile.id, content);
+      // Reload comments after adding
+      await loadComments(task.id);
+    } catch (err) {
+      console.error('Error adding comment:', err);
+    }
+  };
 
   const filtered = tasks.filter((t) => filter === "todas" || t.status === filter);
   const sorted = [...filtered].sort((a, b) => {
@@ -281,9 +310,6 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
 
   const cycleStatus = (t: Task) =>
     onUpdateTask({ ...t, status: t.status === "completada" ? "pendiente" : t.status === "pendiente" ? "en_progreso" : "completada" });
-
-  const addComment = (task: Task, comment: TaskComment) =>
-    onUpdateTask({ ...task, comments: [...task.comments, comment] });
 
   return (
     <div>
@@ -367,7 +393,7 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
                       className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600"
                     >
                       <MessageSquare className="w-3.5 h-3.5" />
-                      {task.comments.length > 0 && <span>{task.comments.length}</span>}
+                      {(loadedComments[task.id] ?? []).length > 0 && <span>{(loadedComments[task.id] ?? []).length}</span>}
                     </button>
                     <button onClick={() => setEditingTask(task)} className="text-slate-300 hover:text-blue-500 transition-colors" title="Editar tarea">
                       <Edit3 className="w-3.5 h-3.5" />
@@ -382,9 +408,12 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
               {/* Comments panel */}
               {isExpanded && (
                 <div className="border-t border-slate-100 bg-slate-50">
-                  {task.comments.length > 0 && (
+                  {commentLoading === task.id && (
+                    <div className="px-3 py-3 text-center text-xs text-slate-400">Cargando comentarios...</div>
+                  )}
+                  {(loadedComments[task.id] ?? []).length > 0 && (
                     <div className="px-3 py-2 space-y-2 max-h-64 overflow-y-auto">
-                      {task.comments.map((c) => {
+                      {(loadedComments[task.id] ?? []).map((c) => {
                         const author = profiles.find((m) => m.id === c.authorId);
                         return (
                           <div key={c.id} className="bg-white rounded-md p-2.5 border border-slate-100">
@@ -420,7 +449,7 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
                   )}
                   <CommentInput
                     currentProfile={currentProfile}
-                    onSubmit={(comment) => addComment(task, comment)}
+                    onSubmit={(text) => handleAddComment(task, text)}
                   />
                 </div>
               )}
@@ -456,57 +485,19 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
 
 function CommentInput({ currentProfile, onSubmit }: {
   currentProfile: Profile;
-  onSubmit: (comment: TaskComment) => void;
+  onSubmit: (text: string) => void;
 }) {
   const [text, setText] = useState("");
-  const [attachments, setAttachments] = useState<TaskAttachment[]>([]);
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
-    files.forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const base64 = (ev.target?.result as string).split(",")[1];
-        setAttachments((prev) => [
-          ...prev,
-          { id: Date.now().toString(), name: file.name, mimeType: file.type, data: base64, uploadedAt: new Date().toISOString(), uploadedBy: currentProfile.id },
-        ]);
-      };
-      reader.readAsDataURL(file);
-    });
-    e.target.value = "";
-  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!text.trim() && attachments.length === 0) return;
-    onSubmit({
-      id: "c" + Date.now(),
-      authorId: currentProfile.id,
-      content: text.trim(),
-      createdAt: new Date().toISOString(),
-      attachments,
-    });
+    if (!text.trim()) return;
+    onSubmit(text.trim());
     setText("");
-    setAttachments([]);
   };
 
   return (
     <form onSubmit={handleSubmit} className="p-3 border-t border-slate-100">
-      {attachments.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mb-2">
-          {attachments.map((a) => (
-            <span key={a.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-slate-200 text-slate-600">
-              <Paperclip className="w-2.5 h-2.5" />
-              {a.name}
-              <button type="button" onClick={() => setAttachments((p) => p.filter((x) => x.id !== a.id))}>
-                <X className="w-2.5 h-2.5" />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
       <div className="flex items-center gap-2">
         <input
           value={text}
@@ -514,15 +505,6 @@ function CommentInput({ currentProfile, onSubmit }: {
           placeholder="Añadir comentario..."
           className="flex-1 text-xs rounded-md border border-slate-200 bg-white px-2.5 py-1.5 focus:outline-none focus:ring-1"
         />
-        <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,image/*" multiple onChange={handleFile} className="hidden" />
-        <button
-          type="button"
-          onClick={() => fileRef.current?.click()}
-          className="p-1.5 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-          title="Adjuntar PDF"
-        >
-          <Paperclip className="w-3.5 h-3.5" />
-        </button>
         <button
           type="submit"
           className="p-1.5 rounded text-white"
@@ -912,6 +894,9 @@ function ContractTab({ player, onUpdate }: { player: Player; onUpdate: (p: Playe
         )}
       </div>
 
+      {/* Club interests / market info */}
+      <ClubInterestsSection player={player} onUpdate={onUpdate} />
+
       {/* Club / loan situation */}
       <div className="bg-white border border-slate-200 rounded-lg p-4">
         <h3 className="text-sm font-semibold text-slate-800 mb-3">Situación de club</h3>
@@ -946,6 +931,114 @@ function ContractTab({ player, onUpdate }: { player: Player; onUpdate: (p: Playe
               </div>
             ))}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ========== CLUB INTERESTS SECTION ========== */
+function ClubInterestsSection({ player, onUpdate }: { player: Player; onUpdate: (p: Player) => void }) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [newInterest, setNewInterest] = useState<Omit<ClubInterest, 'id'>>({
+    clubName: '', date: new Date().toISOString().slice(0, 10), type: 'interés', details: '', source: '',
+  });
+
+  const interests = [...(player.clubInterests || [])].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  const typeColors: Record<string, string> = {
+    'interés': 'bg-blue-50 text-blue-700 border-blue-200',
+    'oferta': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    'rumor': 'bg-slate-100 text-slate-600 border-slate-200',
+    'negociación': 'bg-amber-50 text-amber-700 border-amber-200',
+  };
+
+  const handleAdd = () => {
+    if (!newInterest.clubName.trim()) return;
+    const entry: ClubInterest = {
+      ...newInterest,
+      id: 'ci' + Date.now() + Math.random().toString(36).slice(2, 6),
+    };
+    onUpdate({ ...player, clubInterests: [...(player.clubInterests || []), entry] });
+    setNewInterest({ clubName: '', date: new Date().toISOString().slice(0, 10), type: 'interés', details: '', source: '' });
+    setShowAdd(false);
+  };
+
+  const handleDelete = (id: string) => {
+    onUpdate({ ...player, clubInterests: (player.clubInterests || []).filter((ci) => ci.id !== id) });
+  };
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-slate-800">Intereses de clubes</h3>
+        <button onClick={() => setShowAdd(!showAdd)}
+          className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700">
+          <Plus className="w-3 h-3" />{showAdd ? 'Cancelar' : 'Añadir'}
+        </button>
+      </div>
+
+      {showAdd && (
+        <div className="mb-4 p-3 bg-slate-50 rounded-lg border border-slate-100 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <TF label="Club" value={newInterest.clubName} onChange={(v) => setNewInterest({ ...newInterest, clubName: v })} />
+            <TF label="Fecha" value={newInterest.date} onChange={(v) => setNewInterest({ ...newInterest, date: v })} type="date" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Tipo</label>
+              <select
+                value={newInterest.type}
+                onChange={(e) => setNewInterest({ ...newInterest, type: e.target.value as ClubInterest['type'] })}
+                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2"
+              >
+                <option value="interés">Interés</option>
+                <option value="oferta">Oferta</option>
+                <option value="rumor">Rumor</option>
+                <option value="negociación">Negociación</option>
+              </select>
+            </div>
+            <TF label="Fuente" value={newInterest.source || ''} onChange={(v) => setNewInterest({ ...newInterest, source: v })} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Detalles</label>
+            <textarea value={newInterest.details} onChange={(e) => setNewInterest({ ...newInterest, details: e.target.value })} rows={2}
+              placeholder="Condiciones, contexto, notas..."
+              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 resize-none" />
+          </div>
+          <div className="flex justify-end">
+            <button onClick={handleAdd}
+              className="text-xs px-3 py-1.5 rounded text-white" style={{ background: PRIMARY }}>Guardar</button>
+          </div>
+        </div>
+      )}
+
+      {interests.length === 0 && !showAdd && (
+        <p className="text-xs text-slate-400 text-center py-4">Sin intereses registrados</p>
+      )}
+
+      {interests.length > 0 && (
+        <div className="space-y-2">
+          {interests.map((ci) => (
+            <div key={ci.id} className="flex items-start gap-3 py-2 px-3 rounded-lg bg-slate-50 border border-slate-100">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-sm font-semibold text-slate-800">{ci.clubName}</span>
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium border ${typeColors[ci.type] || 'bg-slate-100 text-slate-600'}`}>
+                    {ci.type.charAt(0).toUpperCase() + ci.type.slice(1)}
+                  </span>
+                  <span className="text-[10px] text-slate-400 ml-auto flex-shrink-0">
+                    {new Date(ci.date).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" })}
+                  </span>
+                </div>
+                {ci.details && <p className="text-xs text-slate-600 leading-relaxed">{ci.details}</p>}
+                {ci.source && <p className="text-[10px] text-slate-400 mt-0.5">Fuente: {ci.source}</p>}
+              </div>
+              <button onClick={() => handleDelete(ci.id)} className="text-slate-300 hover:text-red-400 mt-0.5 flex-shrink-0">
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
         </div>
       )}
     </div>

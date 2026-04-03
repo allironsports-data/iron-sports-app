@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Player, Task, TaskComment, PerformanceNote } from '../types'
+import type { Player, Task, TaskComment, PerformanceNote, ClubInterest } from '../types'
 
 // ── helpers ──────────────────────────────────────────────────
 
@@ -17,6 +17,7 @@ function dbToPlayer(row: Record<string, unknown>): Player {
     representationContract: (row.representation_contract as Player['representationContract']) ?? { start: '', end: '' },
     clubContract: (row.club_contract as Player['clubContract']) ?? { endDate: '' },
     contractHistory: (row.contract_history as Player['contractHistory']) ?? [],
+    clubInterests: (row.club_interests as ClubInterest[]) ?? [],
     performance: [],
     info: (() => {
       const raw = (row.info as Record<string, unknown>) ?? {}
@@ -43,6 +44,7 @@ function playerToDb(p: Partial<Player>) {
     representation_contract: p.representationContract,
     club_contract: p.clubContract,
     contract_history: p.contractHistory,
+    club_interests: p.clubInterests,
     info: p.info,
   }
 }

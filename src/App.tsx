@@ -8,6 +8,7 @@ import { LoginScreen } from './views/LoginScreen'
 import { Dashboard } from './views/Dashboard'
 import { PlayerDetail } from './views/PlayerDetail'
 import { AdminPanel } from './views/AdminPanel'
+import { OverviewPanel } from './views/OverviewPanel'
 
 export interface AppNotification {
   id: string
@@ -34,6 +35,7 @@ export default function App() {
   const [dataLoading, setDataLoading] = useState(false)
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
   const [showAdmin, setShowAdmin] = useState(false)
+  const [showOverview, setShowOverview] = useState(false)
   const [notifications, setNotifications] = useState<AppNotification[]>([])
 
   const addNotification = useCallback((msg: string, type: AppNotification['type'], playerId?: string) => {
@@ -167,6 +169,20 @@ export default function App() {
 
   // ── routing ─────────────────────────────────────────────────
 
+  if (showOverview) {
+    return (
+      <OverviewPanel
+        players={players}
+        tasks={tasks}
+        profiles={profiles}
+        currentProfile={profile}
+        onBack={() => setShowOverview(false)}
+        onLogout={signOut}
+        onAdmin={profile.is_admin ? () => { setShowOverview(false); setShowAdmin(true); } : undefined}
+      />
+    )
+  }
+
   if (showAdmin && profile.is_admin) {
     return (
       <AdminPanel
@@ -213,6 +229,7 @@ export default function App() {
       onAdmin={profile.is_admin ? () => setShowAdmin(true) : undefined}
       onBulkDelete={profile.is_admin ? handleBulkDelete : undefined}
       onBulkAssignManager={profile.is_admin ? handleBulkAssignManager : undefined}
+      onOverview={() => setShowOverview(true)}
       notifications={notifications}
       onDismissNotification={dismissNotification}
       onAddGeneralTask={handleAddTask}

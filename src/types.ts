@@ -24,6 +24,7 @@ export interface TaskAttachment {
   name: string;
   mimeType: string;
   data: string; // base64
+  storagePath?: string;
   uploadedAt: string;
   uploadedBy: string;
 }
@@ -77,6 +78,16 @@ export interface PerformanceNote {
   content: string;
 }
 
+// ---- Club interest / market info ----
+export interface ClubInterest {
+  id: string;
+  clubName: string;
+  date: string;           // "YYYY-MM-DD"
+  type: "interés" | "oferta" | "rumor" | "negociación";
+  details: string;
+  source?: string;        // who reported it
+}
+
 // ---- Player personal info ----
 export interface PlayerInfo {
   family: string;
@@ -99,6 +110,7 @@ export interface Player {
   representationContract: RepresentationContract;
   clubContract: ClubContract;
   contractHistory: { club: string; period: string; type: string }[];
+  clubInterests: ClubInterest[];
   performance: PerformanceNote[];
   info: PlayerInfo;
 }
