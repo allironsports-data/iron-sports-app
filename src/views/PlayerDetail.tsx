@@ -12,7 +12,7 @@ import {
   ArrowLeft, LogOut, ClipboardList, FileText,
   TrendingUp, User, Plus, X, Calendar, AlertCircle,
   Clock, CheckCircle2, Trash2, Edit3, Star, Users,
-  Paperclip, Send, Download, ExternalLink, Link2,
+  Paperclip, Download, ExternalLink, Link2,
   Video, BarChart2, BookOpen,
 } from "lucide-react";
 
