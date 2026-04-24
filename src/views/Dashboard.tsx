@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import * as db from '../lib/db';
 import { TaskDetailPanel } from "../components/TaskDetailPanel";
 import logoImg from '../assets/logo.jpeg';
 import type { Player, Task } from "../types";
