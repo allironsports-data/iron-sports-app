@@ -436,7 +436,8 @@ export function Dashboard({
                     <>
                       {myTasks.map((task) => (
                         <TaskRow key={task.id} task={task} players={players} profiles={profiles}
-                          onCycleStatus={() => cycleTaskStatus(task)} onOpenDetail={() => setDetailTask(task)} />
+                          onCycleStatus={() => cycleTaskStatus(task)} onOpenDetail={() => setDetailTask(task)}
+                          isSelected={detailTask?.id === task.id} />
                       ))}
                       {myTasksCompleted.length > 0 && (
                         <>
@@ -449,7 +450,8 @@ export function Dashboard({
                           </button>
                           {showCompletedMine && myTasksCompleted.map((task) => (
                             <TaskRow key={task.id} task={task} players={players} profiles={profiles}
-                              onCycleStatus={() => cycleTaskStatus(task)} onOpenDetail={() => setDetailTask(task)} completed />
+                              onCycleStatus={() => cycleTaskStatus(task)} onOpenDetail={() => setDetailTask(task)}
+                              isSelected={detailTask?.id === task.id} completed />
                           ))}
                         </>
                       )}
@@ -466,7 +468,8 @@ export function Dashboard({
                     <>
                       {myPlayerTasks.map((task) => (
                         <TaskRow key={task.id} task={task} players={players} profiles={profiles}
-                          onCycleStatus={() => cycleTaskStatus(task)} onOpenDetail={() => setDetailTask(task)} />
+                          onCycleStatus={() => cycleTaskStatus(task)} onOpenDetail={() => setDetailTask(task)}
+                          isSelected={detailTask?.id === task.id} />
                       ))}
                       {myPlayerTasksCompleted.length > 0 && (
                         <>
@@ -479,7 +482,8 @@ export function Dashboard({
                           </button>
                           {showCompletedPlayers && myPlayerTasksCompleted.map((task) => (
                             <TaskRow key={task.id} task={task} players={players} profiles={profiles}
-                              onCycleStatus={() => cycleTaskStatus(task)} onOpenDetail={() => setDetailTask(task)} completed />
+                              onCycleStatus={() => cycleTaskStatus(task)} onOpenDetail={() => setDetailTask(task)}
+                              isSelected={detailTask?.id === task.id} completed />
                           ))}
                         </>
                       )}
@@ -496,7 +500,8 @@ export function Dashboard({
                     <>
                       {generalTasks.map((task) => (
                         <TaskRow key={task.id} task={task} players={players} profiles={profiles}
-                          onCycleStatus={() => cycleTaskStatus(task)} onOpenDetail={() => setDetailTask(task)} />
+                          onCycleStatus={() => cycleTaskStatus(task)} onOpenDetail={() => setDetailTask(task)}
+                          isSelected={detailTask?.id === task.id} />
                       ))}
                       {generalTasksCompleted.length > 0 && (
                         <>
@@ -509,7 +514,8 @@ export function Dashboard({
                           </button>
                           {showCompletedGeneral && generalTasksCompleted.map((task) => (
                             <TaskRow key={task.id} task={task} players={players} profiles={profiles}
-                              onCycleStatus={() => cycleTaskStatus(task)} onOpenDetail={() => setDetailTask(task)} completed />
+                              onCycleStatus={() => cycleTaskStatus(task)} onOpenDetail={() => setDetailTask(task)}
+                              isSelected={detailTask?.id === task.id} completed />
                           ))}
                         </>
                       )}
@@ -765,11 +771,11 @@ export function Dashboard({
       )}
 
       {detailTask && (
-        <TaskDetailModal
+        <TaskDetailPanel
           task={detailTask}
           player={players.find((p) => p.id === detailTask.playerId)}
           profiles={profiles}
-          currentProfileId={currentProfile.id}
+          currentProfile={currentProfile}
           onGoToPlayer={onSelectPlayer}
           onClose={() => setDetailTask(null)}
           onUpdate={(updated) => {
@@ -797,83 +803,119 @@ export function Dashboard({
   );
 }
 
-function TaskRow({ task, players, profiles, onCycleStatus, onOpenDetail, completed = false }: {
+function TaskRow({ task, players, profiles, onCycleStatus, onOpenDetail, completed = false, isSelected = false }: {
   task: Task;
   players: Player[];
   profiles: Profile[];
   onCycleStatus: () => void;
   onOpenDetail: () => void;
   completed?: boolean;
+  isSelected?: boolean;
 }) {
   const player = players.find((p) => p.id === task.playerId);
   const assignee = profiles.find((m) => m.id === task.assigneeId);
   const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "completada";
 
-  const statusColor = task.status === "completada"
-    ? "bg-emerald-500"
+  const statusBadge = task.status === "completada"
+    ? { label: "Completada", cls: "bg-emerald-100 text-emerald-700 border-emerald-200" }
     : task.status === "en_progreso"
-    ? "bg-blue-500"
-    : task.priority === "alta"
-    ? "bg-red-500"
-    : task.priority === "media"
-    ? "bg-amber-400"
-    : "bg-slate-300";
+    ? { label: "En progreso", cls: "bg-blue-100 text-blue-700 border-blue-200" }
+    : { label: "Pendiente", cls: "bg-slate-100 text-slate-600 border-slate-200" };
 
-  const rowBg = task.adminOnly
-    ? completed
-      ? "bg-rose-50/40 opacity-50"
-      : "bg-rose-50 hover:bg-rose-100/70"
-    : completed
-      ? "opacity-50 hover:bg-slate-50"
-      : "hover:bg-slate-50";
+  const priorityBadge = task.priority === "alta"
+    ? { label: "Alta", cls: "bg-red-100 text-red-700 border-red-200" }
+    : task.priority === "media"
+    ? { label: "Media", cls: "bg-amber-100 text-amber-700 border-amber-200" }
+    : null;
+
+  const rowBg = isSelected
+    ? "bg-blue-50 border-l-2 border-blue-400"
+    : task.adminOnly
+    ? completed ? "bg-rose-50/40 opacity-50" : "bg-rose-50 hover:bg-rose-100/70"
+    : completed ? "opacity-50 hover:bg-slate-50" : "hover:bg-slate-50";
+
+  const initials = (name: string) => name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
 
   return (
-    <div className={`flex items-center gap-3 px-3 sm:px-4 py-3 text-left transition-colors ${rowBg}`}>
-      <button
-        onClick={onCycleStatus}
-        className={`w-2.5 h-2.5 rounded-full flex-shrink-0 hover:ring-2 hover:ring-offset-2 ${statusColor}`}
-        title={
-          task.status === "completada" ? "Completada — clic para reabrir"
-          : task.status === "en_progreso" ? "En progreso — clic para completar"
-          : task.priority === "alta" ? "Pendiente · Prioridad alta — clic para iniciar"
-          : task.priority === "media" ? "Pendiente · Prioridad media — clic para iniciar"
-          : "Pendiente · Prioridad baja — clic para iniciar"
-        }
-      />
-      <button onClick={onOpenDetail} className="flex-1 min-w-0 text-left">
-        <p className={`text-sm font-medium truncate ${completed ? "text-slate-400 line-through" : "text-slate-700"}`}>
-          {task.title}
-          {task.adminOnly && (
-            <span className="ml-1.5 text-[9px] font-bold uppercase tracking-wide text-rose-500 border border-rose-200 rounded px-1 py-px">admin</span>
-          )}
-        </p>
-        <p className="text-xs text-slate-400">
-          {player?.name}{player?.name && assignee?.name ? " · " : ""}{assignee?.name}
-        </p>
-      </button>
-      {task.dueDate && (
-        <span className={`text-xs flex-shrink-0 ${isOverdue ? "text-red-500 font-medium" : "text-slate-400"}`}>
-          {new Date(task.dueDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
-        </span>
-      )}
-      <button onClick={onOpenDetail} className="p-1 text-slate-400 hover:text-slate-600 flex-shrink-0">
-        <ChevronRight className="w-4 h-4" />
-      </button>
+    <div className={`px-3 sm:px-4 py-3 transition-colors cursor-pointer ${rowBg}`} onClick={onOpenDetail}>
+      <div className="flex items-start gap-2.5">
+        {/* Status cycle dot */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onCycleStatus(); }}
+          className="mt-1 w-3 h-3 rounded-full flex-shrink-0 border-2 transition-colors hover:scale-125"
+          style={{
+            background: task.status === "completada" ? "#10b981"
+              : task.status === "en_progreso" ? "#3b82f6" : "transparent",
+            borderColor: task.status === "completada" ? "#10b981"
+              : task.status === "en_progreso" ? "#3b82f6"
+              : task.priority === "alta" ? "#ef4444"
+              : task.priority === "media" ? "#f59e0b" : "#94a3b8",
+          }}
+          title="Cambiar estado"
+        />
+
+        <div className="flex-1 min-w-0">
+          {/* Title row */}
+          <div className="flex items-center gap-1.5 flex-wrap mb-1">
+            <p className={`text-sm font-medium ${completed ? "line-through text-slate-400" : "text-slate-800"}`}>
+              {task.title}
+            </p>
+            {task.adminOnly && (
+              <span className="text-[9px] font-bold uppercase tracking-wide text-rose-500 border border-rose-200 bg-rose-50 rounded px-1 py-px">admin</span>
+            )}
+          </div>
+
+          {/* Meta row */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Status badge */}
+            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${statusBadge.cls}`}>
+              {statusBadge.label}
+            </span>
+            {/* Priority badge */}
+            {priorityBadge && !completed && (
+              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${priorityBadge.cls}`}>
+                {priorityBadge.label}
+              </span>
+            )}
+            {/* Player */}
+            {player && (
+              <span className="text-[11px] text-slate-400 truncate max-w-[100px]">{player.name}</span>
+            )}
+            {/* Assignee avatar chip */}
+            {assignee && (
+              <span className="inline-flex items-center gap-1">
+                <span className="w-4 h-4 rounded-full bg-blue-100 text-blue-700 text-[9px] font-bold flex items-center justify-center flex-shrink-0">
+                  {initials(assignee.name)}
+                </span>
+                <span className="text-[11px] text-slate-500">{assignee.name.split(" ")[0]}</span>
+              </span>
+            )}
+            {/* Due date */}
+            {task.dueDate && (
+              <span className={`text-[11px] ml-auto flex-shrink-0 ${isOverdue ? "text-red-500 font-semibold" : "text-slate-400"}`}>
+                {isOverdue ? "⚠ " : ""}{new Date(task.dueDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
-function TaskDetailModal({ task, player, profiles, currentProfileId, onClose, onUpdate, onSaveAndClose, onDelete, onGoToPlayer }: {
+function TaskDetailPanel({ task, player, profiles, currentProfile, onClose, onUpdate, onSaveAndClose, onDelete, onGoToPlayer }: {
   task: Task;
   player: Player | undefined;
   profiles: Profile[];
-  currentProfileId: string;
+  currentProfile: Profile;
   onClose: () => void;
   onUpdate: (task: Task) => void;
   onSaveAndClose: (task: Task) => void;
   onDelete: (taskId: string) => void;
   onGoToPlayer?: (playerId: string) => void;
 }) {
+  const canEdit = currentProfile.is_admin || task.assigneeId === currentProfile.id;
+
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description);
   const [status, setStatus] = useState<"pendiente" | "en_progreso" | "completada">(task.status);
@@ -894,6 +936,15 @@ function TaskDetailModal({ task, player, profiles, currentProfileId, onClose, on
 
   useEffect(() => { loadComments(); }, [loadComments]);
 
+  // Sync when task prop changes (e.g. status toggled from row)
+  useEffect(() => {
+    setTitle(task.title);
+    setDescription(task.description);
+    setStatus(task.status);
+    setAssigneeId(task.assigneeId);
+    setWatchers(task.watchers ?? []);
+  }, [task.id, task.status]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleSave = () => {
     onSaveAndClose({ ...task, title, description, status, assigneeId, watchers });
   };
@@ -913,7 +964,7 @@ function TaskDetailModal({ task, player, profiles, currentProfileId, onClose, on
     if (!commentText.trim()) return;
     setSendingComment(true);
     try {
-      const newComment = await db.createComment(task.id, currentProfileId, commentText.trim());
+      const newComment = await db.createComment(task.id, currentProfile.id, commentText.trim());
       setLocalComments((prev) => [...prev, newComment]);
       setCommentText("");
     } catch (e) {
@@ -923,224 +974,288 @@ function TaskDetailModal({ task, player, profiles, currentProfileId, onClose, on
     }
   };
 
+  const assignee = profiles.find((p) => p.id === (canEdit ? assigneeId : task.assigneeId));
+  const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "completada";
+
+  const priorityLabel = task.priority === "alta" ? "Alta" : task.priority === "media" ? "Media" : "Baja";
+  const priorityColor = task.priority === "alta" ? "text-red-600" : task.priority === "media" ? "text-amber-600" : "text-slate-500";
+
+  const initials = (name: string) => name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-0 sm:p-4">
-      <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-lg max-h-[92vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white z-10">
-          <h2 className="text-sm font-semibold text-slate-800">Detalles de tarea</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+    <>
+      {/* Mobile backdrop */}
+      <div className="fixed inset-0 z-30 bg-black/30 sm:hidden" onClick={onClose} />
+      {/* Desktop subtle backdrop — clicking closes panel */}
+      <div className="fixed inset-0 z-30 hidden sm:block" onClick={onClose} />
+
+      {/* Panel */}
+      <div
+        className="fixed bottom-0 inset-x-0 sm:inset-x-auto sm:right-0 sm:top-0 sm:bottom-0 z-40
+                   w-full sm:w-[400px] bg-white
+                   rounded-t-2xl sm:rounded-none
+                   border-t sm:border-t-0 sm:border-l border-slate-200 shadow-2xl
+                   flex flex-col max-h-[92vh] sm:max-h-none"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between px-4 py-3 border-b border-slate-100 flex-shrink-0">
+          <div className="flex-1 min-w-0 pr-2">
+            <div className="flex items-center gap-2 flex-wrap mb-0.5">
+              {task.adminOnly && (
+                <span className="text-[9px] font-bold uppercase tracking-wide text-rose-500 border border-rose-200 bg-rose-50 rounded px-1 py-px">admin</span>
+              )}
+              {task.priority === "alta" && (
+                <span className="text-[9px] font-bold uppercase tracking-wide text-red-500 border border-red-200 bg-red-50 rounded px-1 py-px">urgente</span>
+              )}
+            </div>
+            <h2 className="text-sm font-semibold text-slate-800 leading-snug line-clamp-2">
+              {canEdit ? title : task.title}
+            </h2>
+            {player && (
+              <button
+                onClick={() => { if (onGoToPlayer) { onGoToPlayer(player.id); onClose(); } }}
+                className="text-xs text-blue-600 hover:underline mt-0.5 flex items-center gap-0.5"
+              >
+                {player.name} <ChevronRight className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-0.5 flex-shrink-0">
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="p-4 space-y-4 pb-8">
-          {/* Title */}
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Título</label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-            />
-          </div>
+        {/* Scrollable content */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-4 space-y-4">
 
-          {/* Description */}
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Descripción</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none h-20"
-            />
-          </div>
-
-          {/* Status buttons */}
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-2">Estado</label>
-            <div className="flex gap-2">
-              <button
-                onClick={() => handleStatusChange("pendiente")}
-                className={`flex-1 px-3 py-2 rounded-md text-xs font-medium transition-colors ${
-                  status === "pendiente"
-                    ? "bg-slate-200 text-slate-900"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-150"
-                }`}
-              >
-                Pendiente
-              </button>
-              <button
-                onClick={() => handleStatusChange("en_progreso")}
-                className={`flex-1 px-3 py-2 rounded-md text-xs font-medium transition-colors ${
-                  status === "en_progreso"
-                    ? "bg-blue-200 text-blue-900"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-150"
-                }`}
-              >
-                En proceso
-              </button>
-              <button
-                onClick={() => handleStatusChange("completada")}
-                className={`flex-1 px-3 py-2 rounded-md text-xs font-medium transition-colors ${
-                  status === "completada"
-                    ? "bg-emerald-200 text-emerald-900"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-150"
-                }`}
-              >
-                Completada
-              </button>
-            </div>
-          </div>
-
-          {/* Metadata */}
-          <div className="border-t border-slate-100 pt-3 space-y-3">
-            {/* Player link */}
-            {player && (
-              <div>
-                <p className="text-xs text-slate-500 mb-1">Jugador</p>
-                {onGoToPlayer ? (
-                  <button
-                    onClick={() => { onGoToPlayer(player.id); onClose(); }}
-                    className="flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline transition-colors"
-                  >
-                    {player.name}
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-                ) : (
-                  <p className="text-sm font-medium text-slate-700">{player.name}</p>
-                )}
+            {/* Read-only notice */}
+            {!canEdit && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700 flex items-center gap-2">
+                <span className="text-base">👀</span>
+                <span>Solo puedes comentar — editar lo hace el responsable.</span>
               </div>
             )}
 
-            {/* Prioridad + vencimiento */}
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div>
-                <p className="text-slate-500">Prioridad</p>
-                <p className={`font-medium ${
-                  task.priority === "alta" ? "text-red-600" : task.priority === "media" ? "text-amber-600" : "text-slate-600"
-                }`}>
-                  {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
-                </p>
-              </div>
-              {task.dueDate && (
-                <div>
-                  <p className="text-slate-500">Vencimiento</p>
-                  <p className="font-medium text-slate-700">
-                    {new Date(task.dueDate).toLocaleDateString("es-ES")}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Asignado a — editable */}
+            {/* Status buttons — visible to all, only actionable by editor */}
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Responsable</label>
-              <select
-                value={assigneeId}
-                onChange={(e) => setAssigneeId(e.target.value)}
-                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-              >
-                <option value="">— Sin asignar —</option>
-                {profiles.map((p) => (
-                  <option key={p.id} value={p.id}>{p.avatar} {p.name}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Adjuntados — editable */}
-            <div>
-              <p className="text-xs text-slate-500 mb-1.5">Adjuntados (también notificados)</p>
-              <div className="flex flex-wrap gap-1.5">
-                {profiles.map((p) => {
-                  const active = watchers.includes(p.id);
+              <p className="text-xs font-medium text-slate-500 mb-2">Estado</p>
+              <div className="flex gap-1.5">
+                {(["pendiente", "en_progreso", "completada"] as const).map((s) => {
+                  const labels = { pendiente: "Pendiente", en_progreso: "En proceso", completada: "Completada" };
+                  const active = status === s;
+                  const activeCls = s === "pendiente" ? "bg-slate-200 text-slate-900 border-slate-300"
+                    : s === "en_progreso" ? "bg-blue-100 text-blue-800 border-blue-300"
+                    : "bg-emerald-100 text-emerald-800 border-emerald-300";
                   return (
                     <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => toggleWatcher(p.id)}
-                      className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border transition-colors ${
-                        active
-                          ? "bg-blue-100 border-blue-300 text-blue-800"
-                          : "bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300"
-                      }`}
+                      key={s}
+                      onClick={() => canEdit && handleStatusChange(s)}
+                      disabled={!canEdit}
+                      className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium border transition-colors
+                        ${active ? activeCls : "bg-white text-slate-500 border-slate-200"}
+                        ${canEdit ? "hover:opacity-90" : "cursor-default opacity-70"}`}
                     >
-                      {p.avatar} {p.name}
+                      {labels[s]}
                     </button>
                   );
                 })}
               </div>
             </div>
-          </div>
 
-          {/* Comments */}
-          {localComments.length > 0 && (
-            <div className="border-t border-slate-100 pt-3">
-              <p className="text-xs font-medium text-slate-600 mb-2">Comentarios</p>
-              <div className="space-y-2 max-h-32 overflow-y-auto">
-                {localComments.map((comment) => {
-                  const commentAuthor = profiles.find((p) => p.id === comment.authorId);
-                  return (
-                    <div key={comment.id} className="bg-slate-50 rounded-md p-2">
-                      <p className="text-[10px] font-medium text-slate-700">
-                        {commentAuthor?.name ?? "Desconocido"}
-                      </p>
-                      <p className="text-xs text-slate-600 mt-0.5">{comment.content}</p>
-                      <p className="text-[9px] text-slate-400 mt-1">
-                        {new Date(comment.createdAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}
-                      </p>
-                    </div>
-                  );
-                })}
+            {/* Edit fields (only for editors) */}
+            {canEdit ? (
+              <>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Título</label>
+                  <input
+                    type="text" value={title} onChange={(e) => setTitle(e.target.value)}
+                    className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Descripción</label>
+                  <textarea
+                    value={description} onChange={(e) => setDescription(e.target.value)}
+                    className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none h-20"
+                  />
+                </div>
+              </>
+            ) : (
+              description && (
+                <div>
+                  <p className="text-xs font-medium text-slate-500 mb-1">Descripción</p>
+                  <p className="text-sm text-slate-700 bg-slate-50 rounded-md px-3 py-2">{description}</p>
+                </div>
+              )
+            )}
+
+            {/* Metadata grid */}
+            <div className="grid grid-cols-2 gap-3 text-xs bg-slate-50 rounded-lg p-3">
+              <div>
+                <p className="text-slate-400 uppercase tracking-wide text-[10px] mb-0.5">Prioridad</p>
+                <p className={`font-semibold ${priorityColor}`}>{priorityLabel}</p>
               </div>
+              {task.dueDate && (
+                <div>
+                  <p className="text-slate-400 uppercase tracking-wide text-[10px] mb-0.5">Vencimiento</p>
+                  <p className={`font-semibold ${isOverdue ? "text-red-600" : "text-slate-700"}`}>
+                    {isOverdue ? "⚠ " : ""}{new Date(task.dueDate).toLocaleDateString("es-ES")}
+                  </p>
+                </div>
+              )}
+              <div>
+                <p className="text-slate-400 uppercase tracking-wide text-[10px] mb-0.5">Creada</p>
+                <p className="text-slate-600">{new Date(task.createdAt).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}</p>
+              </div>
+              {assignee && (
+                <div>
+                  <p className="text-slate-400 uppercase tracking-wide text-[10px] mb-0.5">Responsable</p>
+                  <div className="flex items-center gap-1">
+                    <span className="w-4 h-4 rounded-full bg-blue-100 text-blue-700 text-[9px] font-bold flex items-center justify-center flex-shrink-0">
+                      {initials(assignee.name)}
+                    </span>
+                    <span className="text-slate-700 font-medium truncate">{assignee.name.split(" ")[0]}</span>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
 
-          {/* Comment input */}
-          <div className="border-t border-slate-100 pt-3">
-            <label className="block text-xs font-medium text-slate-600 mb-1">Añadir comentario</label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter" && commentText.trim()) handleSendComment(); }}
-                placeholder="Escribe un comentario…"
-                className="flex-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-200"
-              />
-              <button
-                onClick={handleSendComment}
-                disabled={!commentText.trim() || sendingComment}
-                className="rounded-md text-white text-xs font-medium px-2.5 py-1.5 disabled:opacity-40 transition-colors"
-                style={{ background: PRIMARY }}
-              >
-                {sendingComment ? "…" : "Enviar"}
-              </button>
+            {/* Responsable selector (edit only) */}
+            {canEdit && (
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Responsable</label>
+                <select
+                  value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}
+                  className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+                >
+                  <option value="">— Sin asignar —</option>
+                  {profiles.map((p) => (
+                    <option key={p.id} value={p.id}>{p.avatar} {p.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Watchers */}
+            {canEdit ? (
+              <div>
+                <p className="text-xs font-medium text-slate-500 mb-1.5">Adjuntados</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {profiles.map((p) => {
+                    const active = watchers.includes(p.id);
+                    return (
+                      <button key={p.id} type="button" onClick={() => toggleWatcher(p.id)}
+                        className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border transition-colors ${
+                          active ? "bg-blue-100 border-blue-300 text-blue-800" : "bg-white border-slate-200 text-slate-500 hover:border-slate-300"
+                        }`}
+                      >
+                        {p.avatar} {p.name.split(" ")[0]}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : watchers.length > 0 ? (
+              <div>
+                <p className="text-xs font-medium text-slate-500 mb-1.5">Adjuntados</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {watchers.map((wid) => {
+                    const w = profiles.find((p) => p.id === wid);
+                    if (!w) return null;
+                    return (
+                      <span key={wid} className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border bg-blue-50 border-blue-200 text-blue-700">
+                        {w.avatar} {w.name.split(" ")[0]}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+
+            {/* Comments thread */}
+            <div className="border-t border-slate-100 pt-3">
+              <p className="text-xs font-semibold text-slate-600 mb-3">
+                Comentarios {localComments.length > 0 ? `(${localComments.length})` : ""}
+              </p>
+              {localComments.length === 0 ? (
+                <p className="text-xs text-slate-400 text-center py-4">Sin comentarios aún</p>
+              ) : (
+                <div className="space-y-3">
+                  {localComments.map((comment) => {
+                    const author = profiles.find((p) => p.id === comment.authorId);
+                    const isMe = comment.authorId === currentProfile.id;
+                    return (
+                      <div key={comment.id} className={`flex gap-2 ${isMe ? "flex-row-reverse" : ""}`}>
+                        <div className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[9px] font-bold text-white"
+                          style={{ background: PRIMARY }}>
+                          {author ? initials(author.name) : "?"}
+                        </div>
+                        <div className={`flex-1 max-w-[80%] ${isMe ? "items-end" : "items-start"} flex flex-col`}>
+                          <div className={`rounded-2xl px-3 py-2 text-xs ${
+                            isMe ? "bg-blue-600 text-white rounded-tr-sm" : "bg-slate-100 text-slate-700 rounded-tl-sm"
+                          }`}>
+                            {comment.content}
+                          </div>
+                          <p className="text-[9px] text-slate-400 mt-0.5 px-1">
+                            {isMe ? "Tú" : (author?.name.split(" ")[0] ?? "?")} ·{" "}
+                            {new Date(comment.createdAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
+
           </div>
+        </div>
 
-          {/* Actions */}
-          <div className="pt-2 flex gap-2 border-t border-slate-100">
+        {/* Comment input — sticky bottom */}
+        <div className="border-t border-slate-100 px-4 py-3 flex-shrink-0 bg-white">
+          <div className="flex gap-2 items-center">
+            <div className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[9px] font-bold text-white"
+              style={{ background: PRIMARY }}>
+              {initials(currentProfile.name)}
+            </div>
+            <input
+              type="text" value={commentText}
+              onChange={(e) => setCommentText(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && commentText.trim()) handleSendComment(); }}
+              placeholder="Escribe un comentario…"
+              className="flex-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-200"
+            />
             <button
-              onClick={handleSave}
-              className="flex-1 rounded-md text-white text-sm font-medium py-2.5 transition-colors"
+              onClick={handleSendComment}
+              disabled={!commentText.trim() || sendingComment}
+              className="rounded-full text-white text-xs font-medium px-3 py-1.5 disabled:opacity-40 transition-colors flex-shrink-0"
               style={{ background: PRIMARY }}
             >
+              {sendingComment ? "…" : "Enviar"}
+            </button>
+          </div>
+        </div>
+
+        {/* Save / Delete actions (edit only) */}
+        {canEdit && (
+          <div className="px-4 pb-4 pt-1 flex gap-2 flex-shrink-0 border-t border-slate-100 bg-white">
+            <button onClick={handleSave}
+              className="flex-1 rounded-md text-white text-sm font-medium py-2.5 transition-colors"
+              style={{ background: PRIMARY }}>
               Guardar cambios
             </button>
             <button
-              onClick={() => {
-                if (confirm("¿Eliminar esta tarea?")) {
-                  onDelete(task.id);
-                }
-              }}
+              onClick={() => { if (confirm("¿Eliminar esta tarea?")) onDelete(task.id); }}
               className="rounded-md text-red-600 border border-red-200 text-sm font-medium px-4 py-2.5 hover:bg-red-50 transition-colors"
             >
               <Trash2 className="w-4 h-4" />
             </button>
           </div>
-        </div>
+        )}
       </div>
-    </div>
+    </>
   );
 }
 
