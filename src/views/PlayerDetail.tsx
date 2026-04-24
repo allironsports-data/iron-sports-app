@@ -34,7 +34,7 @@ interface Props {
   onAdmin?: () => void;
 }
 
-type TabId = "tareas" | "contrato" | "rendimiento" | "info";
+type TabId = "tareas" | "contrato" | "rendimiento" | "info" | "actividad";
 
 export function PlayerDetail({
   player, tasks, allTasks, profiles, currentProfile,
@@ -51,6 +51,7 @@ export function PlayerDetail({
     { id: "contrato", label: "Contrato", icon: <FileText className="w-4 h-4" /> },
     { id: "rendimiento", label: "Rendimiento", icon: <TrendingUp className="w-4 h-4" />, count: (player.matchReports?.length ?? 0) + player.performance.length + (player.videoSessions?.length ?? 0) },
     { id: "info", label: "Info / Entorno", icon: <User className="w-4 h-4" /> },
+    { id: "actividad", label: "Actividad", icon: <Clock className="w-4 h-4" /> },
   ];
 
   const managers = profiles.filter((m) => player.managedBy.includes(m.id));
@@ -183,6 +184,9 @@ export function PlayerDetail({
             <InfoTab player={player} onUpdate={onUpdatePlayer} />
             <LinksSection player={player} onUpdate={onUpdatePlayer} />
           </div>
+        )}
+        {activeTab === "actividad" && (
+          <ActivityTimeline player={player} tasks={tasks} profiles={profiles} />
         )}
       </main>
 
@@ -1744,6 +1748,142 @@ function EditPlayerModal({ player, profiles, onClose, onSave }: {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── ACTIVITY TIMELINE ─────────────────────────────────────────
+type TimelineEvent = {
+  id: string;
+  date: string;
+  type: "task_created" | "task_done" | "match" | "note" | "video";
+  title: string;
+  subtitle?: string;
+  extra?: string;
+};
+
+function ActivityTimeline({ player, tasks, profiles }: {
+  player: Player; tasks: Task[]; profiles: Profile[];
+}) {
+  // Build events from existing data
+  const events: TimelineEvent[] = [];
+
+  // Tasks
+  tasks.forEach(t => {
+    events.push({
+      id: "tc-" + t.id,
+      date: t.createdAt,
+      type: t.status === "completada" ? "task_done" : "task_created",
+      title: t.title,
+      subtitle: t.assigneeId ? profiles.find(p => p.id === t.assigneeId)?.name.split(" ")[0] : undefined,
+      extra: t.status === "completada" ? "Completada" : t.priority === "alta" ? "⚡ Alta prioridad" : undefined,
+    });
+  });
+
+  // Match reports
+  (player.matchReports ?? []).forEach(m => {
+    events.push({
+      id: "mr-" + m.id,
+      date: m.date,
+      type: "match",
+      title: `${m.role === "titular" ? "Titular" : m.role === "suplente" ? "Suplente" : "No convocado"} vs ${m.opponent}`,
+      subtitle: m.competition,
+      extra: m.minutesPlayed > 0
+        ? `${m.minutesPlayed}' ${m.goals > 0 ? `⚽${m.goals}` : ""} ${m.assists > 0 ? `🅰️${m.assists}` : ""}`.trim()
+        : undefined,
+    });
+  });
+
+  // Performance notes
+  player.performance.forEach(n => {
+    events.push({
+      id: "pn-" + n.id,
+      date: n.date,
+      type: "note",
+      title: n.category || "Nota de rendimiento",
+      subtitle: n.authorId ? profiles.find(p => p.id === n.authorId)?.name.split(" ")[0] : undefined,
+      extra: n.rating ? `★ ${n.rating}/10` : undefined,
+    });
+  });
+
+  // Video sessions
+  (player.videoSessions ?? []).forEach(v => {
+    events.push({
+      id: "vs-" + v.id,
+      date: v.date,
+      type: "video",
+      title: v.description || "Sesión de vídeoanalisis",
+      extra: v.duration ? `${v.duration} min` : undefined,
+    });
+  });
+
+  // Sort newest first
+  events.sort((a, b) => b.date.localeCompare(a.date));
+
+  const typeConfig: Record<TimelineEvent["type"], { icon: string; dot: string }> = {
+    task_created: { icon: "📋", dot: "bg-blue-400" },
+    task_done:    { icon: "✅", dot: "bg-emerald-400" },
+    match:        { icon: "⚽", dot: "bg-amber-400" },
+    note:         { icon: "📝", dot: "bg-violet-400" },
+    video:        { icon: "🎥", dot: "bg-pink-400" },
+  };
+
+  if (events.length === 0) {
+    return (
+      <div className="text-center py-16 text-sm text-slate-400">
+        <Clock className="w-8 h-8 mx-auto mb-3 opacity-30" />
+        Sin actividad registrada aún
+      </div>
+    );
+  }
+
+  // Group by month
+  const grouped: Record<string, TimelineEvent[]> = {};
+  events.forEach(e => {
+    const key = new Date(e.date).toLocaleDateString("es-ES", { month: "long", year: "numeric" });
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(e);
+  });
+
+  return (
+    <div className="space-y-6">
+      {Object.entries(grouped).map(([month, evts]) => (
+        <div key={month}>
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3 px-1">{month}</p>
+          <div className="relative">
+            {/* Vertical line */}
+            <div className="absolute left-3.5 top-0 bottom-0 w-px bg-slate-200" />
+            <div className="space-y-1">
+              {evts.map(evt => {
+                const cfg = typeConfig[evt.type];
+                return (
+                  <div key={evt.id} className="flex gap-3 pl-0.5">
+                    {/* Dot */}
+                    <div className={`w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-sm z-10 bg-white border-2 border-slate-200 mt-1.5`}>
+                      <span className="text-xs leading-none">{cfg.icon}</span>
+                    </div>
+                    {/* Content */}
+                    <div className="flex-1 bg-white border border-slate-100 rounded-lg px-3 py-2 mb-1 hover:border-slate-200 transition-colors">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-medium text-slate-700 leading-snug">{evt.title}</p>
+                        <span className="text-[10px] text-slate-400 flex-shrink-0 mt-0.5">
+                          {new Date(evt.date).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
+                        </span>
+                      </div>
+                      {(evt.subtitle || evt.extra) && (
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                          {evt.subtitle && <span className="text-xs text-slate-400">{evt.subtitle}</span>}
+                          {evt.extra && <span className="text-xs text-slate-500 font-medium">{evt.extra}</span>}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

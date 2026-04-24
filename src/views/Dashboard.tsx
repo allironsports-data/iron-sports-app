@@ -22,6 +22,9 @@ import {
   Calendar,
   BarChart3,
   ChevronRight,
+  LayoutList,
+  LayoutGrid,
+  Zap,
 } from "lucide-react";
 
 const PRIMARY = "hsl(220,72%,26%)";
@@ -100,6 +103,19 @@ export function Dashboard({
   const [showCompletedMine, setShowCompletedMine] = useState(false);
   const [showCompletedPlayers, setShowCompletedPlayers] = useState(false);
   const [showCompletedGeneral, setShowCompletedGeneral] = useState(false);
+  const [listView, setListView] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [quickTaskPlayer, setQuickTaskPlayer] = useState<Player | null>(null);
+
+  // Cmd+K / Ctrl+K global search
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") { e.preventDefault(); setShowSearch(true); }
+      if (e.key === "Escape") { setShowSearch(false); }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   // Toast auto-dismiss
   const [toasts, setToasts] = useState<AppNotification[]>([]);
@@ -249,18 +265,26 @@ export function Dashboard({
 
       {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-3 sm:px-6 h-12 sm:h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg overflow-hidden bg-white flex-shrink-0">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 h-11 sm:h-14 flex items-center justify-between">
+          {/* Logo — icon only on mobile */}
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg overflow-hidden bg-white flex-shrink-0">
               <img src={logoImg} className="w-full h-full object-contain p-0.5" alt="AIS" />
             </div>
-            <div>
-              <span className="font-black text-sm tracking-tight text-slate-900 uppercase">All Iron Sports</span>
-              <span className="hidden sm:inline text-slate-300 mx-2">·</span>
-              <span className="hidden sm:inline text-xs text-slate-400 uppercase tracking-widest">Gestión de jugadores</span>
-            </div>
+            <span className="hidden sm:block font-black text-sm tracking-tight text-slate-900 uppercase">All Iron Sports</span>
+            <span className="hidden sm:inline text-slate-300 mx-1">·</span>
+            <span className="hidden sm:inline text-xs text-slate-400 uppercase tracking-widest">Gestión de jugadores</span>
           </div>
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Global search */}
+            <button
+              onClick={() => setShowSearch(true)}
+              className="flex items-center gap-1.5 px-2 py-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              title="Buscar (⌘K)"
+            >
+              <Search className="w-4 h-4" />
+              <span className="hidden sm:inline text-xs text-slate-400 border border-slate-200 rounded px-1 py-px">⌘K</span>
+            </button>
             {/* Notification bell */}
             <button
               onClick={() => setShowNotifications(!showNotifications)}
@@ -278,16 +302,16 @@ export function Dashboard({
               <p className="text-sm font-medium text-slate-700">{currentProfile.name}</p>
             </div>
             <div
-              className="w-8 h-8 rounded-full text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0"
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-full text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0"
               style={{ background: PRIMARY }}
             >{currentProfile.avatar}</div>
             {currentProfile.is_admin && onOverview && (
-              <button onClick={onOverview} className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors" title="Overview">
+              <button onClick={onOverview} className="p-1 sm:p-1.5 text-slate-400 hover:text-slate-600 transition-colors" title="Overview">
                 <BarChart3 className="w-4 h-4" />
               </button>
             )}
             {currentProfile.is_admin && onAdmin && (
-              <button onClick={onAdmin} className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors" title="Admin">
+              <button onClick={onAdmin} className="p-1 sm:p-1.5 text-slate-400 hover:text-slate-600 transition-colors" title="Admin">
                 <Users className="w-4 h-4" />
               </button>
             )}
@@ -625,84 +649,193 @@ export function Dashboard({
           )}
         </div>
 
-        {/* Player cards grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-          {filtered.map((player) => {
-            const playerTasks = tasks.filter((t) => t.playerId === player.id && t.status !== "completada");
-            const urgent = playerTasks.filter((t) => t.priority === "alta");
-            const age = calcAge(player.birthDate);
-            const repEnd = new Date(player.representationContract.end).getTime();
-            const repDaysLeft = Math.ceil((repEnd - Date.now()) / (1000*60*60*24));
-            const repEndStr = player.representationContract.end ? new Date(player.representationContract.end).toLocaleDateString("es-ES", { month: "short", year: "numeric" }) : "—";
-            const clubEnd = new Date(player.clubContract.endDate).getTime();
-            const clubDaysLeft = Math.ceil((clubEnd - Date.now()) / (1000*60*60*24));
-            const clubEndStr = player.clubContract.endDate ? new Date(player.clubContract.endDate).toLocaleDateString("es-ES", { month: "short", year: "numeric" }) : "—";
-            const managers = player.managedBy.map((id) => profiles.find((m) => m.id === id)).filter(Boolean) as Profile[];
-            const isSelected = selected.has(player.id);
-            const isBday = isBirthdayToday(player.birthDate);
+        {/* View toggle */}
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs text-slate-400">{filtered.length} jugador{filtered.length !== 1 ? "es" : ""}</span>
+          <div className="flex items-center gap-1 bg-slate-100 rounded-md p-0.5">
+            <button onClick={() => setListView(false)}
+              className={`p-1.5 rounded transition-colors ${!listView ? "bg-white shadow-sm text-slate-700" : "text-slate-400 hover:text-slate-600"}`}
+              title="Vista tarjetas">
+              <LayoutGrid className="w-3.5 h-3.5" />
+            </button>
+            <button onClick={() => setListView(true)}
+              className={`p-1.5 rounded transition-colors ${listView ? "bg-white shadow-sm text-slate-700" : "text-slate-400 hover:text-slate-600"}`}
+              title="Vista lista">
+              <LayoutList className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
 
-            return (
-              <div
-                key={player.id}
-                className={`bg-white border rounded-xl p-4 sm:p-5 cursor-pointer transition-all hover:shadow-md relative ${
-                  isSelected ? "border-blue-400 ring-2 ring-blue-200" : "border-slate-200 hover:border-slate-300"
-                }`}
-                onClick={() => selectMode ? toggleSelect(player.id) : onSelectPlayer(player.id)}
-              >
-                {selectMode && (
-                  <div className="absolute top-3 right-3 z-10">
-                    {isSelected ? <CheckSquare className="w-5 h-5 text-blue-600" /> : <Square className="w-5 h-5 text-slate-300" />}
-                  </div>
-                )}
-                {isBday && <span className="absolute top-2 left-3 text-base">🎂</span>}
+        {/* ── GRID VIEW ── */}
+        {!listView && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+            {filtered.map((player) => {
+              const playerTasks = tasks.filter((t) => t.playerId === player.id && t.status !== "completada");
+              const urgent = playerTasks.filter((t) => t.priority === "alta");
+              const age = calcAge(player.birthDate);
+              const repEnd = new Date(player.representationContract.end).getTime();
+              const repDaysLeft = Math.ceil((repEnd - Date.now()) / (1000*60*60*24));
+              const repEndStr = player.representationContract.end ? new Date(player.representationContract.end).toLocaleDateString("es-ES", { month: "short", year: "numeric" }) : "—";
+              const clubEnd = new Date(player.clubContract.endDate).getTime();
+              const clubDaysLeft = Math.ceil((clubEnd - Date.now()) / (1000*60*60*24));
+              const clubEndStr = player.clubContract.endDate ? new Date(player.clubContract.endDate).toLocaleDateString("es-ES", { month: "short", year: "numeric" }) : "—";
+              const managers = player.managedBy.map((id) => profiles.find((m) => m.id === id)).filter(Boolean) as Profile[];
+              const isSelected = selected.has(player.id);
+              const isBday = isBirthdayToday(player.birthDate);
 
-                {/* Name & basic info */}
-                <h3 className="text-base sm:text-lg font-bold text-slate-900 truncate">{player.name}</h3>
-                <p className="text-sm text-slate-500 truncate mt-0.5">
-                  {player.positions[0]}{player.positions[1] ? ` / ${player.positions[1]}` : ''} · {clubsLabel(player.clubs)}
-                </p>
-                <p className="text-sm text-slate-400">
-                  {age} años · {player.nationality}
-                </p>
-
-                {/* Contracts row */}
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  {currentProfile.is_admin && (
-                  <div className={`rounded-lg px-2.5 py-1.5 ${repDaysLeft > 0 && repDaysLeft < 183 ? 'bg-red-50 border border-red-100' : repDaysLeft >= 183 && repDaysLeft < 365 ? 'bg-amber-50 border border-amber-100' : 'bg-slate-50'}`}>
-                    <p className="text-[10px] text-slate-400 uppercase tracking-wide">Repr.</p>
-                    <p className={`text-xs font-semibold ${repDaysLeft > 0 && repDaysLeft < 183 ? 'text-red-600' : repDaysLeft >= 183 && repDaysLeft < 365 ? 'text-amber-600' : 'text-slate-700'}`}>{repEndStr}</p>
-                  </div>
+              return (
+                <div
+                  key={player.id}
+                  className={`bg-white border rounded-xl p-4 sm:p-5 cursor-pointer transition-all hover:shadow-md relative ${
+                    isSelected ? "border-blue-400 ring-2 ring-blue-200" : "border-slate-200 hover:border-slate-300"
+                  }`}
+                  onClick={() => selectMode ? toggleSelect(player.id) : onSelectPlayer(player.id)}
+                >
+                  {selectMode && (
+                    <div className="absolute top-3 right-3 z-10">
+                      {isSelected ? <CheckSquare className="w-5 h-5 text-blue-600" /> : <Square className="w-5 h-5 text-slate-300" />}
+                    </div>
                   )}
-                  <div className={`rounded-lg px-2.5 py-1.5 ${clubDaysLeft > 0 && clubDaysLeft < 183 ? 'bg-red-50 border border-red-100' : clubDaysLeft >= 183 && clubDaysLeft < 365 ? 'bg-amber-50 border border-amber-100' : 'bg-slate-50'}`}>
-                    <p className="text-[10px] text-slate-400 uppercase tracking-wide">Club</p>
-                    <p className={`text-xs font-semibold ${clubDaysLeft > 0 && clubDaysLeft < 183 ? 'text-red-600' : clubDaysLeft >= 183 && clubDaysLeft < 365 ? 'text-amber-600' : 'text-slate-700'}`}>{clubEndStr}</p>
+                  {isBday && <span className="absolute top-2 left-3 text-base">🎂</span>}
+
+                  {/* Quick task button */}
+                  {!selectMode && onAddGeneralTask && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setQuickTaskPlayer(player); }}
+                      className="absolute top-3 right-3 w-6 h-6 rounded-full bg-slate-100 hover:bg-blue-100 text-slate-400 hover:text-blue-600 flex items-center justify-center transition-colors"
+                      title="Nueva tarea rápida"
+                    >
+                      <Zap className="w-3 h-3" />
+                    </button>
+                  )}
+
+                  <h3 className="text-base sm:text-lg font-bold text-slate-900 truncate pr-8">{player.name}</h3>
+                  <p className="text-sm text-slate-500 truncate mt-0.5">
+                    {player.positions[0]}{player.positions[1] ? ` / ${player.positions[1]}` : ''} · {clubsLabel(player.clubs)}
+                  </p>
+                  <p className="text-sm text-slate-400">{age} años · {player.nationality}</p>
+
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    {currentProfile.is_admin && (
+                      <div className={`rounded-lg px-2.5 py-1.5 ${repDaysLeft > 0 && repDaysLeft < 183 ? 'bg-red-50 border border-red-100' : repDaysLeft >= 183 && repDaysLeft < 365 ? 'bg-amber-50 border border-amber-100' : 'bg-slate-50'}`}>
+                        <p className="text-[10px] text-slate-400 uppercase tracking-wide">Repr.</p>
+                        <p className={`text-xs font-semibold ${repDaysLeft > 0 && repDaysLeft < 183 ? 'text-red-600' : repDaysLeft >= 183 && repDaysLeft < 365 ? 'text-amber-600' : 'text-slate-700'}`}>{repEndStr}</p>
+                      </div>
+                    )}
+                    <div className={`rounded-lg px-2.5 py-1.5 ${clubDaysLeft > 0 && clubDaysLeft < 183 ? 'bg-red-50 border border-red-100' : clubDaysLeft >= 183 && clubDaysLeft < 365 ? 'bg-amber-50 border border-amber-100' : 'bg-slate-50'}`}>
+                      <p className="text-[10px] text-slate-400 uppercase tracking-wide">Club</p>
+                      <p className={`text-xs font-semibold ${clubDaysLeft > 0 && clubDaysLeft < 183 ? 'text-red-600' : clubDaysLeft >= 183 && clubDaysLeft < 365 ? 'text-amber-600' : 'text-slate-700'}`}>{clubEndStr}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between">
+                    <div className="flex items-center gap-1">
+                      {managers.map(m => (
+                        <span key={m.id} className="w-6 h-6 rounded-full text-[9px] font-bold flex items-center justify-center text-white" style={{ background: PRIMARY }}>{m.avatar}</span>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {playerTasks.length > 0 && (
+                        <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                          {playerTasks.length} tarea{playerTasks.length > 1 ? 's' : ''}
+                        </span>
+                      )}
+                      {urgent.length > 0 && (
+                        <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-600 border border-red-200">
+                          {urgent.length} urg.
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
+              );
+            })}
+          </div>
+        )}
 
-                {/* Bottom row: managers + tasks */}
-                <div className="mt-3 flex items-center justify-between">
-                  <div className="flex items-center gap-1">
-                    {managers.map(m => (
-                      <span key={m.id} className="w-6 h-6 rounded-full text-[9px] font-bold flex items-center justify-center text-white" style={{ background: PRIMARY }}>{m.avatar}</span>
+        {/* ── LIST VIEW ── */}
+        {listView && (
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+            {filtered.map((player, idx) => {
+              const playerTasks = tasks.filter((t) => t.playerId === player.id && t.status !== "completada");
+              const urgent = playerTasks.filter((t) => t.priority === "alta");
+              const age = calcAge(player.birthDate);
+              const clubDaysLeft = Math.ceil((new Date(player.clubContract.endDate).getTime() - Date.now()) / (1000*60*60*24));
+              const repDaysLeft = Math.ceil((new Date(player.representationContract.end).getTime() - Date.now()) / (1000*60*60*24));
+              const managers = player.managedBy.map((id) => profiles.find((m) => m.id === id)).filter(Boolean) as Profile[];
+              const isSelected = selected.has(player.id);
+              const isBday = isBirthdayToday(player.birthDate);
+
+              return (
+                <div
+                  key={player.id}
+                  onClick={() => selectMode ? toggleSelect(player.id) : onSelectPlayer(player.id)}
+                  className={`flex items-center gap-3 px-3 sm:px-4 py-3 cursor-pointer hover:bg-slate-50 transition-colors ${
+                    idx > 0 ? "border-t border-slate-100" : ""
+                  } ${isSelected ? "bg-blue-50" : ""}`}
+                >
+                  {/* Avatar */}
+                  <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white"
+                    style={{ background: PRIMARY }}>
+                    {player.name.split(" ").map(n => n[0]).join("").slice(0, 2)}
+                  </div>
+
+                  {/* Name + meta */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      {isBday && <span className="text-sm">🎂</span>}
+                      <p className="text-sm font-semibold text-slate-800 truncate">{player.name}</p>
+                    </div>
+                    <p className="text-xs text-slate-400 truncate">
+                      {player.positions[0]} · {clubsLabel(player.clubs)} · {age}a · {player.nationality}
+                    </p>
+                  </div>
+
+                  {/* Contracts (hidden on xs) */}
+                  <div className="hidden sm:flex items-center gap-2">
+                    {currentProfile.is_admin && (
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                        repDaysLeft < 183 ? "bg-red-50 text-red-600" : repDaysLeft < 365 ? "bg-amber-50 text-amber-600" : "bg-slate-50 text-slate-500"
+                      }`}>R {player.representationContract.end ? new Date(player.representationContract.end).toLocaleDateString("es-ES", { month: "short", year: "2-digit" }) : "—"}</span>
+                    )}
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                      clubDaysLeft < 183 ? "bg-red-50 text-red-600" : clubDaysLeft < 365 ? "bg-amber-50 text-amber-600" : "bg-slate-50 text-slate-500"
+                    }`}>C {player.clubContract.endDate ? new Date(player.clubContract.endDate).toLocaleDateString("es-ES", { month: "short", year: "2-digit" }) : "—"}</span>
+                  </div>
+
+                  {/* Managers */}
+                  <div className="hidden sm:flex items-center gap-0.5">
+                    {managers.slice(0, 2).map(m => (
+                      <span key={m.id} className="w-5 h-5 rounded-full text-[8px] font-bold flex items-center justify-center text-white" style={{ background: PRIMARY }}>{m.avatar}</span>
                     ))}
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    {playerTasks.length > 0 && (
-                      <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                        {playerTasks.length} tarea{playerTasks.length > 1 ? 's' : ''}
-                      </span>
-                    )}
+
+                  {/* Task badges + quick task */}
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
                     {urgent.length > 0 && (
-                      <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-600 border border-red-200">
-                        {urgent.length} urg.
-                      </span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200">{urgent.length}⚡</span>
+                    )}
+                    {playerTasks.length > 0 && (
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">{playerTasks.length}</span>
+                    )}
+                    {!selectMode && onAddGeneralTask && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setQuickTaskPlayer(player); }}
+                        className="w-6 h-6 rounded-full bg-slate-100 hover:bg-blue-100 text-slate-400 hover:text-blue-600 flex items-center justify-center transition-colors flex-shrink-0"
+                        title="Nueva tarea rápida"
+                      >
+                        <Zap className="w-3 h-3" />
+                      </button>
+                    )}
+                    {selectMode && (
+                      isSelected ? <CheckSquare className="w-4 h-4 text-blue-600" /> : <Square className="w-4 h-4 text-slate-300" />
                     )}
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
 
         {filtered.length === 0 && (
           <div className="text-center py-12 text-sm text-slate-400">No se encontraron jugadores</div>
@@ -761,6 +894,26 @@ export function Dashboard({
             onDeleteGeneralTask(id);
             setEditingGeneralTask(null);
           } : undefined}
+        />
+      )}
+
+      {quickTaskPlayer && onAddGeneralTask && (
+        <QuickTaskModal
+          player={quickTaskPlayer}
+          profiles={profiles}
+          onClose={() => setQuickTaskPlayer(null)}
+          onAdd={(t) => { onAddGeneralTask(t); setQuickTaskPlayer(null); }}
+        />
+      )}
+
+      {showSearch && (
+        <GlobalSearch
+          players={players}
+          tasks={tasks}
+          profiles={profiles}
+          onSelectPlayer={(id) => { onSelectPlayer(id); setShowSearch(false); }}
+          onSelectTask={(t) => { setDetailTask(t); setShowSearch(false); }}
+          onClose={() => setShowSearch(false)}
         />
       )}
 
@@ -1269,6 +1422,202 @@ function Sel({ label, value, onChange, options }: {
         <option value="">—</option>
         {options.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
       </select>
+    </div>
+  );
+}
+
+// ── QUICK TASK MODAL ─────────────────────────────────────────
+function QuickTaskModal({ player, profiles, onClose, onAdd }: {
+  player: Player; profiles: Profile[];
+  onClose: () => void; onAdd: (task: Task) => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [assigneeId, setAssigneeId] = useState("");
+  const [priority, setPriority] = useState<"alta" | "media" | "baja">("media");
+  const [dueDate, setDueDate] = useState("");
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-0 sm:p-4">
+      <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-sm">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-800">Nueva tarea</h2>
+            <p className="text-xs text-slate-400">{player.name}</p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-4 space-y-3 pb-6">
+          <div>
+            <input
+              autoFocus
+              type="text" value={title} onChange={(e) => setTitle(e.target.value)}
+              placeholder="¿Qué hay que hacer?"
+              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && title.trim()) {
+                  onAdd({ id: "t"+Date.now(), playerId: player.id, title: title.trim(), description: "",
+                    assigneeId, priority, status: "pendiente", dueDate: dueDate || undefined,
+                    createdAt: new Date().toISOString(), comments: [] });
+                }
+              }}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Asignado a</label>
+              <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}
+                className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-200">
+                <option value="">— Sin asignar —</option>
+                {profiles.map(p => <option key={p.id} value={p.id}>{p.avatar} {p.name.split(" ")[0]}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Prioridad</label>
+              <select value={priority} onChange={(e) => setPriority(e.target.value as typeof priority)}
+                className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-200">
+                <option value="baja">Baja</option>
+                <option value="media">Media</option>
+                <option value="alta">Alta ⚡</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Fecha límite (opcional)</label>
+            <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
+              className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-200" />
+          </div>
+          <button
+            onClick={() => {
+              if (!title.trim()) return;
+              onAdd({ id: "t"+Date.now(), playerId: player.id, title: title.trim(), description: "",
+                assigneeId, priority, status: "pendiente", dueDate: dueDate || undefined,
+                createdAt: new Date().toISOString(), comments: [] });
+            }}
+            disabled={!title.trim()}
+            className="w-full rounded-md text-white text-sm font-medium py-2.5 disabled:opacity-40 transition-colors"
+            style={{ background: PRIMARY }}
+          >
+            Crear tarea
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── GLOBAL SEARCH ────────────────────────────────────────────
+function GlobalSearch({ players, tasks, profiles, onSelectPlayer, onSelectTask, onClose }: {
+  players: Player[]; tasks: Task[]; profiles: Profile[];
+  onSelectPlayer: (id: string) => void;
+  onSelectTask: (task: Task) => void;
+  onClose: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const inputRef = useState<HTMLInputElement | null>(null);
+
+  const q = query.toLowerCase().trim();
+
+  const matchedPlayers = q.length < 1 ? [] : players.filter(p =>
+    p.name.toLowerCase().includes(q) ||
+    p.positions.some(pos => pos.toLowerCase().includes(q)) ||
+    p.clubs.some(c => c.name.toLowerCase().includes(q)) ||
+    p.nationality.toLowerCase().includes(q)
+  ).slice(0, 5);
+
+  const matchedTasks = q.length < 1 ? [] : tasks.filter(t =>
+    t.title.toLowerCase().includes(q) ||
+    (t.description ?? "").toLowerCase().includes(q)
+  ).slice(0, 5);
+
+  const hasResults = matchedPlayers.length > 0 || matchedTasks.length > 0;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh] bg-black/40 px-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden" onClick={e => e.stopPropagation()}>
+        {/* Search input */}
+        <div className="flex items-center gap-2.5 px-4 py-3 border-b border-slate-100">
+          <Search className="w-4 h-4 text-slate-400 flex-shrink-0" />
+          <input
+            ref={el => { inputRef[1](el); if (el) el.focus(); }}
+            type="text" value={query} onChange={e => setQuery(e.target.value)}
+            placeholder="Buscar jugadores, tareas…"
+            className="flex-1 text-sm text-slate-800 bg-transparent focus:outline-none placeholder-slate-400"
+            autoFocus
+          />
+          {query && (
+            <button onClick={() => setQuery("")} className="text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>
+          )}
+          <button onClick={onClose} className="text-xs text-slate-400 border border-slate-200 rounded px-1.5 py-0.5 hover:bg-slate-50">Esc</button>
+        </div>
+
+        {/* Results */}
+        <div className="max-h-[60vh] overflow-y-auto">
+          {!hasResults && q.length > 0 && (
+            <div className="py-8 text-center text-sm text-slate-400">Sin resultados para "{query}"</div>
+          )}
+          {!hasResults && q.length === 0 && (
+            <div className="py-8 text-center text-sm text-slate-400">Empieza a escribir para buscar…</div>
+          )}
+
+          {matchedPlayers.length > 0 && (
+            <div>
+              <p className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400 bg-slate-50 border-b border-slate-100">Jugadores</p>
+              {matchedPlayers.map(player => {
+                const pendingCount = tasks.filter(t => t.playerId === player.id && t.status !== "completada").length;
+                return (
+                  <button key={player.id} onClick={() => onSelectPlayer(player.id)}
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-blue-50 transition-colors border-b border-slate-50 text-left">
+                    <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white"
+                      style={{ background: PRIMARY }}>
+                      {player.name.split(" ").map(n => n[0]).join("").slice(0, 2)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-800 truncate">{player.name}</p>
+                      <p className="text-xs text-slate-400 truncate">{player.positions[0]} · {clubsLabel(player.clubs)}</p>
+                    </div>
+                    {pendingCount > 0 && (
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100 flex-shrink-0">
+                        {pendingCount} tareas
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {matchedTasks.length > 0 && (
+            <div>
+              <p className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400 bg-slate-50 border-b border-slate-100">Tareas</p>
+              {matchedTasks.map(task => {
+                const taskPlayer = players.find(p => p.id === task.playerId);
+                const assignee = profiles.find(p => p.id === task.assigneeId);
+                return (
+                  <button key={task.id} onClick={() => onSelectTask(task)}
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-blue-50 transition-colors border-b border-slate-50 text-left">
+                    <div className={`w-2 h-2 rounded-full flex-shrink-0 mt-1 ${
+                      task.priority === "alta" ? "bg-red-500" : task.priority === "media" ? "bg-amber-400" : "bg-slate-300"
+                    }`} />
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-medium truncate ${task.status === "completada" ? "line-through text-slate-400" : "text-slate-800"}`}>{task.title}</p>
+                      <p className="text-xs text-slate-400 truncate">
+                        {taskPlayer ? taskPlayer.name : "General"}{assignee ? ` · ${assignee.name.split(" ")[0]}` : ""}
+                      </p>
+                    </div>
+                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded border flex-shrink-0 ${
+                      task.status === "completada" ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                      : task.status === "en_progreso" ? "bg-blue-50 text-blue-700 border-blue-200"
+                      : "bg-slate-50 text-slate-500 border-slate-200"
+                    }`}>
+                      {task.status === "completada" ? "✓" : task.status === "en_progreso" ? "→" : "·"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
