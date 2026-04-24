@@ -79,6 +79,32 @@ export interface PerformanceNote {
   content: string;
 }
 
+// ---- Match report ----
+export interface MatchReport {
+  id: string;
+  date: string;                  // "YYYY-MM-DD"
+  opponent: string;
+  competition: string;           // Liga, Copa, Champions, Amistoso, etc.
+  venue: "local" | "visitante";
+  role: "titular" | "suplente" | "no_convocado";
+  minutesPlayed: number;
+  goals: number;
+  assists: number;
+  yellowCards: number;
+  redCard: boolean;
+  rating?: number;               // 1-10
+  notes?: string;
+}
+
+// ---- Video analysis session ----
+export interface VideoSession {
+  id: string;
+  date: string;                  // "YYYY-MM-DD"
+  videoUrl: string;
+  description: string;
+  duration?: number;             // minutes
+}
+
 // ---- Club interest / market info ----
 export interface ClubInterest {
   id: string;
@@ -121,6 +147,8 @@ export interface Player {
   contractHistory: { club: string; period: string; type: string }[];
   clubInterests: ClubInterest[];
   performance: PerformanceNote[];
+  matchReports: MatchReport[];
+  videoSessions: VideoSession[];
   info: PlayerInfo;
   transfermarktUrl?: string;   // URL del perfil en Transfermarkt
   links: PlayerLink[];         // enlaces adicionales (vídeos, redes, etc.)

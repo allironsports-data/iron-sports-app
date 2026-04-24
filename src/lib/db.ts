@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink } from '../types'
+import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession } from '../types'
 
 // ── helpers ──────────────────────────────────────────────────
 
@@ -19,6 +19,8 @@ function dbToPlayer(row: Record<string, unknown>): Player {
     contractHistory: (row.contract_history as Player['contractHistory']) ?? [],
     foot: (row.foot as Player['foot']) ?? undefined,
     clubInterests: (row.club_interests as ClubInterest[]) ?? [],
+    matchReports: (row.match_reports as MatchReport[]) ?? [],
+    videoSessions: (row.video_sessions as VideoSession[]) ?? [],
     transfermarktUrl: (row.transfermarkt_url as string) ?? undefined,
     links: (row.links as PlayerLink[]) ?? [],
     performance: [],
@@ -49,6 +51,8 @@ function playerToDb(p: Partial<Player>) {
     contract_history: p.contractHistory,
     foot: p.foot ?? null,
     club_interests: p.clubInterests,
+    match_reports: p.matchReports ?? [],
+    video_sessions: p.videoSessions ?? [],
     transfermarkt_url: p.transfermarktUrl ?? null,
     links: p.links ?? [],
     info: p.info,

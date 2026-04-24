@@ -42,6 +42,8 @@ export const initialPlayers: Player[] = [
       { club: "Betis Deportivo / Betis Juvenil", period: "2024–presente", type: "Cantera / Filial" },
     ],
     clubInterests: [],
+    matchReports: [],
+    videoSessions: [],
     transfermarktUrl: undefined,
     links: [],
     performance: [],

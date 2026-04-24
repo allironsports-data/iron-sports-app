@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import logoImg from '../assets/logo.jpeg';
 import type {
   Player, Task, TaskComment,
-  PerformanceNote, ClubInterest, PlayerLink,
+  PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession,
 } from "../types";
 import { calcAge } from "../types";
 import type { Profile } from "../contexts/AuthContext";
@@ -12,6 +12,7 @@ import {
   TrendingUp, User, Plus, X, Calendar, AlertCircle,
   Clock, CheckCircle2, Trash2, Edit3, Star, Users,
   MessageSquare, Paperclip, Send, Download, ExternalLink, Link2,
+  Video, BarChart2, BookOpen,
 } from "lucide-react";
 
 const PRIMARY = "hsl(220,72%,26%)";
@@ -47,7 +48,7 @@ export function PlayerDetail({
   const tabs: { id: TabId; label: string; icon: React.ReactNode; count?: number }[] = [
     { id: "tareas", label: "Tareas", icon: <ClipboardList className="w-4 h-4" />, count: pendingCount },
     { id: "contrato", label: "Contrato", icon: <FileText className="w-4 h-4" /> },
-    { id: "rendimiento", label: "Rendimiento", icon: <TrendingUp className="w-4 h-4" />, count: player.performance.length },
+    { id: "rendimiento", label: "Rendimiento", icon: <TrendingUp className="w-4 h-4" />, count: (player.matchReports?.length ?? 0) + player.performance.length + (player.videoSessions?.length ?? 0) },
     { id: "info", label: "Info / Entorno", icon: <User className="w-4 h-4" /> },
   ];
 
@@ -1068,53 +1069,429 @@ function ClubInterestsSection({ player, onUpdate }: { player: Player; onUpdate: 
 
 /* ========== PERFORMANCE TAB ========== */
 function PerformanceTab({ player, profiles, onUpdate }: { player: Player; profiles: Profile[]; onUpdate: (p: Player) => void }) {
-  const [showAdd, setShowAdd] = useState(false);
+  const [section, setSection] = useState<"partidos" | "informes" | "video">("partidos");
+  const [showAddMatch, setShowAddMatch] = useState(false);
+  const [showAddNote, setShowAddNote] = useState(false);
+  const [showAddVideo, setShowAddVideo] = useState(false);
+  const [editingMatch, setEditingMatch] = useState<MatchReport | null>(null);
 
-  const sorted = [...player.performance].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const matches = [...(player.matchReports ?? [])].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const videos = [...(player.videoSessions ?? [])].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const notes = [...player.performance].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  // Auto-calculated stats from match reports
+  const played = matches.filter(m => m.role !== "no_convocado");
+  const starters = matches.filter(m => m.role === "titular");
+  const subs = matches.filter(m => m.role === "suplente");
+  const totalMins = played.reduce((s, m) => s + m.minutesPlayed, 0);
+  const totalGoals = played.reduce((s, m) => s + m.goals, 0);
+  const totalAssists = played.reduce((s, m) => s + m.assists, 0);
+  const totalYellow = played.reduce((s, m) => s + m.yellowCards, 0);
+  const totalRed = played.filter(m => m.redCard).length;
+  const goalsP90 = totalMins > 0 ? ((totalGoals / totalMins) * 90).toFixed(2) : "—";
+  const assistsP90 = totalMins > 0 ? ((totalAssists / totalMins) * 90).toFixed(2) : "—";
+  const avgRating = played.filter(m => m.rating).length > 0
+    ? (played.reduce((s, m) => s + (m.rating ?? 0), 0) / played.filter(m => m.rating).length).toFixed(1)
+    : "—";
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-slate-800">Informes y valoraciones</h3>
-        <button onClick={() => setShowAdd(true)}
-          className="inline-flex items-center gap-1 rounded-md text-white text-xs font-medium px-2.5 py-1.5"
-          style={{ background: PRIMARY }}>
-          <Plus className="w-3.5 h-3.5" />Nuevo informe
-        </button>
+    <div className="space-y-4">
+      {/* Sub-nav */}
+      <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
+        {([
+          { id: "partidos", label: "Partidos", icon: <BarChart2 className="w-3.5 h-3.5" />, count: matches.length },
+          { id: "informes", label: "Informes", icon: <BookOpen className="w-3.5 h-3.5" />, count: notes.length },
+          { id: "video", label: "Vídeoanalisis", icon: <Video className="w-3.5 h-3.5" />, count: videos.length },
+        ] as const).map(s => (
+          <button key={s.id} onClick={() => setSection(s.id)}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md text-xs font-medium transition-colors ${
+              section === s.id ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"
+            }`}>
+            {s.icon}{s.label}
+            {s.count > 0 && <span className={`text-[10px] rounded-full px-1.5 py-0.5 ${section === s.id ? "bg-slate-100 text-slate-600" : "bg-slate-200 text-slate-500"}`}>{s.count}</span>}
+          </button>
+        ))}
       </div>
-      <div className="space-y-3">
-        {sorted.map((note) => {
-          const author = profiles.find((m) => m.id === note.authorId);
-          return (
-            <div key={note.id} className="bg-white border border-slate-200 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-600">{note.category}</span>
-                  <span className="text-xs text-slate-400">{new Date(note.date).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}</span>
+
+      {/* PARTIDOS SECTION */}
+      {section === "partidos" && (
+        <div className="space-y-4">
+          {/* Stats grid */}
+          {played.length > 0 && (
+            <div className="bg-white border border-slate-200 rounded-lg p-4">
+              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Estadísticas de temporada</h3>
+              <div className="grid grid-cols-4 gap-3 mb-3">
+                {[
+                  { label: "PJ", value: played.length, sub: `${starters.length}T / ${subs.length}S` },
+                  { label: "Minutos", value: totalMins, sub: `${Math.round(totalMins / Math.max(played.length, 1))} prom.` },
+                  { label: "Goles", value: totalGoals, sub: `${goalsP90}/90` },
+                  { label: "Asist.", value: totalAssists, sub: `${assistsP90}/90` },
+                ].map(stat => (
+                  <div key={stat.label} className="text-center">
+                    <p className="text-2xl font-bold text-slate-800">{stat.value}</p>
+                    <p className="text-[10px] font-semibold text-slate-500 uppercase">{stat.label}</p>
+                    <p className="text-[10px] text-slate-400">{stat.sub}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-3 gap-3 border-t border-slate-100 pt-3">
+                {[
+                  { label: "Nota media", value: avgRating, color: "text-amber-600" },
+                  { label: "Tarjetas 🟨", value: totalYellow, color: "text-amber-500" },
+                  { label: "Tarjetas 🟥", value: totalRed, color: "text-red-600" },
+                ].map(stat => (
+                  <div key={stat.label} className="text-center">
+                    <p className={`text-xl font-bold ${stat.color}`}>{stat.value}</p>
+                    <p className="text-[10px] text-slate-400">{stat.label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Match list */}
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-slate-800">Fichas de partido</h3>
+            <button onClick={() => setShowAddMatch(true)}
+              className="inline-flex items-center gap-1 rounded-md text-white text-xs font-medium px-2.5 py-1.5"
+              style={{ background: PRIMARY }}>
+              <Plus className="w-3.5 h-3.5" />Nueva ficha
+            </button>
+          </div>
+
+          {matches.length === 0 && (
+            <div className="text-center py-10 text-sm text-slate-400 bg-white border border-slate-200 rounded-lg">
+              Sin fichas de partido — añade la primera
+            </div>
+          )}
+
+          <div className="space-y-2">
+            {matches.map(match => (
+              <div key={match.id} className="bg-white border border-slate-200 rounded-lg p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                        match.role === "titular" ? "bg-blue-100 text-blue-700"
+                        : match.role === "suplente" ? "bg-amber-100 text-amber-700"
+                        : "bg-slate-100 text-slate-500"
+                      }`}>{match.role === "no_convocado" ? "NC" : match.role === "titular" ? "Titular" : "Suplente"}</span>
+                      <span className="text-sm font-semibold text-slate-800">vs {match.opponent}</span>
+                      <span className="text-[10px] text-slate-400 bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded">{match.competition}</span>
+                      <span className="text-[10px] text-slate-400">{match.venue}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-0.5">{new Date(match.date).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}</p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {match.rating && (
+                      <span className={`text-sm font-bold ${match.rating >= 8 ? "text-emerald-600" : match.rating >= 6 ? "text-amber-600" : "text-red-500"}`}>
+                        {match.rating}/10
+                      </span>
+                    )}
+                    <button onClick={() => setEditingMatch(match)} className="p-1 text-slate-400 hover:text-slate-600">
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => onUpdate({ ...player, matchReports: player.matchReports.filter(m => m.id !== match.id) })}
+                      className="p-1 text-slate-300 hover:text-red-500">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-0.5">
-                  {Array.from({ length: 10 }).map((_, i) => (
-                    <Star key={i} className={`w-3 h-3 ${i < note.rating ? "text-amber-400 fill-amber-400" : "text-slate-200"}`} />
-                  ))}
-                  <span className="ml-1 text-xs font-semibold text-slate-600">{note.rating}/10</span>
+                {match.role !== "no_convocado" && (
+                  <div className="flex items-center gap-4 mt-2 pt-2 border-t border-slate-50">
+                    <StatChip label="min" value={match.minutesPlayed} />
+                    <StatChip label="⚽" value={match.goals} highlight={match.goals > 0} />
+                    <StatChip label="🅰️" value={match.assists} highlight={match.assists > 0} />
+                    {match.yellowCards > 0 && <StatChip label="🟨" value={match.yellowCards} />}
+                    {match.redCard && <span className="text-[10px] font-semibold text-red-600">🟥 Roja</span>}
+                    {match.notes && <p className="text-[11px] text-slate-400 ml-auto truncate max-w-[120px]" title={match.notes}>{match.notes}</p>}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* INFORMES SECTION */}
+      {section === "informes" && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-slate-800">Informes y valoraciones</h3>
+            <button onClick={() => setShowAddNote(true)}
+              className="inline-flex items-center gap-1 rounded-md text-white text-xs font-medium px-2.5 py-1.5"
+              style={{ background: PRIMARY }}>
+              <Plus className="w-3.5 h-3.5" />Nuevo informe
+            </button>
+          </div>
+          {notes.length === 0 && <div className="text-center py-10 text-sm text-slate-400 bg-white border border-slate-200 rounded-lg">Sin informes aún</div>}
+          {notes.map(note => {
+            const author = profiles.find(m => m.id === note.authorId);
+            return (
+              <div key={note.id} className="bg-white border border-slate-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-600">{note.category}</span>
+                    <span className="text-xs text-slate-400">{new Date(note.date).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}</span>
+                  </div>
+                  <div className="flex items-center gap-0.5">
+                    {Array.from({ length: 10 }).map((_, i) => (
+                      <Star key={i} className={`w-3 h-3 ${i < note.rating ? "text-amber-400 fill-amber-400" : "text-slate-200"}`} />
+                    ))}
+                    <span className="ml-1 text-xs font-semibold text-slate-600">{note.rating}/10</span>
+                  </div>
+                </div>
+                <p className="text-sm text-slate-700 leading-relaxed">{note.content}</p>
+                {author && (
+                  <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-5 h-5 rounded-full bg-slate-100 text-[9px] font-semibold flex items-center justify-center">{author.avatar}</span>
+                      <span className="text-xs text-slate-400">{author.name}</span>
+                    </div>
+                    <button onClick={() => onUpdate({ ...player, performance: player.performance.filter(n => n.id !== note.id) })}
+                      className="p-1 text-slate-300 hover:text-red-500">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* VIDEO SESSIONS SECTION */}
+      {section === "video" && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-slate-800">Sesiones de vídeoanalisis</h3>
+            <button onClick={() => setShowAddVideo(true)}
+              className="inline-flex items-center gap-1 rounded-md text-white text-xs font-medium px-2.5 py-1.5"
+              style={{ background: PRIMARY }}>
+              <Plus className="w-3.5 h-3.5" />Nueva sesión
+            </button>
+          </div>
+          {videos.length === 0 && (
+            <div className="text-center py-10 text-sm text-slate-400 bg-white border border-slate-200 rounded-lg">
+              Sin sesiones registradas
+            </div>
+          )}
+          <div className="space-y-2">
+            {videos.map(v => (
+              <div key={v.id} className="bg-white border border-slate-200 rounded-lg p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Video className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                      <p className="text-sm font-medium text-slate-800 truncate">{v.description}</p>
+                    </div>
+                    <p className="text-xs text-slate-400">
+                      {new Date(v.date).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}
+                      {v.duration ? ` · ${v.duration} min` : ""}
+                    </p>
+                    <a href={v.videoUrl} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 mt-1.5 text-xs text-blue-600 hover:text-blue-800 hover:underline">
+                      <ExternalLink className="w-3 h-3" /> Ver vídeo
+                    </a>
+                  </div>
+                  <button onClick={() => onUpdate({ ...player, videoSessions: player.videoSessions.filter(s => s.id !== v.id) })}
+                    className="p-1 text-slate-300 hover:text-red-500 flex-shrink-0">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
-              <p className="text-sm text-slate-700 leading-relaxed">{note.content}</p>
-              {author && (
-                <div className="mt-3 pt-2 border-t border-slate-100 flex items-center gap-1.5">
-                  <span className="w-5 h-5 rounded-full bg-slate-100 text-[9px] font-semibold flex items-center justify-center text-slate-500">{author.avatar}</span>
-                  <span className="text-xs text-slate-400">{author.name}</span>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-      {sorted.length === 0 && <div className="text-center py-10 text-sm text-slate-400">No hay informes aún</div>}
-      {showAdd && (
-        <AddPerformanceModal profiles={profiles} onClose={() => setShowAdd(false)}
-          onAdd={(note) => { onUpdate({ ...player, performance: [note, ...player.performance] }); setShowAdd(false); }} />
+            ))}
+          </div>
+        </div>
       )}
+
+      {/* Modals */}
+      {(showAddMatch || editingMatch) && (
+        <MatchReportModal
+          initial={editingMatch ?? undefined}
+          onClose={() => { setShowAddMatch(false); setEditingMatch(null); }}
+          onSave={(m) => {
+            const reports = editingMatch
+              ? player.matchReports.map(r => r.id === m.id ? m : r)
+              : [m, ...player.matchReports];
+            onUpdate({ ...player, matchReports: reports });
+            setShowAddMatch(false); setEditingMatch(null);
+          }}
+        />
+      )}
+      {showAddNote && (
+        <AddPerformanceModal profiles={profiles} onClose={() => setShowAddNote(false)}
+          onAdd={(note) => { onUpdate({ ...player, performance: [note, ...player.performance] }); setShowAddNote(false); }} />
+      )}
+      {showAddVideo && (
+        <AddVideoSessionModal onClose={() => setShowAddVideo(false)}
+          onSave={(v) => { onUpdate({ ...player, videoSessions: [v, ...(player.videoSessions ?? [])] }); setShowAddVideo(false); }} />
+      )}
+    </div>
+  );
+}
+
+function StatChip({ label, value, highlight = false }: { label: string; value: number; highlight?: boolean }) {
+  return (
+    <span className={`text-xs font-semibold ${highlight ? "text-slate-800" : "text-slate-500"}`}>
+      {value} <span className="font-normal text-slate-400">{label}</span>
+    </span>
+  );
+}
+
+function MatchReportModal({ initial, onClose, onSave }: {
+  initial?: MatchReport; onClose: () => void; onSave: (m: MatchReport) => void;
+}) {
+  const today = new Date().toISOString().split("T")[0];
+  const [date, setDate] = useState(initial?.date ?? today);
+  const [opponent, setOpponent] = useState(initial?.opponent ?? "");
+  const [competition, setCompetition] = useState(initial?.competition ?? "Liga");
+  const [venue, setVenue] = useState<MatchReport["venue"]>(initial?.venue ?? "local");
+  const [role, setRole] = useState<MatchReport["role"]>(initial?.role ?? "titular");
+  const [minutes, setMinutes] = useState(String(initial?.minutesPlayed ?? 90));
+  const [goals, setGoals] = useState(String(initial?.goals ?? 0));
+  const [assists, setAssists] = useState(String(initial?.assists ?? 0));
+  const [yellow, setYellow] = useState(String(initial?.yellowCards ?? 0));
+  const [red, setRed] = useState(initial?.redCard ?? false);
+  const [rating, setRating] = useState(String(initial?.rating ?? ""));
+  const [notes, setNotes] = useState(initial?.notes ?? "");
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSave({
+      id: initial?.id ?? "mr" + Date.now(),
+      date, opponent, competition, venue, role,
+      minutesPlayed: parseInt(minutes) || 0,
+      goals: parseInt(goals) || 0,
+      assists: parseInt(assists) || 0,
+      yellowCards: parseInt(yellow) || 0,
+      redCard: red,
+      rating: rating ? parseInt(rating) : undefined,
+      notes: notes || undefined,
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-0 sm:p-4">
+      <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-lg max-h-[92vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white">
+          <h2 className="text-sm font-semibold text-slate-800">{initial ? "Editar ficha" : "Nueva ficha de partido"}</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-4 space-y-3 pb-8">
+          <div className="grid grid-cols-2 gap-3">
+            <TF label="Fecha" value={date} onChange={setDate} type="date" required />
+            <TF label="Rival" value={opponent} onChange={setOpponent} required />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Competición</label>
+              <select value={competition} onChange={(e) => setCompetition(e.target.value)}
+                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
+                {["Liga", "Copa del Rey", "Champions League", "Europa League", "Conference League", "Playoffs", "Amistoso", "Otro"].map(c => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Campo</label>
+              <div className="flex gap-2 mt-1">
+                {(["local", "visitante"] as const).map(v => (
+                  <button key={v} type="button" onClick={() => setVenue(v)}
+                    className={`flex-1 py-1.5 rounded-md text-xs font-medium border transition-colors ${venue === v ? "border-blue-400 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-500"}`}>
+                    {v.charAt(0).toUpperCase() + v.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Rol */}
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Participación</label>
+            <div className="flex gap-2">
+              {(["titular", "suplente", "no_convocado"] as const).map(r => (
+                <button key={r} type="button" onClick={() => setRole(r)}
+                  className={`flex-1 py-1.5 rounded-md text-xs font-medium border transition-colors ${role === r
+                    ? r === "titular" ? "border-blue-400 bg-blue-50 text-blue-700"
+                    : r === "suplente" ? "border-amber-400 bg-amber-50 text-amber-700"
+                    : "border-slate-300 bg-slate-100 text-slate-600"
+                    : "border-slate-200 text-slate-500"}`}>
+                  {r === "no_convocado" ? "No conv." : r.charAt(0).toUpperCase() + r.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {role !== "no_convocado" && (
+            <>
+              <div className="grid grid-cols-4 gap-2">
+                <TF label="Minutos" value={minutes} onChange={setMinutes} type="number" />
+                <TF label="Goles" value={goals} onChange={setGoals} type="number" />
+                <TF label="Asist." value={assists} onChange={setAssists} type="number" />
+                <TF label="🟨" value={yellow} onChange={setYellow} type="number" />
+              </div>
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={red} onChange={(e) => setRed(e.target.checked)} className="w-4 h-4 accent-red-500" />
+                  <span className="text-sm text-slate-700">🟥 Tarjeta roja</span>
+                </label>
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Nota (1-10)</label>
+                  <input type="number" min={1} max={10} value={rating} onChange={(e) => setRating(e.target.value)}
+                    placeholder="—" className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2" />
+                </div>
+              </div>
+            </>
+          )}
+
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Observaciones (opcional)</label>
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2}
+              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 resize-none" />
+          </div>
+          <button type="submit" disabled={!opponent}
+            className="w-full rounded-md text-white text-sm font-medium py-2.5 disabled:opacity-40 transition-colors"
+            style={{ background: PRIMARY }}>
+            {initial ? "Guardar cambios" : "Crear ficha"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function AddVideoSessionModal({ onClose, onSave }: {
+  onClose: () => void; onSave: (v: VideoSession) => void;
+}) {
+  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [videoUrl, setVideoUrl] = useState("");
+  const [description, setDescription] = useState("");
+  const [duration, setDuration] = useState("");
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-0 sm:p-4">
+      <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-sm">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+          <h2 className="text-sm font-semibold text-slate-800">Nueva sesión de vídeoanalisis</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+        </div>
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          onSave({ id: "vs" + Date.now(), date, videoUrl, description, duration: duration ? parseInt(duration) : undefined });
+        }} className="p-4 space-y-3 pb-8">
+          <TF label="Fecha" value={date} onChange={setDate} type="date" required />
+          <TF label="Enlace al vídeo (Streamable, YouTube, etc.)" value={videoUrl} onChange={setVideoUrl} required />
+          <TF label="Duración (minutos, opcional)" value={duration} onChange={setDuration} type="number" />
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Descripción de la sesión</label>
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} required rows={3}
+              placeholder="Ej: Revisión de movimientos defensivos, posicionamiento en bloque medio..."
+              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 resize-none" />
+          </div>
+          <button type="submit" disabled={!videoUrl || !description}
+            className="w-full rounded-md text-white text-sm font-medium py-2.5 disabled:opacity-40"
+            style={{ background: PRIMARY }}>Guardar sesión</button>
+        </form>
+      </div>
     </div>
   );
 }
@@ -1153,12 +1530,9 @@ function AddPerformanceModal({ profiles, onClose, onAdd }: {
               <label className="block text-xs font-medium text-slate-600 mb-1">Categoría</label>
               <select value={category} onChange={(e) => setCategory(e.target.value)}
                 className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
-                <option>Partido</option>
-                <option>Entrenamiento</option>
-                <option>Informe mensual</option>
-                <option>Informe scouting</option>
-                <option>Médico</option>
-                <option>Otro</option>
+                <option>Partido</option><option>Entrenamiento</option>
+                <option>Informe mensual</option><option>Informe scouting</option>
+                <option>Médico</option><option>Otro</option>
               </select>
             </div>
             <div>
