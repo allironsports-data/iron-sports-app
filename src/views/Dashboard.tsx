@@ -30,6 +30,7 @@ import {
 const PRIMARY = "hsl(220,72%,26%)";
 
 interface Props {
+  view?: 'tareas' | 'jugadores';   // which section to show
   players: Player[];
   tasks: Task[];
   profiles: Profile[];
@@ -68,6 +69,7 @@ function isBirthdaySoon(birthDate: string, days: number): boolean {
 }
 
 export function Dashboard({
+  view = 'tareas',
   players,
   tasks,
   profiles,
@@ -93,6 +95,8 @@ export function Dashboard({
   const [editingGeneralTask, setEditingGeneralTask] = useState<Task | null>(null);
   const [managerFilter, setManagerFilter] = useState<string>("all");
   const [taskView, setTaskView] = useState<"pending" | "urgent" | "mine" | "inprogress" | null>("mine");
+  // quick filter from stat cards: overlays on top of tab filter
+  const [quickFilter, setQuickFilter] = useState<"overdue" | "urgent" | "inprogress" | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
   const [mineSubTab, setMineSubTab] = useState<"mine" | "players" | "general" | "all">("mine");
   const [detailTask, setDetailTask] = useState<Task | null>(null);
@@ -180,19 +184,29 @@ export function Dashboard({
     return true;
   });
 
-  // Tasks for kanban: which tasks to show based on mineSubTab filter
+  // Tasks for kanban: respects tab filter + quickFilter from stat cards
   const activeDashboardTasks = (status: Task["status"]) => {
     const now = new Date();
+    // Base pool from tab selection
     let pool: Task[] = [];
-    if (mineSubTab === "mine" || taskView !== "mine") {
-      pool = [...myTasks, ...myPlayerTasks];
-    } else if (mineSubTab === "players") {
+    if (mineSubTab === "players") {
       pool = myPlayerTasks;
     } else if (mineSubTab === "general") {
       pool = generalTasks;
-    } else {
-      // all
+    } else if (mineSubTab === "all") {
       pool = tasks.filter(t => t.status !== "completada" && !(t.adminOnly && !currentProfile.is_admin));
+    } else {
+      // "mine" = my tasks + my players tasks
+      pool = [...myTasks, ...myPlayerTasks];
+    }
+    // Apply quickFilter overlay
+    if (quickFilter === "overdue") {
+      pool = pool.filter(t => t.dueDate && new Date(t.dueDate) < now);
+    } else if (quickFilter === "urgent") {
+      pool = pool.filter(t => t.priority === "alta");
+    } else if (quickFilter === "inprogress") {
+      // only show en_progreso tasks regardless of status param
+      if (status !== "en_progreso") return [];
     }
     return pool
       .filter(t => t.status === status)
@@ -307,7 +321,9 @@ export function Dashboard({
             </div>
             <span className="hidden sm:block font-black text-sm tracking-tight text-slate-900 uppercase">All Iron Sports</span>
             <span className="hidden sm:inline text-slate-300 mx-1">·</span>
-            <span className="hidden sm:inline text-xs text-slate-400 uppercase tracking-widest">Gestión de jugadores</span>
+            <span className="hidden sm:inline text-xs text-slate-400 uppercase tracking-widest">
+              {view === 'jugadores' ? 'Jugadores' : 'Tareas'}
+            </span>
           </div>
           <div className="flex items-center gap-1.5 sm:gap-2">
             {/* Global search */}
@@ -424,6 +440,9 @@ export function Dashboard({
           </div>
         )}
 
+        {/* ── Tareas section ──────────────────────────────── */}
+        {view === 'tareas' && (<>
+
         {/* ── Stat cards ──────────────────────────────────── */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-5">
           <div className="bg-white border border-slate-200 rounded-xl p-3 text-center">
@@ -431,10 +450,12 @@ export function Dashboard({
             <p className="text-xs text-slate-500 mt-0.5">Jugadores</p>
           </div>
           <div
-            className={`bg-white border rounded-xl p-3 text-center cursor-pointer transition-colors ${
-              overdueDashboardTasks.length > 0 ? "border-red-200 hover:border-red-300" : "border-slate-200"
+            className={`border rounded-xl p-3 text-center cursor-pointer transition-colors ${
+              quickFilter === "overdue"
+                ? "bg-red-50 border-red-300"
+                : overdueDashboardTasks.length > 0 ? "bg-white border-red-200 hover:border-red-300" : "bg-white border-slate-200 hover:border-slate-300"
             }`}
-            onClick={() => setTaskView(taskView === "pending" ? null : "pending")}
+            onClick={() => setQuickFilter(q => q === "overdue" ? null : "overdue")}
           >
             <p className={`text-2xl font-semibold ${overdueDashboardTasks.length > 0 ? "text-red-500" : "text-slate-800"}`}>
               {overdueDashboardTasks.length}
@@ -442,15 +463,19 @@ export function Dashboard({
             <p className="text-xs text-slate-500 mt-0.5">Vencidas</p>
           </div>
           <div
-            className={`bg-white border rounded-xl p-3 text-center cursor-pointer transition-colors hover:border-amber-300 ${taskView === "urgent" ? "border-amber-300 bg-amber-50" : "border-slate-200"}`}
-            onClick={() => setTaskView(taskView === "urgent" ? null : "urgent")}
+            className={`border rounded-xl p-3 text-center cursor-pointer transition-colors ${
+              quickFilter === "urgent" ? "bg-amber-50 border-amber-300" : "bg-white border-slate-200 hover:border-amber-300"
+            }`}
+            onClick={() => setQuickFilter(q => q === "urgent" ? null : "urgent")}
           >
             <p className={`text-2xl font-semibold ${urgentTasks.length > 0 ? "text-amber-600" : "text-slate-800"}`}>{urgentTasks.length}</p>
             <p className="text-xs text-slate-500 mt-0.5">Urgentes</p>
           </div>
           <div
-            className={`bg-white border rounded-xl p-3 text-center cursor-pointer transition-colors hover:border-slate-300 ${taskView === "inprogress" ? "border-blue-300 bg-blue-50" : "border-slate-200"}`}
-            onClick={() => setTaskView(taskView === "inprogress" ? null : "inprogress")}
+            className={`border rounded-xl p-3 text-center cursor-pointer transition-colors ${
+              quickFilter === "inprogress" ? "bg-blue-50 border-blue-300" : "bg-white border-slate-200 hover:border-slate-300"
+            }`}
+            onClick={() => setQuickFilter(q => q === "inprogress" ? null : "inprogress")}
           >
             <p className="text-2xl font-semibold text-slate-800">{inProgressTasks.length}</p>
             <p className="text-xs text-slate-500 mt-0.5">En progreso</p>
@@ -555,6 +580,11 @@ export function Dashboard({
             />
           </div>
         </div>
+
+        </>)}
+
+        {/* ── Jugadores section ────────────────────────────── */}
+        {view === 'jugadores' && (<>
 
         {/* Players list header */}
         <div className="flex flex-col gap-2 mb-3">
@@ -812,6 +842,8 @@ export function Dashboard({
         {filtered.length === 0 && (
           <div className="text-center py-12 text-sm text-slate-400">No se encontraron jugadores</div>
         )}
+
+        </>)}
       </main>
 
       {/* Bulk action toolbar */}

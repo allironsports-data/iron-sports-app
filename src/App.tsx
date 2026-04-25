@@ -13,7 +13,7 @@ import { PlayersTable } from './views/PlayersTable'
 import { Distribution } from './views/Distribution'
 import { ClubDetail } from './views/ClubDetail'
 import type { Club, DistributionEntry, ClubNegotiation } from './types'
-import { TrendingUp, Users } from 'lucide-react'
+import { TrendingUp, Users, ClipboardList } from 'lucide-react'
 
 export interface AppNotification {
   id: string
@@ -40,8 +40,8 @@ export default function App() {
   const [dataLoading, setDataLoading] = useState(false)
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
   const [selectedClubId, setSelectedClubId] = useState<string | null>(null)
-  // 'mantenimiento' = player management, 'distribucion' = distribution module
-  const [mainSection, setMainSection] = useState<'mantenimiento' | 'distribucion'>('mantenimiento')
+  // three main sections
+  const [mainSection, setMainSection] = useState<'tareas' | 'jugadores' | 'distribucion'>('tareas')
   // where to return after closing PlayerDetail
   const [playerReturnToClub, setPlayerReturnToClub] = useState(false)
   const [showAdmin, setShowAdmin] = useState(false)
@@ -360,9 +360,9 @@ export default function App() {
           entries={distEntries}
           negotiations={negotiations}
           currentProfile={profile}
-          onBack={() => setMainSection('mantenimiento')}
+          onBack={() => setMainSection('tareas')}
           onLogout={signOut}
-          onAdmin={profile.is_admin ? () => { setMainSection('mantenimiento'); setShowAdmin(true) } : undefined}
+          onAdmin={profile.is_admin ? () => { setMainSection('tareas'); setShowAdmin(true) } : undefined}
           onSelectPlayer={(id) => navigateToPlayer(id, false)}
           onSelectClub={navigateToClub}
           onCreateClub={handleCreateClub}
@@ -380,9 +380,11 @@ export default function App() {
     )
   }
 
+  // 'tareas' and 'jugadores' both use Dashboard with a view prop
   return (
     <>
       <Dashboard
+        view={mainSection === 'jugadores' ? 'jugadores' : 'tareas'}
         players={players}
         tasks={tasks}
         profiles={profiles}
@@ -407,36 +409,39 @@ export default function App() {
   )
 }
 
-// ── Bottom navigation bar ────────────────────────────────────
+// ── Bottom navigation bar (3 tabs) ──────────────────────────
 
 function BottomNav({ section, onSelect, badge }: {
-  section: 'mantenimiento' | 'distribucion'
-  onSelect: (s: 'mantenimiento' | 'distribucion') => void
+  section: 'tareas' | 'jugadores' | 'distribucion'
+  onSelect: (s: 'tareas' | 'jugadores' | 'distribucion') => void
   badge: number
 }) {
+  const tabs: { id: 'tareas' | 'jugadores' | 'distribucion'; label: string; icon: React.ReactNode }[] = [
+    { id: 'tareas',      label: 'Tareas',      icon: <ClipboardList className="w-5 h-5" /> },
+    { id: 'jugadores',   label: 'Jugadores',   icon: <Users className="w-5 h-5" /> },
+    { id: 'distribucion',label: 'Distribución', icon: (
+      <div className="relative">
+        <TrendingUp className="w-5 h-5" />
+        {badge > 0 && (
+          <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 bg-blue-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5">
+            {badge > 99 ? '99+' : badge}
+          </span>
+        )}
+      </div>
+    )},
+  ]
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-200 flex sm:hidden safe-area-inset-bottom">
-      <button
-        onClick={() => onSelect('mantenimiento')}
-        className={`flex-1 flex flex-col items-center gap-0.5 py-2 transition-colors ${section === 'mantenimiento' ? 'text-[hsl(220,72%,36%)]' : 'text-slate-400'}`}
-      >
-        <Users className="w-5 h-5" />
-        <span className="text-[10px] font-medium">Mantenimiento</span>
-      </button>
-      <button
-        onClick={() => onSelect('distribucion')}
-        className={`flex-1 flex flex-col items-center gap-0.5 py-2 relative transition-colors ${section === 'distribucion' ? 'text-[hsl(220,72%,36%)]' : 'text-slate-400'}`}
-      >
-        <div className="relative">
-          <TrendingUp className="w-5 h-5" />
-          {badge > 0 && (
-            <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 bg-blue-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5">
-              {badge > 99 ? '99+' : badge}
-            </span>
-          )}
-        </div>
-        <span className="text-[10px] font-medium">Distribución</span>
-      </button>
+      {tabs.map(t => (
+        <button
+          key={t.id}
+          onClick={() => onSelect(t.id)}
+          className={`flex-1 flex flex-col items-center gap-0.5 py-2 transition-colors ${section === t.id ? 'text-[hsl(220,72%,36%)]' : 'text-slate-400'}`}
+        >
+          {t.icon}
+          <span className="text-[10px] font-medium">{t.label}</span>
+        </button>
+      ))}
     </nav>
   )
 }
