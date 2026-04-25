@@ -46,6 +46,8 @@ interface Props {
 
 type TabId = "tareas" | "contrato" | "rendimiento" | "info" | "actividad" | "distribucion";
 
+type NavGroup = { label: string; items: { id: TabId; label: string; icon: React.ReactNode; count?: number }[] };
+
 export function PlayerDetail({
   player, tasks, allTasks, profiles, currentProfile,
   onBack, onAddTask, onUpdateTask, onDeleteTask, onUpdatePlayer, onLogout,
@@ -58,37 +60,69 @@ export function PlayerDetail({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEditPlayer, setShowEditPlayer] = useState(false);
 
-  const pendingCount = tasks.filter((t) => t.status !== "completada").length;
-  const tabs: { id: TabId; label: string; icon: React.ReactNode; count?: number }[] = [
-    { id: "tareas", label: "Tareas", icon: <ClipboardList className="w-4 h-4" />, count: pendingCount },
-    { id: "contrato", label: "Contrato", icon: <FileText className="w-4 h-4" /> },
-    { id: "rendimiento", label: "Rendimiento", icon: <TrendingUp className="w-4 h-4" />, count: (player.matchReports?.length ?? 0) + player.performance.length + (player.videoSessions?.length ?? 0) },
-    { id: "info", label: "Info / Entorno", icon: <User className="w-4 h-4" /> },
-    { id: "actividad", label: "Actividad", icon: <Clock className="w-4 h-4" /> },
-    { id: "distribucion", label: "Distribución", icon: <BarChart2 className="w-4 h-4" />, count: playerNegotiations.length || undefined },
+  const pendingCount   = tasks.filter((t) => t.status !== "completada").length;
+  const rendimCount    = (player.matchReports?.length ?? 0) + player.performance.length + (player.videoSessions?.length ?? 0);
+  const distribCount   = playerNegotiations.length || undefined;
+
+  const navGroups: NavGroup[] = [
+    {
+      label: "Gestión",
+      items: [
+        { id: "tareas",      label: "Tareas",      icon: <ClipboardList className="w-3.5 h-3.5" />, count: pendingCount || undefined },
+        { id: "contrato",    label: "Contrato",    icon: <FileText className="w-3.5 h-3.5" /> },
+        { id: "distribucion",label: "Distribución",icon: <BarChart2 className="w-3.5 h-3.5" />, count: distribCount },
+      ],
+    },
+    {
+      label: "Seguimiento",
+      items: [
+        { id: "rendimiento", label: "Rendimiento", icon: <TrendingUp className="w-3.5 h-3.5" />, count: rendimCount || undefined },
+        { id: "actividad",   label: "Actividad",   icon: <Clock className="w-3.5 h-3.5" /> },
+      ],
+    },
+    {
+      label: "Perfil",
+      items: [
+        { id: "info", label: "Info / Entorno", icon: <User className="w-3.5 h-3.5" /> },
+      ],
+    },
   ];
 
-  const managers = profiles.filter((m) => player.managedBy.includes(m.id));
+  const managers    = profiles.filter((m) => player.managedBy.includes(m.id));
+  const avatarText  = player.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
+
+  // Contract urgency for sidebar badge
+  const clubEndDate  = player.clubContract?.endDate;
+  const clubDaysLeft = clubEndDate
+    ? Math.ceil((new Date(clubEndDate).getTime() - Date.now()) / 86400000)
+    : null;
+  const contractBadgeCls =
+    clubDaysLeft !== null && clubDaysLeft <= 90  ? "bg-red-50 text-red-600 border-red-200" :
+    clubDaysLeft !== null && clubDaysLeft <= 180 ? "bg-amber-50 text-amber-700 border-amber-200" :
+    "bg-slate-100 text-slate-500 border-slate-200";
+  const contractBadgeLabel = clubEndDate
+    ? new Date(clubEndDate).toLocaleDateString("es-ES", { month: "short", year: "2-digit" })
+    : null;
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Header */}
+      {/* ── Compact header ──────────────────────────────── */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-12 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button onClick={onBack} className="text-slate-400 hover:text-slate-600 transition-colors">
               <ArrowLeft className="w-5 h-5" />
             </button>
-            <div className="w-8 h-8 rounded-lg overflow-hidden bg-white flex-shrink-0"><img src={logoImg} className="w-full h-full object-contain p-0.5" alt="AIS" /></div>
-            <span className="font-semibold text-slate-900 text-sm">{player.name}</span>
+            <div className="w-6 h-6 rounded overflow-hidden bg-white flex-shrink-0">
+              <img src={logoImg} className="w-full h-full object-contain" alt="AIS" />
+            </div>
+            <span className="text-xs text-slate-400">Jugadores</span>
+            <span className="text-xs text-slate-300">/</span>
+            <span className="text-sm font-semibold text-slate-800">{player.name}</span>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {onAdmin && (
-              <button
-                onClick={onAdmin}
-                className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors"
-                title="Panel de administración"
-              >
+              <button onClick={onAdmin} className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors" title="Admin">
                 <Users className="w-4 h-4" />
               </button>
             )}
@@ -99,122 +133,136 @@ export function PlayerDetail({
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
-        {/* Player summary */}
-        <div className="bg-white border border-slate-200 rounded-lg p-4 sm:p-5 mb-4">
-          <div className="flex items-start gap-4">
-            <div className="w-16 h-16 rounded-lg bg-slate-100 flex items-center justify-center text-xl font-bold text-slate-400 flex-shrink-0">
-              {player.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between gap-2 mb-2">
-                <h1 className="text-lg font-semibold text-slate-900">{player.name}</h1>
-                <div className="flex items-center gap-2">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-5">
+        <div className="flex gap-5 items-start">
+
+          {/* ── Sidebar ─────────────────────────────────── */}
+          <aside className="w-52 flex-shrink-0 sticky top-16">
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+
+              {/* Player card inside sidebar */}
+              <div className="p-4 border-b border-slate-100 text-center">
+                <div className="w-14 h-14 rounded-xl bg-slate-100 flex items-center justify-center text-lg font-bold text-slate-400 mx-auto mb-2">
+                  {avatarText}
+                </div>
+                <p className="text-sm font-semibold text-slate-900 leading-tight">{player.name}</p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {player.positions.join(" / ")} · {calcAge(player.birthDate)} años
+                </p>
+                <p className="text-xs text-slate-400">{player.nationality}</p>
+
+                {/* Club */}
+                <div className="mt-2">
+                  <ClubsDisplay clubs={player.clubs} />
+                </div>
+
+                {/* Contract badge */}
+                {contractBadgeLabel && (
+                  <span className={`inline-flex items-center mt-2 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${contractBadgeCls}`}>
+                    Contrato · {contractBadgeLabel}
+                  </span>
+                )}
+
+                {/* Managers */}
+                {managers.length > 0 && (
+                  <div className="flex flex-wrap gap-1 justify-center mt-2">
+                    {managers.map((m) => (
+                      <span key={m.id} className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">{m.name}</span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Edit / Delete */}
+                <div className="flex gap-1.5 mt-3 justify-center">
                   <button
                     onClick={() => setShowEditPlayer(true)}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-slate-600 hover:bg-slate-100 transition-colors"
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-slate-500 border border-slate-200 hover:bg-slate-50 transition-colors"
                   >
-                    <Edit3 className="w-3.5 h-3.5" />
+                    <Edit3 className="w-3 h-3" />
                     Editar
                   </button>
                   {onDeletePlayer && currentProfile.is_admin && (
                     <button
                       onClick={() => setShowDeleteConfirm(true)}
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-red-500 border border-red-200 hover:bg-red-50 transition-colors"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      Eliminar
+                      <Trash2 className="w-3 h-3" />
                     </button>
                   )}
                 </div>
               </div>
-              <p className="text-sm text-slate-500 mt-0.5">
-                {player.positions.join(" / ")}
-                {" · "}
-                {calcAge(player.birthDate)} años ({new Date(player.birthDate).toLocaleDateString("es-ES")})
-                {" · "}
-                {player.nationality}
-              </p>
-              {/* Clubs */}
-              <div className="mt-1">
-                <ClubsDisplay clubs={player.clubs} />
-              </div>
-              {/* Managers + partner */}
-              <div className="flex items-center gap-2 mt-2 flex-wrap">
-                {managers.map((m) => (
-                  <span key={m.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600">
-                    {m.name}
-                  </span>
+
+              {/* Nav groups */}
+              <nav className="p-2">
+                {navGroups.map((group, gi) => (
+                  <div key={gi} className={gi > 0 ? "mt-3" : ""}>
+                    <p className="text-[9px] font-semibold uppercase tracking-widest text-slate-400 px-2 mb-1">{group.label}</p>
+                    {group.items.map((item) => {
+                      const active = activeTab === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => setActiveTab(item.id)}
+                          className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm transition-colors text-left ${
+                            active
+                              ? "bg-blue-50 text-blue-700 font-medium"
+                              : "text-slate-600 hover:bg-slate-50"
+                          }`}
+                        >
+                          <span className={active ? "text-blue-500" : "text-slate-400"}>{item.icon}</span>
+                          <span className="flex-1 truncate">{item.label}</span>
+                          {item.count !== undefined && (
+                            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                              active ? "bg-blue-100 text-blue-600" : "bg-slate-100 text-slate-500"
+                            }`}>
+                              {item.count}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
                 ))}
-                {player.partner && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700">
-                    Partner: {player.partner}
-                  </span>
-                )}
-                {player.info.phone && (
-                  <a href={`tel:${player.info.phone}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100">
-                    📞 {player.info.phone}
-                  </a>
-                )}
-              </div>
+              </nav>
             </div>
+          </aside>
+
+          {/* ── Content area ─────────────────────────────── */}
+          <div className="flex-1 min-w-0">
+            {activeTab === "tareas" && (
+              <TasksTab tasks={tasks} allTasks={allTasks} profiles={profiles} player={player}
+                currentProfile={currentProfile} onAddTask={onAddTask} onUpdateTask={onUpdateTask} onDeleteTask={onDeleteTask} />
+            )}
+            {activeTab === "contrato" && (
+              <ContractTab player={player} onUpdate={onUpdatePlayer} isAdmin={currentProfile.is_admin} />
+            )}
+            {activeTab === "rendimiento" && (
+              <PerformanceTab player={player} profiles={profiles} onUpdate={onUpdatePlayer} />
+            )}
+            {activeTab === "info" && (
+              <div className="space-y-4">
+                <InfoTab player={player} onUpdate={onUpdatePlayer} />
+                <LinksSection player={player} onUpdate={onUpdatePlayer} />
+              </div>
+            )}
+            {activeTab === "actividad" && (
+              <ActivityTimeline player={player} tasks={tasks} profiles={profiles} />
+            )}
+            {activeTab === "distribucion" && (
+              <DistributionTab
+                player={player}
+                entry={distributionEntry}
+                negotiations={playerNegotiations}
+                clubs={clubs}
+                onUpdateEntry={onUpdateEntry}
+                onCreateNegotiation={onCreateNegotiation}
+                onUpdateNegotiation={onUpdateNegotiation}
+                onDeleteNegotiation={onDeleteNegotiation}
+                onSelectClub={onSelectClub}
+              />
+            )}
           </div>
         </div>
-
-        {/* Tabs */}
-        <div className="flex gap-1 mb-4 bg-white border border-slate-200 rounded-lg p-1 overflow-x-auto">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
-                activeTab === tab.id ? "text-white" : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
-              }`}
-              style={activeTab === tab.id ? { background: PRIMARY } : {}}
-            >
-              {tab.icon}
-              {tab.label}
-              {tab.count !== undefined && tab.count > 0 && (
-                <span className={`ml-1 text-xs px-1.5 py-0.5 rounded-full ${activeTab === tab.id ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"}`}>
-                  {tab.count}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-
-        {activeTab === "tareas" && (
-          <TasksTab tasks={tasks} allTasks={allTasks} profiles={profiles} player={player}
-            currentProfile={currentProfile} onAddTask={onAddTask} onUpdateTask={onUpdateTask} onDeleteTask={onDeleteTask} />
-        )}
-        {activeTab === "contrato" && (
-          <ContractTab player={player} onUpdate={onUpdatePlayer} isAdmin={currentProfile.is_admin} />
-        )}
-        {activeTab === "rendimiento" && (
-          <PerformanceTab player={player} profiles={profiles} onUpdate={onUpdatePlayer} />
-        )}
-        {activeTab === "info" && (
-          <div className="space-y-4">
-            <InfoTab player={player} onUpdate={onUpdatePlayer} />
-            <LinksSection player={player} onUpdate={onUpdatePlayer} />
-          </div>
-        )}
-        {activeTab === "actividad" && (
-          <ActivityTimeline player={player} tasks={tasks} profiles={profiles} />
-        )}
-        {activeTab === "distribucion" && (
-          <DistributionTab
-            player={player}
-            entry={distributionEntry}
-            negotiations={playerNegotiations}
-            clubs={clubs}
-            onUpdateEntry={onUpdateEntry}
-            onCreateNegotiation={onCreateNegotiation}
-            onUpdateNegotiation={onUpdateNegotiation}
-            onDeleteNegotiation={onDeleteNegotiation}
-            onSelectClub={onSelectClub}
-          />
-        )}
       </main>
 
       {showEditPlayer && (
@@ -228,7 +276,7 @@ export function PlayerDetail({
 
       {showDeleteConfirm && onDeletePlayer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-          <div className="bg-white rounded-lg border border-slate-200 shadow-lg w-full max-w-sm">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-lg w-full max-w-sm">
             <div className="px-4 py-3 border-b border-slate-100">
               <h2 className="text-sm font-semibold text-slate-800">Confirmar eliminación</h2>
             </div>
@@ -239,17 +287,13 @@ export function PlayerDetail({
               <div className="flex gap-2 justify-end">
                 <button
                   onClick={() => setShowDeleteConfirm(false)}
-                  className="px-3 py-1.5 rounded border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors"
+                  className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
-                  onClick={() => {
-                    onDeletePlayer(player.id);
-                    setShowDeleteConfirm(false);
-                    onBack();
-                  }}
-                  className="px-3 py-1.5 rounded text-white text-sm font-medium transition-colors"
+                  onClick={() => { onDeletePlayer(player.id); setShowDeleteConfirm(false); onBack(); }}
+                  className="px-3 py-1.5 rounded-lg text-white text-sm font-medium transition-colors"
                   style={{ background: "hsl(0, 84%, 60%)" }}
                 >
                   Eliminar
@@ -299,14 +343,42 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
   const [showAdd, setShowAdd] = useState(false);
   const [filter, setFilter] = useState<"todas" | "pendiente" | "en_progreso" | "completada">("todas");
   const [detailTask, setDetailTask] = useState<Task | null>(null);
+  const [showCompleted, setShowCompleted] = useState(false);
 
-  const filtered = tasks.filter((t) => filter === "todas" || t.status === filter);
-  const sorted = [...filtered].sort((a, b) => {
-    const prio = { alta: 0, media: 1, baja: 2 };
-    if (a.status === "completada" && b.status !== "completada") return 1;
-    if (b.status === "completada" && a.status !== "completada") return -1;
-    return prio[a.priority] - prio[b.priority];
-  });
+  const now = new Date();
+  const overdueTasks   = tasks.filter((t) => t.status !== "completada" && t.dueDate && new Date(t.dueDate) < now);
+  const pendingCount   = tasks.filter((t) => t.status === "pendiente").length;
+  const inProgressCount = tasks.filter((t) => t.status === "en_progreso").length;
+  const completedCount = tasks.filter((t) => t.status === "completada").length;
+
+  const activeTasks = tasks.filter((t) => t.status !== "completada");
+  const completedTasks = tasks.filter((t) => t.status === "completada");
+
+  const applyFilter = (list: Task[]) =>
+    filter === "todas" ? list :
+    filter === "completada" ? completedTasks :
+    list.filter((t) => t.status === filter);
+
+  const sortByPrio = (list: Task[]) =>
+    [...list].sort((a, b) => {
+      const prio = { alta: 0, media: 1, baja: 2 };
+      // overdue first within active
+      const aOver = a.dueDate && new Date(a.dueDate) < now ? 0 : 1;
+      const bOver = b.dueDate && new Date(b.dueDate) < now ? 0 : 1;
+      if (aOver !== bOver) return aOver - bOver;
+      return prio[a.priority] - prio[b.priority];
+    });
+
+  // For "todas" or active-only filters: show active grouped by status, then collapsible completed
+  const inProgressFiltered = filter === "todas" || filter === "en_progreso"
+    ? sortByPrio(activeTasks.filter((t) => t.status === "en_progreso"))
+    : [];
+  const pendingFiltered = filter === "todas" || filter === "pendiente"
+    ? sortByPrio(activeTasks.filter((t) => t.status === "pendiente"))
+    : [];
+  const completedFiltered = filter === "todas" || filter === "completada"
+    ? completedTasks
+    : [];
 
   const statusIcon = (s: Task["status"]) => {
     if (s === "completada") return <CheckCircle2 className="w-4 h-4 text-emerald-500" />;
@@ -317,13 +389,137 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
   const cycleStatus = (t: Task) =>
     onUpdateTask({ ...t, status: t.status === "completada" ? "pendiente" : t.status === "pendiente" ? "en_progreso" : "completada" });
 
+  const TaskCard = ({ task }: { task: Task }) => {
+    const assignee  = profiles.find((m) => m.id === task.assigneeId);
+    const dependency = task.dependsOnId ? allTasks.find((t) => t.id === task.dependsOnId) : null;
+    const isOverdue = task.status !== "completada" && !!task.dueDate && new Date(task.dueDate) < now;
+    const isSelected = detailTask?.id === task.id;
+    const canEdit   = currentProfile.is_admin || task.assigneeId === currentProfile.id;
+    const prioBorderColor =
+      task.priority === "alta"  ? "#E24B4A" :
+      task.priority === "media" ? "#EF9F27" : "#94a3b8";
+
+    return (
+      <div
+        onClick={() => setDetailTask(task)}
+        className={`bg-white border rounded-xl overflow-hidden cursor-pointer transition-all hover:shadow-sm ${
+          isSelected
+            ? "border-blue-400 ring-1 ring-blue-200"
+            : task.status === "completada"
+            ? "border-slate-100 opacity-60"
+            : isOverdue
+            ? "border-red-200"
+            : "border-slate-200 hover:border-slate-300"
+        }`}
+        style={{ borderLeftWidth: "3px", borderLeftColor: task.status === "completada" ? "#e2e8f0" : prioBorderColor }}
+      >
+        <div className="p-3">
+          <div className="flex items-start gap-3">
+            <button
+              onClick={(e) => { e.stopPropagation(); cycleStatus(task); }}
+              className="mt-0.5 flex-shrink-0"
+            >
+              {statusIcon(task.status)}
+            </button>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`text-sm font-medium ${task.status === "completada" ? "text-slate-400 line-through" : "text-slate-800"}`}>
+                  {task.title}
+                </span>
+                {task.adminOnly && (
+                  <span className="text-[9px] font-bold uppercase tracking-wide text-rose-500 border border-rose-200 bg-rose-50 rounded px-1 py-px">admin</span>
+                )}
+              </div>
+              {task.description && <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{task.description}</p>}
+              <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                {assignee && (
+                  <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+                    <span className="w-4 h-4 rounded-full bg-slate-100 text-[9px] font-semibold flex items-center justify-center">{assignee.avatar}</span>
+                    {assignee.name.split(" ")[0]}
+                  </span>
+                )}
+                {(task.watchers ?? []).map((wId) => {
+                  const w = profiles.find((m) => m.id === wId);
+                  return w ? (
+                    <span key={wId} className="inline-flex items-center gap-1 text-xs text-slate-400">
+                      <span className="w-4 h-4 rounded-full bg-blue-50 text-[9px] font-semibold flex items-center justify-center text-blue-600">{w.avatar}</span>
+                      {w.name.split(" ")[0]}
+                    </span>
+                  ) : null;
+                })}
+                {task.dueDate && (
+                  <span className={`inline-flex items-center gap-1 text-xs ${isOverdue ? "text-red-500 font-medium" : "text-slate-400"}`}>
+                    <Calendar className="w-3 h-3" />
+                    {new Date(task.dueDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
+                    {isOverdue && " ⚠"}
+                  </span>
+                )}
+                {dependency && <span className="text-xs text-slate-400 truncate">Dep: {dependency.title}</span>}
+              </div>
+            </div>
+            {canEdit && (
+              <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                <button onClick={() => setDetailTask(task)} className="text-slate-300 hover:text-blue-500 transition-colors" title="Ver detalles">
+                  <Edit3 className="w-3.5 h-3.5" />
+                </button>
+                <button onClick={() => onDeleteTask(task.id)} className="text-slate-300 hover:text-red-400 transition-colors">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div>
-      <div className="flex items-center justify-between mb-3 gap-2">
-        <div className="flex gap-1 flex-wrap">
+    <div className="space-y-4">
+      {/* Mini-stats row */}
+      <div className="grid grid-cols-3 gap-2.5">
+        <div
+          className="bg-white border border-slate-200 rounded-xl p-3 text-center cursor-pointer hover:border-red-200 transition-colors"
+          onClick={() => setFilter(overdueTasks.length > 0 ? "todas" : "todas")}
+        >
+          <p className={`text-xl font-semibold ${overdueTasks.length > 0 ? "text-red-500" : "text-slate-400"}`}>
+            {overdueTasks.length}
+          </p>
+          <p className="text-[10px] text-slate-500 mt-0.5">Vencidas</p>
+        </div>
+        <div
+          className="bg-white border border-slate-200 rounded-xl p-3 text-center cursor-pointer hover:border-slate-300 transition-colors"
+          onClick={() => setFilter("pendiente")}
+        >
+          <p className="text-xl font-semibold text-slate-700">{pendingCount + inProgressCount}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">Activas</p>
+        </div>
+        <div
+          className="bg-white border border-slate-200 rounded-xl p-3 text-center cursor-pointer hover:border-emerald-200 transition-colors"
+          onClick={() => setFilter("completada")}
+        >
+          <p className="text-xl font-semibold text-emerald-600">{completedCount}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">Completadas</p>
+        </div>
+      </div>
+
+      {/* Overdue banner */}
+      {overdueTasks.length > 0 && filter !== "completada" && (
+        <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5">
+          <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+          <p className="text-xs text-red-700 font-medium">
+            {overdueTasks.length === 1
+              ? `1 tarea vencida: ${overdueTasks[0].title}`
+              : `${overdueTasks.length} tareas vencidas · revisa antes de continuar`}
+          </p>
+        </div>
+      )}
+
+      {/* Toolbar */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex gap-1">
           {(["todas", "pendiente", "en_progreso", "completada"] as const).map((f) => (
             <button key={f} onClick={() => setFilter(f)}
-              className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
                 filter === f ? "text-white" : "bg-white border border-slate-200 text-slate-500 hover:text-slate-700"
               }`}
               style={filter === f ? { background: PRIMARY } : {}}
@@ -334,103 +530,71 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
         </div>
         <button
           onClick={() => setShowAdd(true)}
-          className="inline-flex items-center gap-1 rounded-md text-white text-xs font-medium px-2.5 py-1.5 transition-colors"
+          className="inline-flex items-center gap-1 rounded-lg text-white text-xs font-medium px-2.5 py-1.5 transition-colors flex-shrink-0"
           style={{ background: PRIMARY }}
         >
           <Plus className="w-3.5 h-3.5" />
-          Nueva tarea
+          Nueva
         </button>
       </div>
 
-      <div className="space-y-2">
-        {sorted.map((task) => {
-          const assignee = profiles.find((m) => m.id === task.assigneeId);
-          const dependency = task.dependsOnId ? allTasks.find((t) => t.id === task.dependsOnId) : null;
-          const isOverdue = task.status !== "completada" && !!task.dueDate && new Date(task.dueDate) < new Date();
-          const isSelected = detailTask?.id === task.id;
-          const canEdit = currentProfile.is_admin || task.assigneeId === currentProfile.id;
-
-          return (
-            <div
-              key={task.id}
-              onClick={() => setDetailTask(task)}
-              className={`bg-white border rounded-lg overflow-hidden cursor-pointer transition-all hover:shadow-sm ${
-                isSelected
-                  ? "border-blue-400 ring-1 ring-blue-200"
-                  : task.status === "completada"
-                  ? "border-slate-100 opacity-70"
-                  : isOverdue
-                  ? "border-red-200"
-                  : "border-slate-200 hover:border-slate-300"
-              }`}
-            >
-              <div className="p-3">
-                <div className="flex items-start gap-3">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); cycleStatus(task); }}
-                    className="mt-0.5 flex-shrink-0"
-                  >
-                    {statusIcon(task.status)}
-                  </button>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`text-sm font-medium ${task.status === "completada" ? "text-slate-400 line-through" : "text-slate-800"}`}>
-                        {task.title}
-                      </span>
-                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                        task.priority === "alta" ? "bg-red-50 text-red-600" : task.priority === "media" ? "bg-amber-50 text-amber-600" : "bg-slate-50 text-slate-500"
-                      }`}>{task.priority}</span>
-                      {task.adminOnly && (
-                        <span className="text-[9px] font-bold uppercase tracking-wide text-rose-500 border border-rose-200 bg-rose-50 rounded px-1 py-px">admin</span>
-                      )}
-                    </div>
-                    {task.description && <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{task.description}</p>}
-                    <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                      {assignee && (
-                        <span className="inline-flex items-center gap-1 text-xs text-slate-500">
-                          <span className="w-4 h-4 rounded-full bg-slate-100 text-[9px] font-semibold flex items-center justify-center">{assignee.avatar}</span>
-                          {assignee.name.split(" ")[0]}
-                        </span>
-                      )}
-                      {(task.watchers ?? []).map((wId) => {
-                        const w = profiles.find((m) => m.id === wId);
-                        return w ? (
-                          <span key={wId} className="inline-flex items-center gap-1 text-xs text-slate-400">
-                            <span className="w-4 h-4 rounded-full bg-blue-50 text-[9px] font-semibold flex items-center justify-center text-blue-600">{w.avatar}</span>
-                            {w.name.split(" ")[0]}
-                          </span>
-                        ) : null;
-                      })}
-                      {task.dueDate && (
-                        <span className={`inline-flex items-center gap-1 text-xs ${isOverdue ? "text-red-500 font-medium" : "text-slate-400"}`}>
-                          <Calendar className="w-3 h-3" />
-                          {new Date(task.dueDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
-                          {isOverdue && " ⚠"}
-                        </span>
-                      )}
-                      {dependency && <span className="text-xs text-slate-400 truncate">Dep: {dependency.title}</span>}
-                    </div>
-                  </div>
-                  {/* Only show edit/delete to editors */}
-                  {canEdit && (
-                    <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                      <button onClick={() => setDetailTask(task)} className="text-slate-300 hover:text-blue-500 transition-colors" title="Ver detalles">
-                        <Edit3 className="w-3.5 h-3.5" />
-                      </button>
-                      <button onClick={() => onDeleteTask(task.id)} className="text-slate-300 hover:text-red-400 transition-colors">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  )}
-                </div>
+      {/* Task groups */}
+      {filter === "completada" ? (
+        <div className="space-y-2">
+          {completedFiltered.length === 0
+            ? <div className="text-center py-8 text-sm text-slate-400">No hay tareas completadas</div>
+            : completedFiltered.map((t) => <TaskCard key={t.id} task={t} />)
+          }
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {/* En progreso */}
+          {inProgressFiltered.length > 0 && (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-1.5">
+                <Clock className="w-3 h-3 text-blue-400" /> En progreso · {inProgressFiltered.length}
+              </p>
+              <div className="space-y-2">
+                {inProgressFiltered.map((t) => <TaskCard key={t.id} task={t} />)}
               </div>
             </div>
-          );
-        })}
-      </div>
+          )}
 
-      {sorted.length === 0 && (
-        <div className="text-center py-10 text-sm text-slate-400">No hay tareas en esta categoría</div>
+          {/* Pendientes */}
+          {pendingFiltered.length > 0 && (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-1.5">
+                <AlertCircle className="w-3 h-3 text-slate-400" /> Pendientes · {pendingFiltered.length}
+              </p>
+              <div className="space-y-2">
+                {pendingFiltered.map((t) => <TaskCard key={t.id} task={t} />)}
+              </div>
+            </div>
+          )}
+
+          {/* No active tasks */}
+          {inProgressFiltered.length === 0 && pendingFiltered.length === 0 && (
+            <div className="text-center py-8 text-sm text-slate-400">No hay tareas activas</div>
+          )}
+
+          {/* Collapsible completed */}
+          {filter === "todas" && completedTasks.length > 0 && (
+            <div>
+              <button
+                onClick={() => setShowCompleted(v => !v)}
+                className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 transition-colors py-1"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                {showCompleted ? "Ocultar" : "Ver"} {completedTasks.length} tarea{completedTasks.length !== 1 ? "s" : ""} completada{completedTasks.length !== 1 ? "s" : ""}
+              </button>
+              {showCompleted && (
+                <div className="space-y-2 mt-2">
+                  {completedTasks.map((t) => <TaskCard key={t.id} task={t} />)}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       {showAdd && (

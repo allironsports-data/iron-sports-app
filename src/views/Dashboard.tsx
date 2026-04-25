@@ -95,7 +95,7 @@ export function Dashboard({
   const [managerFilter, setManagerFilter] = useState<string>("all");
   const [taskView, setTaskView] = useState<"pending" | "urgent" | "mine" | "inprogress" | null>("mine");
   const [showNotifications, setShowNotifications] = useState(false);
-  const [mineSubTab, setMineSubTab] = useState<"assigned" | "players" | "general">("assigned");
+  const [mineSubTab, setMineSubTab] = useState<"mine" | "players" | "general" | "all">("mine");
   const [detailTask, setDetailTask] = useState<Task | null>(null);
 
   // Bulk select state
@@ -104,8 +104,6 @@ export function Dashboard({
   const [bulkLoading, setBulkLoading] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showCompletedMine, setShowCompletedMine] = useState(false);
-  const [showCompletedPlayers, setShowCompletedPlayers] = useState(false);
-  const [showCompletedGeneral, setShowCompletedGeneral] = useState(false);
   const [listView, setListView] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [quickTaskPlayer, setQuickTaskPlayer] = useState<Player | null>(null);
@@ -183,6 +181,42 @@ export function Dashboard({
     return true;
   });
 
+  // Tasks for kanban: which tasks to show based on mineSubTab filter
+  const activeDashboardTasks = (status: Task["status"]) => {
+    const now = new Date();
+    let pool: Task[] = [];
+    if (mineSubTab === "mine" || taskView !== "mine") {
+      pool = [...myTasks, ...myPlayerTasks];
+    } else if (mineSubTab === "players") {
+      pool = myPlayerTasks;
+    } else if (mineSubTab === "general") {
+      pool = generalTasks;
+    } else {
+      // all
+      pool = tasks.filter(t => t.status !== "completada" && !(t.adminOnly && !currentProfile.is_admin));
+    }
+    return pool
+      .filter(t => t.status === status)
+      .sort((a, b) => {
+        const aOver = a.dueDate && new Date(a.dueDate) < now ? 0 : 1;
+        const bOver = b.dueDate && new Date(b.dueDate) < now ? 0 : 1;
+        if (aOver !== bOver) return aOver - bOver;
+        const prio = { alta: 0, media: 1, baja: 2 };
+        return prio[a.priority] - prio[b.priority];
+      });
+  };
+
+  const overdueDashboardTasks = tasks.filter(
+    t => t.status !== "completada" && t.dueDate && new Date(t.dueDate) < new Date()
+    && !(t.adminOnly && !currentProfile.is_admin)
+  );
+
+  const completedTasksForKanban = [
+    ...myTasksCompleted,
+    ...myPlayerTasksCompleted,
+    ...generalTasksCompleted,
+  ].filter((t, i, arr) => arr.findIndex(x => x.id === t.id) === i);
+
   // Birthdays
   const birthdaysToday = visiblePlayers.filter((p) => isBirthdayToday(p.birthDate));
   const birthdaysSoon = visiblePlayers.filter((p) => isBirthdaySoon(p.birthDate, 7));
@@ -197,12 +231,7 @@ export function Dashboard({
     return matchSearch && matchManager;
   });
 
-  // Task view filtered tasks
-  const viewTasks = taskView === "pending" ? pendingTasks
-    : taskView === "urgent" ? urgentTasks
-    : taskView === "inprogress" ? inProgressTasks
-    : taskView === "mine" ? myTasks
-    : [];
+  // (taskView kept for stat-card highlight state)
 
   const toggleSelect = (id: string) => {
     setSelected((prev) => {
@@ -396,208 +425,137 @@ export function Dashboard({
           </div>
         )}
 
-        {/* Stats — clickable */}
-        <div className="grid grid-cols-2 gap-1.5 sm:gap-3 sm:grid-cols-3 lg:grid-cols-5 mb-4 sm:mb-6">
-          <StatCard icon={<Users className="w-4 h-4" />} label="Jugadores" value={visiblePlayers.length} color="blue"
-            onClick={() => setTaskView(null)} active={taskView === null} />
-          <StatCard icon={<ClipboardList className="w-4 h-4" />} label="Pendientes" value={pendingTasks.length} color="amber"
-            onClick={() => setTaskView(taskView === "pending" ? null : "pending")} active={taskView === "pending"} />
-          <StatCard icon={<AlertTriangle className="w-4 h-4" />} label="Urgentes" value={urgentTasks.length} color="red"
-            onClick={() => setTaskView(taskView === "urgent" ? null : "urgent")} active={taskView === "urgent"} />
-          <StatCard icon={<ClipboardList className="w-4 h-4" />} label="En proceso" value={inProgressTasks.length} color="purple"
-            onClick={() => setTaskView(taskView === "inprogress" ? null : "inprogress")} active={taskView === "inprogress"} />
-          <StatCard icon={<ClipboardList className="w-4 h-4" />} label="Mis tareas" value={myTasks.length} color="green"
-            onClick={() => setTaskView(taskView === "mine" ? null : "mine")} active={taskView === "mine"} />
+        {/* ── Stat cards ──────────────────────────────────── */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-5">
+          <div className="bg-white border border-slate-200 rounded-xl p-3 text-center">
+            <p className="text-2xl font-semibold text-slate-800">{visiblePlayers.length}</p>
+            <p className="text-xs text-slate-500 mt-0.5">Jugadores</p>
+          </div>
+          <div
+            className={`bg-white border rounded-xl p-3 text-center cursor-pointer transition-colors ${
+              overdueDashboardTasks.length > 0 ? "border-red-200 hover:border-red-300" : "border-slate-200"
+            }`}
+            onClick={() => setTaskView(taskView === "pending" ? null : "pending")}
+          >
+            <p className={`text-2xl font-semibold ${overdueDashboardTasks.length > 0 ? "text-red-500" : "text-slate-800"}`}>
+              {overdueDashboardTasks.length}
+            </p>
+            <p className="text-xs text-slate-500 mt-0.5">Vencidas</p>
+          </div>
+          <div
+            className={`bg-white border rounded-xl p-3 text-center cursor-pointer transition-colors hover:border-amber-300 ${taskView === "urgent" ? "border-amber-300 bg-amber-50" : "border-slate-200"}`}
+            onClick={() => setTaskView(taskView === "urgent" ? null : "urgent")}
+          >
+            <p className={`text-2xl font-semibold ${urgentTasks.length > 0 ? "text-amber-600" : "text-slate-800"}`}>{urgentTasks.length}</p>
+            <p className="text-xs text-slate-500 mt-0.5">Urgentes</p>
+          </div>
+          <div
+            className={`bg-white border rounded-xl p-3 text-center cursor-pointer transition-colors hover:border-slate-300 ${taskView === "inprogress" ? "border-blue-300 bg-blue-50" : "border-slate-200"}`}
+            onClick={() => setTaskView(taskView === "inprogress" ? null : "inprogress")}
+          >
+            <p className="text-2xl font-semibold text-slate-800">{inProgressTasks.length}</p>
+            <p className="text-xs text-slate-500 mt-0.5">En progreso</p>
+          </div>
         </div>
 
-        {/* Mine view — default and new design */}
-        {taskView === "mine" && (
-          <div className="mb-4 sm:mb-6 bg-white border border-slate-200 rounded-lg overflow-hidden">
-            <div className="px-3 sm:px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-slate-800">Mis tareas</h2>
-              {onAddGeneralTask && (
-                <button
-                  onClick={() => setShowAddGeneralTask(true)}
-                  className="inline-flex items-center gap-1 rounded text-slate-600 bg-slate-50 border border-slate-200 text-xs font-medium px-2 py-1 hover:bg-slate-100 transition-colors"
-                >
-                  <Plus className="w-3 h-3" /><span className="hidden sm:inline">Nueva tarea</span>
-                </button>
-              )}
-            </div>
-
-            {/* Sub-tabs */}
-            <div className="px-3 sm:px-4 py-2 border-b border-slate-100 flex gap-2 bg-slate-50">
-              <button
-                onClick={() => setMineSubTab("assigned")}
-                className={`text-xs font-medium px-3 py-1.5 rounded transition-colors ${
-                  mineSubTab === "assigned"
-                    ? "bg-white text-slate-900 border border-slate-200"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                Asignadas a mí ({myTasks.length})
-              </button>
-              <button
-                onClick={() => setMineSubTab("players")}
-                className={`text-xs font-medium px-3 py-1.5 rounded transition-colors ${
-                  mineSubTab === "players"
-                    ? "bg-white text-slate-900 border border-slate-200"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                De mis jugadores ({myPlayerTasks.length})
-              </button>
-              <button
-                onClick={() => setMineSubTab("general")}
-                className={`text-xs font-medium px-3 py-1.5 rounded transition-colors ${
-                  mineSubTab === "general"
-                    ? "bg-white text-slate-900 border border-slate-200"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                Generales ({generalTasks.length})
-              </button>
-            </div>
-
-            {/* Task list for selected sub-tab */}
-            <div className="divide-y divide-slate-100 max-h-96 overflow-y-auto">
-              {mineSubTab === "assigned" && (
-                <>
-                  {myTasks.length === 0 && myTasksCompleted.length === 0 ? (
-                    <div className="px-3 sm:px-4 py-6 text-center text-xs text-slate-400">Sin tareas asignadas</div>
-                  ) : (
-                    <>
-                      {myTasks.map((task) => (
-                        <TaskRow key={task.id} task={task} players={players} profiles={profiles}
-                          onCycleStatus={() => cycleTaskStatus(task)} onOpenDetail={() => setDetailTask(task)}
-                          isSelected={detailTask?.id === task.id} />
-                      ))}
-                      {myTasksCompleted.length > 0 && (
-                        <>
-                          <button
-                            onClick={() => setShowCompletedMine((v) => !v)}
-                            className="w-full px-3 sm:px-4 py-2 text-left text-[11px] text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors flex items-center gap-1"
-                          >
-                            <ChevronRight className={`w-3 h-3 transition-transform ${showCompletedMine ? "rotate-90" : ""}`} />
-                            {showCompletedMine ? "Ocultar" : "Ver"} completadas ({myTasksCompleted.length})
-                          </button>
-                          {showCompletedMine && myTasksCompleted.map((task) => (
-                            <TaskRow key={task.id} task={task} players={players} profiles={profiles}
-                              onCycleStatus={() => cycleTaskStatus(task)} onOpenDetail={() => setDetailTask(task)}
-                              isSelected={detailTask?.id === task.id} completed />
-                          ))}
-                        </>
-                      )}
-                    </>
-                  )}
-                </>
-              )}
-
-              {mineSubTab === "players" && (
-                <>
-                  {myPlayerTasks.length === 0 && myPlayerTasksCompleted.length === 0 ? (
-                    <div className="px-3 sm:px-4 py-6 text-center text-xs text-slate-400">Sin tareas de tus jugadores</div>
-                  ) : (
-                    <>
-                      {myPlayerTasks.map((task) => (
-                        <TaskRow key={task.id} task={task} players={players} profiles={profiles}
-                          onCycleStatus={() => cycleTaskStatus(task)} onOpenDetail={() => setDetailTask(task)}
-                          isSelected={detailTask?.id === task.id} />
-                      ))}
-                      {myPlayerTasksCompleted.length > 0 && (
-                        <>
-                          <button
-                            onClick={() => setShowCompletedPlayers((v) => !v)}
-                            className="w-full px-3 sm:px-4 py-2 text-left text-[11px] text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors flex items-center gap-1"
-                          >
-                            <ChevronRight className={`w-3 h-3 transition-transform ${showCompletedPlayers ? "rotate-90" : ""}`} />
-                            {showCompletedPlayers ? "Ocultar" : "Ver"} completadas ({myPlayerTasksCompleted.length})
-                          </button>
-                          {showCompletedPlayers && myPlayerTasksCompleted.map((task) => (
-                            <TaskRow key={task.id} task={task} players={players} profiles={profiles}
-                              onCycleStatus={() => cycleTaskStatus(task)} onOpenDetail={() => setDetailTask(task)}
-                              isSelected={detailTask?.id === task.id} completed />
-                          ))}
-                        </>
-                      )}
-                    </>
-                  )}
-                </>
-              )}
-
-              {mineSubTab === "general" && (
-                <>
-                  {generalTasks.length === 0 && generalTasksCompleted.length === 0 ? (
-                    <div className="px-3 sm:px-4 py-6 text-center text-xs text-slate-400">Sin tareas generales</div>
-                  ) : (
-                    <>
-                      {generalTasks.map((task) => (
-                        <TaskRow key={task.id} task={task} players={players} profiles={profiles}
-                          onCycleStatus={() => cycleTaskStatus(task)} onOpenDetail={() => setDetailTask(task)}
-                          isSelected={detailTask?.id === task.id} />
-                      ))}
-                      {generalTasksCompleted.length > 0 && (
-                        <>
-                          <button
-                            onClick={() => setShowCompletedGeneral((v) => !v)}
-                            className="w-full px-3 sm:px-4 py-2 text-left text-[11px] text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors flex items-center gap-1"
-                          >
-                            <ChevronRight className={`w-3 h-3 transition-transform ${showCompletedGeneral ? "rotate-90" : ""}`} />
-                            {showCompletedGeneral ? "Ocultar" : "Ver"} completadas ({generalTasksCompleted.length})
-                          </button>
-                          {showCompletedGeneral && generalTasksCompleted.map((task) => (
-                            <TaskRow key={task.id} task={task} players={players} profiles={profiles}
-                              onCycleStatus={() => cycleTaskStatus(task)} onOpenDetail={() => setDetailTask(task)}
-                              isSelected={detailTask?.id === task.id} completed />
-                          ))}
-                        </>
-                      )}
-                    </>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Expanded task list view for pending/urgent/inprogress */}
-        {(taskView === "pending" || taskView === "urgent" || taskView === "inprogress") && viewTasks.length > 0 && (
-          <div className="mb-4 sm:mb-6 bg-white border border-slate-200 rounded-lg overflow-hidden">
-            <div className="px-3 sm:px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-slate-800">
-                {taskView === "pending" ? "Todas las tareas pendientes" : taskView === "urgent" ? "Tareas urgentes" : "Tareas en proceso"}
-              </h2>
-              <button onClick={() => setTaskView(null)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="divide-y divide-slate-100 max-h-80 overflow-y-auto">
-              {viewTasks.map((task) => {
-                const player = players.find((p) => p.id === task.playerId);
-                const assignee = profiles.find((m) => m.id === task.assigneeId);
-                const isOverdue = task.dueDate && new Date(task.dueDate) < new Date();
+        {/* ── Tareas (Kanban-light) ────────────────────────── */}
+        <div className="bg-white border border-slate-200 rounded-xl mb-5 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between flex-wrap gap-2">
+            <h2 className="text-sm font-semibold text-slate-800">Tareas</h2>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {(["mine", "players", "general", "all"] as const).map((f) => {
+                const labels: Record<string, string> = {
+                  mine: `Mis tareas (${myTasks.length})`,
+                  players: `Mis jugadores (${myPlayerTasks.length})`,
+                  general: `Generales (${generalTasks.length})`,
+                  all: "Todas",
+                };
+                const active = mineSubTab === f;
                 return (
                   <button
-                    key={task.id}
-                    onClick={() => onSelectPlayer(task.playerId)}
-                    className="w-full flex items-center gap-3 px-3 sm:px-4 py-3 text-left hover:bg-slate-50 active:bg-slate-100 transition-colors"
+                    key={f}
+                    onClick={() => { setMineSubTab(f as typeof mineSubTab); setTaskView("mine"); }}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                      active && taskView === "mine"
+                        ? "text-white border-transparent"
+                        : "bg-white border-slate-200 text-slate-500 hover:text-slate-700"
+                    }`}
+                    style={active && taskView === "mine" ? { background: PRIMARY } : {}}
                   >
-                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                      task.priority === "alta" ? "bg-red-500" : task.priority === "media" ? "bg-amber-400" : "bg-slate-300"
-                    }`} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-slate-700 truncate">{task.title}</p>
-                      <p className="text-xs text-slate-400">{player?.name} · {assignee?.name ?? "Sin asignar"}</p>
-                    </div>
-                    {task.dueDate && (
-                      <span className={`text-xs flex-shrink-0 ${isOverdue ? "text-red-500 font-medium" : "text-slate-400"}`}>
-                        {new Date(task.dueDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
-                      </span>
-                    )}
+                    {labels[f]}
                   </button>
                 );
               })}
+              {onAddGeneralTask && (
+                <button
+                  onClick={() => setShowAddGeneralTask(true)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
+                >
+                  <Plus className="w-3 h-3" /> Nueva
+                </button>
+              )}
             </div>
           </div>
-        )}
+
+          {/* Overdue banner */}
+          {overdueDashboardTasks.length > 0 && (
+            <div className="mx-4 mt-3 flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+              <AlertTriangle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
+              <p className="text-xs text-red-700 font-medium">
+                {overdueDashboardTasks.length} tarea{overdueDashboardTasks.length > 1 ? "s" : ""} vencida{overdueDashboardTasks.length > 1 ? "s" : ""} · revisa antes de continuar
+              </p>
+            </div>
+          )}
+
+          {/* 3-column kanban */}
+          <div className="grid grid-cols-3 gap-0 divide-x divide-slate-100 p-4 pt-3">
+            {/* Pendiente column */}
+            <KanbanCol
+              label="Pendiente"
+              dotColor="#94a3b8"
+              tasks={activeDashboardTasks("pendiente")}
+              players={players}
+              profiles={profiles}
+              onCycleStatus={cycleTaskStatus}
+              onOpenDetail={setDetailTask}
+              detailTaskId={detailTask?.id}
+              onSelectPlayer={onSelectPlayer}
+              showCompleted={showCompletedMine}
+              onToggleCompleted={() => setShowCompletedMine(v => !v)}
+              completedCount={myTasksCompleted.length + myPlayerTasksCompleted.length + generalTasksCompleted.length}
+              completedTasks={completedTasksForKanban}
+            />
+            {/* En progreso column */}
+            <KanbanCol
+              label="En progreso"
+              dotColor="#378ADD"
+              tasks={activeDashboardTasks("en_progreso")}
+              players={players}
+              profiles={profiles}
+              onCycleStatus={cycleTaskStatus}
+              onOpenDetail={setDetailTask}
+              detailTaskId={detailTask?.id}
+              onSelectPlayer={onSelectPlayer}
+            />
+            {/* Completada column */}
+            <KanbanCol
+              label="Completada"
+              dotColor="#1D9E75"
+              tasks={[]}
+              players={players}
+              profiles={profiles}
+              onCycleStatus={cycleTaskStatus}
+              onOpenDetail={setDetailTask}
+              detailTaskId={detailTask?.id}
+              onSelectPlayer={onSelectPlayer}
+              showCompleted={showCompletedMine}
+              onToggleCompleted={() => setShowCompletedMine(v => !v)}
+              completedCount={myTasksCompleted.length + myPlayerTasksCompleted.length + generalTasksCompleted.length}
+              completedTasks={completedTasksForKanban}
+              isCompletedCol
+            />
+          </div>
+        </div>
 
         {/* Players list header */}
         <div className="flex flex-col gap-2 mb-3">
@@ -960,6 +918,138 @@ export function Dashboard({
             setDetailTask(null);
           }}
         />
+      )}
+    </div>
+  );
+}
+
+/* ── KanbanCol: one column in the home kanban ── */
+function KanbanCol({
+  label, dotColor, tasks, players, profiles,
+  onCycleStatus, onOpenDetail, detailTaskId, onSelectPlayer,
+  showCompleted, onToggleCompleted, completedCount = 0, completedTasks = [],
+  isCompletedCol = false,
+}: {
+  label: string;
+  dotColor: string;
+  tasks: Task[];
+  players: Player[];
+  profiles: Profile[];
+  onCycleStatus: (t: Task) => void;
+  onOpenDetail: (t: Task) => void;
+  detailTaskId?: string;
+  onSelectPlayer: (id: string) => void;
+  showCompleted?: boolean;
+  onToggleCompleted?: () => void;
+  completedCount?: number;
+  completedTasks?: Task[];
+  isCompletedCol?: boolean;
+}) {
+  const now = new Date();
+  const prioBorder = (t: Task) =>
+    t.priority === "alta"  ? "#E24B4A" :
+    t.priority === "media" ? "#EF9F27" : "#94a3b8";
+
+  const initials = (name: string) => name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+
+  const renderTask = (task: Task, dimmed = false) => {
+    const player   = players.find(p => p.id === task.playerId);
+    const assignee = profiles.find(m => m.id === task.assigneeId);
+    const isOverdue = !dimmed && task.dueDate && new Date(task.dueDate) < now && task.status !== "completada";
+    const isSelected = detailTaskId === task.id;
+
+    return (
+      <div
+        key={task.id}
+        onClick={() => onOpenDetail(task)}
+        className={`bg-white rounded-xl border cursor-pointer transition-all hover:shadow-sm mb-2 overflow-hidden ${
+          isSelected ? "border-blue-400 ring-1 ring-blue-200" :
+          isOverdue   ? "border-red-200" :
+          dimmed      ? "border-slate-100 opacity-60" :
+          "border-slate-200 hover:border-slate-300"
+        }`}
+        style={{ borderLeftWidth: "3px", borderLeftColor: dimmed ? "#e2e8f0" : prioBorder(task) }}
+      >
+        <div className="p-2.5">
+          <div className="flex items-start gap-2">
+            <button
+              onClick={e => { e.stopPropagation(); onCycleStatus(task); }}
+              className="mt-0.5 flex-shrink-0 w-3.5 h-3.5 rounded-full border-2 transition-colors"
+              style={{
+                background: task.status === "completada" ? "#10b981" : task.status === "en_progreso" ? "#3b82f6" : "transparent",
+                borderColor: task.status === "completada" ? "#10b981" : task.status === "en_progreso" ? "#3b82f6" : prioBorder(task),
+              }}
+            />
+            <div className="flex-1 min-w-0">
+              <p className={`text-xs font-medium leading-snug ${dimmed ? "line-through text-slate-400" : "text-slate-800"}`}>
+                {task.title}
+              </p>
+              {player && (
+                <p className="text-[10px] text-slate-400 mt-0.5 truncate">{player.name}</p>
+              )}
+              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                {assignee && (
+                  <span className="inline-flex items-center gap-1 text-[10px] text-slate-400">
+                    <span
+                      className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[7px] font-bold text-white flex-shrink-0"
+                      style={{ background: PRIMARY }}
+                    >{initials(assignee.name)}</span>
+                    {assignee.name.split(" ")[0]}
+                  </span>
+                )}
+                {task.dueDate && (
+                  <span className={`text-[10px] ${isOverdue ? "text-red-500 font-medium" : "text-slate-400"}`}>
+                    {new Date(task.dueDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
+                    {isOverdue ? " ⚠" : ""}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="px-3 first:pl-0 last:pr-0">
+      <div className="flex items-center gap-1.5 mb-2.5">
+        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: dotColor }} />
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{label}</p>
+        {!isCompletedCol && (
+          <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded-full font-medium">{tasks.length}</span>
+        )}
+        {isCompletedCol && (
+          <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded-full font-medium">{completedCount}</span>
+        )}
+      </div>
+
+      {isCompletedCol ? (
+        <div>
+          {showCompleted
+            ? completedTasks.slice(0, 5).map(t => renderTask(t, true))
+            : completedTasks.slice(0, 2).map(t => renderTask(t, true))
+          }
+          {completedCount > 2 && onToggleCompleted && (
+            <button
+              onClick={onToggleCompleted}
+              className="text-[10px] text-slate-400 hover:text-slate-600 transition-colors py-1 flex items-center gap-1"
+            >
+              <ChevronRight className={`w-3 h-3 transition-transform ${showCompleted ? "rotate-90" : ""}`} />
+              {showCompleted ? "Ocultar" : `Ver todas (${completedCount})`}
+            </button>
+          )}
+          {completedCount === 0 && (
+            <p className="text-[10px] text-slate-400 italic py-2">Sin completadas</p>
+          )}
+        </div>
+      ) : (
+        <div>
+          {tasks.map(t => renderTask(t))}
+          {tasks.length === 0 && (
+            <p className="text-[10px] text-slate-400 italic py-2">Sin tareas</p>
+          )}
+        </div>
       )}
     </div>
   );
