@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import React, { useState, useMemo } from 'react'
 import {
   Plus, Search, Star, Building2, Users,
   ChevronRight, X, Check, Pencil, Trash2, LogOut,
@@ -298,10 +298,10 @@ export function Distribution({
         {/* Tab nav matching Dashboard */}
         <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center border-t border-slate-100">
           {([
-            { id: 'tareas',       label: 'Tareas',       onClick: onBack },
-            { id: 'jugadores',    label: 'Jugadores',    onClick: onGoToJugadores ?? onBack },
+            { id: 'tareas',       label: 'Tareas',       icon: null,                                    onClick: onBack },
+            { id: 'jugadores',    label: 'Jugadores',    icon: null,                                    onClick: onGoToJugadores ?? onBack },
             { id: 'distribucion', label: 'Distribución', icon: <TrendingUp className="w-3.5 h-3.5" />, onClick: undefined },
-          ] as const).map(tab => (
+          ] as { id: string; label: string; icon: React.ReactNode; onClick: (() => void) | undefined }[]).map(tab => (
             <button
               key={tab.id}
               onClick={tab.onClick}
