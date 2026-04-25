@@ -82,15 +82,6 @@ function contractBadge(endDate?: string): { label: string; cls: string } | null 
   return             { label,                 cls: 'bg-slate-100 text-slate-500 border-slate-200' }
 }
 
-/** Last-contacted staleness color */
-function lastContactedCls(dateStr?: string): string {
-  const days = daysUntil(dateStr)
-  if (days === null) return 'text-slate-300'        // never contacted
-  const ago = -days
-  if (ago < 14)  return 'text-green-600'
-  if (ago < 45)  return 'text-amber-500'
-  return 'text-red-500'
-}
 
 function Avatar({ name, photo, size = 'sm' }: { name: string; photo?: string; size?: 'sm' | 'md' }) {
   const cls = size === 'sm' ? 'w-8 h-8 text-xs' : 'w-10 h-10 text-sm'
@@ -157,6 +148,7 @@ export function Distribution({
   const [leagueFilter, setLeagueFilter] = useState<string | null>(null)
   const [positionFilter, setPositionFilter] = useState('')   // solicitudes tab
   const [posFilter, setPosFilter] = useState('')             // jugadores tab
+  const [yearFilter, setYearFilter] = useState('')
   const [activityFilter, setActivityFilter] = useState(false)
 
   const seasonEntries = entries.filter(e => e.season === season)
@@ -176,13 +168,19 @@ export function Distribution({
         return p?.positions[0] === posFilter
       })
     }
+    if (yearFilter) {
+      result = result.filter(e => {
+        const p = players.find(pl => pl.id === e.playerId)
+        return p?.birthDate?.startsWith(yearFilter)
+      })
+    }
     if (activityFilter) {
       result = result.filter(e =>
         negotiations.some(n => n.playerId === e.playerId && n.status !== 'descartado')
       )
     }
     return result
-  }, [seasonEntries, search, players, posFilter, activityFilter, negotiations])
+  }, [seasonEntries, search, players, posFilter, yearFilter, activityFilter, negotiations])
 
   const distributionPositions = useMemo(() => {
     const pos = new Set<string>()
@@ -191,6 +189,16 @@ export function Distribution({
       if (p?.positions[0]) pos.add(p.positions[0])
     })
     return Array.from(pos).sort()
+  }, [seasonEntries, players])
+
+  const distributionYears = useMemo(() => {
+    const years = new Set<string>()
+    seasonEntries.forEach(e => {
+      const p = players.find(pl => pl.id === e.playerId)
+      const y = p?.birthDate?.slice(0, 4)
+      if (y) years.add(y)
+    })
+    return Array.from(years).sort((a, b) => Number(b) - Number(a))
   }, [seasonEntries, players])
 
   const filteredClubs = useMemo(() => {
@@ -239,6 +247,7 @@ export function Distribution({
     setLeagueFilter(null)
     setPositionFilter('')
     setPosFilter('')
+    setYearFilter('')
     setActivityFilter(false)
     setSearch('')
   }
@@ -337,40 +346,55 @@ export function Distribution({
           {/* ── JUGADORES TAB ── */}
           {tab === 'jugadores' && (
             <div className="max-w-5xl mx-auto">
-              <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
-                {/* Filters */}
-                <div className="flex flex-wrap gap-1.5 flex-1 min-w-0">
-                  {/* Position chips */}
-                  <button
-                    onClick={() => setPosFilter('')}
-                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                      !posFilter ? 'bg-[hsl(220,72%,36%)] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    Todas
-                  </button>
-                  {distributionPositions.map(pos => (
-                    <button
-                      key={pos}
-                      onClick={() => setPosFilter(posFilter === pos ? '' : pos)}
-                      className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                        posFilter === pos ? 'bg-[hsl(220,72%,36%)] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                {/* Filter bar */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Position dropdown */}
+                  <div className="relative">
+                    <select
+                      value={posFilter}
+                      onChange={e => setPosFilter(e.target.value)}
+                      className={`appearance-none pl-3 pr-7 py-1.5 text-sm rounded-lg border cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-200 transition-colors ${
+                        posFilter ? 'bg-[hsl(220,72%,36%)] text-white border-[hsl(220,72%,36%)]' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
                       }`}
                     >
-                      {pos}
-                    </button>
-                  ))}
+                      <option value="">Posición</option>
+                      {distributionPositions.map(pos => <option key={pos} value={pos}>{pos}</option>)}
+                    </select>
+                    <ChevronDown className={`absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none ${posFilter ? 'text-white' : 'text-slate-400'}`} />
+                  </div>
+                  {/* Birth year dropdown */}
+                  <div className="relative">
+                    <select
+                      value={yearFilter}
+                      onChange={e => setYearFilter(e.target.value)}
+                      className={`appearance-none pl-3 pr-7 py-1.5 text-sm rounded-lg border cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-200 transition-colors ${
+                        yearFilter ? 'bg-[hsl(220,72%,36%)] text-white border-[hsl(220,72%,36%)]' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <option value="">Año nacimiento</option>
+                      {distributionYears.map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                    <ChevronDown className={`absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none ${yearFilter ? 'text-white' : 'text-slate-400'}`} />
+                  </div>
                   {/* Activity toggle */}
                   <button
                     onClick={() => setActivityFilter(!activityFilter)}
-                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors border ${
-                      activityFilter
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                    className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                      activityFilter ? 'bg-[hsl(220,72%,36%)] text-white border-[hsl(220,72%,36%)]' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
                     }`}
                   >
                     Con actividad
                   </button>
+                  {/* Clear */}
+                  {(posFilter || yearFilter || activityFilter) && (
+                    <button
+                      onClick={() => { setPosFilter(''); setYearFilter(''); setActivityFilter(false) }}
+                      className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 px-2 py-1.5"
+                    >
+                      <X className="w-3 h-3" /> Limpiar
+                    </button>
+                  )}
                 </div>
                 <button
                   onClick={() => setShowAddPlayer(true)}
@@ -857,13 +881,6 @@ export function Distribution({
                         <Star className="w-3.5 h-3.5 fill-green-500" /> Club prioritario
                       </div>
                     )}
-                    <div className="flex items-center gap-2 text-sm">
-                      <CircleDot className="w-3.5 h-3.5 text-slate-400" />
-                      <span className={`text-sm font-medium ${lastContactedCls(selectedClub.lastContacted)}`}>
-                        {selectedClub.lastContacted ? fmtMonth(selectedClub.lastContacted) : 'Sin contacto registrado'}
-                      </span>
-                      <span className="text-xs text-slate-400">último contacto</span>
-                    </div>
                     {selectedClub.notes && (
                       <p className="text-xs text-slate-500 mt-1">{selectedClub.notes}</p>
                     )}
@@ -1086,13 +1103,6 @@ function ClubCard({ club, negotiations, isSelected, onClick }: {
           {club.contactPerson && <span className="truncate">{club.contactPerson}</span>}
           {activeNegs.length > 0 && (
             <span className="text-blue-600 flex-shrink-0">{activeNegs.length} ofrecido{activeNegs.length !== 1 ? 's' : ''}</span>
-          )}
-          {club.lastContacted ? (
-            <span className={`flex-shrink-0 ${lastContactedCls(club.lastContacted)}`} title="Último contacto">
-              {fmtMonth(club.lastContacted)}
-            </span>
-          ) : (
-            <span className="flex-shrink-0 text-slate-300 text-xs">sin contacto</span>
           )}
         </div>
       </div>
@@ -1458,12 +1468,11 @@ function EditClubModal({ club, onClose, onSave }: {
   const [aisManager, setAisManager] = useState(club.aisManager ?? '')
   const [notes, setNotes] = useState(club.notes ?? '')
   const [isPriority, setIsPriority] = useState(club.isPriority)
-  const [lastContacted, setLastContacted] = useState(club.lastContacted ?? '')
   const [saving, setSaving] = useState(false)
 
   async function handleSave() {
     setSaving(true)
-    try { await onSave({ name, league: league || undefined, contactPerson: contactPerson || undefined, aisManager: aisManager || undefined, notes: notes || undefined, isPriority, lastContacted: lastContacted || undefined }) }
+    try { await onSave({ name, league: league || undefined, contactPerson: contactPerson || undefined, aisManager: aisManager || undefined, notes: notes || undefined, isPriority }) }
     finally { setSaving(false) }
   }
 
@@ -1491,15 +1500,6 @@ function EditClubModal({ club, onClose, onSave }: {
         <div>
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Notas</label>
           <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none" />
-        </div>
-        <div>
-          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Último contacto</label>
-          <input
-            type="date"
-            value={lastContacted}
-            onChange={e => setLastContacted(e.target.value)}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-          />
         </div>
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="checkbox" checked={isPriority} onChange={e => setIsPriority(e.target.checked)} className="w-4 h-4 rounded" />

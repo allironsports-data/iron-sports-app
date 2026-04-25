@@ -329,7 +329,6 @@ function dbToClub(row: Record<string, unknown>): Club {
     notes: (row.notes as string) ?? undefined,
     isPriority: (row.is_priority as boolean) ?? false,
     needs: (row.needs as Club['needs']) ?? [],
-    lastContacted: (row.last_contacted as string) ?? undefined,
     createdAt: row.created_at as string,
   }
 }
@@ -350,7 +349,6 @@ export async function createClub(c: Omit<Club, 'id' | 'createdAt'>): Promise<Clu
     notes: c.notes ?? null,
     is_priority: c.isPriority,
     needs: c.needs ?? [],
-    last_contacted: c.lastContacted ?? null,
   }).select().single()
   if (error) throw error
   return dbToClub(data)
@@ -366,7 +364,6 @@ export async function updateClub(c: Club): Promise<void> {
     notes: c.notes ?? null,
     is_priority: c.isPriority,
     needs: c.needs ?? [],
-    last_contacted: c.lastContacted ?? null,
   }).eq('id', c.id)
   if (error) throw error
 }
