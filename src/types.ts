@@ -175,6 +175,7 @@ export interface Club {
   notes?: string
   isPriority: boolean
   needs: ClubNeed[]
+  lastContacted?: string   // "YYYY-MM-DD"
   createdAt: string
 }
 

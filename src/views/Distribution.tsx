@@ -33,6 +33,65 @@ const PRIORITY_CONFIG = {
 function genId() { return 'tmp_' + Math.random().toString(36).slice(2) }
 function now() { return new Date().toISOString() }
 
+/** Parse "400k", "1.5M", "2M" → number in euros */
+function parseTransferFee(fee?: string): number {
+  if (!fee) return 0
+  const s = fee.trim().toLowerCase().replace(',', '.')
+  const num = parseFloat(s)
+  if (isNaN(num)) return 0
+  if (s.includes('m')) return num * 1_000_000
+  if (s.includes('k')) return num * 1_000
+  return num
+}
+
+/** Format a total number back to "1.2M", "400k", etc. */
+function formatFeeTotal(total: number): string {
+  if (total <= 0) return ''
+  if (total >= 1_000_000) {
+    const v = total / 1_000_000
+    return `${v % 1 === 0 ? v : v.toFixed(1)}M`
+  }
+  if (total >= 1_000) return `${Math.round(total / 1_000)}k`
+  return `${total}`
+}
+
+/** Short month+year: "jun 2025". Empty string if no date. */
+function fmtMonth(dateStr?: string): string {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' })
+}
+
+/** Days from today to a date (negative = past) */
+function daysUntil(dateStr?: string): number | null {
+  if (!dateStr) return null
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return null
+  return Math.round((d.getTime() - Date.now()) / 86_400_000)
+}
+
+/** Contract urgency badge: color class + label */
+function contractBadge(endDate?: string): { label: string; cls: string } | null {
+  const days = daysUntil(endDate)
+  if (days === null) return null
+  const label = fmtMonth(endDate)
+  if (days < 0)   return { label: 'Expirado', cls: 'bg-red-100 text-red-700 border-red-200' }
+  if (days < 60)  return { label,             cls: 'bg-red-100 text-red-700 border-red-200' }
+  if (days < 180) return { label,             cls: 'bg-amber-100 text-amber-700 border-amber-200' }
+  return             { label,                 cls: 'bg-slate-100 text-slate-500 border-slate-200' }
+}
+
+/** Last-contacted staleness color */
+function lastContactedCls(dateStr?: string): string {
+  const days = daysUntil(dateStr)
+  if (days === null) return 'text-slate-300'        // never contacted
+  const ago = -days
+  if (ago < 14)  return 'text-green-600'
+  if (ago < 45)  return 'text-amber-500'
+  return 'text-red-500'
+}
+
 function Avatar({ name, photo, size = 'sm' }: { name: string; photo?: string; size?: 'sm' | 'md' }) {
   const cls = size === 'sm' ? 'w-8 h-8 text-xs' : 'w-10 h-10 text-sm'
   if (photo) return <img src={photo} className={`${cls} rounded-full object-cover flex-shrink-0`} />
@@ -96,18 +155,43 @@ export function Distribution({
 
   // filters
   const [leagueFilter, setLeagueFilter] = useState<string | null>(null)
-  const [positionFilter, setPositionFilter] = useState('')
+  const [positionFilter, setPositionFilter] = useState('')   // solicitudes tab
+  const [posFilter, setPosFilter] = useState('')             // jugadores tab
+  const [activityFilter, setActivityFilter] = useState(false)
 
   const seasonEntries = entries.filter(e => e.season === season)
 
   const filteredEntries = useMemo(() => {
-    if (!search) return seasonEntries
-    const q = search.toLowerCase()
-    return seasonEntries.filter(e => {
+    let result = seasonEntries
+    if (search) {
+      const q = search.toLowerCase()
+      result = result.filter(e => {
+        const p = players.find(pl => pl.id === e.playerId)
+        return p?.name.toLowerCase().includes(q)
+      })
+    }
+    if (posFilter) {
+      result = result.filter(e => {
+        const p = players.find(pl => pl.id === e.playerId)
+        return p?.positions[0] === posFilter
+      })
+    }
+    if (activityFilter) {
+      result = result.filter(e =>
+        negotiations.some(n => n.playerId === e.playerId && n.status !== 'descartado')
+      )
+    }
+    return result
+  }, [seasonEntries, search, players, posFilter, activityFilter, negotiations])
+
+  const distributionPositions = useMemo(() => {
+    const pos = new Set<string>()
+    seasonEntries.forEach(e => {
       const p = players.find(pl => pl.id === e.playerId)
-      return p?.name.toLowerCase().includes(q)
+      if (p?.positions[0]) pos.add(p.positions[0])
     })
-  }, [seasonEntries, search, players])
+    return Array.from(pos).sort()
+  }, [seasonEntries, players])
 
   const filteredClubs = useMemo(() => {
     let result = clubs
@@ -154,6 +238,8 @@ export function Distribution({
     closePanel()
     setLeagueFilter(null)
     setPositionFilter('')
+    setPosFilter('')
+    setActivityFilter(false)
     setSearch('')
   }
 
@@ -251,10 +337,44 @@ export function Distribution({
           {/* ── JUGADORES TAB ── */}
           {tab === 'jugadores' && (
             <div className="max-w-5xl mx-auto">
-              <div className="flex justify-end mb-3">
+              <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
+                {/* Filters */}
+                <div className="flex flex-wrap gap-1.5 flex-1 min-w-0">
+                  {/* Position chips */}
+                  <button
+                    onClick={() => setPosFilter('')}
+                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                      !posFilter ? 'bg-[hsl(220,72%,36%)] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    Todas
+                  </button>
+                  {distributionPositions.map(pos => (
+                    <button
+                      key={pos}
+                      onClick={() => setPosFilter(posFilter === pos ? '' : pos)}
+                      className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                        posFilter === pos ? 'bg-[hsl(220,72%,36%)] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      {pos}
+                    </button>
+                  ))}
+                  {/* Activity toggle */}
+                  <button
+                    onClick={() => setActivityFilter(!activityFilter)}
+                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors border ${
+                      activityFilter
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    Con actividad
+                  </button>
+                </div>
                 <button
                   onClick={() => setShowAddPlayer(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[hsl(220,72%,36%)] text-white text-sm rounded-lg hover:bg-[hsl(220,72%,30%)] transition-colors"
+                  className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-[hsl(220,72%,36%)] text-white text-sm rounded-lg hover:bg-[hsl(220,72%,30%)] transition-colors"
                 >
                   <Plus className="w-4 h-4" /> Añadir jugador
                 </button>
@@ -302,6 +422,14 @@ export function Distribution({
                                   {entry.condition && (
                                     <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full">{entry.condition}</span>
                                   )}
+                                  {(() => {
+                                    const badge = contractBadge(player.clubContract?.endDate)
+                                    return badge ? (
+                                      <span className={`text-xs px-1.5 py-0.5 rounded-full border ${badge.cls}`}>
+                                        {badge.label}
+                                      </span>
+                                    ) : null
+                                  })()}
                                   {topStatus && (
                                     <span className={`text-xs px-1.5 py-0.5 rounded-full ${STATUS_CONFIG[topStatus].color}`}>
                                       {STATUS_CONFIG[topStatus].label}
@@ -504,11 +632,25 @@ export function Distribution({
                   const cfg = STATUS_CONFIG[status]
                   return (
                     <div key={status} className="w-56 flex-shrink-0">
-                      <div className={`flex items-center gap-2 px-3 py-2 rounded-lg mb-2 ${cfg.color}`}>
-                        <div className={`w-2 h-2 rounded-full ${cfg.dot}`} />
-                        <span className="text-xs font-semibold">{cfg.label}</span>
-                        <span className="ml-auto text-xs opacity-70">{col.length}</span>
-                      </div>
+                      {(() => {
+                        const feeTotal = col.reduce((sum, neg) => {
+                          const entry = entries.find(e => e.playerId === neg.playerId)
+                          return sum + parseTransferFee(entry?.transferFee)
+                        }, 0)
+                        const feeStr = formatFeeTotal(feeTotal)
+                        return (
+                          <div className={`flex items-center gap-2 px-3 py-2 rounded-lg mb-2 ${cfg.color}`}>
+                            <div className={`w-2 h-2 rounded-full ${cfg.dot}`} />
+                            <span className="text-xs font-semibold">{cfg.label}</span>
+                            <div className="ml-auto flex items-center gap-1.5">
+                              {feeStr && (
+                                <span className="text-xs font-semibold opacity-80">{feeStr}</span>
+                              )}
+                              <span className="text-xs opacity-60">{col.length}</span>
+                            </div>
+                          </div>
+                        )
+                      })()}
                       <div className="space-y-2">
                         {col.map(neg => {
                           const player = players.find(p => p.id === neg.playerId)
@@ -715,6 +857,13 @@ export function Distribution({
                         <Star className="w-3.5 h-3.5 fill-green-500" /> Club prioritario
                       </div>
                     )}
+                    <div className="flex items-center gap-2 text-sm">
+                      <CircleDot className="w-3.5 h-3.5 text-slate-400" />
+                      <span className={`text-sm font-medium ${lastContactedCls(selectedClub.lastContacted)}`}>
+                        {selectedClub.lastContacted ? fmtMonth(selectedClub.lastContacted) : 'Sin contacto registrado'}
+                      </span>
+                      <span className="text-xs text-slate-400">último contacto</span>
+                    </div>
                     {selectedClub.notes && (
                       <p className="text-xs text-slate-500 mt-1">{selectedClub.notes}</p>
                     )}
@@ -937,6 +1086,13 @@ function ClubCard({ club, negotiations, isSelected, onClick }: {
           {club.contactPerson && <span className="truncate">{club.contactPerson}</span>}
           {activeNegs.length > 0 && (
             <span className="text-blue-600 flex-shrink-0">{activeNegs.length} ofrecido{activeNegs.length !== 1 ? 's' : ''}</span>
+          )}
+          {club.lastContacted ? (
+            <span className={`flex-shrink-0 ${lastContactedCls(club.lastContacted)}`} title="Último contacto">
+              {fmtMonth(club.lastContacted)}
+            </span>
+          ) : (
+            <span className="flex-shrink-0 text-slate-300 text-xs">sin contacto</span>
           )}
         </div>
       </div>
@@ -1302,11 +1458,12 @@ function EditClubModal({ club, onClose, onSave }: {
   const [aisManager, setAisManager] = useState(club.aisManager ?? '')
   const [notes, setNotes] = useState(club.notes ?? '')
   const [isPriority, setIsPriority] = useState(club.isPriority)
+  const [lastContacted, setLastContacted] = useState(club.lastContacted ?? '')
   const [saving, setSaving] = useState(false)
 
   async function handleSave() {
     setSaving(true)
-    try { await onSave({ name, league: league || undefined, contactPerson: contactPerson || undefined, aisManager: aisManager || undefined, notes: notes || undefined, isPriority }) }
+    try { await onSave({ name, league: league || undefined, contactPerson: contactPerson || undefined, aisManager: aisManager || undefined, notes: notes || undefined, isPriority, lastContacted: lastContacted || undefined }) }
     finally { setSaving(false) }
   }
 
@@ -1334,6 +1491,15 @@ function EditClubModal({ club, onClose, onSave }: {
         <div>
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Notas</label>
           <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none" />
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Último contacto</label>
+          <input
+            type="date"
+            value={lastContacted}
+            onChange={e => setLastContacted(e.target.value)}
+            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+          />
         </div>
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="checkbox" checked={isPriority} onChange={e => setIsPriority(e.target.checked)} className="w-4 h-4 rounded" />
