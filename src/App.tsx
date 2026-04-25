@@ -10,6 +10,8 @@ import { PlayerDetail } from './views/PlayerDetail'
 import { AdminPanel } from './views/AdminPanel'
 import { OverviewPanel } from './views/OverviewPanel'
 import { PlayersTable } from './views/PlayersTable'
+import { Distribution } from './views/Distribution'
+import type { Club, DistributionEntry, ClubNegotiation } from './types'
 
 export interface AppNotification {
   id: string
@@ -38,7 +40,13 @@ export default function App() {
   const [showAdmin, setShowAdmin] = useState(false)
   const [showOverview, setShowOverview] = useState(false)
   const [showTable, setShowTable] = useState(false)
+  const [showDistribution, setShowDistribution] = useState(false)
   const [notifications, setNotifications] = useState<AppNotification[]>([])
+
+  // Distribution state
+  const [clubs, setClubs] = useState<Club[]>([])
+  const [distEntries, setDistEntries] = useState<DistributionEntry[]>([])
+  const [negotiations, setNegotiations] = useState<ClubNegotiation[]>([])
 
   const addNotification = useCallback((msg: string, type: AppNotification['type'], playerId?: string) => {
     setNotifications((prev) => [
@@ -59,10 +67,16 @@ export default function App() {
       db.fetchPlayers(),
       db.fetchTasks(),
       db.fetchProfiles(),
-    ]).then(([p, t, pr]) => {
+      db.fetchClubs(),
+      db.fetchDistributionEntries(),
+      db.fetchNegotiations(),
+    ]).then(([p, t, pr, cl, de, ng]) => {
       setPlayers(p)
       setTasks(t)
       setProfiles(pr as Profile[])
+      setClubs(cl as Club[])
+      setDistEntries(de as DistributionEntry[])
+      setNegotiations(ng as ClubNegotiation[])
     }).finally(() => setDataLoading(false))
   }, [user])
 
@@ -169,7 +183,77 @@ export default function App() {
     setProfiles(pr as Profile[])
   }
 
+  // ── distribution handlers ────────────────────────────────────
+
+  const handleCreateClub = async (c: Omit<Club, 'id' | 'createdAt'>) => {
+    const saved = await db.createClub(c)
+    setClubs(prev => [...prev, saved].sort((a, b) => a.name.localeCompare(b.name)))
+    return saved
+  }
+  const handleUpdateClub = async (c: Club) => {
+    await db.updateClub(c)
+    setClubs(prev => prev.map(x => x.id === c.id ? c : x))
+  }
+  const handleDeleteClub = async (id: string) => {
+    await db.deleteClub(id)
+    setClubs(prev => prev.filter(x => x.id !== id))
+    setNegotiations(prev => prev.filter(n => n.clubId !== id))
+  }
+
+  const handleCreateEntry = async (e: Omit<DistributionEntry, 'id' | 'createdAt'>) => {
+    const saved = await db.createDistributionEntry(e)
+    setDistEntries(prev => [...prev, saved])
+    return saved
+  }
+  const handleUpdateEntry = async (e: DistributionEntry) => {
+    await db.updateDistributionEntry(e)
+    setDistEntries(prev => prev.map(x => x.id === e.id ? e : x))
+  }
+  const handleDeleteEntry = async (id: string) => {
+    await db.deleteDistributionEntry(id)
+    setDistEntries(prev => prev.filter(x => x.id !== id))
+  }
+
+  const handleCreateNegotiation = async (n: Omit<ClubNegotiation, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const saved = await db.createNegotiation(n)
+    setNegotiations(prev => [saved, ...prev])
+    return saved
+  }
+  const handleUpdateNegotiation = async (n: ClubNegotiation) => {
+    await db.updateNegotiation(n)
+    setNegotiations(prev => prev.map(x => x.id === n.id ? n : x))
+  }
+  const handleDeleteNegotiation = async (id: string) => {
+    await db.deleteNegotiation(id)
+    setNegotiations(prev => prev.filter(x => x.id !== id))
+  }
+
   // ── routing ─────────────────────────────────────────────────
+
+  if (showDistribution) {
+    return (
+      <Distribution
+        players={players}
+        clubs={clubs}
+        entries={distEntries}
+        negotiations={negotiations}
+        currentProfile={profile}
+        onBack={() => setShowDistribution(false)}
+        onLogout={signOut}
+        onAdmin={profile.is_admin ? () => { setShowDistribution(false); setShowAdmin(true) } : undefined}
+        onSelectPlayer={(id) => { setShowDistribution(false); setSelectedPlayerId(id) }}
+        onCreateClub={handleCreateClub}
+        onUpdateClub={handleUpdateClub}
+        onDeleteClub={handleDeleteClub}
+        onCreateEntry={handleCreateEntry}
+        onUpdateEntry={handleUpdateEntry}
+        onDeleteEntry={handleDeleteEntry}
+        onCreateNegotiation={handleCreateNegotiation}
+        onUpdateNegotiation={handleUpdateNegotiation}
+        onDeleteNegotiation={handleDeleteNegotiation}
+      />
+    )
+  }
 
   if (showTable && profile.is_admin) {
     return (
@@ -227,6 +311,13 @@ export default function App() {
         onDeletePlayer={profile.is_admin ? handleDeletePlayer : undefined}
         onLogout={signOut}
         onAdmin={profile.is_admin ? () => setShowAdmin(true) : undefined}
+        distributionEntry={distEntries.find(e => e.playerId === selectedPlayer.id)}
+        playerNegotiations={negotiations.filter(n => n.playerId === selectedPlayer.id)}
+        clubs={clubs}
+        onUpdateEntry={handleUpdateEntry}
+        onCreateNegotiation={handleCreateNegotiation}
+        onUpdateNegotiation={handleUpdateNegotiation}
+        onDeleteNegotiation={handleDeleteNegotiation}
       />
     )
   }
@@ -244,6 +335,7 @@ export default function App() {
       onBulkDelete={profile.is_admin ? handleBulkDelete : undefined}
       onBulkAssignManager={profile.is_admin ? handleBulkAssignManager : undefined}
       onOverview={profile.is_admin ? () => setShowOverview(true) : undefined}
+      onDistribution={() => setShowDistribution(true)}
       notifications={notifications}
       onDismissNotification={dismissNotification}
       onAddGeneralTask={handleAddTask}

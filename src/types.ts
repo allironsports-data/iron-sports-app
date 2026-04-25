@@ -154,6 +154,52 @@ export interface Player {
   links: PlayerLink[];         // enlaces adicionales (vídeos, redes, etc.)
 }
 
+// ── DISTRIBUTION ────────────────────────────────────────────
+
+export interface ClubNeed {
+  position: string
+  ageMax?: number
+  transferBudget?: string   // "400k", "2M", etc.
+  salaryBudget?: string
+  notes?: string
+}
+
+export interface Club {
+  id: string
+  name: string
+  league?: string
+  country: string
+  contactPerson?: string
+  aisManager?: string       // initials: "PP", "BGF", etc.
+  notes?: string
+  isPriority: boolean
+  needs: ClubNeed[]
+  createdAt: string
+}
+
+export interface DistributionEntry {
+  id: string
+  playerId: string
+  season: string
+  priority: 'A' | 'B' | 'C'
+  condition?: string        // "Libre", "Traspaso", "Cesión", "Cesión/Traspaso"
+  transferFee?: string
+  notes?: string
+  active: boolean
+  createdAt: string
+}
+
+export interface ClubNegotiation {
+  id: string
+  playerId: string
+  clubId: string
+  status: 'ofrecido' | 'interesado' | 'negociando' | 'cerrado' | 'descartado'
+  aisManager?: string
+  notes?: string
+  createdAt: string
+  updatedAt: string
+}
+
 // ---- Helpers ----
 export function calcAge(birthDate: string): number {
   const today = new Date();

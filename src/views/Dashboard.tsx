@@ -25,6 +25,7 @@ import {
   LayoutList,
   LayoutGrid,
   Zap,
+  TrendingUp,
 } from "lucide-react";
 
 const PRIMARY = "hsl(220,72%,26%)";
@@ -47,6 +48,7 @@ interface Props {
   onUpdateTask?: (task: Task) => void;
   onDeleteGeneralTask?: (taskId: string) => void;
   onOverview?: () => void;
+  onDistribution?: () => void;
 }
 
 // Birthday helpers
@@ -84,6 +86,7 @@ export function Dashboard({
   onUpdateTask,
   onDeleteGeneralTask,
   onOverview,
+  onDistribution,
 }: Props) {
   const [search, setSearch] = useState("");
   const [showAddPlayer, setShowAddPlayer] = useState(false);
@@ -305,6 +308,11 @@ export function Dashboard({
               className="w-7 h-7 sm:w-8 sm:h-8 rounded-full text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0"
               style={{ background: PRIMARY }}
             >{currentProfile.avatar}</div>
+            {onDistribution && (
+              <button onClick={onDistribution} className="p-1 sm:p-1.5 text-slate-400 hover:text-slate-600 transition-colors" title="Distribución">
+                <TrendingUp className="w-4 h-4" />
+              </button>
+            )}
             {currentProfile.is_admin && onOverview && (
               <button onClick={onOverview} className="p-1 sm:p-1.5 text-slate-400 hover:text-slate-600 transition-colors" title="Overview">
                 <BarChart3 className="w-4 h-4" />

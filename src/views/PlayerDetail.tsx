@@ -3,6 +3,7 @@ import logoImg from '../assets/logo.jpeg';
 import type {
   Player, Task,
   PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession,
+  DistributionEntry, ClubNegotiation, Club,
 } from "../types";
 import { calcAge } from "../types";
 import type { Profile } from "../contexts/AuthContext";
@@ -32,14 +33,24 @@ interface Props {
   onLogout: () => void;
   onDeletePlayer?: (id: string) => void;
   onAdmin?: () => void;
+  // Distribution props (optional — passed when data is loaded)
+  distributionEntry?: DistributionEntry;
+  playerNegotiations?: ClubNegotiation[];
+  clubs?: Club[];
+  onUpdateEntry?: (e: DistributionEntry) => Promise<void>;
+  onCreateNegotiation?: (n: Omit<ClubNegotiation, 'id' | 'createdAt' | 'updatedAt'>) => Promise<ClubNegotiation>;
+  onUpdateNegotiation?: (n: ClubNegotiation) => Promise<void>;
+  onDeleteNegotiation?: (id: string) => Promise<void>;
 }
 
-type TabId = "tareas" | "contrato" | "rendimiento" | "info" | "actividad";
+type TabId = "tareas" | "contrato" | "rendimiento" | "info" | "actividad" | "distribucion";
 
 export function PlayerDetail({
   player, tasks, allTasks, profiles, currentProfile,
   onBack, onAddTask, onUpdateTask, onDeleteTask, onUpdatePlayer, onLogout,
   onDeletePlayer, onAdmin,
+  distributionEntry, playerNegotiations = [], clubs = [],
+  onUpdateEntry, onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation,
 }: Props) {
   const [activeTab, setActiveTab] = useState<TabId>("tareas");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -52,6 +63,7 @@ export function PlayerDetail({
     { id: "rendimiento", label: "Rendimiento", icon: <TrendingUp className="w-4 h-4" />, count: (player.matchReports?.length ?? 0) + player.performance.length + (player.videoSessions?.length ?? 0) },
     { id: "info", label: "Info / Entorno", icon: <User className="w-4 h-4" /> },
     { id: "actividad", label: "Actividad", icon: <Clock className="w-4 h-4" /> },
+    { id: "distribucion", label: "Distribución", icon: <BarChart2 className="w-4 h-4" />, count: playerNegotiations.length || undefined },
   ];
 
   const managers = profiles.filter((m) => player.managedBy.includes(m.id));
@@ -187,6 +199,18 @@ export function PlayerDetail({
         )}
         {activeTab === "actividad" && (
           <ActivityTimeline player={player} tasks={tasks} profiles={profiles} />
+        )}
+        {activeTab === "distribucion" && (
+          <DistributionTab
+            player={player}
+            entry={distributionEntry}
+            negotiations={playerNegotiations}
+            clubs={clubs}
+            onUpdateEntry={onUpdateEntry}
+            onCreateNegotiation={onCreateNegotiation}
+            onUpdateNegotiation={onUpdateNegotiation}
+            onDeleteNegotiation={onDeleteNegotiation}
+          />
         )}
       </main>
 
@@ -1886,4 +1910,203 @@ function ActivityTimeline({ player, tasks, profiles }: {
       ))}
     </div>
   );
+}
+
+// ── DISTRIBUTION TAB ──────────────────────────────────────────
+
+const NEG_STATUSES_D: ClubNegotiation['status'][] = ['ofrecido', 'interesado', 'negociando', 'cerrado', 'descartado']
+const STATUS_CONFIG_D: Record<ClubNegotiation['status'], { label: string; color: string }> = {
+  ofrecido:   { label: 'Ofrecido',   color: 'bg-slate-100 text-slate-600' },
+  interesado: { label: 'Interesado', color: 'bg-blue-100 text-blue-700' },
+  negociando: { label: 'Negociando', color: 'bg-amber-100 text-amber-700' },
+  cerrado:    { label: 'Cerrado',    color: 'bg-green-100 text-green-700' },
+  descartado: { label: 'Descartado', color: 'bg-red-100 text-red-600' },
+}
+const PRIORITY_CONFIG_D = {
+  A: { bg: 'bg-red-100',   text: 'text-red-700' },
+  B: { bg: 'bg-amber-100', text: 'text-amber-700' },
+  C: { bg: 'bg-slate-100', text: 'text-slate-600' },
+}
+const CONDITIONS_D = ['Libre', 'Traspaso', 'Cesión', 'Cesión/Traspaso', 'Traspaso (porcentaje)', 'Cesión con opción']
+
+function DistributionTab({ player, entry, negotiations, clubs, onUpdateEntry, onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation }: {
+  player: Player
+  entry?: DistributionEntry
+  negotiations: ClubNegotiation[]
+  clubs: Club[]
+  onUpdateEntry?: (e: DistributionEntry) => Promise<void>
+  onCreateNegotiation?: (n: Omit<ClubNegotiation, 'id' | 'createdAt' | 'updatedAt'>) => Promise<ClubNegotiation>
+  onUpdateNegotiation?: (n: ClubNegotiation) => Promise<void>
+  onDeleteNegotiation?: (id: string) => Promise<void>
+}) {
+  const [editingEntry, setEditingEntry] = useState(false)
+  const [editPriority, setEditPriority] = useState<'A'|'B'|'C'>(entry?.priority ?? 'B')
+  const [editCondition, setEditCondition] = useState(entry?.condition ?? '')
+  const [editFee, setEditFee] = useState(entry?.transferFee ?? '')
+  const [editNotes, setEditNotes] = useState(entry?.notes ?? '')
+  const [savingEntry, setSavingEntry] = useState(false)
+
+  const [showAddNeg, setShowAddNeg] = useState(false)
+  const [negClubId, setNegClubId] = useState('')
+  const [negStatus, setNegStatus] = useState<ClubNegotiation['status']>('ofrecido')
+  const [negAis, setNegAis] = useState('')
+  const [negNotes, setNegNotes] = useState('')
+  const [savingNeg, setSavingNeg] = useState(false)
+  const [editingNeg, setEditingNeg] = useState<ClubNegotiation | null>(null)
+
+  async function saveEntry() {
+    if (!entry) return
+    setSavingEntry(true)
+    try {
+      await onUpdateEntry?.({ ...entry, priority: editPriority, condition: editCondition || undefined, transferFee: editFee || undefined, notes: editNotes || undefined })
+      setEditingEntry(false)
+    } finally { setSavingEntry(false) }
+  }
+
+  async function saveNeg() {
+    if (!negClubId) return
+    setSavingNeg(true)
+    try {
+      await onCreateNegotiation?.({ playerId: player.id, clubId: negClubId, status: negStatus, aisManager: negAis || undefined, notes: negNotes || undefined })
+      setShowAddNeg(false)
+      setNegClubId(''); setNegAis(''); setNegNotes(''); setNegStatus('ofrecido')
+    } finally { setSavingNeg(false) }
+  }
+
+  async function saveEditNeg() {
+    if (!editingNeg) return
+    await onUpdateNegotiation?.(editingNeg)
+    setEditingNeg(null)
+  }
+
+  if (!entry) {
+    return (
+      <div className="text-center py-12">
+        <BarChart2 className="w-10 h-10 text-slate-200 mx-auto mb-3" />
+        <p className="text-slate-400 text-sm">Este jugador no está en distribución activa.</p>
+        <p className="text-slate-400 text-xs mt-1">Añádelo desde la sección Distribución.</p>
+      </div>
+    )
+  }
+
+  const pcfg = PRIORITY_CONFIG_D[entry.priority]
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Estado de distribución</span>
+          <button onClick={() => { setEditPriority(entry.priority); setEditCondition(entry.condition ?? ''); setEditFee(entry.transferFee ?? ''); setEditNotes(entry.notes ?? ''); setEditingEntry(true) }} className="p-1 text-slate-400 hover:text-slate-600">
+            <Edit3 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+        {!editingEntry ? (
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className={`px-3 py-1.5 rounded-full text-sm font-bold ${pcfg.bg} ${pcfg.text}`}>Prioridad {entry.priority}</span>
+            {entry.condition && <span className="text-sm bg-slate-100 text-slate-600 px-3 py-1.5 rounded-full">{entry.condition}</span>}
+            {entry.transferFee && <span className="text-sm bg-slate-100 text-slate-500 px-3 py-1.5 rounded-full">{entry.transferFee}</span>}
+            {entry.notes && <p className="text-xs text-slate-500 w-full mt-1">{entry.notes}</p>}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              {(['A', 'B', 'C'] as const).map(p => {
+                const cfg = PRIORITY_CONFIG_D[p]
+                return <button key={p} onClick={() => setEditPriority(p)} className={`flex-1 py-2 rounded-lg text-sm font-bold border-2 transition-all ${editPriority === p ? `${cfg.bg} ${cfg.text} border-current` : 'bg-white text-slate-400 border-slate-200'}`}>{p}</button>
+              })}
+            </div>
+            <select value={editCondition} onChange={e => setEditCondition(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
+              <option value="">Sin especificar</option>
+              {CONDITIONS_D.map(c => <option key={c}>{c}</option>)}
+            </select>
+            {(editCondition.includes('Traspaso') || editCondition.includes('traspaso')) && (
+              <input value={editFee} onChange={e => setEditFee(e.target.value)} placeholder="Importe: 400k, 2M…" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+            )}
+            <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)} rows={2} placeholder="Notas…" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none" />
+            <div className="flex gap-2">
+              <button onClick={() => setEditingEntry(false)} className="flex-1 py-1.5 text-sm border border-slate-200 rounded-lg text-slate-500">Cancelar</button>
+              <button onClick={saveEntry} disabled={savingEntry} className="flex-1 py-1.5 text-sm bg-[hsl(220,72%,36%)] text-white rounded-lg disabled:opacity-60">{savingEntry ? '…' : 'Guardar'}</button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Clubes contactados ({negotiations.length})</span>
+          {onCreateNegotiation && (
+            <button onClick={() => setShowAddNeg(true)} className="flex items-center gap-1 text-xs text-blue-600 font-medium">
+              <Plus className="w-3.5 h-3.5" /> Añadir club
+            </button>
+          )}
+        </div>
+        {showAddNeg && (
+          <div className="bg-slate-50 rounded-lg p-3 mb-3 space-y-2">
+            <select value={negClubId} onChange={e => setNegClubId(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
+              <option value="">Seleccionar club…</option>
+              {clubs.map(c => <option key={c.id} value={c.id}>{c.name}{c.league ? ` (${c.league})` : ''}</option>)}
+            </select>
+            <div className="flex flex-wrap gap-1.5">
+              {NEG_STATUSES_D.map(s => {
+                const cfg = STATUS_CONFIG_D[s]
+                return <button key={s} onClick={() => setNegStatus(s)} className={`px-2.5 py-1 rounded-full text-xs font-medium ${negStatus === s ? cfg.color + ' ring-1 ring-current' : 'bg-white border border-slate-200 text-slate-500'}`}>{cfg.label}</button>
+              })}
+            </div>
+            <input value={negAis} onChange={e => setNegAis(e.target.value)} placeholder="Gestor AIS (PP, BGF…)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+            <input value={negNotes} onChange={e => setNegNotes(e.target.value)} placeholder="Notas (opcional)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+            <div className="flex gap-2">
+              <button onClick={() => setShowAddNeg(false)} className="flex-1 py-1.5 text-xs border border-slate-200 rounded-lg text-slate-500">Cancelar</button>
+              <button onClick={saveNeg} disabled={!negClubId || savingNeg} className="flex-1 py-1.5 text-xs bg-[hsl(220,72%,36%)] text-white rounded-lg disabled:opacity-60">{savingNeg ? '…' : 'Guardar'}</button>
+            </div>
+          </div>
+        )}
+        <div className="space-y-2">
+          {negotiations.map(neg => {
+            const club = clubs.find(c => c.id === neg.clubId)
+            if (!club) return null
+            const scfg = STATUS_CONFIG_D[neg.status]
+            const isEditing = editingNeg?.id === neg.id
+            if (isEditing) {
+              return (
+                <div key={neg.id} className="bg-slate-50 rounded-lg p-3 space-y-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    {NEG_STATUSES_D.map(s => {
+                      const cfg = STATUS_CONFIG_D[s]
+                      return <button key={s} onClick={() => setEditingNeg({ ...editingNeg!, status: s })} className={`px-2.5 py-1 rounded-full text-xs font-medium ${editingNeg!.status === s ? cfg.color + ' ring-1 ring-current' : 'bg-white border border-slate-200 text-slate-500'}`}>{cfg.label}</button>
+                    })}
+                  </div>
+                  <input value={editingNeg!.aisManager ?? ''} onChange={e => setEditingNeg({ ...editingNeg!, aisManager: e.target.value })} placeholder="Gestor AIS" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+                  <input value={editingNeg!.notes ?? ''} onChange={e => setEditingNeg({ ...editingNeg!, notes: e.target.value })} placeholder="Notas" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+                  <div className="flex gap-2">
+                    <button onClick={async () => { await onDeleteNegotiation?.(neg.id); setEditingNeg(null) }} className="px-2 py-1.5 text-xs border border-red-200 text-red-500 rounded-lg">Eliminar</button>
+                    <button onClick={() => setEditingNeg(null)} className="flex-1 py-1.5 text-xs border border-slate-200 rounded-lg text-slate-500">Cancelar</button>
+                    <button onClick={saveEditNeg} className="flex-1 py-1.5 text-xs bg-[hsl(220,72%,36%)] text-white rounded-lg">Guardar</button>
+                  </div>
+                </div>
+              )
+            }
+            return (
+              <div key={neg.id} className="flex items-start gap-3 p-3 rounded-lg hover:bg-slate-50">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium text-slate-700 text-sm">{club.name}</span>
+                    {club.league && <span className="text-xs text-slate-400">{club.league}</span>}
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${scfg.color}`}>{scfg.label}</span>
+                    {neg.aisManager && <span className="text-xs font-mono bg-slate-100 text-slate-500 px-1.5 rounded">{neg.aisManager}</span>}
+                  </div>
+                  {neg.notes && <p className="text-xs text-slate-500 mt-0.5">{neg.notes}</p>}
+                </div>
+                <button onClick={() => setEditingNeg(neg)} className="p-1 text-slate-300 hover:text-slate-500 flex-shrink-0">
+                  <Edit3 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )
+          })}
+          {negotiations.length === 0 && !showAddNeg && (
+            <p className="text-center text-slate-400 text-xs py-4">Sin clubes contactados aún</p>
+          )}
+        </div>
+      </div>
+    </div>
+  )
 }

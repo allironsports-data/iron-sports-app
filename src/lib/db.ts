@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession } from '../types'
+import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation } from '../types'
 
 // ── helpers ──────────────────────────────────────────────────
 
@@ -311,5 +311,166 @@ export async function updateProfile(id: string, updates: { name?: string; avatar
 
 export async function inviteUser(email: string) {
   const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } })
+  if (error) throw error
+}
+
+// ── CLUBS ─────────────────────────────────────────────────────
+
+function dbToClub(row: Record<string, unknown>): Club {
+  return {
+    id: row.id as string,
+    name: row.name as string,
+    league: (row.league as string) ?? undefined,
+    country: (row.country as string) ?? 'Spain',
+    contactPerson: (row.contact_person as string) ?? undefined,
+    aisManager: (row.ais_manager as string) ?? undefined,
+    notes: (row.notes as string) ?? undefined,
+    isPriority: (row.is_priority as boolean) ?? false,
+    needs: (row.needs as Club['needs']) ?? [],
+    createdAt: row.created_at as string,
+  }
+}
+
+export async function fetchClubs(): Promise<Club[]> {
+  const { data, error } = await supabase.from('clubs').select('*').order('name')
+  if (error) throw error
+  return (data ?? []).map(dbToClub)
+}
+
+export async function createClub(c: Omit<Club, 'id' | 'createdAt'>): Promise<Club> {
+  const { data, error } = await supabase.from('clubs').insert({
+    name: c.name,
+    league: c.league ?? null,
+    country: c.country,
+    contact_person: c.contactPerson ?? null,
+    ais_manager: c.aisManager ?? null,
+    notes: c.notes ?? null,
+    is_priority: c.isPriority,
+    needs: c.needs ?? [],
+  }).select().single()
+  if (error) throw error
+  return dbToClub(data)
+}
+
+export async function updateClub(c: Club): Promise<void> {
+  const { error } = await supabase.from('clubs').update({
+    name: c.name,
+    league: c.league ?? null,
+    country: c.country,
+    contact_person: c.contactPerson ?? null,
+    ais_manager: c.aisManager ?? null,
+    notes: c.notes ?? null,
+    is_priority: c.isPriority,
+    needs: c.needs ?? [],
+  }).eq('id', c.id)
+  if (error) throw error
+}
+
+export async function deleteClub(id: string): Promise<void> {
+  const { error } = await supabase.from('clubs').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── DISTRIBUTION ENTRIES ──────────────────────────────────────
+
+function dbToDistEntry(row: Record<string, unknown>): DistributionEntry {
+  return {
+    id: row.id as string,
+    playerId: row.player_id as string,
+    season: (row.season as string) ?? '2025-26',
+    priority: (row.priority as DistributionEntry['priority']) ?? 'B',
+    condition: (row.condition as string) ?? undefined,
+    transferFee: (row.transfer_fee as string) ?? undefined,
+    notes: (row.notes as string) ?? undefined,
+    active: (row.active as boolean) ?? true,
+    createdAt: row.created_at as string,
+  }
+}
+
+export async function fetchDistributionEntries(season?: string): Promise<DistributionEntry[]> {
+  let q = supabase.from('distribution_entries').select('*').eq('active', true).order('priority')
+  if (season) q = q.eq('season', season)
+  const { data, error } = await q
+  if (error) throw error
+  return (data ?? []).map(dbToDistEntry)
+}
+
+export async function createDistributionEntry(e: Omit<DistributionEntry, 'id' | 'createdAt'>): Promise<DistributionEntry> {
+  const { data, error } = await supabase.from('distribution_entries').insert({
+    player_id: e.playerId,
+    season: e.season,
+    priority: e.priority,
+    condition: e.condition ?? null,
+    transfer_fee: e.transferFee ?? null,
+    notes: e.notes ?? null,
+    active: e.active,
+  }).select().single()
+  if (error) throw error
+  return dbToDistEntry(data)
+}
+
+export async function updateDistributionEntry(e: DistributionEntry): Promise<void> {
+  const { error } = await supabase.from('distribution_entries').update({
+    priority: e.priority,
+    condition: e.condition ?? null,
+    transfer_fee: e.transferFee ?? null,
+    notes: e.notes ?? null,
+    active: e.active,
+  }).eq('id', e.id)
+  if (error) throw error
+}
+
+export async function deleteDistributionEntry(id: string): Promise<void> {
+  const { error } = await supabase.from('distribution_entries').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── CLUB NEGOTIATIONS ─────────────────────────────────────────
+
+function dbToNegotiation(row: Record<string, unknown>): ClubNegotiation {
+  return {
+    id: row.id as string,
+    playerId: row.player_id as string,
+    clubId: row.club_id as string,
+    status: (row.status as ClubNegotiation['status']) ?? 'ofrecido',
+    aisManager: (row.ais_manager as string) ?? undefined,
+    notes: (row.notes as string) ?? undefined,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+  }
+}
+
+export async function fetchNegotiations(playerId?: string, clubId?: string): Promise<ClubNegotiation[]> {
+  let q = supabase.from('club_negotiations').select('*').order('updated_at', { ascending: false })
+  if (playerId) q = q.eq('player_id', playerId)
+  if (clubId) q = q.eq('club_id', clubId)
+  const { data, error } = await q
+  if (error) throw error
+  return (data ?? []).map(dbToNegotiation)
+}
+
+export async function createNegotiation(n: Omit<ClubNegotiation, 'id' | 'createdAt' | 'updatedAt'>): Promise<ClubNegotiation> {
+  const { data, error } = await supabase.from('club_negotiations').insert({
+    player_id: n.playerId,
+    club_id: n.clubId,
+    status: n.status,
+    ais_manager: n.aisManager ?? null,
+    notes: n.notes ?? null,
+  }).select().single()
+  if (error) throw error
+  return dbToNegotiation(data)
+}
+
+export async function updateNegotiation(n: ClubNegotiation): Promise<void> {
+  const { error } = await supabase.from('club_negotiations').update({
+    status: n.status,
+    ais_manager: n.aisManager ?? null,
+    notes: n.notes ?? null,
+  }).eq('id', n.id)
+  if (error) throw error
+}
+
+export async function deleteNegotiation(id: string): Promise<void> {
+  const { error } = await supabase.from('club_negotiations').delete().eq('id', id)
   if (error) throw error
 }
