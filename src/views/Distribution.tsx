@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react'
 import {
-  ArrowLeft, Plus, Search, Star, Building2, Users,
+  Plus, Search, Star, Building2, Users,
   ChevronRight, X, Check, Pencil, Trash2, LogOut,
   TrendingUp, AlertCircle, CircleDot, Flag, ChevronDown,
 } from 'lucide-react'
+import logoImg from '../assets/logo.jpeg'
 import type { Player, Club, ClubNeed, DistributionEntry, ClubNegotiation } from '../types'
 import type { Profile } from '../contexts/AuthContext'
 
@@ -102,7 +103,8 @@ interface Props {
   entries: DistributionEntry[]
   negotiations: ClubNegotiation[]
   currentProfile: Profile
-  onBack: () => void
+  onBack: () => void          // go to Tareas
+  onGoToJugadores?: () => void
   onLogout: () => void
   onAdmin?: () => void
   onSelectPlayer?: (id: string) => void
@@ -122,7 +124,7 @@ interface Props {
 
 export function Distribution({
   players, clubs, entries, negotiations, currentProfile,
-  onBack, onLogout, onAdmin, onSelectPlayer, onSelectClub,
+  onBack, onGoToJugadores, onLogout, onAdmin, onSelectPlayer, onSelectClub,
   onCreateClub, onUpdateClub, onDeleteClub,
   onCreateEntry, onUpdateEntry, onDeleteEntry,
   onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation,
@@ -273,32 +275,46 @@ export function Distribution({
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 px-4 h-11 sm:h-14 flex items-center gap-3 flex-shrink-0">
-        <button onClick={onBack} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 sm:hidden">
-          <ArrowLeft className="w-4 h-4" />
-        </button>
-        <div className="hidden sm:flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
-          <button
-            onClick={onBack}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors"
-          >
-            <Users className="w-3.5 h-3.5" /> Mantenimiento
-          </button>
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white shadow-sm text-xs font-medium text-[hsl(220,72%,36%)]">
-            <TrendingUp className="w-3.5 h-3.5" /> Distribución
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-10 flex-shrink-0">
+        {/* Top bar */}
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 h-11 sm:h-14 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg overflow-hidden bg-white flex-shrink-0">
+              <img src={logoImg} className="w-full h-full object-contain p-0.5" alt="AIS" />
+            </div>
+            <span className="hidden sm:block font-black text-sm tracking-tight text-slate-900 uppercase">All Iron Sports</span>
+          </div>
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <span className="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded-md">{CURRENT_SEASON}</span>
+            {currentProfile.is_admin && onAdmin && (
+              <button onClick={onAdmin} className="p-1 sm:p-1.5 text-slate-400 hover:text-slate-600 transition-colors text-xs hidden sm:block">Admin</button>
+            )}
+            <button onClick={onLogout} className="text-slate-400 hover:text-slate-600 transition-colors p-1">
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-1 min-w-0 sm:ml-2">
-          <span className="font-semibold text-slate-800 text-sm sm:hidden">Distribución</span>
-          <span className="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded-md">{CURRENT_SEASON}</span>
-        </div>
-        <div className="flex items-center gap-1">
-          {currentProfile.is_admin && onAdmin && (
-            <button onClick={onAdmin} className="text-xs text-slate-500 px-2 py-1 rounded hover:bg-slate-100 hidden sm:block">Admin</button>
-          )}
-          <button onClick={onLogout} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400">
-            <LogOut className="w-4 h-4" />
-          </button>
+
+        {/* Tab nav matching Dashboard */}
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center border-t border-slate-100">
+          {([
+            { id: 'tareas',       label: 'Tareas',       onClick: onBack },
+            { id: 'jugadores',    label: 'Jugadores',    onClick: onGoToJugadores ?? onBack },
+            { id: 'distribucion', label: 'Distribución', icon: <TrendingUp className="w-3.5 h-3.5" />, onClick: undefined },
+          ] as const).map(tab => (
+            <button
+              key={tab.id}
+              onClick={tab.onClick}
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                tab.id === 'distribucion'
+                  ? 'border-[hsl(220,72%,26%)] text-[hsl(220,72%,26%)]'
+                  : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+              }`}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
         </div>
       </header>
 

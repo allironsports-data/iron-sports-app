@@ -356,6 +356,7 @@ export default function App() {
         negotiations={negotiations}
         currentProfile={profile}
         onBack={() => setMainSection('tareas')}
+        onGoToJugadores={() => setMainSection('jugadores')}
         onLogout={signOut}
         onAdmin={profile.is_admin ? () => { setMainSection('tareas'); setShowAdmin(true) } : undefined}
         onSelectPlayer={(id) => navigateToPlayer(id, false)}
