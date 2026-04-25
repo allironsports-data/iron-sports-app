@@ -9,7 +9,7 @@ import type { Profile } from '../contexts/AuthContext'
 
 // ── constants ─────────────────────────────────────────────────
 
-const SEASONS = ['2025-26', '2024-25']
+const CURRENT_SEASON = '2025-26'
 const CONDITIONS = ['Libre', 'Traspaso', 'Cesión', 'Cesión/Traspaso', 'Traspaso (porcentaje)', 'Cesión con opción']
 const NEG_STATUSES: ClubNegotiation['status'][] = ['pendiente', 'ofrecido', 'interesado', 'negociando', 'cerrado', 'descartado']
 
@@ -78,7 +78,7 @@ export function Distribution({
   onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation,
 }: Props) {
   const [tab, setTab] = useState<'jugadores' | 'clubes' | 'pipeline'>('jugadores')
-  const [season, setSeason] = useState('2025-26')
+  const season = CURRENT_SEASON
   const [search, setSearch] = useState('')
 
   // panel state
@@ -154,13 +154,7 @@ export function Distribution({
         </div>
         <div className="flex items-center gap-2 flex-1 min-w-0 sm:ml-2">
           <span className="font-semibold text-slate-800 text-sm sm:hidden">Distribución</span>
-          <select
-            value={season}
-            onChange={e => setSeason(e.target.value)}
-            className="text-xs border border-slate-200 rounded-md px-2 py-1 bg-slate-50 text-slate-600"
-          >
-            {SEASONS.map(s => <option key={s}>{s}</option>)}
-          </select>
+          <span className="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded-md">{CURRENT_SEASON}</span>
         </div>
         <div className="flex items-center gap-1">
           {currentProfile.is_admin && onAdmin && (
