@@ -759,7 +759,6 @@ export function Distribution({
       {/* Bulk assign modal */}
       {bulkAssignPlayerId && (
         <BulkAssignModal
-          playerId={bulkAssignPlayerId}
           clubs={clubs}
           existingNegotiations={negotiations.filter(n => n.playerId === bulkAssignPlayerId)}
           onClose={() => setBulkAssignPlayerId(null)}
@@ -1274,8 +1273,7 @@ function ModalShell({ title, onClose, children }: { title: string; onClose: () =
 
 // ── BULK ASSIGN MODAL ────────────────────────────────────────
 
-function BulkAssignModal({ playerId, clubs, existingNegotiations, onClose, onSave }: {
-  playerId: string
+function BulkAssignModal({ clubs, existingNegotiations, onClose, onSave }: {
   clubs: Club[]
   existingNegotiations: ClubNegotiation[]
   onClose: () => void

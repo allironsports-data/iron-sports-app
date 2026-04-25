@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import {
-  ArrowLeft, Building2, Users, Star, Plus, X, Pencil,
+  ArrowLeft, Building2, Star, Plus, X, Pencil,
   ChevronRight, Trash2, Check, LogOut, AlertCircle, Phone,
 } from 'lucide-react'
 import type { Club, ClubNegotiation, DistributionEntry, Player, ClubNeed } from '../types'
