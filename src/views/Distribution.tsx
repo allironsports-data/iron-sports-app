@@ -2,9 +2,9 @@ import { useState, useMemo } from 'react'
 import {
   ArrowLeft, Plus, Search, Star, Building2, Users,
   ChevronRight, X, Check, Pencil, Trash2, LogOut,
-  TrendingUp, AlertCircle, CircleDot, Flag,
+  TrendingUp, AlertCircle, CircleDot, Flag, ChevronDown,
 } from 'lucide-react'
-import type { Player, Club, DistributionEntry, ClubNegotiation } from '../types'
+import type { Player, Club, ClubNeed, DistributionEntry, ClubNegotiation } from '../types'
 import type { Profile } from '../contexts/AuthContext'
 
 // ── constants ─────────────────────────────────────────────────
@@ -77,7 +77,7 @@ export function Distribution({
   onCreateEntry, onUpdateEntry, onDeleteEntry,
   onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation,
 }: Props) {
-  const [tab, setTab] = useState<'jugadores' | 'clubes' | 'pipeline'>('jugadores')
+  const [tab, setTab] = useState<'jugadores' | 'clubes' | 'solicitudes' | 'pipeline'>('jugadores')
   const season = CURRENT_SEASON
   const [search, setSearch] = useState('')
 
@@ -94,7 +94,12 @@ export function Distribution({
   const [editingNeg, setEditingNeg] = useState<ClubNegotiation | null>(null)
   const [bulkAssignPlayerId, setBulkAssignPlayerId] = useState<string | null>(null)
 
+  // filters
+  const [leagueFilter, setLeagueFilter] = useState<string | null>(null)
+  const [positionFilter, setPositionFilter] = useState('')
+
   const seasonEntries = entries.filter(e => e.season === season)
+
   const filteredEntries = useMemo(() => {
     if (!search) return seasonEntries
     const q = search.toLowerCase()
@@ -105,16 +110,52 @@ export function Distribution({
   }, [seasonEntries, search, players])
 
   const filteredClubs = useMemo(() => {
-    if (!search) return clubs
+    let result = clubs
+    if (leagueFilter) result = result.filter(c => (c.league ?? 'Sin liga') === leagueFilter)
+    if (!search) return result
     const q = search.toLowerCase()
-    return clubs.filter(c => c.name.toLowerCase().includes(q) || c.league?.toLowerCase().includes(q))
-  }, [clubs, search])
+    return result.filter(c => c.name.toLowerCase().includes(q) || c.league?.toLowerCase().includes(q))
+  }, [clubs, search, leagueFilter])
+
+  const sortedLeagues = useMemo(() => {
+    const map = new Map<string, number>()
+    clubs.forEach(c => {
+      const key = c.league ?? 'Sin liga'
+      map.set(key, (map.get(key) ?? 0) + 1)
+    })
+    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b))
+  }, [clubs])
+
+  const allNeedsPositions = useMemo(() => {
+    const positions = new Set<string>()
+    clubs.forEach(c => c.needs.forEach(n => positions.add(n.position)))
+    return Array.from(positions).sort()
+  }, [clubs])
+
+  const clubNeeds = useMemo(() => {
+    const results: Array<{ club: Club; need: ClubNeed }> = []
+    clubs.forEach(club => club.needs.forEach(need => results.push({ club, need })))
+    const pf = positionFilter.toLowerCase()
+    const q = search.toLowerCase()
+    return results.filter(r =>
+      (!pf || r.need.position.toLowerCase().includes(pf)) &&
+      (!q || r.club.name.toLowerCase().includes(q) || r.club.league?.toLowerCase().includes(q) || r.need.position.toLowerCase().includes(q))
+    )
+  }, [clubs, positionFilter, search])
 
   const selectedEntry = seasonEntries.find(e => e.id === selectedEntryId) ?? null
   const selectedClub = clubs.find(c => c.id === selectedClubId) ?? null
 
   function closePanel() { setSelectedEntryId(null); setSelectedClubId(null) }
   const hasPanel = !!selectedEntry || !!selectedClub
+
+  function switchTab(t: typeof tab) {
+    setTab(t)
+    closePanel()
+    setLeagueFilter(null)
+    setPositionFilter('')
+    setSearch('')
+  }
 
   // group entries by priority
   const byPriority = useMemo(() => ({
@@ -136,11 +177,9 @@ export function Distribution({
     <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* Header */}
       <header className="bg-white border-b border-slate-200 px-4 h-11 sm:h-14 flex items-center gap-3 flex-shrink-0">
-        {/* Mobile: arrow back. Desktop: hidden (use tab switcher below) */}
         <button onClick={onBack} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 sm:hidden">
           <ArrowLeft className="w-4 h-4" />
         </button>
-        {/* Desktop section switcher */}
         <div className="hidden sm:flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
           <button
             onClick={onBack}
@@ -167,12 +206,12 @@ export function Distribution({
       </header>
 
       {/* Tabs */}
-      <div className="bg-white border-b border-slate-200 px-4 flex gap-1">
-        {(['jugadores', 'clubes', 'pipeline'] as const).map(t => (
+      <div className="bg-white border-b border-slate-200 px-4 flex gap-1 overflow-x-auto">
+        {(['jugadores', 'clubes', 'solicitudes', 'pipeline'] as const).map(t => (
           <button
             key={t}
-            onClick={() => { setTab(t); closePanel() }}
-            className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors capitalize ${
+            onClick={() => switchTab(t)}
+            className={`flex-shrink-0 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors ${
               tab === t
                 ? 'border-[hsl(220,72%,36%)] text-[hsl(220,72%,36%)]'
                 : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -180,6 +219,7 @@ export function Distribution({
           >
             {t === 'jugadores' ? `Jugadores (${seasonEntries.length})` :
              t === 'clubes' ? `Clubes (${clubs.length})` :
+             t === 'solicitudes' ? `Solicitudes${clubNeeds.length > 0 ? ` (${clubNeeds.length})` : ''}` :
              'Pipeline'}
           </button>
         ))}
@@ -193,7 +233,11 @@ export function Distribution({
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder={tab === 'jugadores' ? 'Buscar jugador…' : 'Buscar club…'}
+              placeholder={
+                tab === 'jugadores' ? 'Buscar jugador…' :
+                tab === 'clubes' ? 'Buscar club…' :
+                'Buscar solicitud…'
+              }
               className="w-full pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200"
             />
           </div>
@@ -206,8 +250,8 @@ export function Distribution({
 
           {/* ── JUGADORES TAB ── */}
           {tab === 'jugadores' && (
-            <div className="space-y-4 max-w-3xl">
-              <div className="flex justify-end">
+            <div className="max-w-5xl mx-auto">
+              <div className="flex justify-end mb-3">
                 <button
                   onClick={() => setShowAddPlayer(true)}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-[hsl(220,72%,36%)] text-white text-sm rounded-lg hover:bg-[hsl(220,72%,30%)] transition-colors"
@@ -216,68 +260,67 @@ export function Distribution({
                 </button>
               </div>
 
-              {(['A', 'B', 'C'] as const).map(pr => {
-                const group = byPriority[pr]
-                if (group.length === 0) return null
-                const cfg = PRIORITY_CONFIG[pr]
-                return (
-                  <div key={pr}>
-                    <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-semibold mb-2 ${cfg.bg} ${cfg.text}`}>
-                      <Flag className="w-3.5 h-3.5" /> Prioridad {pr} — {group.length} jugador{group.length !== 1 ? 'es' : ''}
-                    </div>
-                    <div className="space-y-2">
-                      {group.map(entry => {
-                        const player = players.find(p => p.id === entry.playerId)
-                        if (!player) return null
-                        const negCount = negotiations.filter(n => n.playerId === entry.playerId).length
-                        const activeNegs = negotiations.filter(n => n.playerId === entry.playerId && !['descartado'].includes(n.status))
-                        const topStatus = activeNegs.find(n => n.status === 'negociando')?.status
-                          ?? activeNegs.find(n => n.status === 'interesado')?.status
-                          ?? activeNegs.find(n => n.status === 'ofrecido')?.status
-                          ?? activeNegs.find(n => n.status === 'cerrado')?.status
+              <div className="space-y-3">
+                {(['A', 'B', 'C'] as const).map(pr => {
+                  const group = byPriority[pr]
+                  if (group.length === 0) return null
+                  const cfg = PRIORITY_CONFIG[pr]
+                  return (
+                    <div key={pr}>
+                      <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold mb-2 ${cfg.bg} ${cfg.text}`}>
+                        <Flag className="w-3 h-3" /> Prioridad {pr} — {group.length} jugador{group.length !== 1 ? 'es' : ''}
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-1.5">
+                        {group.map(entry => {
+                          const player = players.find(p => p.id === entry.playerId)
+                          if (!player) return null
+                          const negCount = negotiations.filter(n => n.playerId === entry.playerId).length
+                          const activeNegs = negotiations.filter(n => n.playerId === entry.playerId && !['descartado'].includes(n.status))
+                          const topStatus = activeNegs.find(n => n.status === 'negociando')?.status
+                            ?? activeNegs.find(n => n.status === 'interesado')?.status
+                            ?? activeNegs.find(n => n.status === 'ofrecido')?.status
+                            ?? activeNegs.find(n => n.status === 'cerrado')?.status
 
-                        return (
-                          <div
-                            key={entry.id}
-                            onClick={() => { setSelectedEntryId(entry.id); setSelectedClubId(null) }}
-                            className={`bg-white rounded-xl border cursor-pointer hover:shadow-sm transition-all flex items-center gap-3 px-4 py-3 ${
-                              selectedEntryId === entry.id ? 'border-blue-300 ring-1 ring-blue-200' : 'border-slate-200'
-                            }`}
-                          >
-                            <Avatar name={player.name} photo={player.photo} />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-medium text-slate-800 text-sm">{player.name}</span>
-                                <span className="text-xs text-slate-400">{player.positions[0]}</span>
-                                {player.hiddenFromManagement && (
-                                  <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium">Intermediar</span>
-                                )}
-                                {entry.condition && (
-                                  <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{entry.condition}</span>
-                                )}
-                                {entry.transferFee && (
-                                  <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">{entry.transferFee}</span>
-                                )}
+                          return (
+                            <div
+                              key={entry.id}
+                              onClick={() => { setSelectedEntryId(entry.id); setSelectedClubId(null) }}
+                              className={`bg-white rounded-lg border cursor-pointer hover:shadow-sm transition-all flex items-center gap-2.5 px-3 py-2 ${
+                                selectedEntryId === entry.id ? 'border-blue-300 ring-1 ring-blue-200' : 'border-slate-200'
+                              }`}
+                            >
+                              <Avatar name={player.name} photo={player.photo} />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-medium text-slate-800 text-sm truncate">{player.name}</span>
+                                  <span className="text-xs text-slate-400 flex-shrink-0">{player.positions[0]}</span>
+                                  {player.hiddenFromManagement && (
+                                    <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full font-medium flex-shrink-0">Intermediar</span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                  {entry.condition && (
+                                    <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full">{entry.condition}</span>
+                                  )}
+                                  {topStatus && (
+                                    <span className={`text-xs px-1.5 py-0.5 rounded-full ${STATUS_CONFIG[topStatus].color}`}>
+                                      {STATUS_CONFIG[topStatus].label}
+                                    </span>
+                                  )}
+                                  {negCount > 0 && (
+                                    <span className="text-xs text-slate-400">{negCount} club{negCount !== 1 ? 's' : ''}</span>
+                                  )}
+                                </div>
                               </div>
-                              <div className="flex items-center gap-2 mt-0.5">
-                                {topStatus && (
-                                  <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_CONFIG[topStatus].color}`}>
-                                    {STATUS_CONFIG[topStatus].label}
-                                  </span>
-                                )}
-                                {negCount > 0 && (
-                                  <span className="text-xs text-slate-400">{negCount} club{negCount !== 1 ? 's' : ''}</span>
-                                )}
-                              </div>
+                              <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
                             </div>
-                            <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
-                          </div>
-                        )
-                      })}
+                          )
+                        })}
+                      </div>
                     </div>
-                  </div>
-                )
-              })}
+                  )
+                })}
+              </div>
 
               {filteredEntries.length === 0 && (
                 <div className="text-center py-12 text-slate-400 text-sm">
@@ -289,7 +332,7 @@ export function Distribution({
 
           {/* ── CLUBES TAB ── */}
           {tab === 'clubes' && (
-            <div className="space-y-2 max-w-3xl">
+            <div className="max-w-5xl mx-auto">
               <div className="flex justify-end mb-2">
                 <button
                   onClick={() => setShowAddClub(true)}
@@ -299,48 +342,154 @@ export function Distribution({
                 </button>
               </div>
 
-              {filteredClubs.map(club => {
-                const offered = negotiations.filter(n => n.clubId === club.id)
-                const activeNegs = offered.filter(n => !['descartado'].includes(n.status))
-                return (
-                  <div
-                    key={club.id}
-                    onClick={() => {
-                      if (onSelectClub) {
-                        onSelectClub(club.id)
-                      } else {
-                        setSelectedClubId(club.id); setSelectedEntryId(null)
-                      }
-                    }}
-                    className={`bg-white rounded-xl border cursor-pointer hover:shadow-sm transition-all flex items-center gap-3 px-4 py-3 ${
-                      selectedClubId === club.id ? 'border-blue-300 ring-1 ring-blue-200' : 'border-slate-200'
-                    } ${club.isPriority ? 'border-l-4 border-l-green-400' : ''}`}
+              {/* League filter chips */}
+              <div className="flex gap-1.5 overflow-x-auto pb-2 mb-3 -mx-4 px-4">
+                <button
+                  onClick={() => setLeagueFilter(null)}
+                  className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                    leagueFilter === null
+                      ? 'bg-[hsl(220,72%,36%)] text-white'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  Todas ({clubs.length})
+                </button>
+                {sortedLeagues.map(([league, count]) => (
+                  <button
+                    key={league}
+                    onClick={() => setLeagueFilter(leagueFilter === league ? null : league)}
+                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                      leagueFilter === league
+                        ? 'bg-[hsl(220,72%,36%)] text-white'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
                   >
-                    <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
-                      <Building2 className="w-4 h-4 text-slate-400" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-slate-800 text-sm">{club.name}</span>
-                        {club.isPriority && <Star className="w-3.5 h-3.5 text-green-500 fill-green-500" />}
-                        {club.league && <span className="text-xs text-slate-400">{club.league}</span>}
+                    {league} ({count})
+                  </button>
+                ))}
+              </div>
+
+              {/* Clubs grid — grouped by league when no filter, flat when filtered */}
+              {leagueFilter ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-1.5">
+                  {filteredClubs.map(club => (
+                    <ClubCard
+                      key={club.id}
+                      club={club}
+                      negotiations={negotiations}
+                      isSelected={selectedClubId === club.id}
+                      onClick={() => {
+                        if (onSelectClub) { onSelectClub(club.id) }
+                        else { setSelectedClubId(club.id); setSelectedEntryId(null) }
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {sortedLeagues.map(([league]) => {
+                    const leagueClubs = filteredClubs.filter(c => (c.league ?? 'Sin liga') === league)
+                    if (leagueClubs.length === 0) return null
+                    return (
+                      <div key={league}>
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{league}</span>
+                          <span className="text-xs text-slate-400">({leagueClubs.length})</span>
+                          <div className="flex-1 h-px bg-slate-200" />
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-1.5">
+                          {leagueClubs.map(club => (
+                            <ClubCard
+                              key={club.id}
+                              club={club}
+                              negotiations={negotiations}
+                              isSelected={selectedClubId === club.id}
+                              onClick={() => {
+                                if (onSelectClub) { onSelectClub(club.id) }
+                                else { setSelectedClubId(club.id); setSelectedEntryId(null) }
+                              }}
+                            />
+                          ))}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-500">
-                        {club.contactPerson && <span>{club.contactPerson}</span>}
-                        {club.aisManager && <span className="font-mono bg-slate-100 px-1 rounded">{club.aisManager}</span>}
-                        {activeNegs.length > 0 && (
-                          <span className="text-blue-600">{activeNegs.length} ofrecido{activeNegs.length !== 1 ? 's' : ''}</span>
-                        )}
-                      </div>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
-                  </div>
-                )
-              })}
+                    )
+                  })}
+                </div>
+              )}
 
               {filteredClubs.length === 0 && (
                 <div className="text-center py-12 text-slate-400 text-sm">
-                  {search ? 'Sin resultados' : 'No hay clubes. Añade uno.'}
+                  {search || leagueFilter ? 'Sin resultados' : 'No hay clubes. Añade uno.'}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── SOLICITUDES TAB ── */}
+          {tab === 'solicitudes' && (
+            <div className="max-w-5xl mx-auto">
+              {/* Position filter chips */}
+              <div className="flex gap-1.5 overflow-x-auto pb-2 mb-3 -mx-4 px-4">
+                <button
+                  onClick={() => setPositionFilter('')}
+                  className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                    !positionFilter
+                      ? 'bg-[hsl(220,72%,36%)] text-white'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  Todas las posiciones
+                </button>
+                {allNeedsPositions.map(pos => (
+                  <button
+                    key={pos}
+                    onClick={() => setPositionFilter(positionFilter === pos ? '' : pos)}
+                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                      positionFilter === pos
+                        ? 'bg-[hsl(220,72%,36%)] text-white'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    {pos}
+                  </button>
+                ))}
+              </div>
+
+              {clubNeeds.length === 0 ? (
+                <div className="text-center py-12 text-slate-400 text-sm">
+                  {clubs.every(c => c.needs.length === 0)
+                    ? 'Ningún club tiene solicitudes registradas aún'
+                    : 'Sin resultados para este filtro'}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-1.5">
+                  {clubNeeds.map(({ club, need }, i) => (
+                    <div
+                      key={`${club.id}-${i}`}
+                      onClick={() => { setSelectedClubId(club.id); setSelectedEntryId(null) }}
+                      className="bg-white rounded-lg border border-slate-200 px-3 py-2 flex items-start gap-2.5 cursor-pointer hover:shadow-sm transition-all"
+                    >
+                      <div className="flex-shrink-0 mt-0.5">
+                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-md text-xs font-semibold">
+                          <AlertCircle className="w-3 h-3" />
+                          {need.position}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-medium text-slate-800 text-sm truncate">{club.name}</span>
+                          {club.league && <span className="text-xs text-slate-400">{club.league}</span>}
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-0.5 flex-wrap">
+                          {need.ageMax && <span>Sub-{need.ageMax}</span>}
+                          {need.transferBudget && <span>· {need.transferBudget}</span>}
+                          {need.salaryBudget && <span>· {need.salaryBudget}/mes</span>}
+                          {need.notes && <span className="text-slate-400 truncate">· {need.notes}</span>}
+                        </div>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0 mt-1" />
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -411,7 +560,6 @@ export function Distribution({
               const cfg = PRIORITY_CONFIG[selectedEntry.priority]
               return (
                 <div className="h-full flex flex-col">
-                  {/* Panel header */}
                   <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 flex-shrink-0">
                     <button onClick={closePanel} className="p-1 rounded hover:bg-slate-100 text-slate-400">
                       <X className="w-4 h-4" />
@@ -429,7 +577,6 @@ export function Distribution({
                     </button>
                   </div>
 
-                  {/* Entry info */}
                   <div className="px-4 py-3 bg-slate-50 border-b border-slate-100">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${cfg.bg} ${cfg.text}`}>
@@ -457,7 +604,6 @@ export function Distribution({
                     )}
                   </div>
 
-                  {/* Negotiations */}
                   <div className="flex-1 overflow-y-auto px-4 py-3">
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Clubes ({playerNegs.length})</span>
@@ -465,7 +611,7 @@ export function Distribution({
                         <button
                           onClick={() => setBulkAssignPlayerId(selectedEntry.playerId)}
                           className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-700 font-medium"
-                          title="Asignar liga entera"
+                          title="Asignar por liga"
                         >
                           <Users className="w-3.5 h-3.5" /> Por liga
                         </button>
@@ -513,7 +659,6 @@ export function Distribution({
                     </div>
                   </div>
 
-                  {/* Delete entry */}
                   <div className="px-4 py-3 border-t border-slate-100 flex-shrink-0">
                     <button
                       onClick={async () => {
@@ -531,10 +676,9 @@ export function Distribution({
             })()}
 
             {selectedClub && (() => {
-              const clubNegs = negotiations.filter(n => n.clubId === selectedClub.id)
+              const clubNegsPanel = negotiations.filter(n => n.clubId === selectedClub.id)
               return (
                 <div className="h-full flex flex-col">
-                  {/* Panel header */}
                   <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 flex-shrink-0">
                     <button onClick={closePanel} className="p-1 rounded hover:bg-slate-100 text-slate-400">
                       <X className="w-4 h-4" />
@@ -551,7 +695,6 @@ export function Distribution({
                     </button>
                   </div>
 
-                  {/* Club info */}
                   <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 space-y-1.5">
                     {selectedClub.contactPerson && (
                       <div className="flex items-center gap-2 text-sm">
@@ -577,7 +720,6 @@ export function Distribution({
                     )}
                   </div>
 
-                  {/* Needs */}
                   {selectedClub.needs.length > 0 && (
                     <div className="px-4 py-3 border-b border-slate-100">
                       <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Necesidades</div>
@@ -595,10 +737,9 @@ export function Distribution({
                     </div>
                   )}
 
-                  {/* Negotiations */}
                   <div className="flex-1 overflow-y-auto px-4 py-3">
                     <div className="flex items-center justify-between mb-3">
-                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Ofrecidos ({clubNegs.length})</span>
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Ofrecidos ({clubNegsPanel.length})</span>
                       <button
                         onClick={() => setShowAddNeg({ clubId: selectedClub.id })}
                         className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
@@ -607,7 +748,7 @@ export function Distribution({
                       </button>
                     </div>
                     <div className="space-y-2">
-                      {clubNegs.map(neg => {
+                      {clubNegsPanel.map(neg => {
                         const player = players.find(p => p.id === neg.playerId)
                         const entry = entries.find(e => e.playerId === neg.playerId)
                         if (!player) return null
@@ -638,7 +779,7 @@ export function Distribution({
                           </div>
                         )
                       })}
-                      {clubNegs.length === 0 && (
+                      {clubNegsPanel.length === 0 && (
                         <div className="text-center py-6 text-slate-400 text-xs">
                           Sin jugadores ofrecidos aún
                         </div>
@@ -646,7 +787,6 @@ export function Distribution({
                     </div>
                   </div>
 
-                  {/* Delete club */}
                   <div className="px-4 py-3 border-t border-slate-100 flex-shrink-0">
                     <button
                       onClick={async () => {
@@ -668,7 +808,6 @@ export function Distribution({
 
       {/* ── MODALS ── */}
 
-      {/* Add player to distribution */}
       {showAddPlayer && (
         <AddPlayerModal
           players={players}
@@ -683,7 +822,6 @@ export function Distribution({
         />
       )}
 
-      {/* Add club */}
       {showAddClub && (
         <AddClubModal
           onClose={() => setShowAddClub(false)}
@@ -695,7 +833,6 @@ export function Distribution({
         />
       )}
 
-      {/* Add negotiation */}
       {showAddNeg && (
         <AddNegotiationModal
           players={players}
@@ -711,7 +848,6 @@ export function Distribution({
         />
       )}
 
-      {/* Edit entry */}
       {editingEntry && (
         <EditEntryModal
           entry={editingEntry}
@@ -723,7 +859,6 @@ export function Distribution({
         />
       )}
 
-      {/* Edit club */}
       {editingClub && (
         <EditClubModal
           club={editingClub}
@@ -735,7 +870,6 @@ export function Distribution({
         />
       )}
 
-      {/* Edit negotiation */}
       {editingNeg && (
         <EditNegotiationModal
           neg={editingNeg}
@@ -753,7 +887,6 @@ export function Distribution({
         />
       )}
 
-      {/* Bulk assign modal */}
       {bulkAssignPlayerId && (
         <BulkAssignModal
           clubs={clubs}
@@ -767,6 +900,47 @@ export function Distribution({
           }}
         />
       )}
+    </div>
+  )
+}
+
+// ── CLUB CARD ────────────────────────────────────────────────
+
+function ClubCard({ club, negotiations, isSelected, onClick }: {
+  club: Club
+  negotiations: ClubNegotiation[]
+  isSelected: boolean
+  onClick: () => void
+}) {
+  const activeNegs = negotiations.filter(n => n.clubId === club.id && n.status !== 'descartado')
+  return (
+    <div
+      onClick={onClick}
+      className={`bg-white rounded-lg border cursor-pointer hover:shadow-sm transition-all flex items-center gap-2.5 px-3 py-2 ${
+        isSelected ? 'border-blue-300 ring-1 ring-blue-200' : 'border-slate-200'
+      } ${club.isPriority ? 'border-l-4 border-l-green-400' : ''}`}
+    >
+      <div className="w-7 h-7 rounded-md bg-slate-100 flex items-center justify-center flex-shrink-0">
+        <Building2 className="w-3.5 h-3.5 text-slate-400" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="font-medium text-slate-800 text-sm truncate">{club.name}</span>
+          {club.isPriority && <Star className="w-3 h-3 text-green-500 fill-green-500 flex-shrink-0" />}
+          {club.needs.length > 0 && (
+            <span className="text-xs bg-amber-50 text-amber-600 border border-amber-200 px-1.5 py-0.5 rounded-full flex-shrink-0">
+              {club.needs.length} nec.
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-500">
+          {club.contactPerson && <span className="truncate">{club.contactPerson}</span>}
+          {activeNegs.length > 0 && (
+            <span className="text-blue-600 flex-shrink-0">{activeNegs.length} ofrecido{activeNegs.length !== 1 ? 's' : ''}</span>
+          )}
+        </div>
+      </div>
+      <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
     </div>
   )
 }
@@ -852,7 +1026,6 @@ function AddPlayerModal({ players, existingPlayerIds, season, onClose, onSave }:
             </button>
           </div>
 
-          {/* Priority — tap to select */}
           <div>
             <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1.5">Prioridad</label>
             <div className="flex gap-2">
@@ -871,7 +1044,6 @@ function AddPlayerModal({ players, existingPlayerIds, season, onClose, onSave }:
             </div>
           </div>
 
-          {/* Condition */}
           <div>
             <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1.5">Condición de salida</label>
             <select
@@ -884,7 +1056,6 @@ function AddPlayerModal({ players, existingPlayerIds, season, onClose, onSave }:
             </select>
           </div>
 
-          {/* Fee (only if traspaso) */}
           {(condition.includes('Traspaso') || condition.includes('traspaso')) && (
             <div>
               <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1.5">Importe</label>
@@ -897,7 +1068,6 @@ function AddPlayerModal({ players, existingPlayerIds, season, onClose, onSave }:
             </div>
           )}
 
-          {/* Notes */}
           <div>
             <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1.5">Notas (opcional)</label>
             <textarea
@@ -952,7 +1122,7 @@ function AddClubModal({ onClose, onSave }: {
         </div>
         <div>
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Liga</label>
-          <input value={league} onChange={e => setLeague(e.target.value)} placeholder="Spain 2, Spain 3, Greece…" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+          <input value={league} onChange={e => setLeague(e.target.value)} placeholder="La Liga, La Liga 2, Primera RFEF…" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
         </div>
         <div className="flex gap-2">
           <div className="flex-1">
@@ -1268,7 +1438,9 @@ function ModalShell({ title, onClose, children }: { title: string; onClose: () =
   )
 }
 
-// ── BULK ASSIGN MODAL ────────────────────────────────────────
+// ── BULK ASSIGN MODAL ─────────────────────────────────────────
+// Accordion-style: shows all leagues with select-all checkbox per league.
+// Multiple leagues can be expanded and selected simultaneously.
 
 function BulkAssignModal({ clubs, existingNegotiations, onClose, onSave }: {
   clubs: Club[]
@@ -1276,7 +1448,6 @@ function BulkAssignModal({ clubs, existingNegotiations, onClose, onSave }: {
   onClose: () => void
   onSave: (clubIds: string[]) => Promise<void>
 }) {
-  // group clubs by league
   const leagues = useMemo(() => {
     const map = new Map<string, Club[]>()
     clubs.forEach(c => {
@@ -1287,23 +1458,47 @@ function BulkAssignModal({ clubs, existingNegotiations, onClose, onSave }: {
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b))
   }, [clubs])
 
-  const [selectedLeague, setSelectedLeague] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [saving, setSaving] = useState(false)
 
   const existingIds = new Set(existingNegotiations.map(n => n.clubId))
-  const leagueClubs = selectedLeague ? (leagues.find(([l]) => l === selectedLeague)?.[1] ?? []) : []
   const newIds = Array.from(selected).filter(id => !existingIds.has(id))
 
-  function selectLeague(league: string) {
-    setSelectedLeague(league)
-    const leagueClubIds = (leagues.find(([l]) => l === league)?.[1] ?? [])
-      .filter(c => !existingIds.has(c.id))
-      .map(c => c.id)
-    setSelected(new Set(leagueClubIds))
+  function toggleExpand(league: string) {
+    setExpanded(prev => {
+      const next = new Set(prev)
+      if (next.has(league)) next.delete(league); else next.add(league)
+      return next
+    })
   }
 
-  function toggle(id: string) {
+  function getLeagueState(league: string): 'all' | 'partial' | 'none' {
+    const available = (leagues.find(([l]) => l === league)?.[1] ?? []).filter(c => !existingIds.has(c.id))
+    if (available.length === 0) return 'all'
+    const count = available.filter(c => selected.has(c.id)).length
+    if (count === 0) return 'none'
+    if (count === available.length) return 'all'
+    return 'partial'
+  }
+
+  function toggleLeague(league: string) {
+    const available = (leagues.find(([l]) => l === league)?.[1] ?? [])
+      .filter(c => !existingIds.has(c.id))
+      .map(c => c.id)
+    const state = getLeagueState(league)
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (state === 'all') {
+        available.forEach(id => next.delete(id))
+      } else {
+        available.forEach(id => next.add(id))
+      }
+      return next
+    })
+  }
+
+  function toggleClub(id: string) {
     setSelected(prev => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id); else next.add(id)
@@ -1320,85 +1515,111 @@ function BulkAssignModal({ clubs, existingNegotiations, onClose, onSave }: {
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
       <div className="bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white rounded-t-2xl">
-          <h2 className="font-semibold text-slate-800 text-sm">Asignar por liga</h2>
-          <button onClick={onClose} className="p-1 rounded hover:bg-slate-100 text-slate-400"><X className="w-4 h-4" /></button>
+        {/* Header */}
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 flex-shrink-0">
+          <h2 className="font-semibold text-slate-800 text-sm flex-1">Asignar por liga</h2>
+          {newIds.length > 0 && (
+            <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full font-medium">
+              {newIds.length} seleccionado{newIds.length !== 1 ? 's' : ''}
+            </span>
+          )}
+          <button onClick={onClose} className="p-1 rounded hover:bg-slate-100 text-slate-400">
+            <X className="w-4 h-4" />
+          </button>
         </div>
 
-        {!selectedLeague ? (
-          <div className="p-4 overflow-y-auto flex-1">
-            <p className="text-xs text-slate-500 mb-3">Selecciona una liga para asignar todos sus clubes como <span className="font-semibold text-purple-700">Pendiente</span>:</p>
-            <div className="space-y-1">
-              {leagues.map(([league, leagueClubs]) => {
-                const existing = leagueClubs.filter(c => existingIds.has(c.id)).length
-                const total = leagueClubs.length
-                return (
+        <p className="px-4 py-2 text-xs text-slate-500 border-b border-slate-100 flex-shrink-0">
+          Marca ligas enteras o clubes individuales. Se crearán como <span className="font-semibold text-purple-700">Pendiente</span>.
+        </p>
+
+        {/* Leagues accordion */}
+        <div className="overflow-y-auto flex-1">
+          {leagues.map(([league, leagueClubs]) => {
+            const isExpanded = expanded.has(league)
+            const state = getLeagueState(league)
+            const available = leagueClubs.filter(c => !existingIds.has(c.id))
+            const allAlreadyAssigned = available.length === 0
+
+            return (
+              <div key={league} className="border-b border-slate-100 last:border-0">
+                <div className="flex items-center px-4 py-2.5 gap-3 hover:bg-slate-50">
+                  {/* League-level checkbox */}
+                  <input
+                    type="checkbox"
+                    checked={state !== 'none'}
+                    disabled={allAlreadyAssigned}
+                    ref={el => { if (el) el.indeterminate = state === 'partial' }}
+                    onChange={() => toggleLeague(league)}
+                    className="w-4 h-4 rounded text-purple-600 cursor-pointer flex-shrink-0"
+                  />
+                  {/* League name — click to expand */}
                   <button
-                    key={league}
-                    onClick={() => selectLeague(league)}
-                    className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50 transition-colors text-left"
+                    onClick={() => toggleExpand(league)}
+                    className="flex-1 flex items-center gap-2 text-left min-w-0"
                   >
-                    <div>
-                      <span className="font-medium text-slate-800 text-sm">{league}</span>
-                      <span className="text-xs text-slate-400 ml-2">{total} club{total !== 1 ? 's' : ''}</span>
-                    </div>
-                    {existing > 0 && (
-                      <span className="text-xs bg-green-50 text-green-600 border border-green-200 px-2 py-0.5 rounded-full">{existing} ya asignado{existing !== 1 ? 's' : ''}</span>
+                    <span className="font-medium text-slate-800 text-sm truncate">{league}</span>
+                    <span className="text-xs text-slate-400 flex-shrink-0">{leagueClubs.length}</span>
+                    {state === 'all' && !allAlreadyAssigned && (
+                      <span className="text-xs text-purple-600 font-medium flex-shrink-0">✓ todos</span>
                     )}
+                    {allAlreadyAssigned && (
+                      <span className="text-xs text-green-600 flex-shrink-0">ya asignados</span>
+                    )}
+                    <ChevronDown className={`w-3.5 h-3.5 text-slate-400 ml-auto flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                   </button>
-                )
-              })}
-            </div>
-          </div>
-        ) : (
-          <>
-            <div className="px-4 py-2 border-b border-slate-100 flex items-center gap-2">
-              <button onClick={() => setSelectedLeague(null)} className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1">
-                ← Cambiar liga
-              </button>
-              <span className="text-sm font-semibold text-slate-800 flex-1 text-center">{selectedLeague}</span>
-              <span className="text-xs text-slate-400">{selected.size} seleccionado{selected.size !== 1 ? 's' : ''}</span>
-            </div>
-            <div className="overflow-y-auto flex-1 px-4 py-3 space-y-1">
-              {leagueClubs.map(club => {
-                const alreadyExists = existingIds.has(club.id)
-                const isSelected = selected.has(club.id)
-                return (
-                  <label
-                    key={club.id}
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border cursor-pointer transition-colors ${
-                      alreadyExists ? 'border-green-200 bg-green-50 cursor-not-allowed opacity-60' :
-                      isSelected ? 'border-blue-300 bg-blue-50' : 'border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected || alreadyExists}
-                      disabled={alreadyExists}
-                      onChange={() => !alreadyExists && toggle(club.id)}
-                      className="w-4 h-4 rounded text-blue-600"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <span className="text-sm font-medium text-slate-800">{club.name}</span>
-                      {club.aisManager && <span className="text-xs font-mono text-slate-400 ml-2">{club.aisManager}</span>}
-                    </div>
-                    {alreadyExists && <span className="text-xs text-green-600 flex-shrink-0">Ya asignado</span>}
-                  </label>
-                )
-              })}
-            </div>
-            <div className="px-4 py-3 border-t border-slate-100 flex gap-2">
-              <button onClick={onClose} className="flex-1 py-2 text-sm border border-slate-200 rounded-lg text-slate-500">Cancelar</button>
-              <button
-                onClick={handleSave}
-                disabled={newIds.length === 0 || saving}
-                className="flex-1 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
-              >
-                {saving ? 'Asignando…' : `Asignar ${newIds.length} club${newIds.length !== 1 ? 's' : ''}`}
-              </button>
-            </div>
-          </>
-        )}
+                </div>
+
+                {isExpanded && (
+                  <div className="px-4 pb-2 space-y-1 bg-slate-50">
+                    {leagueClubs.map(club => {
+                      const alreadyExists = existingIds.has(club.id)
+                      const isSelected = selected.has(club.id)
+                      return (
+                        <label
+                          key={club.id}
+                          className={`flex items-center gap-3 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${
+                            alreadyExists
+                              ? 'border-green-200 bg-green-50 cursor-not-allowed opacity-60'
+                              : isSelected
+                                ? 'border-purple-300 bg-purple-50'
+                                : 'border-slate-200 bg-white hover:bg-slate-50'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected || alreadyExists}
+                            disabled={alreadyExists}
+                            onChange={() => !alreadyExists && toggleClub(club.id)}
+                            className="w-4 h-4 rounded text-purple-600"
+                          />
+                          <span className="flex-1 text-sm text-slate-800 truncate">{club.name}</span>
+                          {club.aisManager && (
+                            <span className="text-xs font-mono text-slate-400 flex-shrink-0">{club.aisManager}</span>
+                          )}
+                          {alreadyExists && <span className="text-xs text-green-600 flex-shrink-0">asignado</span>}
+                        </label>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Footer */}
+        <div className="px-4 py-3 border-t border-slate-100 flex gap-2 flex-shrink-0">
+          <button onClick={onClose} className="flex-1 py-2 text-sm border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50">
+            Cancelar
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={newIds.length === 0 || saving}
+            className="flex-1 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 font-medium"
+          >
+            {saving ? 'Asignando…' : `Asignar ${newIds.length} club${newIds.length !== 1 ? 's' : ''}`}
+          </button>
+        </div>
       </div>
     </div>
   )
