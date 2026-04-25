@@ -31,6 +31,7 @@ const PRIMARY = "hsl(220,72%,26%)";
 
 interface Props {
   view?: 'tareas' | 'jugadores';   // which section to show
+  onViewChange?: (v: 'tareas' | 'jugadores' | 'distribucion') => void;
   players: Player[];
   tasks: Task[];
   profiles: Profile[];
@@ -70,6 +71,7 @@ function isBirthdaySoon(birthDate: string, days: number): boolean {
 
 export function Dashboard({
   view = 'tareas',
+  onViewChange,
   players,
   tasks,
   profiles,
@@ -187,26 +189,35 @@ export function Dashboard({
   // Tasks for kanban: respects tab filter + quickFilter from stat cards
   const activeDashboardTasks = (status: Task["status"]) => {
     const now = new Date();
-    // Base pool from tab selection
+    const notAdmin = (t: Task) => t.adminOnly && !currentProfile.is_admin;
+
+    // quickFilter uses the FULL task pool (ignore mineSubTab)
+    if (quickFilter === "overdue") {
+      const pool = tasks.filter(t => t.status !== "completada" && t.dueDate && new Date(t.dueDate) < now && !notAdmin(t));
+      return pool.filter(t => t.status === status).sort((a, b) => {
+        const prio = { alta: 0, media: 1, baja: 2 };
+        return prio[a.priority] - prio[b.priority];
+      });
+    }
+    if (quickFilter === "urgent") {
+      const pool = tasks.filter(t => t.priority === "alta" && t.status !== "completada" && !notAdmin(t));
+      return pool.filter(t => t.status === status);
+    }
+    if (quickFilter === "inprogress") {
+      if (status !== "en_progreso") return [];
+      return tasks.filter(t => t.status === "en_progreso" && !notAdmin(t));
+    }
+
+    // Normal pool from sub-tab selection
     let pool: Task[] = [];
     if (mineSubTab === "players") {
       pool = myPlayerTasks;
     } else if (mineSubTab === "general") {
       pool = generalTasks;
     } else if (mineSubTab === "all") {
-      pool = tasks.filter(t => t.status !== "completada" && !(t.adminOnly && !currentProfile.is_admin));
+      pool = tasks.filter(t => t.status !== "completada" && !notAdmin(t));
     } else {
-      // "mine" = my tasks + my players tasks
       pool = [...myTasks, ...myPlayerTasks];
-    }
-    // Apply quickFilter overlay
-    if (quickFilter === "overdue") {
-      pool = pool.filter(t => t.dueDate && new Date(t.dueDate) < now);
-    } else if (quickFilter === "urgent") {
-      pool = pool.filter(t => t.priority === "alta");
-    } else if (quickFilter === "inprogress") {
-      // only show en_progreso tasks regardless of status param
-      if (status !== "en_progreso") return [];
     }
     return pool
       .filter(t => t.status === status)
@@ -313,17 +324,14 @@ export function Dashboard({
 
       {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
+        {/* Top bar: logo + actions */}
         <div className="max-w-6xl mx-auto px-3 sm:px-6 h-11 sm:h-14 flex items-center justify-between">
-          {/* Logo — icon only on mobile */}
+          {/* Logo */}
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg overflow-hidden bg-white flex-shrink-0">
               <img src={logoImg} className="w-full h-full object-contain p-0.5" alt="AIS" />
             </div>
             <span className="hidden sm:block font-black text-sm tracking-tight text-slate-900 uppercase">All Iron Sports</span>
-            <span className="hidden sm:inline text-slate-300 mx-1">·</span>
-            <span className="hidden sm:inline text-xs text-slate-400 uppercase tracking-widest">
-              {view === 'jugadores' ? 'Jugadores' : 'Tareas'}
-            </span>
           </div>
           <div className="flex items-center gap-1.5 sm:gap-2">
             {/* Global search */}
@@ -355,15 +363,6 @@ export function Dashboard({
               className="w-7 h-7 sm:w-8 sm:h-8 rounded-full text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0"
               style={{ background: PRIMARY }}
             >{currentProfile.avatar}</div>
-            {onDistribution && (
-              <button
-                onClick={onDistribution}
-                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:border-[hsl(220,72%,36%)] hover:text-[hsl(220,72%,36%)] transition-colors text-xs font-medium"
-                title="Distribución"
-              >
-                <TrendingUp className="w-3.5 h-3.5" /> Distribución
-              </button>
-            )}
             {currentProfile.is_admin && onOverview && (
               <button onClick={onOverview} className="p-1 sm:p-1.5 text-slate-400 hover:text-slate-600 transition-colors" title="Overview">
                 <BarChart3 className="w-4 h-4" />
@@ -379,6 +378,33 @@ export function Dashboard({
             </button>
           </div>
         </div>
+
+        {/* Tab nav: Tareas | Jugadores | Distribución */}
+        {onViewChange && (
+          <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center border-t border-slate-100">
+            {([
+              { id: 'tareas' as const,       label: 'Tareas' },
+              { id: 'jugadores' as const,    label: 'Jugadores' },
+              { id: 'distribucion' as const, label: 'Distribución', icon: <TrendingUp className="w-3.5 h-3.5" /> },
+            ]).map(tab => {
+              const isActive = tab.id === 'distribucion' ? false : view === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => onViewChange(tab.id)}
+                  className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                    isActive
+                      ? 'border-[hsl(220,72%,26%)] text-[hsl(220,72%,26%)]'
+                      : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+                  }`}
+                >
+                  {tab.icon}
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </header>
 
       {/* Notifications dropdown */}

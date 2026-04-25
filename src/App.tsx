@@ -13,7 +13,6 @@ import { PlayersTable } from './views/PlayersTable'
 import { Distribution } from './views/Distribution'
 import { ClubDetail } from './views/ClubDetail'
 import type { Club, DistributionEntry, ClubNegotiation } from './types'
-import { TrendingUp, Users, ClipboardList } from 'lucide-react'
 
 export interface AppNotification {
   id: string
@@ -256,9 +255,6 @@ export default function App() {
     setMainSection('distribucion')
   }
 
-  // active negotiations count (for badge)
-  const activeNegCount = negotiations.filter(n => ['pendiente', 'ofrecido', 'interesado', 'negociando'].includes(n.status)).length
-
   // ── routing ─────────────────────────────────────────────────
 
   if (showTable && profile.is_admin) {
@@ -353,95 +349,54 @@ export default function App() {
 
   if (mainSection === 'distribucion') {
     return (
-      <>
-        <Distribution
-          players={players}
-          clubs={clubs}
-          entries={distEntries}
-          negotiations={negotiations}
-          currentProfile={profile}
-          onBack={() => setMainSection('tareas')}
-          onLogout={signOut}
-          onAdmin={profile.is_admin ? () => { setMainSection('tareas'); setShowAdmin(true) } : undefined}
-          onSelectPlayer={(id) => navigateToPlayer(id, false)}
-          onSelectClub={navigateToClub}
-          onCreateClub={handleCreateClub}
-          onUpdateClub={handleUpdateClub}
-          onDeleteClub={handleDeleteClub}
-          onCreateEntry={handleCreateEntry}
-          onUpdateEntry={handleUpdateEntry}
-          onDeleteEntry={handleDeleteEntry}
-          onCreateNegotiation={handleCreateNegotiation}
-          onUpdateNegotiation={handleUpdateNegotiation}
-          onDeleteNegotiation={handleDeleteNegotiation}
-        />
-        <BottomNav section={mainSection} onSelect={setMainSection} badge={activeNegCount} />
-      </>
+      <Distribution
+        players={players}
+        clubs={clubs}
+        entries={distEntries}
+        negotiations={negotiations}
+        currentProfile={profile}
+        onBack={() => setMainSection('tareas')}
+        onLogout={signOut}
+        onAdmin={profile.is_admin ? () => { setMainSection('tareas'); setShowAdmin(true) } : undefined}
+        onSelectPlayer={(id) => navigateToPlayer(id, false)}
+        onSelectClub={navigateToClub}
+        onCreateClub={handleCreateClub}
+        onUpdateClub={handleUpdateClub}
+        onDeleteClub={handleDeleteClub}
+        onCreateEntry={handleCreateEntry}
+        onUpdateEntry={handleUpdateEntry}
+        onDeleteEntry={handleDeleteEntry}
+        onCreateNegotiation={handleCreateNegotiation}
+        onUpdateNegotiation={handleUpdateNegotiation}
+        onDeleteNegotiation={handleDeleteNegotiation}
+      />
     )
   }
 
   // 'tareas' and 'jugadores' both use Dashboard with a view prop
   return (
-    <>
-      <Dashboard
-        view={mainSection === 'jugadores' ? 'jugadores' : 'tareas'}
-        players={players}
-        tasks={tasks}
-        profiles={profiles}
-        currentProfile={profile}
-        onSelectPlayer={(id) => navigateToPlayer(id, false)}
-        onLogout={signOut}
-        onAddPlayer={handleAddPlayer}
-        onAdmin={profile.is_admin ? () => setShowAdmin(true) : undefined}
-        onBulkDelete={profile.is_admin ? handleBulkDelete : undefined}
-        onBulkAssignManager={profile.is_admin ? handleBulkAssignManager : undefined}
-        onOverview={profile.is_admin ? () => setShowOverview(true) : undefined}
-        onDistribution={() => setMainSection('distribucion')}
-        notifications={notifications}
-        onDismissNotification={dismissNotification}
-        onAddGeneralTask={handleAddTask}
-        onUpdateGeneralTask={handleUpdateTask}
-        onUpdateTask={handleUpdateTask}
-        onDeleteGeneralTask={handleDeleteTask}
-      />
-      <BottomNav section={mainSection} onSelect={setMainSection} badge={activeNegCount} />
-    </>
+    <Dashboard
+      view={mainSection === 'jugadores' ? 'jugadores' : 'tareas'}
+      onViewChange={(v) => setMainSection(v)}
+      players={players}
+      tasks={tasks}
+      profiles={profiles}
+      currentProfile={profile}
+      onSelectPlayer={(id) => navigateToPlayer(id, false)}
+      onLogout={signOut}
+      onAddPlayer={handleAddPlayer}
+      onAdmin={profile.is_admin ? () => setShowAdmin(true) : undefined}
+      onBulkDelete={profile.is_admin ? handleBulkDelete : undefined}
+      onBulkAssignManager={profile.is_admin ? handleBulkAssignManager : undefined}
+      onOverview={profile.is_admin ? () => setShowOverview(true) : undefined}
+      onDistribution={() => setMainSection('distribucion')}
+      notifications={notifications}
+      onDismissNotification={dismissNotification}
+      onAddGeneralTask={handleAddTask}
+      onUpdateGeneralTask={handleUpdateTask}
+      onUpdateTask={handleUpdateTask}
+      onDeleteGeneralTask={handleDeleteTask}
+    />
   )
 }
 
-// ── Bottom navigation bar (3 tabs) ──────────────────────────
-
-function BottomNav({ section, onSelect, badge }: {
-  section: 'tareas' | 'jugadores' | 'distribucion'
-  onSelect: (s: 'tareas' | 'jugadores' | 'distribucion') => void
-  badge: number
-}) {
-  const tabs: { id: 'tareas' | 'jugadores' | 'distribucion'; label: string; icon: React.ReactNode }[] = [
-    { id: 'tareas',      label: 'Tareas',      icon: <ClipboardList className="w-5 h-5" /> },
-    { id: 'jugadores',   label: 'Jugadores',   icon: <Users className="w-5 h-5" /> },
-    { id: 'distribucion',label: 'Distribución', icon: (
-      <div className="relative">
-        <TrendingUp className="w-5 h-5" />
-        {badge > 0 && (
-          <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 bg-blue-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5">
-            {badge > 99 ? '99+' : badge}
-          </span>
-        )}
-      </div>
-    )},
-  ]
-  return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-200 flex sm:hidden safe-area-inset-bottom">
-      {tabs.map(t => (
-        <button
-          key={t.id}
-          onClick={() => onSelect(t.id)}
-          className={`flex-1 flex flex-col items-center gap-0.5 py-2 transition-colors ${section === t.id ? 'text-[hsl(220,72%,36%)]' : 'text-slate-400'}`}
-        >
-          {t.icon}
-          <span className="text-[10px] font-medium">{t.label}</span>
-        </button>
-      ))}
-    </nav>
-  )
-}
