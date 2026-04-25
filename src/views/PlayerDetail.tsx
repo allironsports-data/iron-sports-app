@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import logoImg from '../assets/logo.jpeg';
 import type {
   Player, Task,
-  PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession,
+  PerformanceNote, PlayerLink, MatchReport, VideoSession,
   DistributionEntry, ClubNegotiation, Club,
 } from "../types";
 import { calcAge } from "../types";
@@ -41,6 +41,7 @@ interface Props {
   onCreateNegotiation?: (n: Omit<ClubNegotiation, 'id' | 'createdAt' | 'updatedAt'>) => Promise<ClubNegotiation>;
   onUpdateNegotiation?: (n: ClubNegotiation) => Promise<void>;
   onDeleteNegotiation?: (id: string) => Promise<void>;
+  onSelectClub?: (id: string) => void;
 }
 
 type TabId = "tareas" | "contrato" | "rendimiento" | "info" | "actividad" | "distribucion";
@@ -51,6 +52,7 @@ export function PlayerDetail({
   onDeletePlayer, onAdmin,
   distributionEntry, playerNegotiations = [], clubs = [],
   onUpdateEntry, onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation,
+  onSelectClub,
 }: Props) {
   const [activeTab, setActiveTab] = useState<TabId>("tareas");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -210,6 +212,7 @@ export function PlayerDetail({
             onCreateNegotiation={onCreateNegotiation}
             onUpdateNegotiation={onUpdateNegotiation}
             onDeleteNegotiation={onDeleteNegotiation}
+            onSelectClub={onSelectClub}
           />
         )}
       </main>
@@ -734,9 +737,6 @@ function ContractTab({ player, onUpdate, isAdmin }: { player: Player; onUpdate: 
         )}
       </div>
 
-      {/* Club interests / market info */}
-      <ClubInterestsSection player={player} onUpdate={onUpdate} />
-
       {/* Club / loan situation */}
       <div className="bg-white border border-slate-200 rounded-lg p-4">
         <h3 className="text-sm font-semibold text-slate-800 mb-3">Situación de club</h3>
@@ -771,114 +771,6 @@ function ContractTab({ player, onUpdate, isAdmin }: { player: Player; onUpdate: 
               </div>
             ))}
           </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ========== CLUB INTERESTS SECTION ========== */
-function ClubInterestsSection({ player, onUpdate }: { player: Player; onUpdate: (p: Player) => void }) {
-  const [showAdd, setShowAdd] = useState(false);
-  const [newInterest, setNewInterest] = useState<Omit<ClubInterest, 'id'>>({
-    clubName: '', date: new Date().toISOString().slice(0, 10), type: 'interés', details: '', source: '',
-  });
-
-  const interests = [...(player.clubInterests || [])].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-  const typeColors: Record<string, string> = {
-    'interés': 'bg-blue-50 text-blue-700 border-blue-200',
-    'oferta': 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    'rumor': 'bg-slate-100 text-slate-600 border-slate-200',
-    'negociación': 'bg-amber-50 text-amber-700 border-amber-200',
-  };
-
-  const handleAdd = () => {
-    if (!newInterest.clubName.trim()) return;
-    const entry: ClubInterest = {
-      ...newInterest,
-      id: 'ci' + Date.now() + Math.random().toString(36).slice(2, 6),
-    };
-    onUpdate({ ...player, clubInterests: [...(player.clubInterests || []), entry] });
-    setNewInterest({ clubName: '', date: new Date().toISOString().slice(0, 10), type: 'interés', details: '', source: '' });
-    setShowAdd(false);
-  };
-
-  const handleDelete = (id: string) => {
-    onUpdate({ ...player, clubInterests: (player.clubInterests || []).filter((ci) => ci.id !== id) });
-  };
-
-  return (
-    <div className="bg-white border border-slate-200 rounded-lg p-4">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-slate-800">Intereses de clubes</h3>
-        <button onClick={() => setShowAdd(!showAdd)}
-          className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700">
-          <Plus className="w-3 h-3" />{showAdd ? 'Cancelar' : 'Añadir'}
-        </button>
-      </div>
-
-      {showAdd && (
-        <div className="mb-4 p-3 bg-slate-50 rounded-lg border border-slate-100 space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <TF label="Club" value={newInterest.clubName} onChange={(v) => setNewInterest({ ...newInterest, clubName: v })} />
-            <TF label="Fecha" value={newInterest.date} onChange={(v) => setNewInterest({ ...newInterest, date: v })} type="date" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Tipo</label>
-              <select
-                value={newInterest.type}
-                onChange={(e) => setNewInterest({ ...newInterest, type: e.target.value as ClubInterest['type'] })}
-                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2"
-              >
-                <option value="interés">Interés</option>
-                <option value="oferta">Oferta</option>
-                <option value="rumor">Rumor</option>
-                <option value="negociación">Negociación</option>
-              </select>
-            </div>
-            <TF label="Fuente" value={newInterest.source || ''} onChange={(v) => setNewInterest({ ...newInterest, source: v })} />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Detalles</label>
-            <textarea value={newInterest.details} onChange={(e) => setNewInterest({ ...newInterest, details: e.target.value })} rows={2}
-              placeholder="Condiciones, contexto, notas..."
-              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 resize-none" />
-          </div>
-          <div className="flex justify-end">
-            <button onClick={handleAdd}
-              className="text-xs px-3 py-1.5 rounded text-white" style={{ background: PRIMARY }}>Guardar</button>
-          </div>
-        </div>
-      )}
-
-      {interests.length === 0 && !showAdd && (
-        <p className="text-xs text-slate-400 text-center py-4">Sin intereses registrados</p>
-      )}
-
-      {interests.length > 0 && (
-        <div className="space-y-2">
-          {interests.map((ci) => (
-            <div key={ci.id} className="flex items-start gap-3 py-2 px-3 rounded-lg bg-slate-50 border border-slate-100">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-sm font-semibold text-slate-800">{ci.clubName}</span>
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium border ${typeColors[ci.type] || 'bg-slate-100 text-slate-600'}`}>
-                    {ci.type.charAt(0).toUpperCase() + ci.type.slice(1)}
-                  </span>
-                  <span className="text-[10px] text-slate-400 ml-auto flex-shrink-0">
-                    {new Date(ci.date).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" })}
-                  </span>
-                </div>
-                {ci.details && <p className="text-xs text-slate-600 leading-relaxed">{ci.details}</p>}
-                {ci.source && <p className="text-[10px] text-slate-400 mt-0.5">Fuente: {ci.source}</p>}
-              </div>
-              <button onClick={() => handleDelete(ci.id)} className="text-slate-300 hover:text-red-400 mt-0.5 flex-shrink-0">
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          ))}
         </div>
       )}
     </div>
@@ -1914,8 +1806,9 @@ function ActivityTimeline({ player, tasks, profiles }: {
 
 // ── DISTRIBUTION TAB ──────────────────────────────────────────
 
-const NEG_STATUSES_D: ClubNegotiation['status'][] = ['ofrecido', 'interesado', 'negociando', 'cerrado', 'descartado']
+const NEG_STATUSES_D: ClubNegotiation['status'][] = ['pendiente', 'ofrecido', 'interesado', 'negociando', 'cerrado', 'descartado']
 const STATUS_CONFIG_D: Record<ClubNegotiation['status'], { label: string; color: string }> = {
+  pendiente:  { label: 'Pendiente',  color: 'bg-purple-100 text-purple-700' },
   ofrecido:   { label: 'Ofrecido',   color: 'bg-slate-100 text-slate-600' },
   interesado: { label: 'Interesado', color: 'bg-blue-100 text-blue-700' },
   negociando: { label: 'Negociando', color: 'bg-amber-100 text-amber-700' },
@@ -1929,7 +1822,7 @@ const PRIORITY_CONFIG_D = {
 }
 const CONDITIONS_D = ['Libre', 'Traspaso', 'Cesión', 'Cesión/Traspaso', 'Traspaso (porcentaje)', 'Cesión con opción']
 
-function DistributionTab({ player, entry, negotiations, clubs, onUpdateEntry, onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation }: {
+function DistributionTab({ player, entry, negotiations, clubs, onUpdateEntry, onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation, onSelectClub }: {
   player: Player
   entry?: DistributionEntry
   negotiations: ClubNegotiation[]
@@ -1938,6 +1831,7 @@ function DistributionTab({ player, entry, negotiations, clubs, onUpdateEntry, on
   onCreateNegotiation?: (n: Omit<ClubNegotiation, 'id' | 'createdAt' | 'updatedAt'>) => Promise<ClubNegotiation>
   onUpdateNegotiation?: (n: ClubNegotiation) => Promise<void>
   onDeleteNegotiation?: (id: string) => Promise<void>
+  onSelectClub?: (id: string) => void
 }) {
   const [editingEntry, setEditingEntry] = useState(false)
   const [editPriority, setEditPriority] = useState<'A'|'B'|'C'>(entry?.priority ?? 'B')
@@ -2096,9 +1990,16 @@ function DistributionTab({ player, entry, negotiations, clubs, onUpdateEntry, on
                   </div>
                   {neg.notes && <p className="text-xs text-slate-500 mt-0.5">{neg.notes}</p>}
                 </div>
-                <button onClick={() => setEditingNeg(neg)} className="p-1 text-slate-300 hover:text-slate-500 flex-shrink-0">
-                  <Edit3 className="w-3.5 h-3.5" />
-                </button>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  {onSelectClub && (
+                    <button onClick={() => onSelectClub(club.id)} className="p-1 text-slate-300 hover:text-blue-500" title="Ver ficha del club">
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  <button onClick={() => setEditingNeg(neg)} className="p-1 text-slate-300 hover:text-slate-500">
+                    <Edit3 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             )
           })}

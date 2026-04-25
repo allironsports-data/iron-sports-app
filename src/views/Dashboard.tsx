@@ -309,8 +309,12 @@ export function Dashboard({
               style={{ background: PRIMARY }}
             >{currentProfile.avatar}</div>
             {onDistribution && (
-              <button onClick={onDistribution} className="p-1 sm:p-1.5 text-slate-400 hover:text-slate-600 transition-colors" title="Distribución">
-                <TrendingUp className="w-4 h-4" />
+              <button
+                onClick={onDistribution}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:border-[hsl(220,72%,36%)] hover:text-[hsl(220,72%,36%)] transition-colors text-xs font-medium"
+                title="Distribución"
+              >
+                <TrendingUp className="w-3.5 h-3.5" /> Distribución
               </button>
             )}
             {currentProfile.is_admin && onOverview && (
@@ -362,7 +366,7 @@ export function Dashboard({
         </div>
       )}
 
-      <main className="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
+      <main className="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6 pb-20 sm:pb-6">
         {/* Birthday alerts */}
         {(birthdaysToday.length > 0 || birthdaysSoon.length > 0) && (
           <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-3">

@@ -11,7 +11,9 @@ import { AdminPanel } from './views/AdminPanel'
 import { OverviewPanel } from './views/OverviewPanel'
 import { PlayersTable } from './views/PlayersTable'
 import { Distribution } from './views/Distribution'
+import { ClubDetail } from './views/ClubDetail'
 import type { Club, DistributionEntry, ClubNegotiation } from './types'
+import { TrendingUp, Users } from 'lucide-react'
 
 export interface AppNotification {
   id: string
@@ -37,10 +39,14 @@ export default function App() {
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [dataLoading, setDataLoading] = useState(false)
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
+  const [selectedClubId, setSelectedClubId] = useState<string | null>(null)
+  // 'mantenimiento' = player management, 'distribucion' = distribution module
+  const [mainSection, setMainSection] = useState<'mantenimiento' | 'distribucion'>('mantenimiento')
+  // where to return after closing PlayerDetail
+  const [playerReturnToClub, setPlayerReturnToClub] = useState(false)
   const [showAdmin, setShowAdmin] = useState(false)
   const [showOverview, setShowOverview] = useState(false)
   const [showTable, setShowTable] = useState(false)
-  const [showDistribution, setShowDistribution] = useState(false)
   const [notifications, setNotifications] = useState<AppNotification[]>([])
 
   // Distribution state
@@ -228,32 +234,32 @@ export default function App() {
     setNegotiations(prev => prev.filter(x => x.id !== id))
   }
 
-  // ── routing ─────────────────────────────────────────────────
+  // ── helpers ─────────────────────────────────────────────────
 
-  if (showDistribution) {
-    return (
-      <Distribution
-        players={players}
-        clubs={clubs}
-        entries={distEntries}
-        negotiations={negotiations}
-        currentProfile={profile}
-        onBack={() => setShowDistribution(false)}
-        onLogout={signOut}
-        onAdmin={profile.is_admin ? () => { setShowDistribution(false); setShowAdmin(true) } : undefined}
-        onSelectPlayer={(id) => { setShowDistribution(false); setSelectedPlayerId(id) }}
-        onCreateClub={handleCreateClub}
-        onUpdateClub={handleUpdateClub}
-        onDeleteClub={handleDeleteClub}
-        onCreateEntry={handleCreateEntry}
-        onUpdateEntry={handleUpdateEntry}
-        onDeleteEntry={handleDeleteEntry}
-        onCreateNegotiation={handleCreateNegotiation}
-        onUpdateNegotiation={handleUpdateNegotiation}
-        onDeleteNegotiation={handleDeleteNegotiation}
-      />
-    )
+  function navigateToPlayer(id: string, fromClub = false) {
+    setPlayerReturnToClub(fromClub)
+    setSelectedPlayerId(id)
   }
+
+  function handlePlayerBack() {
+    setSelectedPlayerId(null)
+    if (playerReturnToClub) {
+      // stay on ClubDetail (selectedClubId remains set)
+    } else {
+      setSelectedClubId(null)
+    }
+  }
+
+  function navigateToClub(id: string) {
+    setSelectedPlayerId(null)
+    setSelectedClubId(id)
+    setMainSection('distribucion')
+  }
+
+  // active negotiations count (for badge)
+  const activeNegCount = negotiations.filter(n => ['pendiente', 'ofrecido', 'interesado', 'negociando'].includes(n.status)).length
+
+  // ── routing ─────────────────────────────────────────────────
 
   if (showTable && profile.is_admin) {
     return (
@@ -303,7 +309,7 @@ export default function App() {
         allTasks={tasks}
         profiles={profiles}
         currentProfile={profile}
-        onBack={() => setSelectedPlayerId(null)}
+        onBack={handlePlayerBack}
         onAddTask={handleAddTask}
         onUpdateTask={handleUpdateTask}
         onDeleteTask={handleDeleteTask}
@@ -318,30 +324,119 @@ export default function App() {
         onCreateNegotiation={handleCreateNegotiation}
         onUpdateNegotiation={handleUpdateNegotiation}
         onDeleteNegotiation={handleDeleteNegotiation}
+        onSelectClub={navigateToClub}
       />
     )
   }
 
+  const selectedClub = clubs.find(c => c.id === selectedClubId)
+  if (selectedClub) {
+    return (
+      <ClubDetail
+        club={selectedClub}
+        players={players}
+        entries={distEntries}
+        negotiations={negotiations}
+        currentProfile={profile}
+        onBack={() => setSelectedClubId(null)}
+        onLogout={signOut}
+        onAdmin={profile.is_admin ? () => { setSelectedClubId(null); setShowAdmin(true) } : undefined}
+        onSelectPlayer={(id) => navigateToPlayer(id, true)}
+        onUpdateClub={handleUpdateClub}
+        onDeleteClub={async (id) => { await handleDeleteClub(id); setSelectedClubId(null) }}
+        onCreateNegotiation={handleCreateNegotiation}
+        onUpdateNegotiation={handleUpdateNegotiation}
+        onDeleteNegotiation={handleDeleteNegotiation}
+      />
+    )
+  }
+
+  if (mainSection === 'distribucion') {
+    return (
+      <>
+        <Distribution
+          players={players}
+          clubs={clubs}
+          entries={distEntries}
+          negotiations={negotiations}
+          currentProfile={profile}
+          onBack={() => setMainSection('mantenimiento')}
+          onLogout={signOut}
+          onAdmin={profile.is_admin ? () => { setMainSection('mantenimiento'); setShowAdmin(true) } : undefined}
+          onSelectPlayer={(id) => navigateToPlayer(id, false)}
+          onSelectClub={navigateToClub}
+          onCreateClub={handleCreateClub}
+          onUpdateClub={handleUpdateClub}
+          onDeleteClub={handleDeleteClub}
+          onCreateEntry={handleCreateEntry}
+          onUpdateEntry={handleUpdateEntry}
+          onDeleteEntry={handleDeleteEntry}
+          onCreateNegotiation={handleCreateNegotiation}
+          onUpdateNegotiation={handleUpdateNegotiation}
+          onDeleteNegotiation={handleDeleteNegotiation}
+        />
+        <BottomNav section={mainSection} onSelect={setMainSection} badge={activeNegCount} />
+      </>
+    )
+  }
+
   return (
-    <Dashboard
-      players={players}
-      tasks={tasks}
-      profiles={profiles}
-      currentProfile={profile}
-      onSelectPlayer={setSelectedPlayerId}
-      onLogout={signOut}
-      onAddPlayer={handleAddPlayer}
-      onAdmin={profile.is_admin ? () => setShowAdmin(true) : undefined}
-      onBulkDelete={profile.is_admin ? handleBulkDelete : undefined}
-      onBulkAssignManager={profile.is_admin ? handleBulkAssignManager : undefined}
-      onOverview={profile.is_admin ? () => setShowOverview(true) : undefined}
-      onDistribution={() => setShowDistribution(true)}
-      notifications={notifications}
-      onDismissNotification={dismissNotification}
-      onAddGeneralTask={handleAddTask}
-      onUpdateGeneralTask={handleUpdateTask}
-      onUpdateTask={handleUpdateTask}
-      onDeleteGeneralTask={handleDeleteTask}
-    />
+    <>
+      <Dashboard
+        players={players}
+        tasks={tasks}
+        profiles={profiles}
+        currentProfile={profile}
+        onSelectPlayer={(id) => navigateToPlayer(id, false)}
+        onLogout={signOut}
+        onAddPlayer={handleAddPlayer}
+        onAdmin={profile.is_admin ? () => setShowAdmin(true) : undefined}
+        onBulkDelete={profile.is_admin ? handleBulkDelete : undefined}
+        onBulkAssignManager={profile.is_admin ? handleBulkAssignManager : undefined}
+        onOverview={profile.is_admin ? () => setShowOverview(true) : undefined}
+        onDistribution={() => setMainSection('distribucion')}
+        notifications={notifications}
+        onDismissNotification={dismissNotification}
+        onAddGeneralTask={handleAddTask}
+        onUpdateGeneralTask={handleUpdateTask}
+        onUpdateTask={handleUpdateTask}
+        onDeleteGeneralTask={handleDeleteTask}
+      />
+      <BottomNav section={mainSection} onSelect={setMainSection} badge={activeNegCount} />
+    </>
+  )
+}
+
+// ── Bottom navigation bar ────────────────────────────────────
+
+function BottomNav({ section, onSelect, badge }: {
+  section: 'mantenimiento' | 'distribucion'
+  onSelect: (s: 'mantenimiento' | 'distribucion') => void
+  badge: number
+}) {
+  return (
+    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-200 flex sm:hidden safe-area-inset-bottom">
+      <button
+        onClick={() => onSelect('mantenimiento')}
+        className={`flex-1 flex flex-col items-center gap-0.5 py-2 transition-colors ${section === 'mantenimiento' ? 'text-[hsl(220,72%,36%)]' : 'text-slate-400'}`}
+      >
+        <Users className="w-5 h-5" />
+        <span className="text-[10px] font-medium">Mantenimiento</span>
+      </button>
+      <button
+        onClick={() => onSelect('distribucion')}
+        className={`flex-1 flex flex-col items-center gap-0.5 py-2 relative transition-colors ${section === 'distribucion' ? 'text-[hsl(220,72%,36%)]' : 'text-slate-400'}`}
+      >
+        <div className="relative">
+          <TrendingUp className="w-5 h-5" />
+          {badge > 0 && (
+            <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 bg-blue-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5">
+              {badge > 99 ? '99+' : badge}
+            </span>
+          )}
+        </div>
+        <span className="text-[10px] font-medium">Distribución</span>
+      </button>
+    </nav>
   )
 }

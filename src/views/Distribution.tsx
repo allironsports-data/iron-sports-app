@@ -11,9 +11,10 @@ import type { Profile } from '../contexts/AuthContext'
 
 const SEASONS = ['2025-26', '2024-25']
 const CONDITIONS = ['Libre', 'Traspaso', 'Cesión', 'Cesión/Traspaso', 'Traspaso (porcentaje)', 'Cesión con opción']
-const NEG_STATUSES: ClubNegotiation['status'][] = ['ofrecido', 'interesado', 'negociando', 'cerrado', 'descartado']
+const NEG_STATUSES: ClubNegotiation['status'][] = ['pendiente', 'ofrecido', 'interesado', 'negociando', 'cerrado', 'descartado']
 
 const STATUS_CONFIG: Record<ClubNegotiation['status'], { label: string; color: string; dot: string }> = {
+  pendiente:   { label: 'Pendiente',   color: 'bg-purple-100 text-purple-700', dot: 'bg-purple-400' },
   ofrecido:    { label: 'Ofrecido',    color: 'bg-slate-100 text-slate-600',   dot: 'bg-slate-400' },
   interesado:  { label: 'Interesado',  color: 'bg-blue-100 text-blue-700',     dot: 'bg-blue-500' },
   negociando:  { label: 'Negociando',  color: 'bg-amber-100 text-amber-700',   dot: 'bg-amber-500' },
@@ -55,6 +56,7 @@ interface Props {
   onLogout: () => void
   onAdmin?: () => void
   onSelectPlayer?: (id: string) => void
+  onSelectClub?: (id: string) => void
   onCreateClub: (c: Omit<Club, 'id' | 'createdAt'>) => Promise<Club>
   onUpdateClub: (c: Club) => Promise<void>
   onDeleteClub: (id: string) => Promise<void>
@@ -70,7 +72,7 @@ interface Props {
 
 export function Distribution({
   players, clubs, entries, negotiations, currentProfile,
-  onBack, onLogout, onAdmin, onSelectPlayer,
+  onBack, onLogout, onAdmin, onSelectPlayer, onSelectClub,
   onCreateClub, onUpdateClub, onDeleteClub,
   onCreateEntry, onUpdateEntry, onDeleteEntry,
   onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation,
@@ -90,6 +92,7 @@ export function Distribution({
   const [editingEntry, setEditingEntry] = useState<DistributionEntry | null>(null)
   const [editingClub, setEditingClub] = useState<Club | null>(null)
   const [editingNeg, setEditingNeg] = useState<ClubNegotiation | null>(null)
+  const [bulkAssignPlayerId, setBulkAssignPlayerId] = useState<string | null>(null)
 
   const seasonEntries = entries.filter(e => e.season === season)
   const filteredEntries = useMemo(() => {
@@ -123,7 +126,7 @@ export function Distribution({
   // pipeline columns
   const pipeline = useMemo(() => {
     const cols: Record<ClubNegotiation['status'], ClubNegotiation[]> = {
-      ofrecido: [], interesado: [], negociando: [], cerrado: [], descartado: [],
+      pendiente: [], ofrecido: [], interesado: [], negociando: [], cerrado: [], descartado: [],
     }
     negotiations.forEach(n => { cols[n.status].push(n) })
     return cols
@@ -133,16 +136,28 @@ export function Distribution({
     <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* Header */}
       <header className="bg-white border-b border-slate-200 px-4 h-11 sm:h-14 flex items-center gap-3 flex-shrink-0">
-        <button onClick={onBack} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500">
+        {/* Mobile: arrow back. Desktop: hidden (use tab switcher below) */}
+        <button onClick={onBack} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 sm:hidden">
           <ArrowLeft className="w-4 h-4" />
         </button>
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          <TrendingUp className="w-4 h-4 text-[hsl(220,72%,36%)] flex-shrink-0" />
-          <span className="font-semibold text-slate-800 text-sm sm:text-base">Distribución</span>
+        {/* Desktop section switcher */}
+        <div className="hidden sm:flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors"
+          >
+            <Users className="w-3.5 h-3.5" /> Mantenimiento
+          </button>
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white shadow-sm text-xs font-medium text-[hsl(220,72%,36%)]">
+            <TrendingUp className="w-3.5 h-3.5" /> Distribución
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-1 min-w-0 sm:ml-2">
+          <span className="font-semibold text-slate-800 text-sm sm:hidden">Distribución</span>
           <select
             value={season}
             onChange={e => setSeason(e.target.value)}
-            className="ml-2 text-xs border border-slate-200 rounded-md px-2 py-1 bg-slate-50 text-slate-600"
+            className="text-xs border border-slate-200 rounded-md px-2 py-1 bg-slate-50 text-slate-600"
           >
             {SEASONS.map(s => <option key={s}>{s}</option>)}
           </select>
@@ -193,7 +208,7 @@ export function Distribution({
 
       {/* Content */}
       <div className="flex flex-1 overflow-hidden">
-        <div className={`flex-1 overflow-y-auto p-4 ${hasPanel ? 'hidden sm:block' : ''}`}>
+        <div className={`flex-1 overflow-y-auto p-4 pb-20 sm:pb-4 ${hasPanel ? 'hidden sm:block' : ''}`}>
 
           {/* ── JUGADORES TAB ── */}
           {tab === 'jugadores' && (
@@ -293,7 +308,13 @@ export function Distribution({
                 return (
                   <div
                     key={club.id}
-                    onClick={() => { setSelectedClubId(club.id); setSelectedEntryId(null) }}
+                    onClick={() => {
+                      if (onSelectClub) {
+                        onSelectClub(club.id)
+                      } else {
+                        setSelectedClubId(club.id); setSelectedEntryId(null)
+                      }
+                    }}
                     className={`bg-white rounded-xl border cursor-pointer hover:shadow-sm transition-all flex items-center gap-3 px-4 py-3 ${
                       selectedClubId === club.id ? 'border-blue-300 ring-1 ring-blue-200' : 'border-slate-200'
                     } ${club.isPriority ? 'border-l-4 border-l-green-400' : ''}`}
@@ -443,12 +464,21 @@ export function Distribution({
                   <div className="flex-1 overflow-y-auto px-4 py-3">
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Clubes ({playerNegs.length})</span>
-                      <button
-                        onClick={() => setShowAddNeg({ playerId: selectedEntry.playerId })}
-                        className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
-                      >
-                        <Plus className="w-3.5 h-3.5" /> Añadir club
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setBulkAssignPlayerId(selectedEntry.playerId)}
+                          className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-700 font-medium"
+                          title="Asignar liga entera"
+                        >
+                          <Users className="w-3.5 h-3.5" /> Por liga
+                        </button>
+                        <button
+                          onClick={() => setShowAddNeg({ playerId: selectedEntry.playerId })}
+                          className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Añadir
+                        </button>
+                      </div>
                     </div>
 
                     <div className="space-y-2">
@@ -722,6 +752,22 @@ export function Distribution({
           onDelete={async () => {
             await onDeleteNegotiation(editingNeg.id)
             setEditingNeg(null)
+          }}
+        />
+      )}
+
+      {/* Bulk assign modal */}
+      {bulkAssignPlayerId && (
+        <BulkAssignModal
+          playerId={bulkAssignPlayerId}
+          clubs={clubs}
+          existingNegotiations={negotiations.filter(n => n.playerId === bulkAssignPlayerId)}
+          onClose={() => setBulkAssignPlayerId(null)}
+          onSave={async (clubIds) => {
+            await Promise.all(
+              clubIds.map(clubId => onCreateNegotiation({ playerId: bulkAssignPlayerId, clubId, status: 'pendiente' }))
+            )
+            setBulkAssignPlayerId(null)
           }}
         />
       )}
@@ -1221,6 +1267,143 @@ function ModalShell({ title, onClose, children }: { title: string; onClose: () =
           </button>
         </div>
         <div className="p-4">{children}</div>
+      </div>
+    </div>
+  )
+}
+
+// ── BULK ASSIGN MODAL ────────────────────────────────────────
+
+function BulkAssignModal({ playerId, clubs, existingNegotiations, onClose, onSave }: {
+  playerId: string
+  clubs: Club[]
+  existingNegotiations: ClubNegotiation[]
+  onClose: () => void
+  onSave: (clubIds: string[]) => Promise<void>
+}) {
+  // group clubs by league
+  const leagues = useMemo(() => {
+    const map = new Map<string, Club[]>()
+    clubs.forEach(c => {
+      const key = c.league ?? 'Sin liga'
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push(c)
+    })
+    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b))
+  }, [clubs])
+
+  const [selectedLeague, setSelectedLeague] = useState<string | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [saving, setSaving] = useState(false)
+
+  const existingIds = new Set(existingNegotiations.map(n => n.clubId))
+  const leagueClubs = selectedLeague ? (leagues.find(([l]) => l === selectedLeague)?.[1] ?? []) : []
+  const newIds = Array.from(selected).filter(id => !existingIds.has(id))
+
+  function selectLeague(league: string) {
+    setSelectedLeague(league)
+    const leagueClubIds = (leagues.find(([l]) => l === league)?.[1] ?? [])
+      .filter(c => !existingIds.has(c.id))
+      .map(c => c.id)
+    setSelected(new Set(leagueClubIds))
+  }
+
+  function toggle(id: string) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  async function handleSave() {
+    if (newIds.length === 0) return
+    setSaving(true)
+    try { await onSave(newIds) } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
+      <div className="bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white rounded-t-2xl">
+          <h2 className="font-semibold text-slate-800 text-sm">Asignar por liga</h2>
+          <button onClick={onClose} className="p-1 rounded hover:bg-slate-100 text-slate-400"><X className="w-4 h-4" /></button>
+        </div>
+
+        {!selectedLeague ? (
+          <div className="p-4 overflow-y-auto flex-1">
+            <p className="text-xs text-slate-500 mb-3">Selecciona una liga para asignar todos sus clubes como <span className="font-semibold text-purple-700">Pendiente</span>:</p>
+            <div className="space-y-1">
+              {leagues.map(([league, leagueClubs]) => {
+                const existing = leagueClubs.filter(c => existingIds.has(c.id)).length
+                const total = leagueClubs.length
+                return (
+                  <button
+                    key={league}
+                    onClick={() => selectLeague(league)}
+                    className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50 transition-colors text-left"
+                  >
+                    <div>
+                      <span className="font-medium text-slate-800 text-sm">{league}</span>
+                      <span className="text-xs text-slate-400 ml-2">{total} club{total !== 1 ? 's' : ''}</span>
+                    </div>
+                    {existing > 0 && (
+                      <span className="text-xs bg-green-50 text-green-600 border border-green-200 px-2 py-0.5 rounded-full">{existing} ya asignado{existing !== 1 ? 's' : ''}</span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="px-4 py-2 border-b border-slate-100 flex items-center gap-2">
+              <button onClick={() => setSelectedLeague(null)} className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1">
+                ← Cambiar liga
+              </button>
+              <span className="text-sm font-semibold text-slate-800 flex-1 text-center">{selectedLeague}</span>
+              <span className="text-xs text-slate-400">{selected.size} seleccionado{selected.size !== 1 ? 's' : ''}</span>
+            </div>
+            <div className="overflow-y-auto flex-1 px-4 py-3 space-y-1">
+              {leagueClubs.map(club => {
+                const alreadyExists = existingIds.has(club.id)
+                const isSelected = selected.has(club.id)
+                return (
+                  <label
+                    key={club.id}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border cursor-pointer transition-colors ${
+                      alreadyExists ? 'border-green-200 bg-green-50 cursor-not-allowed opacity-60' :
+                      isSelected ? 'border-blue-300 bg-blue-50' : 'border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected || alreadyExists}
+                      disabled={alreadyExists}
+                      onChange={() => !alreadyExists && toggle(club.id)}
+                      className="w-4 h-4 rounded text-blue-600"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium text-slate-800">{club.name}</span>
+                      {club.aisManager && <span className="text-xs font-mono text-slate-400 ml-2">{club.aisManager}</span>}
+                    </div>
+                    {alreadyExists && <span className="text-xs text-green-600 flex-shrink-0">Ya asignado</span>}
+                  </label>
+                )
+              })}
+            </div>
+            <div className="px-4 py-3 border-t border-slate-100 flex gap-2">
+              <button onClick={onClose} className="flex-1 py-2 text-sm border border-slate-200 rounded-lg text-slate-500">Cancelar</button>
+              <button
+                onClick={handleSave}
+                disabled={newIds.length === 0 || saving}
+                className="flex-1 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+              >
+                {saving ? 'Asignando…' : `Asignar ${newIds.length} club${newIds.length !== 1 ? 's' : ''}`}
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )

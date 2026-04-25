@@ -193,7 +193,7 @@ export interface ClubNegotiation {
   id: string
   playerId: string
   clubId: string
-  status: 'ofrecido' | 'interesado' | 'negociando' | 'cerrado' | 'descartado'
+  status: 'pendiente' | 'ofrecido' | 'interesado' | 'negociando' | 'cerrado' | 'descartado'
   aisManager?: string
   notes?: string
   createdAt: string
