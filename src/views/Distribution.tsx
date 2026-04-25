@@ -249,6 +249,9 @@ export function Distribution({
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="font-medium text-slate-800 text-sm">{player.name}</span>
                                 <span className="text-xs text-slate-400">{player.positions[0]}</span>
+                                {player.hiddenFromManagement && (
+                                  <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium">Intermediar</span>
+                                )}
                                 {entry.condition && (
                                   <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{entry.condition}</span>
                                 )}

@@ -131,6 +131,9 @@ export function Dashboard({
     }
   }, [notifications]);
 
+  // Exclude intermediation-only players from mantenimiento
+  const visiblePlayers = players.filter(p => !p.hiddenFromManagement)
+
   const pendingTasks = tasks.filter((t) => t.status !== "completada");
   const urgentTasks = tasks.filter(
     (t) => t.priority === "alta" && t.status !== "completada"
@@ -181,10 +184,10 @@ export function Dashboard({
   });
 
   // Birthdays
-  const birthdaysToday = players.filter((p) => isBirthdayToday(p.birthDate));
-  const birthdaysSoon = players.filter((p) => isBirthdaySoon(p.birthDate, 7));
+  const birthdaysToday = visiblePlayers.filter((p) => isBirthdayToday(p.birthDate));
+  const birthdaysSoon = visiblePlayers.filter((p) => isBirthdaySoon(p.birthDate, 7));
 
-  const filtered = players.filter((p) => {
+  const filtered = visiblePlayers.filter((p) => {
     const matchSearch =
       p.name.toLowerCase().includes(search.toLowerCase()) ||
       (p.positions[0] ?? "").toLowerCase().includes(search.toLowerCase()) ||
@@ -395,7 +398,7 @@ export function Dashboard({
 
         {/* Stats — clickable */}
         <div className="grid grid-cols-2 gap-1.5 sm:gap-3 sm:grid-cols-3 lg:grid-cols-5 mb-4 sm:mb-6">
-          <StatCard icon={<Users className="w-4 h-4" />} label="Jugadores" value={players.length} color="blue"
+          <StatCard icon={<Users className="w-4 h-4" />} label="Jugadores" value={visiblePlayers.length} color="blue"
             onClick={() => setTaskView(null)} active={taskView === null} />
           <StatCard icon={<ClipboardList className="w-4 h-4" />} label="Pendientes" value={pendingTasks.length} color="amber"
             onClick={() => setTaskView(taskView === "pending" ? null : "pending")} active={taskView === "pending"} />
@@ -633,10 +636,10 @@ export function Dashboard({
             <button onClick={() => setManagerFilter("all")}
               className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${managerFilter === "all" ? "text-white border-transparent" : "border-slate-200 text-slate-500 hover:text-slate-700 bg-white"}`}
               style={managerFilter === "all" ? { background: PRIMARY } : {}}>
-              Todos ({players.length})
+              Todos ({visiblePlayers.length})
             </button>
             {profiles.map((m) => {
-              const count = players.filter((p) => p.managedBy.includes(m.id)).length;
+              const count = visiblePlayers.filter((p) => p.managedBy.includes(m.id)).length;
               if (count === 0) return null;
               return (
                 <button key={m.id} onClick={() => setManagerFilter(managerFilter === m.id ? "all" : m.id)}

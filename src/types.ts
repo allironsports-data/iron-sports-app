@@ -142,6 +142,7 @@ export interface Player {
   clubs: PlayerClub[];         // one or more current clubs
   partner?: string;            // partner interno responsable
   managedBy: string[];         // team member ids (encargados)
+  hiddenFromManagement?: boolean;  // true = solo distribución (intermediar)
   representationContract: RepresentationContract;
   clubContract: ClubContract;
   contractHistory: { club: string; period: string; type: string }[];

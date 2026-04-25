@@ -23,6 +23,7 @@ function dbToPlayer(row: Record<string, unknown>): Player {
     videoSessions: (row.video_sessions as VideoSession[]) ?? [],
     transfermarktUrl: (row.transfermarkt_url as string) ?? undefined,
     links: (row.links as PlayerLink[]) ?? [],
+    hiddenFromManagement: (row.hidden_from_management as boolean) ?? false,
     performance: [],
     info: (() => {
       const raw = (row.info as Record<string, unknown>) ?? {}
@@ -56,6 +57,7 @@ function playerToDb(p: Partial<Player>) {
     transfermarkt_url: p.transfermarktUrl ?? null,
     links: p.links ?? [],
     info: p.info,
+    hidden_from_management: p.hiddenFromManagement ?? false,
   }
 }
 
