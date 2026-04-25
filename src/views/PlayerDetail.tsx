@@ -354,11 +354,6 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
   const activeTasks = tasks.filter((t) => t.status !== "completada");
   const completedTasks = tasks.filter((t) => t.status === "completada");
 
-  const applyFilter = (list: Task[]) =>
-    filter === "todas" ? list :
-    filter === "completada" ? completedTasks :
-    list.filter((t) => t.status === filter);
-
   const sortByPrio = (list: Task[]) =>
     [...list].sort((a, b) => {
       const prio = { alta: 0, media: 1, baja: 2 };

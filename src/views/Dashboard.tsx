@@ -8,7 +8,6 @@ import type { AppNotification } from "../App";
 import {
   LogOut,
   Users,
-  ClipboardList,
   AlertTriangle,
   Plus,
   Search,
@@ -519,7 +518,7 @@ export function Dashboard({
               onCycleStatus={cycleTaskStatus}
               onOpenDetail={setDetailTask}
               detailTaskId={detailTask?.id}
-              onSelectPlayer={onSelectPlayer}
+
               showCompleted={showCompletedMine}
               onToggleCompleted={() => setShowCompletedMine(v => !v)}
               completedCount={myTasksCompleted.length + myPlayerTasksCompleted.length + generalTasksCompleted.length}
@@ -535,7 +534,7 @@ export function Dashboard({
               onCycleStatus={cycleTaskStatus}
               onOpenDetail={setDetailTask}
               detailTaskId={detailTask?.id}
-              onSelectPlayer={onSelectPlayer}
+
             />
             {/* Completada column */}
             <KanbanCol
@@ -547,7 +546,7 @@ export function Dashboard({
               onCycleStatus={cycleTaskStatus}
               onOpenDetail={setDetailTask}
               detailTaskId={detailTask?.id}
-              onSelectPlayer={onSelectPlayer}
+
               showCompleted={showCompletedMine}
               onToggleCompleted={() => setShowCompletedMine(v => !v)}
               completedCount={myTasksCompleted.length + myPlayerTasksCompleted.length + generalTasksCompleted.length}
@@ -926,7 +925,7 @@ export function Dashboard({
 /* ── KanbanCol: one column in the home kanban ── */
 function KanbanCol({
   label, dotColor, tasks, players, profiles,
-  onCycleStatus, onOpenDetail, detailTaskId, onSelectPlayer,
+  onCycleStatus, onOpenDetail, detailTaskId,
   showCompleted, onToggleCompleted, completedCount = 0, completedTasks = [],
   isCompletedCol = false,
 }: {
@@ -938,7 +937,6 @@ function KanbanCol({
   onCycleStatus: (t: Task) => void;
   onOpenDetail: (t: Task) => void;
   detailTaskId?: string;
-  onSelectPlayer: (id: string) => void;
   showCompleted?: boolean;
   onToggleCompleted?: () => void;
   completedCount?: number;
@@ -1055,133 +1053,6 @@ function KanbanCol({
   );
 }
 
-function TaskRow({ task, players, profiles, onCycleStatus, onOpenDetail, completed = false, isSelected = false }: {
-  task: Task;
-  players: Player[];
-  profiles: Profile[];
-  onCycleStatus: () => void;
-  onOpenDetail: () => void;
-  completed?: boolean;
-  isSelected?: boolean;
-}) {
-  const player = players.find((p) => p.id === task.playerId);
-  const assignee = profiles.find((m) => m.id === task.assigneeId);
-  const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "completada";
-
-  const statusBadge = task.status === "completada"
-    ? { label: "Completada", cls: "bg-emerald-100 text-emerald-700 border-emerald-200" }
-    : task.status === "en_progreso"
-    ? { label: "En progreso", cls: "bg-blue-100 text-blue-700 border-blue-200" }
-    : { label: "Pendiente", cls: "bg-slate-100 text-slate-600 border-slate-200" };
-
-  const priorityBadge = task.priority === "alta"
-    ? { label: "Alta", cls: "bg-red-100 text-red-700 border-red-200" }
-    : task.priority === "media"
-    ? { label: "Media", cls: "bg-amber-100 text-amber-700 border-amber-200" }
-    : null;
-
-  const rowBg = isSelected
-    ? "bg-blue-50 border-l-2 border-blue-400"
-    : task.adminOnly
-    ? completed ? "bg-rose-50/40 opacity-50" : "bg-rose-50 hover:bg-rose-100/70"
-    : completed ? "opacity-50 hover:bg-slate-50" : "hover:bg-slate-50";
-
-  const initials = (name: string) => name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
-
-  return (
-    <div className={`px-3 sm:px-4 py-3 transition-colors cursor-pointer ${rowBg}`} onClick={onOpenDetail}>
-      <div className="flex items-start gap-2.5">
-        {/* Status cycle dot */}
-        <button
-          onClick={(e) => { e.stopPropagation(); onCycleStatus(); }}
-          className="mt-1 w-3 h-3 rounded-full flex-shrink-0 border-2 transition-colors hover:scale-125"
-          style={{
-            background: task.status === "completada" ? "#10b981"
-              : task.status === "en_progreso" ? "#3b82f6" : "transparent",
-            borderColor: task.status === "completada" ? "#10b981"
-              : task.status === "en_progreso" ? "#3b82f6"
-              : task.priority === "alta" ? "#ef4444"
-              : task.priority === "media" ? "#f59e0b" : "#94a3b8",
-          }}
-          title="Cambiar estado"
-        />
-
-        <div className="flex-1 min-w-0">
-          {/* Title row */}
-          <div className="flex items-center gap-1.5 flex-wrap mb-1">
-            <p className={`text-sm font-medium ${completed ? "line-through text-slate-400" : "text-slate-800"}`}>
-              {task.title}
-            </p>
-            {task.adminOnly && (
-              <span className="text-[9px] font-bold uppercase tracking-wide text-rose-500 border border-rose-200 bg-rose-50 rounded px-1 py-px">admin</span>
-            )}
-          </div>
-
-          {/* Meta row */}
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Status badge */}
-            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${statusBadge.cls}`}>
-              {statusBadge.label}
-            </span>
-            {/* Priority badge */}
-            {priorityBadge && !completed && (
-              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${priorityBadge.cls}`}>
-                {priorityBadge.label}
-              </span>
-            )}
-            {/* Player */}
-            {player && (
-              <span className="text-[11px] text-slate-400 truncate max-w-[100px]">{player.name}</span>
-            )}
-            {/* Assignee avatar chip */}
-            {assignee && (
-              <span className="inline-flex items-center gap-1">
-                <span className="w-4 h-4 rounded-full bg-blue-100 text-blue-700 text-[9px] font-bold flex items-center justify-center flex-shrink-0">
-                  {initials(assignee.name)}
-                </span>
-                <span className="text-[11px] text-slate-500">{assignee.name.split(" ")[0]}</span>
-              </span>
-            )}
-            {/* Due date */}
-            {task.dueDate && (
-              <span className={`text-[11px] ml-auto flex-shrink-0 ${isOverdue ? "text-red-500 font-semibold" : "text-slate-400"}`}>
-                {isOverdue ? "⚠ " : ""}{new Date(task.dueDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function StatCard({ icon, label, value, color, onClick, active }: {
-  icon: React.ReactNode; label: string; value: number;
-  color: "blue" | "amber" | "red" | "green" | "purple";
-  onClick?: () => void; active?: boolean;
-}) {
-  const colors = {
-    blue: "bg-blue-50 text-blue-600",
-    amber: "bg-amber-50 text-amber-600",
-    red: "bg-red-50 text-red-600",
-    green: "bg-emerald-50 text-emerald-600",
-    purple: "bg-violet-50 text-violet-600",
-  };
-  return (
-    <button
-      onClick={onClick}
-      className={`bg-white border rounded-lg p-3 text-left transition-all hover:shadow-sm ${
-        active ? "border-blue-400 ring-1 ring-blue-200" : "border-slate-200 hover:border-slate-300"
-      }`}
-    >
-      <div className="flex items-center gap-2 mb-1">
-        <div className={`w-6 h-6 rounded flex items-center justify-center ${colors[color]}`}>{icon}</div>
-        <span className="text-xs text-slate-500 truncate">{label}</span>
-      </div>
-      <p className="text-2xl font-semibold text-slate-900">{value}</p>
-    </button>
-  );
-}
 
 function AssignManagerModal({ profiles, count, loading, onClose, onAssign }: {
   profiles: Profile[]; count: number; loading: boolean;
