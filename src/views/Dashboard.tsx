@@ -49,7 +49,6 @@ interface Props {
   onUpdateTask?: (task: Task) => void;
   onDeleteGeneralTask?: (taskId: string) => void;
   onOverview?: () => void;
-  onDistribution?: () => void;
 }
 
 // Birthday helpers
@@ -89,7 +88,6 @@ export function Dashboard({
   onUpdateTask,
   onDeleteGeneralTask,
   onOverview,
-  onDistribution,
 }: Props) {
   const [search, setSearch] = useState("");
   const [showAddPlayer, setShowAddPlayer] = useState(false);

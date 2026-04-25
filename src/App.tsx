@@ -389,7 +389,6 @@ export default function App() {
       onBulkDelete={profile.is_admin ? handleBulkDelete : undefined}
       onBulkAssignManager={profile.is_admin ? handleBulkAssignManager : undefined}
       onOverview={profile.is_admin ? () => setShowOverview(true) : undefined}
-      onDistribution={() => setMainSection('distribucion')}
       notifications={notifications}
       onDismissNotification={dismissNotification}
       onAddGeneralTask={handleAddTask}
