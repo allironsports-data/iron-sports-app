@@ -147,9 +147,10 @@ export function Distribution({
   // filters
   const [leagueFilter, setLeagueFilter] = useState<string | null>(null)
   const [positionFilter, setPositionFilter] = useState('')   // solicitudes tab
-  const [posFilter, setPosFilter] = useState('')             // jugadores tab
-  const [yearFilter, setYearFilter] = useState('')
+  const [posFilters, setPosFilters] = useState<string[]>([])   // jugadores tab
+  const [yearFilters, setYearFilters] = useState<string[]>([])
   const [activityFilter, setActivityFilter] = useState(false)
+  const [showAddNeed, setShowAddNeed] = useState(false)
 
   const seasonEntries = entries.filter(e => e.season === season)
 
@@ -162,16 +163,17 @@ export function Distribution({
         return p?.name.toLowerCase().includes(q)
       })
     }
-    if (posFilter) {
+    if (posFilters.length > 0) {
       result = result.filter(e => {
         const p = players.find(pl => pl.id === e.playerId)
-        return p?.positions[0] === posFilter
+        return p?.positions[0] && posFilters.includes(p.positions[0])
       })
     }
-    if (yearFilter) {
+    if (yearFilters.length > 0) {
       result = result.filter(e => {
         const p = players.find(pl => pl.id === e.playerId)
-        return p?.birthDate?.startsWith(yearFilter)
+        const y = p?.birthDate?.slice(0, 4) ?? ''
+        return yearFilters.includes(y)
       })
     }
     if (activityFilter) {
@@ -180,7 +182,7 @@ export function Distribution({
       )
     }
     return result
-  }, [seasonEntries, search, players, posFilter, yearFilter, activityFilter, negotiations])
+  }, [seasonEntries, search, players, posFilters, yearFilters, activityFilter, negotiations])
 
   const distributionPositions = useMemo(() => {
     const pos = new Set<string>()
@@ -246,8 +248,8 @@ export function Distribution({
     closePanel()
     setLeagueFilter(null)
     setPositionFilter('')
-    setPosFilter('')
-    setYearFilter('')
+    setPosFilters([])
+    setYearFilters([])
     setActivityFilter(false)
     setSearch('')
   }
@@ -347,49 +349,32 @@ export function Distribution({
           {tab === 'jugadores' && (
             <div className="max-w-5xl mx-auto">
               <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
-                {/* Filter bar */}
                 <div className="flex items-center gap-2 flex-wrap">
-                  {/* Position dropdown */}
-                  <div className="relative">
-                    <select
-                      value={posFilter}
-                      onChange={e => setPosFilter(e.target.value)}
-                      className={`appearance-none pl-3 pr-7 py-1.5 text-sm rounded-lg border cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-200 transition-colors ${
-                        posFilter ? 'bg-[hsl(220,72%,36%)] text-white border-[hsl(220,72%,36%)]' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
-                      }`}
-                    >
-                      <option value="">Posición</option>
-                      {distributionPositions.map(pos => <option key={pos} value={pos}>{pos}</option>)}
-                    </select>
-                    <ChevronDown className={`absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none ${posFilter ? 'text-white' : 'text-slate-400'}`} />
-                  </div>
-                  {/* Birth year dropdown */}
-                  <div className="relative">
-                    <select
-                      value={yearFilter}
-                      onChange={e => setYearFilter(e.target.value)}
-                      className={`appearance-none pl-3 pr-7 py-1.5 text-sm rounded-lg border cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-200 transition-colors ${
-                        yearFilter ? 'bg-[hsl(220,72%,36%)] text-white border-[hsl(220,72%,36%)]' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
-                      }`}
-                    >
-                      <option value="">Año nacimiento</option>
-                      {distributionYears.map(y => <option key={y} value={y}>{y}</option>)}
-                    </select>
-                    <ChevronDown className={`absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none ${yearFilter ? 'text-white' : 'text-slate-400'}`} />
-                  </div>
-                  {/* Activity toggle */}
+                  <MultiSelect
+                    label="Posición"
+                    options={distributionPositions}
+                    selected={posFilters}
+                    onChange={setPosFilters}
+                  />
+                  <MultiSelect
+                    label="Año nacimiento"
+                    options={distributionYears}
+                    selected={yearFilters}
+                    onChange={setYearFilters}
+                  />
                   <button
                     onClick={() => setActivityFilter(!activityFilter)}
                     className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
-                      activityFilter ? 'bg-[hsl(220,72%,36%)] text-white border-[hsl(220,72%,36%)]' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+                      activityFilter
+                        ? 'bg-[hsl(220,72%,36%)] text-white border-[hsl(220,72%,36%)]'
+                        : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
                     }`}
                   >
                     Con actividad
                   </button>
-                  {/* Clear */}
-                  {(posFilter || yearFilter || activityFilter) && (
+                  {(posFilters.length > 0 || yearFilters.length > 0 || activityFilter) && (
                     <button
-                      onClick={() => { setPosFilter(''); setYearFilter(''); setActivityFilter(false) }}
+                      onClick={() => { setPosFilters([]); setYearFilters([]); setActivityFilter(false) }}
                       className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 px-2 py-1.5"
                     >
                       <X className="w-3 h-3" /> Limpiar
@@ -580,6 +565,14 @@ export function Distribution({
           {/* ── SOLICITUDES TAB ── */}
           {tab === 'solicitudes' && (
             <div className="max-w-5xl mx-auto">
+              <div className="flex justify-end mb-2">
+                <button
+                  onClick={() => setShowAddNeed(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[hsl(220,72%,36%)] text-white text-sm rounded-lg hover:bg-[hsl(220,72%,30%)] transition-colors"
+                >
+                  <Plus className="w-4 h-4" /> Añadir solicitud
+                </button>
+              </div>
               {/* Position filter chips */}
               <div className="flex gap-1.5 overflow-x-auto pb-2 mb-3 -mx-4 px-4">
                 <button
@@ -1049,6 +1042,19 @@ export function Distribution({
           onDelete={async () => {
             await onDeleteNegotiation(editingNeg.id)
             setEditingNeg(null)
+          }}
+        />
+      )}
+
+      {showAddNeed && (
+        <AddNeedModal
+          clubs={clubs}
+          onClose={() => setShowAddNeed(false)}
+          onSave={async (clubId, need) => {
+            const club = clubs.find(c => c.id === clubId)
+            if (!club) return
+            await onUpdateClub({ ...club, needs: [...club.needs, need] })
+            setShowAddNeed(false)
           }}
         />
       )}
@@ -1788,6 +1794,207 @@ function BulkAssignModal({ clubs, existingNegotiations, onClose, onSave }: {
         </div>
       </div>
     </div>
+  )
+}
+
+// ── MULTI-SELECT DROPDOWN ─────────────────────────────────────
+
+function MultiSelect({ label, options, selected, onChange }: {
+  label: string
+  options: string[]
+  selected: string[]
+  onChange: (values: string[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const isActive = selected.length > 0
+
+  function toggle(val: string) {
+    onChange(selected.includes(val) ? selected.filter(s => s !== val) : [...selected, val])
+  }
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className={`flex items-center gap-1.5 pl-3 pr-2 py-1.5 text-sm rounded-lg border transition-colors ${
+          isActive
+            ? 'bg-[hsl(220,72%,36%)] text-white border-[hsl(220,72%,36%)]'
+            : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+        }`}
+      >
+        <span>{label}{isActive ? ` (${selected.length})` : ''}</span>
+        <ChevronDown className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-20 min-w-[180px] py-1 max-h-60 overflow-y-auto">
+            {options.map(opt => (
+              <label key={opt} className="flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selected.includes(opt)}
+                  onChange={() => toggle(opt)}
+                  onClick={e => e.stopPropagation()}
+                  className="w-3.5 h-3.5 rounded"
+                />
+                <span className="text-sm text-slate-700">{opt}</span>
+              </label>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ── ADD NEED MODAL ────────────────────────────────────────────
+
+function AddNeedModal({ clubs, onClose, onSave }: {
+  clubs: Club[]
+  onClose: () => void
+  onSave: (clubId: string, need: ClubNeed) => Promise<void>
+}) {
+  const [clubId, setClubId] = useState('')
+  const [clubSearch, setClubSearch] = useState('')
+  const [position, setPosition] = useState('')
+  const [ageMax, setAgeMax] = useState('')
+  const [transferBudget, setTransferBudget] = useState('')
+  const [salaryBudget, setSalaryBudget] = useState('')
+  const [notes, setNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const selectedClub = clubs.find(c => c.id === clubId)
+
+  const visibleClubs = useMemo(() => {
+    if (!clubSearch) return clubs
+    const q = clubSearch.toLowerCase()
+    return clubs.filter(c => c.name.toLowerCase().includes(q) || c.league?.toLowerCase().includes(q))
+  }, [clubs, clubSearch])
+
+  async function handleSave() {
+    if (!clubId || !position.trim()) return
+    setSaving(true)
+    try {
+      await onSave(clubId, {
+        position: position.trim(),
+        ageMax: ageMax ? Number(ageMax) : undefined,
+        transferBudget: transferBudget || undefined,
+        salaryBudget: salaryBudget || undefined,
+        notes: notes || undefined,
+      })
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <ModalShell title="Añadir solicitud de club" onClose={onClose}>
+      <div className="space-y-3">
+        {!selectedClub ? (
+          <div>
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Club *</label>
+            <input
+              autoFocus
+              value={clubSearch}
+              onChange={e => setClubSearch(e.target.value)}
+              placeholder="Buscar club…"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 mb-2"
+            />
+            <div className="max-h-52 overflow-y-auto space-y-0.5">
+              {visibleClubs.slice(0, 25).map(c => (
+                <button
+                  key={c.id}
+                  onClick={() => setClubId(c.id)}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-100 text-left"
+                >
+                  <Building2 className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-slate-800 truncate">{c.name}</div>
+                    {c.league && <div className="text-xs text-slate-400">{c.league}</div>}
+                  </div>
+                </button>
+              ))}
+              {visibleClubs.length === 0 && (
+                <div className="text-sm text-slate-400 text-center py-4">Sin resultados</div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2">
+              <Building2 className="w-4 h-4 text-slate-400 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-slate-800 truncate">{selectedClub.name}</div>
+                {selectedClub.league && <div className="text-xs text-slate-400">{selectedClub.league}</div>}
+              </div>
+              <button onClick={() => setClubId('')} className="text-slate-400 hover:text-slate-600 flex-shrink-0">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Posición *</label>
+              <input
+                autoFocus
+                value={position}
+                onChange={e => setPosition(e.target.value)}
+                placeholder="Lateral izquierdo, Delantero centro…"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Edad máx.</label>
+                <input
+                  type="number"
+                  value={ageMax}
+                  onChange={e => setAgeMax(e.target.value)}
+                  placeholder="23"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Presup. traspaso</label>
+                <input
+                  value={transferBudget}
+                  onChange={e => setTransferBudget(e.target.value)}
+                  placeholder="500k, 2M…"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Salario / mes</label>
+              <input
+                value={salaryBudget}
+                onChange={e => setSalaryBudget(e.target.value)}
+                placeholder="3k, 10k…"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Notas</label>
+              <textarea
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                rows={2}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none"
+              />
+            </div>
+
+            <button
+              onClick={handleSave}
+              disabled={!position.trim() || saving}
+              className="w-full py-2 bg-[hsl(220,72%,36%)] text-white text-sm rounded-lg hover:bg-[hsl(220,72%,30%)] disabled:opacity-60"
+            >
+              {saving ? 'Guardando…' : 'Añadir solicitud'}
+            </button>
+          </>
+        )}
+      </div>
+    </ModalShell>
   )
 }
 
