@@ -21,6 +21,7 @@ import {
   Calendar,
   BarChart3,
   ChevronRight,
+  ChevronDown,
   LayoutList,
   LayoutGrid,
   Zap,
@@ -110,6 +111,11 @@ export function Dashboard({
   const [listView, setListView] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [quickTaskPlayer, setQuickTaskPlayer] = useState<Player | null>(null);
+
+  // Jugadores advanced filters
+  const [posFilters, setPosFilters] = useState<string[]>([]);
+  const [yearFilters, setYearFilters] = useState<string[]>([]);
+  const [activityFilter, setActivityFilter] = useState(false);
 
   // Cmd+K / Ctrl+K global search
   useEffect(() => {
@@ -243,6 +249,10 @@ export function Dashboard({
   const birthdaysToday = visiblePlayers.filter((p) => isBirthdayToday(p.birthDate));
   const birthdaysSoon = visiblePlayers.filter((p) => isBirthdaySoon(p.birthDate, 7));
 
+  // Available options for multi-filters (derived from visible players)
+  const positionOptions = Array.from(new Set(visiblePlayers.map(p => p.positions[0]).filter(Boolean))).sort() as string[];
+  const yearOptions = Array.from(new Set(visiblePlayers.map(p => p.birthDate?.slice(0, 4)).filter(Boolean))).sort((a, b) => Number(b) - Number(a)) as string[];
+
   const filtered = visiblePlayers.filter((p) => {
     const matchSearch =
       p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -250,7 +260,10 @@ export function Dashboard({
       p.clubs.some((c) => c.name.toLowerCase().includes(search.toLowerCase()));
     const matchManager =
       managerFilter === "all" || p.managedBy.includes(managerFilter);
-    return matchSearch && matchManager;
+    const matchPos = posFilters.length === 0 || (p.positions[0] && posFilters.includes(p.positions[0]));
+    const matchYear = yearFilters.length === 0 || (p.birthDate && yearFilters.includes(p.birthDate.slice(0, 4)));
+    const matchActivity = !activityFilter || tasks.some(t => t.playerId === p.id && t.status !== "completada");
+    return matchSearch && matchManager && matchPos && matchYear && matchActivity;
   });
 
   // (taskView kept for stat-card highlight state)
@@ -675,6 +688,40 @@ export function Dashboard({
           )}
         </div>
 
+        {/* Advanced filters */}
+        <div className="flex items-center gap-2 flex-wrap mb-3">
+          <MultiSelectFilter
+            label="Posición"
+            options={positionOptions}
+            selected={posFilters}
+            onChange={setPosFilters}
+          />
+          <MultiSelectFilter
+            label="Año nacimiento"
+            options={yearOptions}
+            selected={yearFilters}
+            onChange={setYearFilters}
+          />
+          <button
+            onClick={() => setActivityFilter(v => !v)}
+            className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+              activityFilter
+                ? 'bg-[hsl(220,72%,36%)] text-white border-[hsl(220,72%,36%)]'
+                : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+            }`}
+          >
+            Con actividad
+          </button>
+          {(posFilters.length > 0 || yearFilters.length > 0 || activityFilter) && (
+            <button
+              onClick={() => { setPosFilters([]); setYearFilters([]); setActivityFilter(false); }}
+              className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 px-2 py-1.5"
+            >
+              <X className="w-3 h-3" /> Limpiar
+            </button>
+          )}
+        </div>
+
         {/* View toggle */}
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs text-slate-400">{filtered.length} jugador{filtered.length !== 1 ? "es" : ""}</span>
@@ -973,6 +1020,54 @@ export function Dashboard({
             setDetailTask(null);
           }}
         />
+      )}
+    </div>
+  );
+}
+
+/* ── MultiSelectFilter: dropdown checkbox filter ── */
+function MultiSelectFilter({ label, options, selected, onChange }: {
+  label: string;
+  options: string[];
+  selected: string[];
+  onChange: (v: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const isActive = selected.length > 0;
+  const toggle = (val: string) =>
+    onChange(selected.includes(val) ? selected.filter(s => s !== val) : [...selected, val]);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className={`flex items-center gap-1.5 pl-3 pr-2 py-1.5 text-sm rounded-lg border transition-colors ${
+          isActive
+            ? 'bg-[hsl(220,72%,36%)] text-white border-[hsl(220,72%,36%)]'
+            : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+        }`}
+      >
+        <span>{label}{isActive ? ` (${selected.length})` : ''}</span>
+        <ChevronDown className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-20 min-w-[180px] py-1 max-h-60 overflow-y-auto">
+            {options.map(opt => (
+              <label key={opt} className="flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selected.includes(opt)}
+                  onChange={() => toggle(opt)}
+                  onClick={e => e.stopPropagation()}
+                  className="w-3.5 h-3.5 rounded"
+                />
+                <span className="text-sm text-slate-700">{opt}</span>
+              </label>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
