@@ -1184,6 +1184,7 @@ export function Distribution({
 
       {showAddClub && (
         <AddClubModal
+          leagueOptions={sortedLeagues.map(l => ({ league: l.league, country: l.country }))}
           onClose={() => setShowAddClub(false)}
           onSave={async (data) => {
             const saved = await onCreateClub(data)
@@ -1466,24 +1467,54 @@ function AddPlayerModal({ players, existingPlayerIds, season, onClose, onSave }:
 
 // ── ADD CLUB MODAL ────────────────────────────────────────────
 
-function AddClubModal({ onClose, onSave }: {
+function AddClubModal({ onClose, onSave, leagueOptions }: {
   onClose: () => void
   onSave: (data: Omit<Club, 'id' | 'createdAt'>) => Promise<void>
+  leagueOptions: { league: string; country: string }[]
 }) {
   const [name, setName] = useState('')
+  const [leagueSearch, setLeagueSearch] = useState('')
   const [league, setLeague] = useState('')
+  const [country, setCountry] = useState('')
+  const [leagueOpen, setLeagueOpen] = useState(false)
   const [contactPerson, setContactPerson] = useState('')
   const [aisManager, setAisManager] = useState('')
   const [notes, setNotes] = useState('')
   const [isPriority, setIsPriority] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const filteredLeagues = leagueOptions.filter(l =>
+    l.league.toLowerCase().includes(leagueSearch.toLowerCase()) ||
+    l.country.toLowerCase().includes(leagueSearch.toLowerCase())
+  )
+
+  function selectLeague(l: { league: string; country: string }) {
+    setLeague(l.league)
+    setCountry(l.country)
+    setLeagueSearch(l.league)
+    setLeagueOpen(false)
+  }
 
   async function handleSave() {
     if (!name.trim()) return
+    setError('')
     setSaving(true)
     try {
-      await onSave({ name: name.trim(), league: league || undefined, country: 'Spain', contactPerson: contactPerson || undefined, aisManager: aisManager || undefined, notes: notes || undefined, isPriority, needs: [] })
-    } finally { setSaving(false) }
+      await onSave({
+        name: name.trim(),
+        league: league || undefined,
+        country: country || '',
+        contactPerson: contactPerson || undefined,
+        aisManager: aisManager || undefined,
+        notes: notes || undefined,
+        isPriority,
+        needs: [],
+      })
+    } catch (e: unknown) {
+      setSaving(false)
+      setError(e instanceof Error ? e.message : 'Error al guardar')
+    }
   }
 
   return (
@@ -1493,10 +1524,42 @@ function AddClubModal({ onClose, onSave }: {
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Nombre *</label>
           <input autoFocus value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSave()} placeholder="Deportivo, Racing…" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
         </div>
-        <div>
+
+        {/* Liga — searchable dropdown */}
+        <div className="relative">
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Liga</label>
-          <input value={league} onChange={e => setLeague(e.target.value)} placeholder="La Liga, La Liga 2, Primera RFEF…" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+          <input
+            value={leagueSearch}
+            onChange={e => { setLeagueSearch(e.target.value); setLeague(''); setLeagueOpen(true) }}
+            onFocus={() => setLeagueOpen(true)}
+            placeholder="Buscar liga…"
+            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+          />
+          {leagueOpen && filteredLeagues.length > 0 && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setLeagueOpen(false)} />
+              <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-xl max-h-52 overflow-y-auto">
+                {filteredLeagues.slice(0, 60).map(l => (
+                  <button
+                    key={l.league}
+                    type="button"
+                    onClick={() => selectLeague(l)}
+                    className="w-full text-left px-3 py-2 hover:bg-slate-50 text-sm flex items-center justify-between gap-2"
+                  >
+                    <span className="font-medium truncate">{l.league}</span>
+                    {l.country && <span className="text-xs text-slate-400 flex-shrink-0">{l.country}</span>}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
+
+        <div>
+          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">País</label>
+          <input value={country} onChange={e => setCountry(e.target.value)} placeholder="Spain, France…" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+        </div>
+
         <div className="flex gap-2">
           <div className="flex-1">
             <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Contacto club</label>
@@ -1516,7 +1579,8 @@ function AddClubModal({ onClose, onSave }: {
           <span className="text-sm text-slate-600">Club prioritario</span>
           <Star className="w-3.5 h-3.5 text-green-500" />
         </label>
-        <button onClick={handleSave} disabled={!name.trim() || saving} className="w-full py-2 bg-[hsl(220,72%,36%)] text-white text-sm rounded-lg hover:bg-[hsl(220,72%,30%)] disabled:opacity-60">
+        {error && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+        <button onClick={handleSave} disabled={!name.trim() || saving} className="w-full py-2 bg-[hsl(220,72%,36%)] text-white text-sm rounded-lg hover:bg-[hsl(220,72%,30%)] disabled:opacity-60 transition-colors">
           {saving ? 'Guardando…' : 'Añadir club'}
         </button>
       </div>
