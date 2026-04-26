@@ -269,7 +269,7 @@ export function Distribution({
   function switchTab(t: typeof tab) {
     setTab(t)
     closePanel()
-    setLeagueFilter(null)
+    setLeagueFilter([])
     setPositionFilter('')
     setPosFilters([])
     setYearFilters([])
