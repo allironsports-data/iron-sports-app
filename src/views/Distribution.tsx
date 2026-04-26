@@ -94,8 +94,8 @@ function contractBadge(endDate?: string): { label: string; cls: string } | null 
 }
 
 
-function Avatar({ name, photo, size = 'sm' }: { name: string; photo?: string; size?: 'sm' | 'md' }) {
-  const cls = size === 'sm' ? 'w-8 h-8 text-xs' : 'w-10 h-10 text-sm'
+function Avatar({ name, photo, size = 'sm' }: { name: string; photo?: string; size?: 'xs' | 'sm' | 'md' }) {
+  const cls = size === 'xs' ? 'w-6 h-6 text-[10px]' : size === 'sm' ? 'w-8 h-8 text-xs' : 'w-10 h-10 text-sm'
   if (photo) return <img src={photo} className={`${cls} rounded-full object-cover flex-shrink-0`} />
   const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
   return (
@@ -157,8 +157,11 @@ export function Distribution({
   const [bulkAssignPlayerId, setBulkAssignPlayerId] = useState<string | null>(null)
   // when opening club panel from a solicitud, track which need position to filter offered players
   const [selectedNeedPosition, setSelectedNeedPosition] = useState<string | null>(null)
-  // pipeline split view: selected player
-  const [selectedPipelinePlayerId, setSelectedPipelinePlayerId] = useState<string | null>(null)
+  // pipeline filters
+  const [pipelineSearch, setPipelineSearch] = useState('')
+  const [pipelinePosFilter, setPipelinePosFilter] = useState<string>('')
+  const [pipelineGestorFilter, setPipelineGestorFilter] = useState<string>('')
+  const [showClosedDeals, setShowClosedDeals] = useState(false)
 
   // filters
   const [leagueFilter, setLeagueFilter] = useState<string | null>(null)
@@ -673,150 +676,159 @@ export function Distribution({
             </div>
           )}
 
-          {/* ── PIPELINE TAB: player-centric split view ── */}
+          {/* ── PIPELINE TAB: global CRM kanban ── */}
           {tab === 'pipeline' && (() => {
-            const statusOrder: Record<ClubNegotiation['status'], number> = {
-              negociando: 0, interesado: 1, ofrecido: 2, pendiente: 3, cerrado: 4, descartado: 5,
-            }
+            // Collect all gestores for filter dropdown
+            const allGestores = Array.from(new Set(
+              negotiations.map(n => n.aisManager).filter(Boolean)
+            )).sort() as string[]
+
+            // All positions from distribution players
             const distPlayerIds = new Set(entries.map(e => e.playerId))
-            const pipelinePlayers = players
-              .filter(p => distPlayerIds.has(p.id))
-              .map(player => {
-                const negs = negotiations.filter(n => n.playerId === player.id)
-                const bestStatus = negs.length
-                  ? negs.reduce<ClubNegotiation['status']>((best, n) =>
-                      statusOrder[n.status] < statusOrder[best] ? n.status : best,
-                      'descartado')
-                  : 'descartado'
-                return { player, negs, bestStatus }
+            const allPositions = Array.from(new Set(
+              players.filter(p => distPlayerIds.has(p.id)).flatMap(p => p.positions)
+            )).sort()
+
+            // Build enriched deals, applying filters
+            const deals = negotiations
+              .map(neg => {
+                const player = players.find(p => p.id === neg.playerId)
+                const club = clubs.find(c => c.id === neg.clubId)
+                const entry = entries.find(e => e.playerId === neg.playerId)
+                return { neg, player, club, entry }
               })
-              .sort((a, b) => {
-                const sd = statusOrder[a.bestStatus] - statusOrder[b.bestStatus]
-                if (sd !== 0) return sd
-                return b.negs.length - a.negs.length
+              .filter(({ player, club, neg }) => {
+                if (!player || !club) return false
+                if (!distPlayerIds.has(player.id)) return false
+                if (pipelineSearch && !player.name.toLowerCase().includes(pipelineSearch.toLowerCase())) return false
+                if (pipelinePosFilter && !player.positions.some(p => p === pipelinePosFilter)) return false
+                if (pipelineGestorFilter && neg.aisManager !== pipelineGestorFilter) return false
+                return true
               })
 
-            const activeId = selectedPipelinePlayerId ?? pipelinePlayers[0]?.player.id ?? null
-            const active = pipelinePlayers.find(p => p.player.id === activeId)
+            const activeStatuses: ClubNegotiation['status'][] = ['pendiente', 'ofrecido', 'interesado', 'negociando']
+            const closedStatuses: ClubNegotiation['status'][] = ['cerrado', 'descartado']
+            const visibleStatuses = showClosedDeals ? [...activeStatuses, ...closedStatuses] : activeStatuses
+
+            const totalActive = deals.filter(d => activeStatuses.includes(d.neg.status)).length
+            const totalClosed = deals.filter(d => closedStatuses.includes(d.neg.status)).length
 
             return (
-              <div className="flex min-h-[500px] -mx-4 -mb-4">
-                {/* Left: player list */}
-                <div className="w-64 flex-shrink-0 border-r border-slate-200 overflow-y-auto bg-white">
-                  <div className="px-3 py-2 border-b border-slate-100">
-                    <span className="text-xs text-slate-400 font-medium">{pipelinePlayers.length} jugadores</span>
+              <div className="-mx-4 -mb-4">
+                {/* Filter bar */}
+                <div className="flex items-center gap-2 flex-wrap px-4 py-3 bg-white border-b border-slate-100">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                    <input
+                      value={pipelineSearch}
+                      onChange={e => setPipelineSearch(e.target.value)}
+                      placeholder="Jugador…"
+                      className="pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-200 w-36"
+                    />
                   </div>
-                  {pipelinePlayers.map(({ player, negs, bestStatus }) => {
-                    const isSelected = player.id === activeId
-                    const cfg = STATUS_CONFIG[bestStatus]
-                    const activeNegs = negs.filter(n => n.status !== 'descartado' && n.status !== 'cerrado')
-                    return (
-                      <div
-                        key={player.id}
-                        onClick={() => setSelectedPipelinePlayerId(player.id)}
-                        className={`flex items-center gap-2.5 px-3 py-2.5 cursor-pointer border-b border-slate-100 transition-colors ${
-                          isSelected ? 'bg-blue-50 border-l-2 border-l-blue-500' : 'hover:bg-slate-50'
-                        }`}
-                      >
-                        <Avatar name={player.name} photo={player.photo} size="sm" />
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium text-slate-800 truncate">{player.name}</div>
-                          <div className="text-xs text-slate-400">{player.positions[0]}</div>
-                        </div>
-                        <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
-                          {negs.length > 0 && (
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${cfg.color}`}>
-                              {cfg.label}
-                            </span>
-                          )}
-                          {activeNegs.length > 0 && (
-                            <span className="text-[10px] text-slate-400">{activeNegs.length} activos</span>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })}
-                  {pipelinePlayers.length === 0 && (
-                    <div className="text-center py-12 text-slate-400 text-sm px-4">
-                      Sin jugadores en distribución
-                    </div>
+                  <select
+                    value={pipelinePosFilter}
+                    onChange={e => setPipelinePosFilter(e.target.value)}
+                    className="text-xs rounded-lg border border-slate-200 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-200 text-slate-600"
+                  >
+                    <option value="">Todas las posiciones</option>
+                    {allPositions.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                  {allGestores.length > 0 && (
+                    <select
+                      value={pipelineGestorFilter}
+                      onChange={e => setPipelineGestorFilter(e.target.value)}
+                      className="text-xs rounded-lg border border-slate-200 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-200 text-slate-600"
+                    >
+                      <option value="">Todos los gestores</option>
+                      {allGestores.map(g => <option key={g} value={g}>{g}</option>)}
+                    </select>
                   )}
+                  <div className="ml-auto flex items-center gap-3">
+                    <span className="text-xs text-slate-400">{totalActive} activos · {totalClosed} cerrados</span>
+                    <button
+                      onClick={() => setShowClosedDeals(v => !v)}
+                      className={`text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
+                        showClosedDeals
+                          ? 'bg-slate-800 text-white border-slate-800'
+                          : 'border-slate-200 text-slate-500 hover:border-slate-400'
+                      }`}
+                    >
+                      {showClosedDeals ? 'Ocultar cerrados' : 'Ver cerrados'}
+                    </button>
+                  </div>
                 </div>
 
-                {/* Right: selected player mini-kanban */}
-                {active ? (
-                  <div className="flex-1 overflow-x-auto p-4">
-                    <div className="flex items-center gap-3 mb-4">
-                      <Avatar name={active.player.name} photo={active.player.photo} size="md" />
-                      <div>
-                        <div className="font-semibold text-slate-800">{active.player.name}</div>
-                        <div className="text-xs text-slate-500">{active.player.positions[0]} · {active.negs.length} negociaciones</div>
-                      </div>
-                      <div className="ml-auto flex items-center gap-2">
-                        {onSelectPlayer && (
-                          <button
-                            onClick={() => onSelectPlayer(active.player.id)}
-                            className="text-xs text-slate-500 hover:text-blue-600 hover:underline"
-                          >
-                            Ver ficha
-                          </button>
-                        )}
-                        <button
-                          onClick={() => setShowAddNeg({ playerId: active.player.id })}
-                          className="flex items-center gap-1 text-xs text-white font-medium px-2.5 py-1.5 rounded-lg bg-[hsl(220,72%,36%)] hover:bg-[hsl(220,72%,30%)]"
-                        >
-                          <Plus className="w-3.5 h-3.5" /> Añadir club
-                        </button>
-                      </div>
-                    </div>
-                    <div className="flex gap-3 min-w-max">
-                      {(NEG_STATUSES.filter(s => s !== 'descartado') as ClubNegotiation['status'][]).concat(['descartado'] as ClubNegotiation['status'][]).map(status => {
-                        const col = active.negs.filter(n => n.status === status)
-                        const cfg = STATUS_CONFIG[status]
-                        return (
-                          <div key={status} className="w-52 flex-shrink-0">
-                            <div className={`flex items-center gap-2 px-3 py-2 rounded-lg mb-2 ${cfg.color}`}>
-                              <div className={`w-2 h-2 rounded-full ${cfg.dot}`} />
-                              <span className="text-xs font-semibold">{cfg.label}</span>
-                              <span className="ml-auto text-xs opacity-60">{col.length}</span>
-                            </div>
-                            <div className="space-y-2">
-                              {col.map(neg => {
-                                const club = clubs.find(c => c.id === neg.clubId)
-                                if (!club) return null
-                                return (
-                                  <div
-                                    key={neg.id}
-                                    onClick={() => setEditingNeg(neg)}
-                                    className="bg-white rounded-lg border border-slate-200 p-3 cursor-pointer hover:shadow-sm transition-all"
-                                  >
-                                    <div className="text-sm font-medium text-slate-800 truncate">{club.name}</div>
-                                    {club.league && <div className="text-xs text-slate-400">{club.league}</div>}
-                                    {neg.aisManager && (
-                                      <span className="text-xs font-mono bg-slate-100 px-1 rounded mt-1 inline-block">{neg.aisManager}</span>
-                                    )}
-                                    {neg.notes && (
-                                      <p className="text-xs text-slate-400 mt-1 line-clamp-2">{neg.notes}</p>
+                {/* Kanban board */}
+                <div className="overflow-x-auto">
+                  <div className="flex gap-3 p-4 min-w-max">
+                    {visibleStatuses.map(status => {
+                      const col = deals.filter(d => d.neg.status === status)
+                      const cfg = STATUS_CONFIG[status]
+                      return (
+                        <div key={status} className="w-60 flex-shrink-0">
+                          {/* Column header */}
+                          <div className={`flex items-center gap-2 px-3 py-2 rounded-lg mb-2 ${cfg.color}`}>
+                            <div className={`w-2 h-2 rounded-full ${cfg.dot}`} />
+                            <span className="text-xs font-semibold">{cfg.label}</span>
+                            <span className="ml-auto text-xs opacity-60 font-mono">{col.length}</span>
+                          </div>
+                          {/* Cards */}
+                          <div className="space-y-2">
+                            {col.map(({ neg, player, club, entry }) => {
+                              if (!player || !club) return null
+                              const pcfg = entry ? PRIORITY_CONFIG[entry.priority] : null
+                              return (
+                                <div
+                                  key={neg.id}
+                                  onClick={() => setEditingNeg(neg)}
+                                  className="bg-white rounded-xl border border-slate-200 p-3 cursor-pointer hover:shadow-md hover:border-slate-300 transition-all"
+                                >
+                                  {/* Player row */}
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Avatar name={player.name} photo={player.photo} size="xs" />
+                                    <div className="flex-1 min-w-0">
+                                      <div className="text-xs font-semibold text-slate-800 truncate">{player.name}</div>
+                                      <div className="text-[10px] text-slate-400">{player.positions[0]}</div>
+                                    </div>
+                                    {pcfg && (
+                                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold flex-shrink-0 ${pcfg.bg} ${pcfg.text}`}>
+                                        {entry?.priority}
+                                      </span>
                                     )}
                                   </div>
-                                )
-                              })}
-                              {col.length === 0 && (
-                                <div className="h-12 flex items-center justify-center text-xs text-slate-300 border-2 border-dashed border-slate-100 rounded-lg">
-                                  Vacío
+                                  {/* Club row */}
+                                  <div className="border-t border-slate-100 pt-2">
+                                    <div className="text-sm font-medium text-slate-700 truncate">{club.name}</div>
+                                    {club.league && <div className="text-xs text-slate-400">{club.league}</div>}
+                                  </div>
+                                  {/* Meta */}
+                                  {(neg.aisManager || neg.notes) && (
+                                    <div className="mt-2 space-y-0.5">
+                                      {neg.aisManager && (
+                                        <span className="text-[10px] font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded inline-block">
+                                          {neg.aisManager}
+                                        </span>
+                                      )}
+                                      {neg.notes && (
+                                        <p className="text-[10px] text-slate-400 line-clamp-2">{neg.notes}</p>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
-                              )}
-                            </div>
+                              )
+                            })}
+                            {col.length === 0 && (
+                              <div className="h-16 flex items-center justify-center text-xs text-slate-300 border-2 border-dashed border-slate-100 rounded-xl">
+                                Vacío
+                              </div>
+                            )}
                           </div>
-                        )
-                      })}
-                    </div>
+                        </div>
+                      )
+                    })}
                   </div>
-                ) : (
-                  <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
-                    Selecciona un jugador
-                  </div>
-                )}
+                </div>
               </div>
             )
           })()}
