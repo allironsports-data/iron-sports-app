@@ -95,7 +95,6 @@ export function Dashboard({
   const [showAddGeneralTask, setShowAddGeneralTask] = useState(false);
   const [editingGeneralTask, setEditingGeneralTask] = useState<Task | null>(null);
   const [managerFilter, setManagerFilter] = useState<string>("all");
-  const [taskView, setTaskView] = useState<"pending" | "urgent" | "mine" | "inprogress" | null>("mine");
   // quick filter from stat cards: overlays on top of tab filter
   const [quickFilter, setQuickFilter] = useState<"overdue" | "urgent" | "inprogress" | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -272,7 +271,6 @@ export function Dashboard({
     return matchSearch && matchManager && matchPos && matchYear && matchActivity;
   });
 
-  // (taskView kept for stat-card highlight state)
 
   const toggleSelect = (id: string) => {
     setSelected((prev) => {
@@ -543,7 +541,6 @@ export function Dashboard({
                     key={f}
                     onClick={() => {
                       setMineSubTab(f as typeof mineSubTab);
-                      setTaskView("mine");
                       setQuickFilter(null); // clear stat-card filter when switching tabs
                       if (f !== "all") setAssigneeFilter("all");
                     }}
