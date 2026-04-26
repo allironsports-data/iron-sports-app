@@ -18,7 +18,7 @@ const FOOTBALL_POSITIONS = [
   'Central', 'Lateral derecho', 'Lateral izquierdo',
   'Pivote', 'Mediocentro', 'Mediapunta',
   'Extremo derecho', 'Extremo izquierdo',
-  'Delantero', 'Delantero centro',
+  'Delantero',
 ]
 
 // Maps need position label → player position abbreviations used in player profiles
@@ -33,7 +33,6 @@ const POSITION_ABBRS: Record<string, string[]> = {
   'Extremo derecho':   ['RW', 'RM', 'ED', 'Extremo derecho'],
   'Extremo izquierdo': ['LW', 'LM', 'EI', 'Extremo izquierdo'],
   'Delantero':         ['FW', 'ST', 'CF', 'AT', 'SS', 'Delantero', 'Delantero centro'],
-  'Delantero centro':  ['ST', 'CF', 'FW', 'AT', 'Delantero centro', 'Delantero'],
 }
 
 function playerMatchesNeedPosition(playerPositions: string[], needPosition: string): boolean {
@@ -166,6 +165,11 @@ export function Distribution({
   // filters
   const [leagueFilter, setLeagueFilter] = useState<string[]>([])
   const [leagueDropdownOpen, setLeagueDropdownOpen] = useState(false)
+  const [countryFilter, setCountryFilter] = useState<string[]>([])
+  const [countryDropdownOpen, setCountryDropdownOpen] = useState(false)
+  const [priorityOnly, setPriorityOnly] = useState(false)
+  const [hasNeedsOnly, setHasNeedsOnly] = useState(false)
+  const [hasContactOnly, setHasContactOnly] = useState(false)
   const [positionFilter, setPositionFilter] = useState('')   // solicitudes tab
   const [posFilters, setPosFilters] = useState<string[]>([])   // jugadores tab
   const [yearFilters, setYearFilters] = useState<string[]>([])
@@ -226,10 +230,14 @@ export function Distribution({
   const filteredClubs = useMemo(() => {
     let result = clubs
     if (leagueFilter.length > 0) result = result.filter(c => leagueFilter.includes(c.league ?? 'Sin liga'))
+    if (countryFilter.length > 0) result = result.filter(c => countryFilter.includes(c.country ?? ''))
+    if (priorityOnly) result = result.filter(c => c.isPriority)
+    if (hasNeedsOnly) result = result.filter(c => c.needs.length > 0)
+    if (hasContactOnly) result = result.filter(c => !!c.contactPerson)
     if (!search) return result
     const q = search.toLowerCase()
     return result.filter(c => c.name.toLowerCase().includes(q) || c.league?.toLowerCase().includes(q))
-  }, [clubs, search, leagueFilter])
+  }, [clubs, search, leagueFilter, countryFilter, priorityOnly, hasNeedsOnly, hasContactOnly])
 
   const sortedLeagues = useMemo(() => {
     const map = new Map<string, { count: number; country: string }>()
@@ -241,6 +249,15 @@ export function Distribution({
     return Array.from(map.entries())
       .map(([league, { count, country }]) => ({ league, count, country }))
       .sort((a, b) => a.league.localeCompare(b.league))
+  }, [clubs])
+
+  const sortedCountries = useMemo(() => {
+    const map = new Map<string, number>()
+    clubs.forEach(c => { const k = c.country ?? ''; map.set(k, (map.get(k) ?? 0) + 1) })
+    return Array.from(map.entries())
+      .filter(([c]) => c)
+      .map(([country, count]) => ({ country, count }))
+      .sort((a, b) => a.country.localeCompare(b.country))
   }, [clubs])
 
   const allNeedsPositions = useMemo(() => {
@@ -270,6 +287,10 @@ export function Distribution({
     setTab(t)
     closePanel()
     setLeagueFilter([])
+    setCountryFilter([])
+    setPriorityOnly(false)
+    setHasNeedsOnly(false)
+    setHasContactOnly(false)
     setPositionFilter('')
     setPosFilters([])
     setYearFilters([])
@@ -571,13 +592,100 @@ export function Distribution({
                   </div>
                 )}
               </div>
-              {/* Click outside to close */}
+              {/* Click outside to close league dropdown */}
               {leagueDropdownOpen && (
                 <div className="fixed inset-0 z-40" onClick={() => setLeagueDropdownOpen(false)} />
               )}
 
+              {/* Filter row: country + toggles */}
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                {/* Country multi-select */}
+                <div className="relative">
+                  <button
+                    onClick={() => setCountryDropdownOpen(o => !o)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
+                      countryFilter.length > 0
+                        ? 'bg-[hsl(220,72%,36%)] text-white border-[hsl(220,72%,36%)]'
+                        : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                    }`}
+                  >
+                    <Flag className="w-3.5 h-3.5" />
+                    {countryFilter.length === 0 ? 'País' : `${countryFilter.length} país${countryFilter.length > 1 ? 'es' : ''}`}
+                    <ChevronDown className="w-3 h-3 opacity-60" />
+                  </button>
+                  {countryDropdownOpen && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setCountryDropdownOpen(false)} />
+                      <div className="absolute z-50 mt-1 w-56 bg-white border border-slate-200 rounded-xl shadow-xl max-h-64 overflow-y-auto">
+                        <div className="p-1.5 border-b border-slate-100">
+                          <button onClick={() => { setCountryFilter([]); setCountryDropdownOpen(false) }} className="w-full text-left px-2 py-1.5 rounded-lg text-xs hover:bg-slate-50 text-slate-600">Todos los países</button>
+                        </div>
+                        <div className="p-1.5 space-y-0.5">
+                          {sortedCountries.map(({ country, count }) => {
+                            const sel = countryFilter.includes(country)
+                            return (
+                              <button key={country} onClick={() => setCountryFilter(prev => sel ? prev.filter(c => c !== country) : [...prev, country])}
+                                className={`w-full text-left px-2 py-1.5 rounded-lg text-xs flex items-center gap-2 ${sel ? 'bg-blue-50 text-[hsl(220,72%,36%)]' : 'hover:bg-slate-50 text-slate-700'}`}
+                              >
+                                <div className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center ${sel ? 'bg-[hsl(220,72%,36%)] border-[hsl(220,72%,36%)]' : 'border-slate-300'}`}>
+                                  {sel && <Check className="w-2 h-2 text-white" />}
+                                </div>
+                                <span className="flex-1 truncate">{country}</span>
+                                <span className="text-slate-400">{count}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Priority toggle */}
+                <button
+                  onClick={() => setPriorityOnly(v => !v)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
+                    priorityOnly ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                  }`}
+                >
+                  <Star className="w-3.5 h-3.5" /> Prioritarios
+                </button>
+
+                {/* Has needs toggle */}
+                <button
+                  onClick={() => setHasNeedsOnly(v => !v)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
+                    hasNeedsOnly ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                  }`}
+                >
+                  <AlertCircle className="w-3.5 h-3.5" /> Con solicitudes
+                </button>
+
+                {/* Has contact toggle */}
+                <button
+                  onClick={() => setHasContactOnly(v => !v)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
+                    hasContactOnly ? 'bg-green-100 text-green-700 border-green-200' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5" /> Con contacto
+                </button>
+
+                {/* Clear all */}
+                {(leagueFilter.length > 0 || countryFilter.length > 0 || priorityOnly || hasNeedsOnly || hasContactOnly) && (
+                  <button
+                    onClick={() => { setLeagueFilter([]); setCountryFilter([]); setPriorityOnly(false); setHasNeedsOnly(false); setHasContactOnly(false) }}
+                    className="text-xs text-slate-400 hover:text-slate-600 underline ml-1"
+                  >
+                    Limpiar todo
+                  </button>
+                )}
+
+                <span className="ml-auto text-xs text-slate-400">{filteredClubs.length} club{filteredClubs.length !== 1 ? 's' : ''}</span>
+              </div>
+
               {/* Clubs grid — grouped by league when no filter, flat when filtered */}
-              {leagueFilter.length > 0 ? (
+              {(leagueFilter.length > 0 || countryFilter.length > 0 || priorityOnly || hasNeedsOnly || hasContactOnly || !!search) ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-1.5">
                   {filteredClubs.map(club => (
                     <ClubCard
@@ -626,7 +734,7 @@ export function Distribution({
 
               {filteredClubs.length === 0 && (
                 <div className="text-center py-12 text-slate-400 text-sm">
-                  {search || leagueFilter.length > 0 ? 'Sin resultados' : 'No hay clubes. Añade uno.'}
+                  {(search || leagueFilter.length > 0 || countryFilter.length > 0 || priorityOnly || hasNeedsOnly || hasContactOnly) ? 'Sin resultados con estos filtros' : 'No hay clubes. Añade uno.'}
                 </div>
               )}
             </div>
