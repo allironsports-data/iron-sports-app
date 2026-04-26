@@ -334,9 +334,20 @@ function dbToClub(row: Record<string, unknown>): Club {
 }
 
 export async function fetchClubs(): Promise<Club[]> {
-  const { data, error } = await supabase.from('clubs').select('*').order('name')
-  if (error) throw error
-  return (data ?? []).map(dbToClub)
+  const all: Club[] = []
+  const pageSize = 1000
+  let from = 0
+  while (true) {
+    const { data, error } = await supabase
+      .from('clubs').select('*').order('name')
+      .range(from, from + pageSize - 1)
+    if (error) throw error
+    const page = (data ?? []).map(dbToClub)
+    all.push(...page)
+    if (page.length < pageSize) break
+    from += pageSize
+  }
+  return all
 }
 
 export async function createClub(c: Omit<Club, 'id' | 'createdAt'>): Promise<Club> {
