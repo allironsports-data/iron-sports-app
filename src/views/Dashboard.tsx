@@ -117,6 +117,9 @@ export function Dashboard({
   const [yearFilters, setYearFilters] = useState<string[]>([]);
   const [activityFilter, setActivityFilter] = useState(false);
 
+  // Tareas: assignee filter (only used in mineSubTab="all")
+  const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
+
   // Cmd+K / Ctrl+K global search
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -220,6 +223,9 @@ export function Dashboard({
       pool = generalTasks;
     } else if (mineSubTab === "all") {
       pool = tasks.filter(t => t.status !== "completada" && !notAdmin(t));
+      if (assigneeFilter !== "all") {
+        pool = pool.filter(t => t.assigneeId === assigneeFilter);
+      }
     } else {
       pool = [...myTasks, ...myPlayerTasks];
     }
@@ -535,13 +541,18 @@ export function Dashboard({
                 return (
                   <button
                     key={f}
-                    onClick={() => { setMineSubTab(f as typeof mineSubTab); setTaskView("mine"); }}
+                    onClick={() => {
+                      setMineSubTab(f as typeof mineSubTab);
+                      setTaskView("mine");
+                      setQuickFilter(null); // clear stat-card filter when switching tabs
+                      if (f !== "all") setAssigneeFilter("all");
+                    }}
                     className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
-                      active && taskView === "mine"
+                      active
                         ? "text-white border-transparent"
                         : "bg-white border-slate-200 text-slate-500 hover:text-slate-700"
                     }`}
-                    style={active && taskView === "mine" ? { background: PRIMARY } : {}}
+                    style={active ? { background: PRIMARY } : {}}
                   >
                     {labels[f]}
                   </button>
@@ -557,6 +568,38 @@ export function Dashboard({
               )}
             </div>
           </div>
+
+          {/* Assignee filter — only in "Todas" mode */}
+          {mineSubTab === "all" && (
+            <div className="px-4 pt-3 flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-slate-400 font-medium">Responsable:</span>
+              <button
+                onClick={() => setAssigneeFilter("all")}
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                  assigneeFilter === "all" ? "text-white border-transparent" : "bg-white border-slate-200 text-slate-500 hover:text-slate-700"
+                }`}
+                style={assigneeFilter === "all" ? { background: PRIMARY } : {}}
+              >
+                Todos
+              </button>
+              {profiles.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => setAssigneeFilter(assigneeFilter === p.id ? "all" : p.id)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors flex items-center gap-1.5 ${
+                    assigneeFilter === p.id ? "text-white border-transparent" : "bg-white border-slate-200 text-slate-500 hover:text-slate-700"
+                  }`}
+                  style={assigneeFilter === p.id ? { background: PRIMARY } : {}}
+                >
+                  <span className="w-4 h-4 rounded-full text-[8px] font-bold flex items-center justify-center text-white flex-shrink-0"
+                    style={{ background: assigneeFilter === p.id ? "rgba(255,255,255,0.3)" : PRIMARY }}>
+                    {p.avatar}
+                  </span>
+                  {p.name.split(" ")[0]}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Overdue banner */}
           {overdueDashboardTasks.length > 0 && (
