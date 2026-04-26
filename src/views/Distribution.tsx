@@ -164,7 +164,8 @@ export function Distribution({
   const [showClosedDeals, setShowClosedDeals] = useState(false)
 
   // filters
-  const [leagueFilter, setLeagueFilter] = useState<string | null>(null)
+  const [leagueFilter, setLeagueFilter] = useState<string[]>([])
+  const [leagueDropdownOpen, setLeagueDropdownOpen] = useState(false)
   const [positionFilter, setPositionFilter] = useState('')   // solicitudes tab
   const [posFilters, setPosFilters] = useState<string[]>([])   // jugadores tab
   const [yearFilters, setYearFilters] = useState<string[]>([])
@@ -224,19 +225,22 @@ export function Distribution({
 
   const filteredClubs = useMemo(() => {
     let result = clubs
-    if (leagueFilter) result = result.filter(c => (c.league ?? 'Sin liga') === leagueFilter)
+    if (leagueFilter.length > 0) result = result.filter(c => leagueFilter.includes(c.league ?? 'Sin liga'))
     if (!search) return result
     const q = search.toLowerCase()
     return result.filter(c => c.name.toLowerCase().includes(q) || c.league?.toLowerCase().includes(q))
   }, [clubs, search, leagueFilter])
 
   const sortedLeagues = useMemo(() => {
-    const map = new Map<string, number>()
+    const map = new Map<string, { count: number; country: string }>()
     clubs.forEach(c => {
       const key = c.league ?? 'Sin liga'
-      map.set(key, (map.get(key) ?? 0) + 1)
+      const existing = map.get(key)
+      map.set(key, { count: (existing?.count ?? 0) + 1, country: existing?.country || c.country || '' })
     })
-    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b))
+    return Array.from(map.entries())
+      .map(([league, { count, country }]) => ({ league, count, country }))
+      .sort((a, b) => a.league.localeCompare(b.league))
   }, [clubs])
 
   const allNeedsPositions = useMemo(() => {
@@ -504,35 +508,76 @@ export function Distribution({
                 </button>
               </div>
 
-              {/* League filter chips */}
-              <div className="flex gap-1.5 overflow-x-auto pb-2 mb-3 -mx-4 px-4">
+              {/* League multi-select dropdown */}
+              <div className="relative mb-3">
                 <button
-                  onClick={() => setLeagueFilter(null)}
-                  className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                    leagueFilter === null
-                      ? 'bg-[hsl(220,72%,36%)] text-white'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
+                  onClick={() => setLeagueDropdownOpen(o => !o)}
+                  className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 hover:border-slate-300 transition-colors shadow-sm"
                 >
-                  Todas ({clubs.length})
+                  <Flag className="w-4 h-4 text-slate-400" />
+                  {leagueFilter.length === 0
+                    ? <span>Todas las ligas <span className="text-slate-400">({clubs.length})</span></span>
+                    : <span className="font-medium text-[hsl(220,72%,36%)]">{leagueFilter.length} liga{leagueFilter.length > 1 ? 's' : ''} seleccionada{leagueFilter.length > 1 ? 's' : ''}</span>
+                  }
+                  <ChevronDown className={`w-4 h-4 text-slate-400 ml-auto transition-transform ${leagueDropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
-                {sortedLeagues.map(([league, count]) => (
+                {leagueFilter.length > 0 && (
                   <button
-                    key={league}
-                    onClick={() => setLeagueFilter(leagueFilter === league ? null : league)}
-                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                      leagueFilter === league
-                        ? 'bg-[hsl(220,72%,36%)] text-white'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
+                    onClick={() => setLeagueFilter([])}
+                    className="ml-2 text-xs text-slate-400 hover:text-slate-600 underline"
                   >
-                    {league} ({count})
+                    Limpiar
                   </button>
-                ))}
+                )}
+                {leagueDropdownOpen && (
+                  <div className="absolute z-50 mt-1 w-80 bg-white border border-slate-200 rounded-xl shadow-xl max-h-80 overflow-y-auto">
+                    <div className="p-2 border-b border-slate-100">
+                      <button
+                        onClick={() => { setLeagueFilter([]); setLeagueDropdownOpen(false) }}
+                        className={`w-full text-left px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                          leagueFilter.length === 0 ? 'bg-[hsl(220,72%,36%)] text-white' : 'hover:bg-slate-50 text-slate-700'
+                        }`}
+                      >
+                        Todas las ligas ({clubs.length})
+                      </button>
+                    </div>
+                    <div className="p-2 space-y-0.5">
+                      {sortedLeagues.map(({ league, count, country }) => {
+                        const selected = leagueFilter.includes(league)
+                        return (
+                          <button
+                            key={league}
+                            onClick={() => setLeagueFilter(prev =>
+                              prev.includes(league) ? prev.filter(l => l !== league) : [...prev, league]
+                            )}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors ${
+                              selected ? 'bg-blue-50 text-[hsl(220,72%,36%)]' : 'hover:bg-slate-50 text-slate-700'
+                            }`}
+                          >
+                            <div className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${
+                              selected ? 'bg-[hsl(220,72%,36%)] border-[hsl(220,72%,36%)]' : 'border-slate-300'
+                            }`}>
+                              {selected && <Check className="w-2.5 h-2.5 text-white" />}
+                            </div>
+                            <span className="flex-1 min-w-0">
+                              <span className="font-medium truncate block">{league}</span>
+                              {country && <span className="text-xs text-slate-400">{country}</span>}
+                            </span>
+                            <span className="text-xs text-slate-400 flex-shrink-0">{count}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
+              {/* Click outside to close */}
+              {leagueDropdownOpen && (
+                <div className="fixed inset-0 z-40" onClick={() => setLeagueDropdownOpen(false)} />
+              )}
 
               {/* Clubs grid — grouped by league when no filter, flat when filtered */}
-              {leagueFilter ? (
+              {leagueFilter.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-1.5">
                   {filteredClubs.map(club => (
                     <ClubCard
@@ -549,7 +594,7 @@ export function Distribution({
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {sortedLeagues.map(([league]) => {
+                  {sortedLeagues.map(({ league }) => {
                     const leagueClubs = filteredClubs.filter(c => (c.league ?? 'Sin liga') === league)
                     if (leagueClubs.length === 0) return null
                     return (
@@ -581,7 +626,7 @@ export function Distribution({
 
               {filteredClubs.length === 0 && (
                 <div className="text-center py-12 text-slate-400 text-sm">
-                  {search || leagueFilter ? 'Sin resultados' : 'No hay clubes. Añade uno.'}
+                  {search || leagueFilter.length > 0 ? 'Sin resultados' : 'No hay clubes. Añade uno.'}
                 </div>
               )}
             </div>
