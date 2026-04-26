@@ -1625,6 +1625,7 @@ function EditClubModal({ club, onClose, onSave }: {
   onSave: (data: Partial<Club>) => Promise<void>
 }) {
   const [name, setName] = useState(club.name)
+  const [country, setCountry] = useState(club.country ?? '')
   const [league, setLeague] = useState(club.league ?? '')
   const [contactPerson, setContactPerson] = useState(club.contactPerson ?? '')
   const [aisManager, setAisManager] = useState(club.aisManager ?? '')
@@ -1634,7 +1635,7 @@ function EditClubModal({ club, onClose, onSave }: {
 
   async function handleSave() {
     setSaving(true)
-    try { await onSave({ name, league: league || undefined, contactPerson: contactPerson || undefined, aisManager: aisManager || undefined, notes: notes || undefined, isPriority }) }
+    try { await onSave({ name, country, league: league || undefined, contactPerson: contactPerson || undefined, aisManager: aisManager || undefined, notes: notes || undefined, isPriority }) }
     finally { setSaving(false) }
   }
 
@@ -1645,9 +1646,15 @@ function EditClubModal({ club, onClose, onSave }: {
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Nombre</label>
           <input value={name} onChange={e => setName(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
         </div>
-        <div>
-          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Liga</label>
-          <input value={league} onChange={e => setLeague(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+        <div className="flex gap-2">
+          <div className="flex-1">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">País</label>
+            <input value={country} onChange={e => setCountry(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+          </div>
+          <div className="flex-1">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Liga</label>
+            <input value={league} onChange={e => setLeague(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+          </div>
         </div>
         <div className="flex gap-2">
           <div className="flex-1">

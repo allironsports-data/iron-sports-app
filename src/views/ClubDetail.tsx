@@ -737,6 +737,7 @@ function InfoEditForm({ club, onSave, onCancel }: {
   onCancel: () => void
 }) {
   const [name, setName] = useState(club.name)
+  const [country, setCountry] = useState(club.country ?? '')
   const [league, setLeague] = useState(club.league ?? '')
   const [contactPerson, setContactPerson] = useState(club.contactPerson ?? '')
   const [aisManager, setAisManager] = useState(club.aisManager ?? '')
@@ -752,17 +753,23 @@ function InfoEditForm({ club, onSave, onCancel }: {
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
+          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">País</label>
+          <input value={country} onChange={e => setCountry(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+        </div>
+        <div>
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Liga</label>
           <input value={league} onChange={e => setLeague(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Contacto club</label>
+          <input value={contactPerson} onChange={e => setContactPerson(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
         </div>
         <div>
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Gestor AIS</label>
           <input value={aisManager} onChange={e => setAisManager(e.target.value)} placeholder="PP, BGF…" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
         </div>
-      </div>
-      <div>
-        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Contacto club</label>
-        <input value={contactPerson} onChange={e => setContactPerson(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
       </div>
       <div>
         <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Notas</label>
@@ -777,7 +784,7 @@ function InfoEditForm({ club, onSave, onCancel }: {
         <button
           onClick={async () => {
             setSaving(true)
-            try { await onSave({ name, league: league || undefined, contactPerson: contactPerson || undefined, aisManager: aisManager || undefined, notes: notes || undefined, isPriority }) }
+            try { await onSave({ name, country, league: league || undefined, contactPerson: contactPerson || undefined, aisManager: aisManager || undefined, notes: notes || undefined, isPriority }) }
             finally { setSaving(false) }
           }}
           disabled={saving}
