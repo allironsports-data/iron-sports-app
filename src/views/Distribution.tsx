@@ -65,27 +65,6 @@ const PRIORITY_CONFIG = {
 function genId() { return 'tmp_' + Math.random().toString(36).slice(2) }
 function now() { return new Date().toISOString() }
 
-/** Parse "400k", "1.5M", "2M" → number in euros */
-function parseTransferFee(fee?: string): number {
-  if (!fee) return 0
-  const s = fee.trim().toLowerCase().replace(',', '.')
-  const num = parseFloat(s)
-  if (isNaN(num)) return 0
-  if (s.includes('m')) return num * 1_000_000
-  if (s.includes('k')) return num * 1_000
-  return num
-}
-
-/** Format a total number back to "1.2M", "400k", etc. */
-function formatFeeTotal(total: number): string {
-  if (total <= 0) return ''
-  if (total >= 1_000_000) {
-    const v = total / 1_000_000
-    return `${v % 1 === 0 ? v : v.toFixed(1)}M`
-  }
-  if (total >= 1_000) return `${Math.round(total / 1_000)}k`
-  return `${total}`
-}
 
 /** Short month+year: "jun 2025". Empty string if no date. */
 function fmtMonth(dateStr?: string): string {
@@ -298,14 +277,6 @@ export function Distribution({
     C: filteredEntries.filter(e => e.priority === 'C'),
   }), [filteredEntries])
 
-  // pipeline columns
-  const pipeline = useMemo(() => {
-    const cols: Record<ClubNegotiation['status'], ClubNegotiation[]> = {
-      pendiente: [], ofrecido: [], interesado: [], negociando: [], cerrado: [], descartado: [],
-    }
-    negotiations.forEach(n => { cols[n.status].push(n) })
-    return cols
-  }, [negotiations])
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
