@@ -171,6 +171,7 @@ export function Distribution({
   const [hasNeedsOnly, setHasNeedsOnly] = useState(false)
   const [hasContactOnly, setHasContactOnly] = useState(false)
   const [positionFilter, setPositionFilter] = useState('')   // solicitudes tab
+  const [editingNeed, setEditingNeed] = useState<{ clubId: string; index: number } | null>(null)
   const [posFilters, setPosFilters] = useState<string[]>([])   // jugadores tab
   const [yearFilters, setYearFilters] = useState<string[]>([])
   const [activityFilter, setActivityFilter] = useState(false)
@@ -786,44 +787,74 @@ export function Distribution({
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-1.5">
-                  {clubNeeds.map(({ club, need }, i) => (
-                    <div
-                      key={`${club.id}-${i}`}
-                      className="bg-white rounded-lg border border-slate-200 px-3 py-2 flex items-start gap-2.5 hover:shadow-sm transition-all"
-                    >
-                      <div
-                        className="flex-shrink-0 mt-0.5 cursor-pointer"
-                        onClick={() => { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(need.position); }}
-                      >
-                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-md text-xs font-semibold">
-                          <AlertCircle className="w-3 h-3" />
-                          {need.position}
-                        </span>
+                  {clubNeeds.map(({ club, need }, i) => {
+                    const needIndex = club.needs.indexOf(need)
+                    const isEditing = editingNeed?.clubId === club.id && editingNeed?.index === needIndex
+                    return (
+                      <div key={`${club.id}-${i}`} className="bg-white rounded-lg border border-slate-200 hover:shadow-sm transition-all">
+                        {isEditing ? (
+                          <div className="p-3">
+                            <div className="flex items-center gap-2 mb-3">
+                              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Editar solicitud — {club.name}</span>
+                              <button onClick={() => setEditingNeed(null)} className="ml-auto text-slate-300 hover:text-slate-500"><X className="w-3.5 h-3.5" /></button>
+                            </div>
+                            <NeedFormInline
+                              initial={need}
+                              onSave={async (updated) => {
+                                const newNeeds = club.needs.map((n, idx) => idx === needIndex ? updated : n)
+                                await onUpdateClub({ ...club, needs: newNeeds })
+                                setEditingNeed(null)
+                              }}
+                              onCancel={() => setEditingNeed(null)}
+                            />
+                          </div>
+                        ) : (
+                          <div className="px-3 py-2 flex items-start gap-2.5">
+                            <div
+                              className="flex-shrink-0 mt-0.5 cursor-pointer"
+                              onClick={() => { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(need.position); }}
+                            >
+                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-md text-xs font-semibold">
+                                <AlertCircle className="w-3 h-3" />
+                                {need.position}
+                              </span>
+                            </div>
+                            <div
+                              className="flex-1 min-w-0 cursor-pointer"
+                              onClick={() => { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(need.position); }}
+                            >
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-medium text-slate-800 text-sm truncate">{club.name}</span>
+                                {club.league && <span className="text-xs text-slate-400">{club.league}</span>}
+                              </div>
+                              <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-0.5 flex-wrap">
+                                {need.ageMax && <span>Sub-{need.ageMax}</span>}
+                                {need.transferBudget && <span>· {need.transferBudget}</span>}
+                                {need.salaryBudget && <span>· {need.salaryBudget}/mes</span>}
+                                {need.notes && <span className="text-slate-400 truncate">· {need.notes}</span>}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              <button
+                                onClick={() => setEditingNeed({ clubId: club.id, index: needIndex })}
+                                className="p-1 text-slate-300 hover:text-slate-500 transition-colors"
+                                title="Editar solicitud"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => setShowAddNeg({ clubId: club.id })}
+                                className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium px-1.5 py-1 rounded hover:bg-blue-50 transition-colors"
+                                title="Ofrecer jugador a esta solicitud"
+                              >
+                                <Plus className="w-3 h-3" /> Ofrecer
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <div
-                        className="flex-1 min-w-0 cursor-pointer"
-                        onClick={() => { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(need.position); }}
-                      >
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-medium text-slate-800 text-sm truncate">{club.name}</span>
-                          {club.league && <span className="text-xs text-slate-400">{club.league}</span>}
-                        </div>
-                        <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-0.5 flex-wrap">
-                          {need.ageMax && <span>Sub-{need.ageMax}</span>}
-                          {need.transferBudget && <span>· {need.transferBudget}</span>}
-                          {need.salaryBudget && <span>· {need.salaryBudget}/mes</span>}
-                          {need.notes && <span className="text-slate-400 truncate">· {need.notes}</span>}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => setShowAddNeg({ clubId: club.id })}
-                        className="flex-shrink-0 flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium px-1.5 py-1 rounded hover:bg-blue-50 transition-colors"
-                        title="Ofrecer jugador a esta solicitud"
-                      >
-                        <Plus className="w-3 h-3" /> Ofrecer
-                      </button>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -1570,6 +1601,70 @@ function AddPlayerModal({ players, existingPlayerIds, season, onClose, onSave }:
         </div>
       )}
     </ModalShell>
+  )
+}
+
+// ── ADD CLUB MODAL ────────────────────────────────────────────
+
+// ── NEED FORM INLINE (solicitudes tab) ───────────────────────
+
+function NeedFormInline({ initial, onSave, onCancel }: {
+  initial?: ClubNeed
+  onSave: (need: ClubNeed) => Promise<void>
+  onCancel: () => void
+}) {
+  const [position, setPosition] = useState(initial?.position ?? '')
+  const [ageMax, setAgeMax] = useState(initial?.ageMax?.toString() ?? '')
+  const [transferBudget, setTransferBudget] = useState(initial?.transferBudget ?? '')
+  const [salaryBudget, setSalaryBudget] = useState(initial?.salaryBudget ?? '')
+  const [notes, setNotes] = useState(initial?.notes ?? '')
+  const [saving, setSaving] = useState(false)
+
+  async function handleSave() {
+    if (!position) return
+    setSaving(true)
+    try {
+      await onSave({ position, ageMax: ageMax ? parseInt(ageMax) : undefined, transferBudget: transferBudget || undefined, salaryBudget: salaryBudget || undefined, notes: notes || undefined })
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-2">Posición *</label>
+        <div className="flex flex-wrap gap-1.5">
+          {FOOTBALL_POSITIONS.map(pos => (
+            <button key={pos} type="button" onClick={() => setPosition(pos)}
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${position === pos ? 'bg-[hsl(220,72%,36%)] text-white border-[hsl(220,72%,36%)]' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}
+            >{pos}</button>
+          ))}
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">Edad máx.</label>
+          <input type="number" value={ageMax} onChange={e => setAgeMax(e.target.value)} placeholder="23" className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">Traspaso</label>
+          <input value={transferBudget} onChange={e => setTransferBudget(e.target.value)} placeholder="400k, 2M…" className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">Salario</label>
+          <input value={salaryBudget} onChange={e => setSalaryBudget(e.target.value)} placeholder="60k/año…" className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">Notas</label>
+          <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Contexto…" className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <button onClick={onCancel} className="flex-1 py-1.5 text-sm border border-slate-200 rounded-lg text-slate-500">Cancelar</button>
+        <button onClick={handleSave} disabled={!position || saving} className="flex-1 py-1.5 text-sm bg-[hsl(220,72%,36%)] text-white rounded-lg disabled:opacity-60">
+          {saving ? '…' : 'Guardar'}
+        </button>
+      </div>
+    </div>
   )
 }
 

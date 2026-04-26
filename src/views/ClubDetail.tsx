@@ -661,6 +661,14 @@ function EditNegModal({ neg, onClose, onSave, onDelete }: {
 
 // ── NEED FORM ─────────────────────────────────────────────────
 
+const POSITIONS = [
+  'Portero',
+  'Central', 'Lateral derecho', 'Lateral izquierdo',
+  'Pivote', 'Mediocentro', 'Mediapunta',
+  'Extremo derecho', 'Extremo izquierdo',
+  'Delantero',
+]
+
 function NeedForm({ initial, onSave, onCancel }: {
   initial?: ClubNeed
   onSave: (need: ClubNeed) => Promise<void>
@@ -689,34 +697,48 @@ function NeedForm({ initial, onSave, onCancel }: {
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Posición *</label>
-          <input autoFocus value={position} onChange={e => setPosition(e.target.value)} placeholder="Ej: Lateral izq., MC…"
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+      <div>
+        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-2">Posición *</label>
+        <div className="flex flex-wrap gap-1.5">
+          {POSITIONS.map(pos => (
+            <button
+              key={pos}
+              type="button"
+              onClick={() => setPosition(pos)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                position === pos
+                  ? 'bg-[hsl(220,72%,36%)] text-white border-[hsl(220,72%,36%)]'
+                  : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+              }`}
+            >
+              {pos}
+            </button>
+          ))}
         </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Edad máx.</label>
           <input type="number" value={ageMax} onChange={e => setAgeMax(e.target.value)} placeholder="Ej: 23"
             className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
         </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Traspaso</label>
           <input value={transferBudget} onChange={e => setTransferBudget(e.target.value)} placeholder="400k, 2M…"
             className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
         </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Salario</label>
           <input value={salaryBudget} onChange={e => setSalaryBudget(e.target.value)} placeholder="60k/año…"
             className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
         </div>
-      </div>
-      <div>
-        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Notas</label>
-        <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Contexto adicional…"
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none" />
+        <div>
+          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Notas</label>
+          <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Contexto adicional…"
+            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+        </div>
       </div>
       <div className="flex gap-2">
         <button onClick={onCancel} className="flex-1 py-2 text-sm border border-slate-200 rounded-lg text-slate-500">Cancelar</button>
