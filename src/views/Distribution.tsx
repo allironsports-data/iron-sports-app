@@ -11,6 +11,37 @@ import type { Profile } from '../contexts/AuthContext'
 // ── constants ─────────────────────────────────────────────────
 
 const CURRENT_SEASON = '2025-26'
+
+// Canonical position list (Spanish labels used for needs)
+const FOOTBALL_POSITIONS = [
+  'Portero',
+  'Central', 'Lateral derecho', 'Lateral izquierdo',
+  'Pivote', 'Mediocentro', 'Mediapunta',
+  'Extremo derecho', 'Extremo izquierdo',
+  'Delantero', 'Delantero centro',
+]
+
+// Maps need position label → player position abbreviations used in player profiles
+const POSITION_ABBRS: Record<string, string[]> = {
+  'Portero':           ['GK', 'POR', 'Portero'],
+  'Central':           ['CB', 'CT', 'DFC', 'Central'],
+  'Lateral derecho':   ['RB', 'RWB', 'LD', 'Lateral derecho'],
+  'Lateral izquierdo': ['LB', 'LWB', 'LI', 'Lateral izquierdo'],
+  'Pivote':            ['DM', 'CDM', 'MCD', 'Pivote'],
+  'Mediocentro':       ['CM', 'MC', 'Mediocentro'],
+  'Mediapunta':        ['AM', 'CAM', 'MP', 'Mediapunta'],
+  'Extremo derecho':   ['RW', 'RM', 'ED', 'Extremo derecho'],
+  'Extremo izquierdo': ['LW', 'LM', 'EI', 'Extremo izquierdo'],
+  'Delantero':         ['FW', 'ST', 'CF', 'AT', 'SS', 'Delantero', 'Delantero centro'],
+  'Delantero centro':  ['ST', 'CF', 'FW', 'AT', 'Delantero centro', 'Delantero'],
+}
+
+function playerMatchesNeedPosition(playerPositions: string[], needPosition: string): boolean {
+  const abbrs = POSITION_ABBRS[needPosition] ?? [needPosition]
+  return playerPositions.some(p =>
+    abbrs.some(a => p.toLowerCase() === a.toLowerCase() || p.toLowerCase().includes(needPosition.toLowerCase()))
+  )
+}
 const CONDITIONS = ['Libre', 'Traspaso', 'Cesión', 'Cesión/Traspaso', 'Traspaso (porcentaje)', 'Cesión con opción']
 const NEG_STATUSES: ClubNegotiation['status'][] = ['pendiente', 'ofrecido', 'interesado', 'negociando', 'cerrado', 'descartado']
 
@@ -145,6 +176,10 @@ export function Distribution({
   const [editingClub, setEditingClub] = useState<Club | null>(null)
   const [editingNeg, setEditingNeg] = useState<ClubNegotiation | null>(null)
   const [bulkAssignPlayerId, setBulkAssignPlayerId] = useState<string | null>(null)
+  // when opening club panel from a solicitud, track which need position to filter offered players
+  const [selectedNeedPosition, setSelectedNeedPosition] = useState<string | null>(null)
+  // pipeline split view: selected player
+  const [selectedPipelinePlayerId, setSelectedPipelinePlayerId] = useState<string | null>(null)
 
   // filters
   const [leagueFilter, setLeagueFilter] = useState<string | null>(null)
@@ -533,7 +568,7 @@ export function Distribution({
                       isSelected={selectedClubId === club.id}
                       onClick={() => {
                         if (onSelectClub) { onSelectClub(club.id) }
-                        else { setSelectedClubId(club.id); setSelectedEntryId(null) }
+                        else { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(null) }
                       }}
                     />
                   ))}
@@ -559,7 +594,7 @@ export function Distribution({
                               isSelected={selectedClubId === club.id}
                               onClick={() => {
                                 if (onSelectClub) { onSelectClub(club.id) }
-                                else { setSelectedClubId(club.id); setSelectedEntryId(null) }
+                                else { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(null) }
                               }}
                             />
                           ))}
@@ -627,16 +662,21 @@ export function Distribution({
                   {clubNeeds.map(({ club, need }, i) => (
                     <div
                       key={`${club.id}-${i}`}
-                      onClick={() => { setSelectedClubId(club.id); setSelectedEntryId(null) }}
-                      className="bg-white rounded-lg border border-slate-200 px-3 py-2 flex items-start gap-2.5 cursor-pointer hover:shadow-sm transition-all"
+                      className="bg-white rounded-lg border border-slate-200 px-3 py-2 flex items-start gap-2.5 hover:shadow-sm transition-all"
                     >
-                      <div className="flex-shrink-0 mt-0.5">
+                      <div
+                        className="flex-shrink-0 mt-0.5 cursor-pointer"
+                        onClick={() => { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(need.position); }}
+                      >
                         <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-md text-xs font-semibold">
                           <AlertCircle className="w-3 h-3" />
                           {need.position}
                         </span>
                       </div>
-                      <div className="flex-1 min-w-0">
+                      <div
+                        className="flex-1 min-w-0 cursor-pointer"
+                        onClick={() => { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(need.position); }}
+                      >
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="font-medium text-slate-800 text-sm truncate">{club.name}</span>
                           {club.league && <span className="text-xs text-slate-400">{club.league}</span>}
@@ -648,7 +688,13 @@ export function Distribution({
                           {need.notes && <span className="text-slate-400 truncate">· {need.notes}</span>}
                         </div>
                       </div>
-                      <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0 mt-1" />
+                      <button
+                        onClick={() => setShowAddNeg({ clubId: club.id })}
+                        className="flex-shrink-0 flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium px-1.5 py-1 rounded hover:bg-blue-50 transition-colors"
+                        title="Ofrecer jugador a esta solicitud"
+                      >
+                        <Plus className="w-3 h-3" /> Ofrecer
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -656,74 +702,153 @@ export function Distribution({
             </div>
           )}
 
-          {/* ── PIPELINE TAB ── */}
-          {tab === 'pipeline' && (
-            <div className="overflow-x-auto pb-4">
-              <div className="flex gap-3 min-w-max">
-                {(NEG_STATUSES.filter(s => s !== 'descartado') as ClubNegotiation['status'][]).concat(['descartado'] as ClubNegotiation['status'][]).map(status => {
-                  const col = pipeline[status]
-                  const cfg = STATUS_CONFIG[status]
-                  return (
-                    <div key={status} className="w-56 flex-shrink-0">
-                      {(() => {
-                        const feeTotal = col.reduce((sum, neg) => {
-                          const entry = entries.find(e => e.playerId === neg.playerId)
-                          return sum + parseTransferFee(entry?.transferFee)
-                        }, 0)
-                        const feeStr = formatFeeTotal(feeTotal)
+          {/* ── PIPELINE TAB: player-centric split view ── */}
+          {tab === 'pipeline' && (() => {
+            const statusOrder: Record<ClubNegotiation['status'], number> = {
+              negociando: 0, interesado: 1, ofrecido: 2, pendiente: 3, cerrado: 4, descartado: 5,
+            }
+            const distPlayerIds = new Set(entries.map(e => e.playerId))
+            const pipelinePlayers = players
+              .filter(p => distPlayerIds.has(p.id))
+              .map(player => {
+                const negs = negotiations.filter(n => n.playerId === player.id)
+                const bestStatus = negs.length
+                  ? negs.reduce<ClubNegotiation['status']>((best, n) =>
+                      statusOrder[n.status] < statusOrder[best] ? n.status : best,
+                      'descartado')
+                  : 'descartado'
+                return { player, negs, bestStatus }
+              })
+              .sort((a, b) => {
+                const sd = statusOrder[a.bestStatus] - statusOrder[b.bestStatus]
+                if (sd !== 0) return sd
+                return b.negs.length - a.negs.length
+              })
+
+            const activeId = selectedPipelinePlayerId ?? pipelinePlayers[0]?.player.id ?? null
+            const active = pipelinePlayers.find(p => p.player.id === activeId)
+
+            return (
+              <div className="flex min-h-[500px] -mx-4 -mb-4">
+                {/* Left: player list */}
+                <div className="w-64 flex-shrink-0 border-r border-slate-200 overflow-y-auto bg-white">
+                  <div className="px-3 py-2 border-b border-slate-100">
+                    <span className="text-xs text-slate-400 font-medium">{pipelinePlayers.length} jugadores</span>
+                  </div>
+                  {pipelinePlayers.map(({ player, negs, bestStatus }) => {
+                    const isSelected = player.id === activeId
+                    const cfg = STATUS_CONFIG[bestStatus]
+                    const activeNegs = negs.filter(n => n.status !== 'descartado' && n.status !== 'cerrado')
+                    return (
+                      <div
+                        key={player.id}
+                        onClick={() => setSelectedPipelinePlayerId(player.id)}
+                        className={`flex items-center gap-2.5 px-3 py-2.5 cursor-pointer border-b border-slate-100 transition-colors ${
+                          isSelected ? 'bg-blue-50 border-l-2 border-l-blue-500' : 'hover:bg-slate-50'
+                        }`}
+                      >
+                        <Avatar name={player.name} photo={player.photo} size="sm" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-slate-800 truncate">{player.name}</div>
+                          <div className="text-xs text-slate-400">{player.positions[0]}</div>
+                        </div>
+                        <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
+                          {negs.length > 0 && (
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${cfg.color}`}>
+                              {cfg.label}
+                            </span>
+                          )}
+                          {activeNegs.length > 0 && (
+                            <span className="text-[10px] text-slate-400">{activeNegs.length} activos</span>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {pipelinePlayers.length === 0 && (
+                    <div className="text-center py-12 text-slate-400 text-sm px-4">
+                      Sin jugadores en distribución
+                    </div>
+                  )}
+                </div>
+
+                {/* Right: selected player mini-kanban */}
+                {active ? (
+                  <div className="flex-1 overflow-x-auto p-4">
+                    <div className="flex items-center gap-3 mb-4">
+                      <Avatar name={active.player.name} photo={active.player.photo} size="md" />
+                      <div>
+                        <div className="font-semibold text-slate-800">{active.player.name}</div>
+                        <div className="text-xs text-slate-500">{active.player.positions[0]} · {active.negs.length} negociaciones</div>
+                      </div>
+                      <div className="ml-auto flex items-center gap-2">
+                        {onSelectPlayer && (
+                          <button
+                            onClick={() => onSelectPlayer(active.player.id)}
+                            className="text-xs text-slate-500 hover:text-blue-600 hover:underline"
+                          >
+                            Ver ficha
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setShowAddNeg({ playerId: active.player.id })}
+                          className="flex items-center gap-1 text-xs text-white font-medium px-2.5 py-1.5 rounded-lg bg-[hsl(220,72%,36%)] hover:bg-[hsl(220,72%,30%)]"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Añadir club
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex gap-3 min-w-max">
+                      {(NEG_STATUSES.filter(s => s !== 'descartado') as ClubNegotiation['status'][]).concat(['descartado'] as ClubNegotiation['status'][]).map(status => {
+                        const col = active.negs.filter(n => n.status === status)
+                        const cfg = STATUS_CONFIG[status]
                         return (
-                          <div className={`flex items-center gap-2 px-3 py-2 rounded-lg mb-2 ${cfg.color}`}>
-                            <div className={`w-2 h-2 rounded-full ${cfg.dot}`} />
-                            <span className="text-xs font-semibold">{cfg.label}</span>
-                            <div className="ml-auto flex items-center gap-1.5">
-                              {feeStr && (
-                                <span className="text-xs font-semibold opacity-80">{feeStr}</span>
+                          <div key={status} className="w-52 flex-shrink-0">
+                            <div className={`flex items-center gap-2 px-3 py-2 rounded-lg mb-2 ${cfg.color}`}>
+                              <div className={`w-2 h-2 rounded-full ${cfg.dot}`} />
+                              <span className="text-xs font-semibold">{cfg.label}</span>
+                              <span className="ml-auto text-xs opacity-60">{col.length}</span>
+                            </div>
+                            <div className="space-y-2">
+                              {col.map(neg => {
+                                const club = clubs.find(c => c.id === neg.clubId)
+                                if (!club) return null
+                                return (
+                                  <div
+                                    key={neg.id}
+                                    onClick={() => setEditingNeg(neg)}
+                                    className="bg-white rounded-lg border border-slate-200 p-3 cursor-pointer hover:shadow-sm transition-all"
+                                  >
+                                    <div className="text-sm font-medium text-slate-800 truncate">{club.name}</div>
+                                    {club.league && <div className="text-xs text-slate-400">{club.league}</div>}
+                                    {neg.aisManager && (
+                                      <span className="text-xs font-mono bg-slate-100 px-1 rounded mt-1 inline-block">{neg.aisManager}</span>
+                                    )}
+                                    {neg.notes && (
+                                      <p className="text-xs text-slate-400 mt-1 line-clamp-2">{neg.notes}</p>
+                                    )}
+                                  </div>
+                                )
+                              })}
+                              {col.length === 0 && (
+                                <div className="h-12 flex items-center justify-center text-xs text-slate-300 border-2 border-dashed border-slate-100 rounded-lg">
+                                  Vacío
+                                </div>
                               )}
-                              <span className="text-xs opacity-60">{col.length}</span>
                             </div>
                           </div>
                         )
-                      })()}
-                      <div className="space-y-2">
-                        {col.map(neg => {
-                          const player = players.find(p => p.id === neg.playerId)
-                          const club = clubs.find(c => c.id === neg.clubId)
-                          if (!player || !club) return null
-                          return (
-                            <div
-                              key={neg.id}
-                              onClick={() => setEditingNeg(neg)}
-                              className="bg-white rounded-lg border border-slate-200 p-3 cursor-pointer hover:shadow-sm transition-all"
-                            >
-                              <div className="flex items-center gap-2 mb-1">
-                                <Avatar name={player.name} photo={player.photo} size="sm" />
-                                <span className="text-sm font-medium text-slate-800 truncate">{player.name}</span>
-                              </div>
-                              <div className="flex items-center gap-1 text-xs text-slate-500 mt-1">
-                                <Building2 className="w-3 h-3" />
-                                <span className="truncate">{club.name}</span>
-                              </div>
-                              {neg.aisManager && (
-                                <span className="text-xs font-mono bg-slate-100 px-1 rounded mt-1 inline-block">{neg.aisManager}</span>
-                              )}
-                              {neg.notes && (
-                                <p className="text-xs text-slate-400 mt-1 line-clamp-2">{neg.notes}</p>
-                              )}
-                            </div>
-                          )
-                        })}
-                        {col.length === 0 && (
-                          <div className="h-16 flex items-center justify-center text-xs text-slate-300 border-2 border-dashed border-slate-100 rounded-lg">
-                            Vacío
-                          </div>
-                        )}
-                      </div>
+                      })}
                     </div>
-                  )
-                })}
+                  </div>
+                ) : (
+                  <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
+                    Selecciona un jugador
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            )
+          })()}
         </div>
 
         {/* ── SIDE PANEL ── */}
@@ -852,6 +977,13 @@ export function Distribution({
 
             {selectedClub && (() => {
               const clubNegsPanel = negotiations.filter(n => n.clubId === selectedClub.id)
+              // when opened from a solicitud, filter offered players to matching position
+              const displayedNegs = selectedNeedPosition
+                ? clubNegsPanel.filter(neg => {
+                    const p = players.find(pl => pl.id === neg.playerId)
+                    return p && playerMatchesNeedPosition(p.positions, selectedNeedPosition)
+                  })
+                : clubNegsPanel
               return (
                 <div className="h-full flex flex-col">
                   <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 flex-shrink-0">
@@ -914,7 +1046,19 @@ export function Distribution({
 
                   <div className="flex-1 overflow-y-auto px-4 py-3">
                     <div className="flex items-center justify-between mb-3">
-                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Ofrecidos ({clubNegsPanel.length})</span>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                          Ofrecidos ({displayedNegs.length}{selectedNeedPosition && displayedNegs.length !== clubNegsPanel.length ? `/${clubNegsPanel.length}` : ''})
+                        </span>
+                        {selectedNeedPosition && (
+                          <button
+                            onClick={() => setSelectedNeedPosition(null)}
+                            className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100"
+                          >
+                            {selectedNeedPosition} <X className="w-2.5 h-2.5" />
+                          </button>
+                        )}
+                      </div>
                       <button
                         onClick={() => setShowAddNeg({ clubId: selectedClub.id })}
                         className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
@@ -923,7 +1067,7 @@ export function Distribution({
                       </button>
                     </div>
                     <div className="space-y-2">
-                      {clubNegsPanel.map(neg => {
+                      {displayedNegs.map(neg => {
                         const player = players.find(p => p.id === neg.playerId)
                         const entry = entries.find(e => e.playerId === neg.playerId)
                         if (!player) return null
@@ -954,9 +1098,11 @@ export function Distribution({
                           </div>
                         )
                       })}
-                      {clubNegsPanel.length === 0 && (
+                      {displayedNegs.length === 0 && (
                         <div className="text-center py-6 text-slate-400 text-xs">
-                          Sin jugadores ofrecidos aún
+                          {selectedNeedPosition && clubNegsPanel.length > 0
+                            ? `Sin jugadores de posición "${selectedNeedPosition}" ofrecidos`
+                            : 'Sin jugadores ofrecidos aún'}
                         </div>
                       )}
                     </div>
@@ -1889,11 +2035,11 @@ function AddNeedModal({ clubs, onClose, onSave }: {
   }, [clubs, clubSearch])
 
   async function handleSave() {
-    if (!clubId || !position.trim()) return
+    if (!clubId || !position) return
     setSaving(true)
     try {
       await onSave(clubId, {
-        position: position.trim(),
+        position,
         ageMax: ageMax ? Number(ageMax) : undefined,
         transferBudget: transferBudget || undefined,
         salaryBudget: salaryBudget || undefined,
@@ -1948,14 +2094,23 @@ function AddNeedModal({ clubs, onClose, onSave }: {
             </div>
 
             <div>
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Posición *</label>
-              <input
-                autoFocus
-                value={position}
-                onChange={e => setPosition(e.target.value)}
-                placeholder="Lateral izquierdo, Delantero centro…"
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-              />
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-2">Posición *</label>
+              <div className="flex flex-wrap gap-1.5">
+                {FOOTBALL_POSITIONS.map(pos => (
+                  <button
+                    key={pos}
+                    type="button"
+                    onClick={() => setPosition(pos)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                      position === pos
+                        ? 'bg-[hsl(220,72%,36%)] text-white border-[hsl(220,72%,36%)]'
+                        : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:text-slate-800'
+                    }`}
+                  >
+                    {pos}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-2">
@@ -2002,7 +2157,7 @@ function AddNeedModal({ clubs, onClose, onSave }: {
 
             <button
               onClick={handleSave}
-              disabled={!position.trim() || saving}
+              disabled={!position || saving}
               className="w-full py-2 bg-[hsl(220,72%,36%)] text-white text-sm rounded-lg hover:bg-[hsl(220,72%,30%)] disabled:opacity-60"
             >
               {saving ? 'Guardando…' : 'Añadir solicitud'}
