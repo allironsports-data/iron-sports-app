@@ -1009,6 +1009,15 @@ export function Distribution({
                             {need.ageMax && <span>· sub-{need.ageMax}</span>}
                             {need.transferBudget && <span>· {need.transferBudget}</span>}
                             {need.notes && <span className="text-slate-400">· {need.notes}</span>}
+                            <button
+                              className="ml-auto p-0.5 text-slate-300 hover:text-red-400 flex-shrink-0"
+                              title="Eliminar solicitud"
+                              onClick={async () => {
+                                await onUpdateClub({ ...selectedClub, needs: selectedClub.needs.filter((_, idx) => idx !== i) })
+                              }}
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
                           </div>
                         ))}
                       </div>
@@ -1079,18 +1088,20 @@ export function Distribution({
                     </div>
                   </div>
 
-                  <div className="px-4 py-3 border-t border-slate-100 flex-shrink-0">
-                    <button
-                      onClick={async () => {
-                        if (!confirm('¿Eliminar este club?')) return
-                        await onDeleteClub(selectedClub.id)
-                        closePanel()
-                      }}
-                      className="text-xs text-red-500 hover:text-red-600 flex items-center gap-1"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" /> Eliminar club
-                    </button>
-                  </div>
+                  {currentProfile.is_admin && (
+                    <div className="px-4 py-3 border-t border-slate-100 flex-shrink-0">
+                      <button
+                        onClick={async () => {
+                          if (!confirm('¿Eliminar este club?')) return
+                          await onDeleteClub(selectedClub.id)
+                          closePanel()
+                        }}
+                        className="text-xs text-red-500 hover:text-red-600 flex items-center gap-1"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Eliminar club
+                      </button>
+                    </div>
+                  )}
                 </div>
               )
             })()}
