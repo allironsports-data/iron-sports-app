@@ -3,6 +3,7 @@ import {
   Plus, Search, Star, Building2, Users,
   ChevronRight, X, Check, Pencil, Trash2, LogOut,
   TrendingUp, AlertCircle, CircleDot, Flag, ChevronDown,
+  LayoutGrid, Table,
 } from 'lucide-react'
 import logoImg from '../assets/logo.jpeg'
 import type { Player, Club, ClubNeed, DistributionEntry, ClubNegotiation } from '../types'
@@ -100,6 +101,7 @@ const LEAGUE_TIERS: Record<string, LeagueTier> = {
   'Superliga':                'B',
   '1. Lig':                   'B',
   'Primera RFEF':             'B',
+  'Segunda RFEF':             'C',
   '1B Pro League':            'B',
   'EFL League One':           'B',
   'Liga Portugal 2':          'B',
@@ -307,6 +309,11 @@ export function Distribution({
   const [showAddNeed, setShowAddNeed] = useState(false)
   const [groupByTier, setGroupByTier] = useState(false)
   const [playerPanelGestorFilter, setPlayerPanelGestorFilter] = useState('')
+  // solicitudes filters
+  const [needsTierFilter, setNeedsTierFilter] = useState<LeagueTier[]>([])
+  const [needsLeagueFilter, setNeedsLeagueFilter] = useState('')
+  const [needsAgeFilter, setNeedsAgeFilter] = useState('')
+  const [needsViewMode, setNeedsViewMode] = useState<'cards' | 'table'>('cards')
 
   const seasonEntries = entries.filter(e => e.season === season)
 
@@ -417,9 +424,18 @@ export function Distribution({
     const q = search.toLowerCase()
     return results.filter(r =>
       (!pf || r.need.position.toLowerCase().includes(pf)) &&
-      (!q || r.club.name.toLowerCase().includes(q) || r.club.league?.toLowerCase().includes(q) || r.need.position.toLowerCase().includes(q))
+      (!q || r.club.name.toLowerCase().includes(q) || r.club.league?.toLowerCase().includes(q) || r.need.position.toLowerCase().includes(q)) &&
+      (needsTierFilter.length === 0 || needsTierFilter.includes(getClubTier(r.club.league, r.club.country))) &&
+      (!needsLeagueFilter || r.club.league === needsLeagueFilter) &&
+      (!needsAgeFilter || (r.need.ageMax !== undefined && r.need.ageMax <= Number(needsAgeFilter)))
     )
-  }, [clubs, positionFilter, search])
+  }, [clubs, positionFilter, search, needsTierFilter, needsLeagueFilter, needsAgeFilter])
+
+  const needsLeagues = useMemo(() => {
+    const m = new Map<string, number>()
+    clubs.forEach(c => { if (c.league && c.needs.length > 0) m.set(c.league, (m.get(c.league) ?? 0) + c.needs.length) })
+    return Array.from(m.entries()).sort((a, b) => a[0].localeCompare(b[0]))
+  }, [clubs])
 
   // For each position, how many distribution players match it
   const matchCountByPosition = useMemo(() => {
@@ -454,6 +470,9 @@ export function Distribution({
     setYearFilters([])
     setActivityFilter(false)
     setSearch('')
+    setNeedsTierFilter([])
+    setNeedsLeagueFilter('')
+    setNeedsAgeFilter('')
   }
 
   // group entries by priority
@@ -999,9 +1018,36 @@ export function Distribution({
           )}
 
           {/* ── SOLICITUDES TAB ── */}
-          {tab === 'solicitudes' && (
+          {tab === 'solicitudes' && (() => {
+            const hasNeedsFilters = needsTierFilter.length > 0 || !!needsLeagueFilter || !!needsAgeFilter || !!positionFilter
+            return (
             <div className="max-w-5xl mx-auto">
-              <div className="flex justify-end mb-2">
+              {/* Top row: view toggle + add button */}
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setNeedsViewMode('cards')}
+                    title="Vista tarjetas"
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
+                      needsViewMode === 'cards'
+                        ? 'bg-[hsl(220,72%,36%)] text-white border-[hsl(220,72%,36%)]'
+                        : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                    }`}
+                  >
+                    <LayoutGrid className="w-3.5 h-3.5" /> Tarjetas
+                  </button>
+                  <button
+                    onClick={() => setNeedsViewMode('table')}
+                    title="Vista tabla"
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
+                      needsViewMode === 'table'
+                        ? 'bg-[hsl(220,72%,36%)] text-white border-[hsl(220,72%,36%)]'
+                        : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                    }`}
+                  >
+                    <Table className="w-3.5 h-3.5" /> Tabla
+                  </button>
+                </div>
                 <button
                   onClick={() => setShowAddNeed(true)}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-[hsl(220,72%,36%)] text-white text-sm rounded-lg hover:bg-[hsl(220,72%,30%)] transition-colors"
@@ -1009,40 +1055,100 @@ export function Distribution({
                   <Plus className="w-4 h-4" /> Añadir solicitud
                 </button>
               </div>
+
               {/* Stats summary */}
-              {clubNeeds.length > 0 && (
+              {clubs.some(c => c.needs.length > 0) && (
                 <div className="flex items-center gap-4 px-3 py-2 bg-slate-50 rounded-lg mb-3 text-xs text-slate-500">
-                  <span><span className="font-semibold text-slate-700">{clubNeeds.length}</span> solicitudes</span>
+                  <span><span className="font-semibold text-slate-700">{clubNeeds.length}</span> solicitudes{hasNeedsFilters ? ' (filtradas)' : ''}</span>
                   <span><span className="font-semibold text-slate-700">{new Set(clubNeeds.map(({need}) => need.position)).size}</span> posiciones distintas</span>
                   <span><span className="font-semibold text-slate-700">{new Set(clubNeeds.filter(({club}) => getClubTier(club.league, club.country) === 'A').map(({club}) => club.id)).size}</span> de clubes Tier A</span>
                   <span><span className="font-semibold text-slate-700">{new Set(clubNeeds.map(({club}) => club.league)).size}</span> ligas</span>
                 </div>
               )}
-              {/* Position filter chips */}
-              <div className="flex gap-1.5 overflow-x-auto pb-2 mb-3 -mx-4 px-4">
-                <button
-                  onClick={() => setPositionFilter('')}
-                  className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                    !positionFilter
-                      ? 'bg-[hsl(220,72%,36%)] text-white'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  Todas las posiciones
-                </button>
-                {allNeedsPositions.map(pos => (
+
+              {/* Filter bar */}
+              <div className="space-y-2 mb-3">
+                {/* Row 1: Tier chips + League select + Age select + clear */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Tier chips */}
+                  {(['A', 'B', 'C', 'D'] as LeagueTier[]).map(t => {
+                    const cfg = TIER_CONFIG[t]
+                    const active = needsTierFilter.includes(t)
+                    return (
+                      <button
+                        key={t}
+                        onClick={() => setNeedsTierFilter(prev => active ? prev.filter(x => x !== t) : [...prev, t])}
+                        title={cfg.title}
+                        className={`flex items-center gap-1 px-2.5 py-1.5 border rounded-lg text-xs font-bold transition-colors ${
+                          active
+                            ? `${cfg.bg} ${cfg.text} ${cfg.border}`
+                            : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                        }`}
+                      >
+                        Tier {t}
+                      </button>
+                    )
+                  })}
+
+                  {/* League select */}
+                  <select
+                    value={needsLeagueFilter}
+                    onChange={e => setNeedsLeagueFilter(e.target.value)}
+                    className="text-xs rounded-lg border border-slate-200 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-200 text-slate-600 bg-white"
+                  >
+                    <option value="">Todas las ligas</option>
+                    {needsLeagues.map(([league, count]) => (
+                      <option key={league} value={league}>{league} ({count})</option>
+                    ))}
+                  </select>
+
+                  {/* Age filter */}
+                  <select
+                    value={needsAgeFilter}
+                    onChange={e => setNeedsAgeFilter(e.target.value)}
+                    className="text-xs rounded-lg border border-slate-200 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-200 text-slate-600 bg-white"
+                  >
+                    <option value="">Cualquier edad</option>
+                    <option value="18">Sub-18</option>
+                    <option value="21">Sub-21</option>
+                    <option value="23">Sub-23</option>
+                    <option value="25">Sub-25</option>
+                    <option value="28">Sub-28</option>
+                  </select>
+
+                  {/* Clear filters */}
+                  {hasNeedsFilters && (
+                    <button
+                      onClick={() => { setNeedsTierFilter([]); setNeedsLeagueFilter(''); setNeedsAgeFilter(''); setPositionFilter('') }}
+                      className="text-xs text-slate-400 hover:text-slate-600 underline"
+                    >
+                      Limpiar filtros
+                    </button>
+                  )}
+                </div>
+
+                {/* Row 2: Position chips */}
+                <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-4 px-4">
                   <button
-                    key={pos}
-                    onClick={() => setPositionFilter(positionFilter === pos ? '' : pos)}
+                    onClick={() => setPositionFilter('')}
                     className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                      positionFilter === pos
-                        ? 'bg-[hsl(220,72%,36%)] text-white'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      !positionFilter ? 'bg-[hsl(220,72%,36%)] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                     }`}
                   >
-                    {pos}
+                    Todas las posiciones
                   </button>
-                ))}
+                  {allNeedsPositions.map(pos => (
+                    <button
+                      key={pos}
+                      onClick={() => setPositionFilter(positionFilter === pos ? '' : pos)}
+                      className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                        positionFilter === pos ? 'bg-[hsl(220,72%,36%)] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      {pos}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {clubNeeds.length === 0 ? (
@@ -1051,17 +1157,20 @@ export function Distribution({
                     ? 'Ningún club tiene solicitudes registradas aún'
                     : 'Sin resultados para este filtro'}
                 </div>
-              ) : (
+              ) : needsViewMode === 'cards' ? (
+                /* ── CARD VIEW ── */
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-1.5">
                   {clubNeeds.map(({ club, need }, i) => {
                     const needIndex = club.needs.indexOf(need)
                     const isEditing = editingNeed?.clubId === club.id && editingNeed?.index === needIndex
+                    const tier = getClubTier(club.league, club.country)
+                    const tierCfg = TIER_CONFIG[tier]
                     return (
                       <div key={`${club.id}-${i}`} className="bg-white rounded-lg border border-slate-200 hover:shadow-sm transition-all">
                         {isEditing ? (
                           <div className="p-3">
                             <div className="flex items-center gap-2 mb-3">
-                              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Editar solicitud — {club.name}</span>
+                              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Editar — {club.name}</span>
                               <button onClick={() => setEditingNeed(null)} className="ml-auto text-slate-300 hover:text-slate-500"><X className="w-3.5 h-3.5" /></button>
                             </div>
                             <NeedFormInline
@@ -1078,19 +1187,21 @@ export function Distribution({
                           <div className="px-3 py-2 flex items-start gap-2.5">
                             <div
                               className="flex-shrink-0 mt-0.5 cursor-pointer"
-                              onClick={() => { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(need.position); }}
+                              onClick={() => { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(need.position) }}
                             >
                               <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-md text-xs font-semibold">
-                                <AlertCircle className="w-3 h-3" />
-                                {need.position}
+                                <AlertCircle className="w-3 h-3" />{need.position}
                               </span>
                             </div>
                             <div
                               className="flex-1 min-w-0 cursor-pointer"
-                              onClick={() => { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(need.position); }}
+                              onClick={() => { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(need.position) }}
                             >
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className="font-medium text-slate-800 text-sm truncate">{club.name}</span>
+                                {club.league && (
+                                  <span className={`text-[10px] font-bold px-1 py-0.5 rounded ${tierCfg.bg} ${tierCfg.text}`}>{tier}</span>
+                                )}
                                 {club.league && <span className="text-xs text-slate-400">{club.league}</span>}
                                 {(matchCountByPosition[need.position] ?? 0) > 0 && (
                                   <span className="text-[10px] bg-green-50 text-green-700 border border-green-200 px-1.5 py-0.5 rounded-full font-medium flex-shrink-0">
@@ -1109,14 +1220,12 @@ export function Distribution({
                               <button
                                 onClick={() => setEditingNeed({ clubId: club.id, index: needIndex })}
                                 className="p-1 text-slate-300 hover:text-slate-500 transition-colors"
-                                title="Editar solicitud"
                               >
                                 <Pencil className="w-3.5 h-3.5" />
                               </button>
                               <button
                                 onClick={() => setShowAddNeg({ clubId: club.id })}
                                 className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium px-1.5 py-1 rounded hover:bg-blue-50 transition-colors"
-                                title="Ofrecer jugador a esta solicitud"
                               >
                                 <Plus className="w-3 h-3" /> Ofrecer
                               </button>
@@ -1127,9 +1236,110 @@ export function Distribution({
                     )
                   })}
                 </div>
+              ) : (
+                /* ── TABLE VIEW ── */
+                <div className="bg-white rounded-lg border border-slate-200 overflow-x-auto">
+                  <table className="w-full min-w-[700px] text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-100 bg-slate-50 text-[10px] text-slate-500 uppercase tracking-wider">
+                        <th className="text-left px-3 py-2.5 font-semibold">Posición</th>
+                        <th className="text-left px-3 py-2.5 font-semibold">Club</th>
+                        <th className="text-left px-3 py-2.5 font-semibold">Liga / Tier</th>
+                        <th className="text-left px-3 py-2.5 font-semibold">Edad máx</th>
+                        <th className="text-left px-3 py-2.5 font-semibold">Traspaso</th>
+                        <th className="text-left px-3 py-2.5 font-semibold">Salario/mes</th>
+                        <th className="text-left px-3 py-2.5 font-semibold">Notas</th>
+                        <th className="text-left px-3 py-2.5 font-semibold">Jugadores</th>
+                        <th className="px-3 py-2.5" />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {clubNeeds.map(({ club, need }, i) => {
+                        const needIndex = club.needs.indexOf(need)
+                        const isEditing = editingNeed?.clubId === club.id && editingNeed?.index === needIndex
+                        const tier = getClubTier(club.league, club.country)
+                        const tierCfg = TIER_CONFIG[tier]
+                        const matchCount = matchCountByPosition[need.position] ?? 0
+                        return (
+                          <tr key={`${club.id}-${i}`} className="hover:bg-slate-50/60 transition-colors">
+                            {isEditing ? (
+                              <td colSpan={9} className="px-3 py-3">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Editar — {club.name}</span>
+                                  <button onClick={() => setEditingNeed(null)} className="ml-auto text-slate-300 hover:text-slate-500"><X className="w-3.5 h-3.5" /></button>
+                                </div>
+                                <NeedFormInline
+                                  initial={need}
+                                  onSave={async (updated) => {
+                                    const newNeeds = club.needs.map((n, idx) => idx === needIndex ? updated : n)
+                                    await onUpdateClub({ ...club, needs: newNeeds })
+                                    setEditingNeed(null)
+                                  }}
+                                  onCancel={() => setEditingNeed(null)}
+                                />
+                              </td>
+                            ) : (
+                              <>
+                                <td className="px-3 py-2">
+                                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-md text-xs font-semibold whitespace-nowrap">
+                                    <AlertCircle className="w-3 h-3 flex-shrink-0" />{need.position}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2">
+                                  <button
+                                    onClick={() => { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(need.position) }}
+                                    className="font-medium text-slate-800 hover:text-blue-600 text-left text-sm transition-colors"
+                                  >
+                                    {club.name}
+                                  </button>
+                                </td>
+                                <td className="px-3 py-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${tierCfg.bg} ${tierCfg.text}`}>{tier}</span>
+                                    <span className="text-xs text-slate-500 whitespace-nowrap">{club.league ?? '—'}</span>
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2 text-xs text-slate-600 whitespace-nowrap">
+                                  {need.ageMax ? <span className="bg-slate-100 px-1.5 py-0.5 rounded font-medium">Sub-{need.ageMax}</span> : <span className="text-slate-300">—</span>}
+                                </td>
+                                <td className="px-3 py-2 text-xs text-slate-600 whitespace-nowrap">{need.transferBudget || <span className="text-slate-300">—</span>}</td>
+                                <td className="px-3 py-2 text-xs text-slate-600 whitespace-nowrap">{need.salaryBudget || <span className="text-slate-300">—</span>}</td>
+                                <td className="px-3 py-2 text-xs text-slate-400 max-w-[160px] truncate" title={need.notes}>{need.notes || <span className="text-slate-300">—</span>}</td>
+                                <td className="px-3 py-2">
+                                  {matchCount > 0 && (
+                                    <span className="text-[10px] bg-green-50 text-green-700 border border-green-200 px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap">
+                                      {matchCount} jugadores
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2">
+                                  <div className="flex items-center gap-1 justify-end">
+                                    <button
+                                      onClick={() => setEditingNeed({ clubId: club.id, index: needIndex })}
+                                      className="p-1 text-slate-300 hover:text-slate-500 transition-colors"
+                                    >
+                                      <Pencil className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => setShowAddNeg({ clubId: club.id })}
+                                      className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium px-1.5 py-1 rounded hover:bg-blue-50 transition-colors whitespace-nowrap"
+                                    >
+                                      <Plus className="w-3 h-3" /> Ofrecer
+                                    </button>
+                                  </div>
+                                </td>
+                              </>
+                            )}
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
-          )}
+            )
+          })()}
 
           {/* ── PIPELINE TAB: global CRM kanban ── */}
           {tab === 'pipeline' && (() => {
