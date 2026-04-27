@@ -305,6 +305,8 @@ export function Distribution({
   const [yearFilters, setYearFilters] = useState<string[]>([])
   const [activityFilter, setActivityFilter] = useState(false)
   const [showAddNeed, setShowAddNeed] = useState(false)
+  const [groupByTier, setGroupByTier] = useState(false)
+  const [playerPanelGestorFilter, setPlayerPanelGestorFilter] = useState('')
 
   const seasonEntries = entries.filter(e => e.season === season)
 
@@ -419,10 +421,24 @@ export function Distribution({
     )
   }, [clubs, positionFilter, search])
 
+  // For each position, how many distribution players match it
+  const matchCountByPosition = useMemo(() => {
+    const map: Record<string, number> = {}
+    FOOTBALL_POSITIONS.forEach(pos => {
+      const abbrs = POSITION_ABBRS[pos] ?? [pos]
+      const count = seasonEntries.filter(e => {
+        const p = players.find(pl => pl.id === e.playerId)
+        return p?.positions.some(pp => abbrs.some(a => pp.toLowerCase() === a.toLowerCase()))
+      }).length
+      map[pos] = count
+    })
+    return map
+  }, [seasonEntries, players])
+
   const selectedEntry = seasonEntries.find(e => e.id === selectedEntryId) ?? null
   const selectedClub = clubs.find(c => c.id === selectedClubId) ?? null
 
-  function closePanel() { setSelectedEntryId(null); setSelectedClubId(null) }
+  function closePanel() { setSelectedEntryId(null); setSelectedClubId(null); setPlayerPanelGestorFilter('') }
   const hasPanel = !!selectedEntry || !!selectedClub
 
   function switchTab(t: typeof tab) {
@@ -430,8 +446,6 @@ export function Distribution({
     closePanel()
     setLeagueFilter([])
     setCountryFilter([])
-    setTierFilter([])
-    setConfederationFilter([])
     setPriorityOnly(false)
     setHasNeedsOnly(false)
     setHasContactOnly(false)
@@ -664,7 +678,18 @@ export function Distribution({
           {/* ── CLUBES TAB ── */}
           {tab === 'clubes' && (
             <div className="max-w-5xl mx-auto">
-              <div className="flex justify-end mb-2">
+              <div className="flex items-center justify-between mb-2">
+                <button
+                  onClick={() => setGroupByTier(v => !v)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
+                    groupByTier
+                      ? 'bg-slate-800 text-white border-slate-800'
+                      : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                  }`}
+                >
+                  <CircleDot className="w-3.5 h-3.5" />
+                  {groupByTier ? 'Por nivel' : 'Por liga'}
+                </button>
                 <button
                   onClick={() => setShowAddClub(true)}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-[hsl(220,72%,36%)] text-white text-sm rounded-lg hover:bg-[hsl(220,72%,30%)] transition-colors"
@@ -892,8 +917,42 @@ export function Distribution({
                         if (onSelectClub) { onSelectClub(club.id) }
                         else { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(null) }
                       }}
+                      onOffer={() => setShowAddNeg({ clubId: club.id })}
                     />
                   ))}
+                </div>
+              ) : groupByTier ? (
+                <div className="space-y-4">
+                  {(['A', 'B', 'C', 'D'] as LeagueTier[]).map(t => {
+                    const tierClubs = filteredClubs.filter(c => getClubTier(c.league, c.country) === t)
+                    if (tierClubs.length === 0) return null
+                    const tierCfg = TIER_CONFIG[t]
+                    return (
+                      <div key={t}>
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${tierCfg.bg} ${tierCfg.text}`}>{t}</span>
+                          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{tierCfg.title}</span>
+                          <span className="text-xs text-slate-400">({tierClubs.length})</span>
+                          <div className="flex-1 h-px bg-slate-200" />
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-1.5">
+                          {tierClubs.map(club => (
+                            <ClubCard
+                              key={club.id}
+                              club={club}
+                              negotiations={negotiations}
+                              isSelected={selectedClubId === club.id}
+                              onClick={() => {
+                                if (onSelectClub) { onSelectClub(club.id) }
+                                else { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(null) }
+                              }}
+                              onOffer={() => setShowAddNeg({ clubId: club.id })}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -921,6 +980,7 @@ export function Distribution({
                                 if (onSelectClub) { onSelectClub(club.id) }
                                 else { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(null) }
                               }}
+                              onOffer={() => setShowAddNeg({ clubId: club.id })}
                             />
                           ))}
                         </div>
@@ -949,6 +1009,15 @@ export function Distribution({
                   <Plus className="w-4 h-4" /> Añadir solicitud
                 </button>
               </div>
+              {/* Stats summary */}
+              {clubNeeds.length > 0 && (
+                <div className="flex items-center gap-4 px-3 py-2 bg-slate-50 rounded-lg mb-3 text-xs text-slate-500">
+                  <span><span className="font-semibold text-slate-700">{clubNeeds.length}</span> solicitudes</span>
+                  <span><span className="font-semibold text-slate-700">{new Set(clubNeeds.map(({need}) => need.position)).size}</span> posiciones distintas</span>
+                  <span><span className="font-semibold text-slate-700">{new Set(clubNeeds.filter(({club}) => getClubTier(club.league, club.country) === 'A').map(({club}) => club.id)).size}</span> de clubes Tier A</span>
+                  <span><span className="font-semibold text-slate-700">{new Set(clubNeeds.map(({club}) => club.league)).size}</span> ligas</span>
+                </div>
+              )}
               {/* Position filter chips */}
               <div className="flex gap-1.5 overflow-x-auto pb-2 mb-3 -mx-4 px-4">
                 <button
@@ -1023,6 +1092,11 @@ export function Distribution({
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className="font-medium text-slate-800 text-sm truncate">{club.name}</span>
                                 {club.league && <span className="text-xs text-slate-400">{club.league}</span>}
+                                {(matchCountByPosition[need.position] ?? 0) > 0 && (
+                                  <span className="text-[10px] bg-green-50 text-green-700 border border-green-200 px-1.5 py-0.5 rounded-full font-medium flex-shrink-0">
+                                    {matchCountByPosition[need.position]} jugadores
+                                  </span>
+                                )}
                               </div>
                               <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-0.5 flex-wrap">
                                 {need.ageMax && <span>Sub-{need.ageMax}</span>}
@@ -1269,7 +1343,13 @@ export function Distribution({
                   </div>
 
                   <div className="flex-1 overflow-y-auto px-4 py-3">
-                    <div className="flex items-center justify-between mb-3">
+                    {(() => {
+                      const panelGestores = Array.from(new Set(playerNegs.map(n => n.aisManager).filter(Boolean))) as string[]
+                      const visibleNegs = playerPanelGestorFilter
+                        ? playerNegs.filter(n => n.aisManager === playerPanelGestorFilter)
+                        : playerNegs
+                      return (<>
+                    <div className="flex items-center justify-between mb-2">
                       <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Clubes ({playerNegs.length})</span>
                       <div className="flex items-center gap-2">
                         <button
@@ -1287,9 +1367,16 @@ export function Distribution({
                         </button>
                       </div>
                     </div>
-
+                    {panelGestores.length > 1 && (
+                      <div className="flex gap-1.5 flex-wrap mb-2">
+                        <button onClick={() => setPlayerPanelGestorFilter('')} className={`px-2 py-1 rounded text-[10px] font-medium border transition-colors ${!playerPanelGestorFilter ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'}`}>Todos</button>
+                        {panelGestores.map(g => (
+                          <button key={g} onClick={() => setPlayerPanelGestorFilter(playerPanelGestorFilter === g ? '' : g)} className={`px-2 py-1 rounded text-[10px] font-medium border transition-colors ${playerPanelGestorFilter === g ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'}`}>{g}</button>
+                        ))}
+                      </div>
+                    )}
                     <div className="space-y-2">
-                      {playerNegs.map(neg => {
+                      {visibleNegs.map(neg => {
                         const club = clubs.find(c => c.id === neg.clubId)
                         if (!club) return null
                         const scfg = STATUS_CONFIG[neg.status]
@@ -1321,6 +1408,7 @@ export function Distribution({
                         </div>
                       )}
                     </div>
+                    </>)})()}
                   </div>
 
                   <div className="px-4 py-3 border-t border-slate-100 flex-shrink-0">
@@ -1559,6 +1647,7 @@ export function Distribution({
       {editingClub && (
         <EditClubModal
           club={editingClub}
+          leagueOptions={sortedLeagues.map(l => l.league)}
           onClose={() => setEditingClub(null)}
           onSave={async (data) => {
             await onUpdateClub({ ...editingClub, ...data })
@@ -1616,11 +1705,12 @@ export function Distribution({
 
 // ── CLUB CARD ────────────────────────────────────────────────
 
-function ClubCard({ club, negotiations, isSelected, onClick }: {
+function ClubCard({ club, negotiations, isSelected, onClick, onOffer }: {
   club: Club
   negotiations: ClubNegotiation[]
   isSelected: boolean
   onClick: () => void
+  onOffer?: () => void
 }) {
   const activeNegs = negotiations.filter(n => n.clubId === club.id && n.status !== 'descartado')
   const tier = getClubTier(club.league, club.country)
@@ -1628,7 +1718,7 @@ function ClubCard({ club, negotiations, isSelected, onClick }: {
   return (
     <div
       onClick={onClick}
-      className={`bg-white rounded-lg border cursor-pointer hover:shadow-sm transition-all flex items-center gap-2.5 px-3 py-2 ${
+      className={`bg-white rounded-lg border cursor-pointer hover:shadow-sm transition-all group flex items-center gap-2.5 px-3 py-2 ${
         isSelected ? 'border-blue-300 ring-1 ring-blue-200' : 'border-slate-200'
       } ${club.isPriority ? 'border-l-4 border-l-green-400' : ''}`}
     >
@@ -1652,7 +1742,16 @@ function ClubCard({ club, negotiations, isSelected, onClick }: {
           )}
         </div>
       </div>
-      <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
+      {onOffer ? (
+        <button
+          onClick={e => { e.stopPropagation(); onOffer() }}
+          className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium px-1.5 py-1 rounded hover:bg-blue-50"
+        >
+          <Plus className="w-3 h-3" /> Ofrecer
+        </button>
+      ) : (
+        <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
+      )}
     </div>
   )
 }
@@ -2130,8 +2229,9 @@ function EditEntryModal({ entry, onClose, onSave }: {
 
 // ── EDIT CLUB MODAL ───────────────────────────────────────────
 
-function EditClubModal({ club, onClose, onSave }: {
+function EditClubModal({ club, leagueOptions = [], onClose, onSave }: {
   club: Club
+  leagueOptions?: string[]
   onClose: () => void
   onSave: (data: Partial<Club>) => Promise<void>
 }) {
@@ -2164,7 +2264,16 @@ function EditClubModal({ club, onClose, onSave }: {
           </div>
           <div className="flex-1">
             <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Liga</label>
-            <input value={league} onChange={e => setLeague(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+            <input
+              value={league}
+              onChange={e => setLeague(e.target.value)}
+              list="edit-club-league-list"
+              placeholder="Buscar liga…"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+            />
+            <datalist id="edit-club-league-list">
+              {leagueOptions.map(l => <option key={l} value={l} />)}
+            </datalist>
           </div>
         </div>
         <div className="flex gap-2">
