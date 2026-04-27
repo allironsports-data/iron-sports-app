@@ -59,6 +59,132 @@ const PRIORITY_CONFIG = {
   C: { label: 'C', bg: 'bg-slate-100',  text: 'text-slate-600',  border: 'border-slate-200',  ring: 'ring-slate-400' },
 }
 
+// ── League / Club metadata ─────────────────────────────────────
+
+export type LeagueTier = 'A' | 'B' | 'C' | 'D'
+export type Confederation = 'UEFA' | 'CONMEBOL' | 'CONCACAF' | 'AFC' | 'CAF'
+
+const TIER_CONFIG: Record<LeagueTier, { label: string; bg: string; text: string; border: string; title: string }> = {
+  A: { label: 'A', bg: 'bg-violet-100',  text: 'text-violet-700',  border: 'border-violet-200', title: 'Elite (Top 5 EU + equivalentes)' },
+  B: { label: 'B', bg: 'bg-blue-100',    text: 'text-blue-700',    border: 'border-blue-200',   title: 'Fuerte (ligas de nivel alto)' },
+  C: { label: 'C', bg: 'bg-teal-100',    text: 'text-teal-700',    border: 'border-teal-200',   title: 'Medio (ligas competitivas)' },
+  D: { label: 'D', bg: 'bg-slate-100',   text: 'text-slate-500',   border: 'border-slate-200',  title: 'Otros / menor nivel' },
+}
+
+// Tier assigned per league name. Conflicts resolved in getClubTier().
+const LEAGUE_TIERS: Record<string, LeagueTier> = {
+  // ── UEFA Tier A ──
+  'Premier League':           'A',
+  'La Liga':                  'A',
+  'Bundesliga':               'A',
+  'Serie A':                  'A', // Italy (Brazil handled via country)
+  'Ligue 1':                  'A',
+  'Eredivisie':               'A',
+  'Primeira Liga':            'A',
+  'Pro League':               'A',
+  'Süper Lig':                'A',
+  // ── UEFA Tier B ──
+  'Championship':             'B',
+  'La Liga 2':                'B',
+  '2. Bundesliga':            'B',
+  'Serie B':                  'B',
+  'Ligue 2':                  'B',
+  'Swiss Super League':       'B',
+  'Scottish Premiership':     'B',
+  'Austrian Bundesliga':      'B',
+  'Ekstraklasa':              'B',
+  'Czech First League':       'B',
+  'NB I':                     'B',
+  'Allsvenskan':              'B',
+  'Eliteserien':              'B',
+  'Superliga':                'B',
+  '1. Lig':                   'B',
+  'Primera RFEF':             'B',
+  '1B Pro League':            'B',
+  'EFL League One':           'B',
+  'Liga Portugal 2':          'B',
+  'HNL':                      'B',
+  'Super liga':               'B',
+  'First Professional League':'B',
+  'Super League Greece':      'B',
+  'Israeli Premier League':   'B',
+  // ── UEFA Tier C ──
+  'EFL League Two':           'C',
+  '3. Liga':                  'C',
+  'Austrian 2. Liga':         'C',
+  'Slovak Super Liga':        'C',
+  'PrvaLiga':                 'C',
+  'Eerste Divisie':           'C',
+  'First Division Cyprus':    'C',
+  'Veikkausliiga':            'C',
+  'Erovnuli Liga':            'C',
+  'Ukrainian Premier League': 'C',
+  'Challenge League':         'C',
+  'Premier League Russia':    'C',
+  'Liga 1':                   'C', // Romania / Peru — same name, resolved by country
+  // ── CONMEBOL ──
+  'Liga Betplay':             'B',
+  'LigaPro':                  'C',
+  // ── CONCACAF ──
+  'MLS':                      'A',
+  'Liga MX':                  'A',
+  // ── AFC ──
+  'Saudi Pro League':         'A',
+  'Qatar Stars League':       'B',
+  'Arabian Gulf League':      'B',
+  'Indian Super League':      'C',
+  'Premier League Kazakhstan':'D',
+  // ── CAF ──
+  // (no CAF leagues in current DB)
+  // ── Misc ──
+  'Baltic Leagues':           'D',
+}
+
+// Country → confederation
+const COUNTRY_CONFEDERATION: Record<string, Confederation> = {
+  // UEFA
+  Spain: 'UEFA', England: 'UEFA', Germany: 'UEFA', France: 'UEFA', Italy: 'UEFA',
+  Netherlands: 'UEFA', Portugal: 'UEFA', Belgium: 'UEFA', Switzerland: 'UEFA',
+  Austria: 'UEFA', Scotland: 'UEFA', Poland: 'UEFA', 'Czech Republic': 'UEFA',
+  Hungary: 'UEFA', Turkey: 'UEFA', Sweden: 'UEFA', Norway: 'UEFA', Denmark: 'UEFA',
+  Finland: 'UEFA', Bulgaria: 'UEFA', Romania: 'UEFA', Serbia: 'UEFA', Croatia: 'UEFA',
+  Slovenia: 'UEFA', Slovakia: 'UEFA', Cyprus: 'UEFA', Greece: 'UEFA', Israel: 'UEFA',
+  Ukraine: 'UEFA', Georgia: 'UEFA', Russia: 'UEFA', Baltics: 'UEFA',
+  // CONMEBOL
+  Brazil: 'CONMEBOL', Argentina: 'CONMEBOL', Colombia: 'CONMEBOL',
+  Chile: 'CONMEBOL', Peru: 'CONMEBOL', Ecuador: 'CONMEBOL', Uruguay: 'CONMEBOL',
+  // CONCACAF
+  USA: 'CONCACAF', Mexico: 'CONCACAF',
+  // AFC
+  'Saudi Arabia': 'AFC', Qatar: 'AFC', UAE: 'AFC', India: 'AFC', Kazakhstan: 'AFC',
+}
+
+const CONFEDERATION_LABELS: Record<Confederation, string> = {
+  UEFA:     '🌍 UEFA',
+  CONMEBOL: '🌎 CONMEBOL',
+  CONCACAF: '🌎 CONCACAF',
+  AFC:      '🌏 AFC',
+  CAF:      '🌍 CAF',
+}
+
+function getClubTier(league: string | undefined, country: string | undefined): LeagueTier {
+  if (!league) return 'D'
+  // Resolve name conflicts using country
+  if (league === 'Primera Division') {
+    if (country === 'Argentina') return 'A'
+    if (country === 'Brazil') return 'A'    // just in case
+    return 'C'                              // Uruguay, Chile, etc.
+  }
+  if (league === 'Serie A' && country === 'Brazil') return 'A'
+  if (league === 'Liga 1' && country === 'Romania') return 'B'
+  if (league === 'Super League' && country === 'Switzerland') return 'B'
+  return LEAGUE_TIERS[league] ?? 'D'
+}
+
+function getClubConfederation(country: string | undefined): Confederation {
+  return COUNTRY_CONFEDERATION[country ?? ''] ?? 'UEFA'
+}
+
 // ── helpers ───────────────────────────────────────────────────
 
 function genId() { return 'tmp_' + Math.random().toString(36).slice(2) }
@@ -167,6 +293,9 @@ export function Distribution({
   const [leagueDropdownOpen, setLeagueDropdownOpen] = useState(false)
   const [countryFilter, setCountryFilter] = useState<string[]>([])
   const [countryDropdownOpen, setCountryDropdownOpen] = useState(false)
+  const [tierFilter, setTierFilter] = useState<LeagueTier[]>([])
+  const [confederationFilter, setConfederationFilter] = useState<Confederation[]>([])
+  const [confDropdownOpen, setConfDropdownOpen] = useState(false)
   const [priorityOnly, setPriorityOnly] = useState(false)
   const [hasNeedsOnly, setHasNeedsOnly] = useState(false)
   const [hasContactOnly, setHasContactOnly] = useState(false)
@@ -232,13 +361,15 @@ export function Distribution({
     let result = clubs
     if (leagueFilter.length > 0) result = result.filter(c => leagueFilter.includes(c.league ?? 'Sin liga'))
     if (countryFilter.length > 0) result = result.filter(c => countryFilter.includes(c.country ?? ''))
+    if (tierFilter.length > 0) result = result.filter(c => tierFilter.includes(getClubTier(c.league, c.country)))
+    if (confederationFilter.length > 0) result = result.filter(c => confederationFilter.includes(getClubConfederation(c.country)))
     if (priorityOnly) result = result.filter(c => c.isPriority)
     if (hasNeedsOnly) result = result.filter(c => c.needs.length > 0)
     if (hasContactOnly) result = result.filter(c => !!c.contactPerson)
     if (!search) return result
     const q = search.toLowerCase()
     return result.filter(c => c.name.toLowerCase().includes(q) || c.league?.toLowerCase().includes(q))
-  }, [clubs, search, leagueFilter, countryFilter, priorityOnly, hasNeedsOnly, hasContactOnly])
+  }, [clubs, search, leagueFilter, countryFilter, tierFilter, confederationFilter, priorityOnly, hasNeedsOnly, hasContactOnly])
 
   const sortedLeagues = useMemo(() => {
     const map = new Map<string, { count: number; country: string }>()
@@ -248,8 +379,18 @@ export function Distribution({
       map.set(key, { count: (existing?.count ?? 0) + 1, country: existing?.country || c.country || '' })
     })
     return Array.from(map.entries())
-      .map(([league, { count, country }]) => ({ league, count, country }))
-      .sort((a, b) => a.league.localeCompare(b.league))
+      .map(([league, { count, country }]) => ({
+        league, count, country,
+        tier: getClubTier(league, country),
+        confederation: getClubConfederation(country),
+      }))
+      .sort((a, b) => {
+        // Sort by tier first, then by league name
+        const tierOrder: Record<LeagueTier, number> = { A: 0, B: 1, C: 2, D: 3 }
+        const td = tierOrder[a.tier] - tierOrder[b.tier]
+        if (td !== 0) return td
+        return a.league.localeCompare(b.league)
+      })
   }, [clubs])
 
   const sortedCountries = useMemo(() => {
@@ -289,6 +430,8 @@ export function Distribution({
     closePanel()
     setLeagueFilter([])
     setCountryFilter([])
+    setTierFilter([])
+    setConfederationFilter([])
     setPriorityOnly(false)
     setHasNeedsOnly(false)
     setHasContactOnly(false)
@@ -530,75 +673,126 @@ export function Distribution({
                 </button>
               </div>
 
-              {/* League multi-select dropdown */}
-              <div className="relative mb-3">
-                <button
-                  onClick={() => setLeagueDropdownOpen(o => !o)}
-                  className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 hover:border-slate-300 transition-colors shadow-sm"
-                >
-                  <Flag className="w-4 h-4 text-slate-400" />
-                  {leagueFilter.length === 0
-                    ? <span>Todas las ligas <span className="text-slate-400">({clubs.length})</span></span>
-                    : <span className="font-medium text-[hsl(220,72%,36%)]">{leagueFilter.length} liga{leagueFilter.length > 1 ? 's' : ''} seleccionada{leagueFilter.length > 1 ? 's' : ''}</span>
-                  }
-                  <ChevronDown className={`w-4 h-4 text-slate-400 ml-auto transition-transform ${leagueDropdownOpen ? 'rotate-180' : ''}`} />
-                </button>
-                {leagueFilter.length > 0 && (
-                  <button
-                    onClick={() => setLeagueFilter([])}
-                    className="ml-2 text-xs text-slate-400 hover:text-slate-600 underline"
-                  >
-                    Limpiar
-                  </button>
-                )}
-                {leagueDropdownOpen && (
-                  <div className="absolute z-50 mt-1 w-80 bg-white border border-slate-200 rounded-xl shadow-xl max-h-80 overflow-y-auto">
-                    <div className="p-2 border-b border-slate-100">
-                      <button
-                        onClick={() => { setLeagueFilter([]); setLeagueDropdownOpen(false) }}
-                        className={`w-full text-left px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                          leagueFilter.length === 0 ? 'bg-[hsl(220,72%,36%)] text-white' : 'hover:bg-slate-50 text-slate-700'
-                        }`}
-                      >
-                        Todas las ligas ({clubs.length})
-                      </button>
-                    </div>
-                    <div className="p-2 space-y-0.5">
-                      {sortedLeagues.map(({ league, count, country }) => {
-                        const selected = leagueFilter.includes(league)
-                        return (
-                          <button
-                            key={league}
-                            onClick={() => setLeagueFilter(prev =>
-                              prev.includes(league) ? prev.filter(l => l !== league) : [...prev, league]
-                            )}
-                            className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors ${
-                              selected ? 'bg-blue-50 text-[hsl(220,72%,36%)]' : 'hover:bg-slate-50 text-slate-700'
-                            }`}
-                          >
-                            <div className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${
-                              selected ? 'bg-[hsl(220,72%,36%)] border-[hsl(220,72%,36%)]' : 'border-slate-300'
-                            }`}>
-                              {selected && <Check className="w-2.5 h-2.5 text-white" />}
-                            </div>
-                            <span className="flex-1 min-w-0">
-                              <span className="font-medium truncate block">{league}</span>
-                              {country && <span className="text-xs text-slate-400">{country}</span>}
-                            </span>
-                            <span className="text-xs text-slate-400 flex-shrink-0">{count}</span>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-              {/* Click outside to close league dropdown */}
-              {leagueDropdownOpen && (
-                <div className="fixed inset-0 z-40" onClick={() => setLeagueDropdownOpen(false)} />
-              )}
+              {/* ── Filter row 1: Tier chips + Confederation dropdown ── */}
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                {/* Tier chips */}
+                <span className="text-xs text-slate-400 font-medium">Nivel:</span>
+                {(['A', 'B', 'C', 'D'] as LeagueTier[]).map(t => {
+                  const cfg = TIER_CONFIG[t]
+                  const active = tierFilter.includes(t)
+                  return (
+                    <button
+                      key={t}
+                      title={cfg.title}
+                      onClick={() => setTierFilter(prev => active ? prev.filter(x => x !== t) : [...prev, t])}
+                      className={`w-7 h-7 rounded-lg text-xs font-bold border transition-all ${
+                        active ? `${cfg.bg} ${cfg.text} ${cfg.border} ring-2 ring-offset-1 ring-current` : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300'
+                      }`}
+                    >
+                      {t}
+                    </button>
+                  )
+                })}
 
-              {/* Filter row: country + toggles */}
+                <div className="w-px h-5 bg-slate-200 mx-1" />
+
+                {/* Confederation dropdown */}
+                <div className="relative">
+                  <button
+                    onClick={() => setConfDropdownOpen(o => !o)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
+                      confederationFilter.length > 0
+                        ? 'bg-[hsl(220,72%,36%)] text-white border-[hsl(220,72%,36%)]'
+                        : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                    }`}
+                  >
+                    🌍 {confederationFilter.length === 0 ? 'Confederación' : confederationFilter.map(c => c).join(', ')}
+                    <ChevronDown className="w-3 h-3 opacity-60" />
+                  </button>
+                  {confDropdownOpen && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setConfDropdownOpen(false)} />
+                      <div className="absolute z-50 mt-1 w-52 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden">
+                        <div className="p-1.5 border-b border-slate-100">
+                          <button onClick={() => { setConfederationFilter([]); setConfDropdownOpen(false) }} className="w-full text-left px-2 py-1.5 rounded-lg text-xs hover:bg-slate-50 text-slate-600">Todas las confederaciones</button>
+                        </div>
+                        <div className="p-1.5 space-y-0.5">
+                          {(['UEFA', 'CONMEBOL', 'CONCACAF', 'AFC', 'CAF'] as Confederation[]).map(conf => {
+                            const sel = confederationFilter.includes(conf)
+                            return (
+                              <button key={conf} onClick={() => setConfederationFilter(prev => sel ? prev.filter(c => c !== conf) : [...prev, conf])}
+                                className={`w-full text-left px-2 py-1.5 rounded-lg text-xs flex items-center gap-2 ${sel ? 'bg-blue-50 text-[hsl(220,72%,36%)]' : 'hover:bg-slate-50 text-slate-700'}`}
+                              >
+                                <div className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center ${sel ? 'bg-[hsl(220,72%,36%)] border-[hsl(220,72%,36%)]' : 'border-slate-300'}`}>
+                                  {sel && <Check className="w-2 h-2 text-white" />}
+                                </div>
+                                {CONFEDERATION_LABELS[conf]}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* ── Filter row 2: League + Country + toggles ── */}
+              <div className="relative mb-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* League multi-select */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setLeagueDropdownOpen(o => !o)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
+                        leagueFilter.length > 0
+                          ? 'bg-[hsl(220,72%,36%)] text-white border-[hsl(220,72%,36%)]'
+                          : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                      }`}
+                    >
+                      <Flag className="w-3.5 h-3.5" />
+                      {leagueFilter.length === 0 ? 'Liga' : `${leagueFilter.length} liga${leagueFilter.length > 1 ? 's' : ''}`}
+                      <ChevronDown className="w-3 h-3 opacity-60" />
+                    </button>
+                    {leagueDropdownOpen && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setLeagueDropdownOpen(false)} />
+                        <div className="absolute z-50 mt-1 w-80 bg-white border border-slate-200 rounded-xl shadow-xl max-h-80 overflow-y-auto">
+                          <div className="p-2 border-b border-slate-100">
+                            <button onClick={() => { setLeagueFilter([]); setLeagueDropdownOpen(false) }} className={`w-full text-left px-3 py-1.5 rounded-lg text-sm transition-colors ${leagueFilter.length === 0 ? 'bg-[hsl(220,72%,36%)] text-white' : 'hover:bg-slate-50 text-slate-700'}`}>
+                              Todas las ligas ({clubs.length})
+                            </button>
+                          </div>
+                          <div className="p-2 space-y-0.5">
+                            {sortedLeagues.map(({ league, count, country, tier }) => {
+                              const selected = leagueFilter.includes(league)
+                              const tierCfg = TIER_CONFIG[tier]
+                              return (
+                                <button key={league}
+                                  onClick={() => setLeagueFilter(prev => prev.includes(league) ? prev.filter(l => l !== league) : [...prev, league])}
+                                  className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors ${selected ? 'bg-blue-50 text-[hsl(220,72%,36%)]' : 'hover:bg-slate-50 text-slate-700'}`}
+                                >
+                                  <div className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${selected ? 'bg-[hsl(220,72%,36%)] border-[hsl(220,72%,36%)]' : 'border-slate-300'}`}>
+                                    {selected && <Check className="w-2.5 h-2.5 text-white" />}
+                                  </div>
+                                  <span className={`text-[10px] font-bold px-1 py-0.5 rounded ${tierCfg.bg} ${tierCfg.text} flex-shrink-0`}>{tier}</span>
+                                  <span className="flex-1 min-w-0">
+                                    <span className="font-medium truncate block">{league}</span>
+                                    {country && <span className="text-xs text-slate-400">{country}</span>}
+                                  </span>
+                                  <span className="text-xs text-slate-400 flex-shrink-0">{count}</span>
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Filter row 3: country + toggles */}
               <div className="flex flex-wrap items-center gap-2 mb-3">
                 {/* Country multi-select */}
                 <div className="relative">
@@ -673,9 +867,9 @@ export function Distribution({
                 </button>
 
                 {/* Clear all */}
-                {(leagueFilter.length > 0 || countryFilter.length > 0 || priorityOnly || hasNeedsOnly || hasContactOnly) && (
+                {(leagueFilter.length > 0 || countryFilter.length > 0 || tierFilter.length > 0 || confederationFilter.length > 0 || priorityOnly || hasNeedsOnly || hasContactOnly) && (
                   <button
-                    onClick={() => { setLeagueFilter([]); setCountryFilter([]); setPriorityOnly(false); setHasNeedsOnly(false); setHasContactOnly(false) }}
+                    onClick={() => { setLeagueFilter([]); setCountryFilter([]); setTierFilter([]); setConfederationFilter([]); setPriorityOnly(false); setHasNeedsOnly(false); setHasContactOnly(false) }}
                     className="text-xs text-slate-400 hover:text-slate-600 underline ml-1"
                   >
                     Limpiar todo
@@ -686,7 +880,7 @@ export function Distribution({
               </div>
 
               {/* Clubs grid — grouped by league when no filter, flat when filtered */}
-              {(leagueFilter.length > 0 || countryFilter.length > 0 || priorityOnly || hasNeedsOnly || hasContactOnly || !!search) ? (
+              {(leagueFilter.length > 0 || countryFilter.length > 0 || tierFilter.length > 0 || confederationFilter.length > 0 || priorityOnly || hasNeedsOnly || hasContactOnly || !!search) ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-1.5">
                   {filteredClubs.map(club => (
                     <ClubCard
@@ -703,14 +897,17 @@ export function Distribution({
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {sortedLeagues.map(({ league }) => {
+                  {sortedLeagues.map(({ league, tier, confederation }) => {
                     const leagueClubs = filteredClubs.filter(c => (c.league ?? 'Sin liga') === league)
                     if (leagueClubs.length === 0) return null
+                    const tierCfg = TIER_CONFIG[tier]
                     return (
                       <div key={league}>
                         <div className="flex items-center gap-2 mb-1.5">
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${tierCfg.bg} ${tierCfg.text}`}>{tier}</span>
                           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{league}</span>
                           <span className="text-xs text-slate-400">({leagueClubs.length})</span>
+                          <span className="text-xs text-slate-300">{CONFEDERATION_LABELS[confederation]}</span>
                           <div className="flex-1 h-px bg-slate-200" />
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-1.5">
@@ -735,7 +932,7 @@ export function Distribution({
 
               {filteredClubs.length === 0 && (
                 <div className="text-center py-12 text-slate-400 text-sm">
-                  {(search || leagueFilter.length > 0 || countryFilter.length > 0 || priorityOnly || hasNeedsOnly || hasContactOnly) ? 'Sin resultados con estos filtros' : 'No hay clubes. Añade uno.'}
+                  {(search || leagueFilter.length > 0 || countryFilter.length > 0 || tierFilter.length > 0 || confederationFilter.length > 0 || priorityOnly || hasNeedsOnly || hasContactOnly) ? 'Sin resultados con estos filtros' : 'No hay clubes. Añade uno.'}
                 </div>
               )}
             </div>
@@ -1426,6 +1623,8 @@ function ClubCard({ club, negotiations, isSelected, onClick }: {
   onClick: () => void
 }) {
   const activeNegs = negotiations.filter(n => n.clubId === club.id && n.status !== 'descartado')
+  const tier = getClubTier(club.league, club.country)
+  const tierCfg = TIER_CONFIG[tier]
   return (
     <div
       onClick={onClick}
@@ -1433,8 +1632,8 @@ function ClubCard({ club, negotiations, isSelected, onClick }: {
         isSelected ? 'border-blue-300 ring-1 ring-blue-200' : 'border-slate-200'
       } ${club.isPriority ? 'border-l-4 border-l-green-400' : ''}`}
     >
-      <div className="w-7 h-7 rounded-md bg-slate-100 flex items-center justify-center flex-shrink-0">
-        <Building2 className="w-3.5 h-3.5 text-slate-400" />
+      <div className={`w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0 text-[10px] font-bold ${tierCfg.bg} ${tierCfg.text}`}>
+        {tier}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 flex-wrap">
