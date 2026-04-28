@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation, ScoutingPlayer, ScoutingReport } from '../types'
+import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation, ScoutingPlayer, ScoutingReport, ScoutingMatch } from '../types'
 
 // ── helpers ──────────────────────────────────────────────────
 
@@ -628,5 +628,72 @@ export async function createScoutingReport(r: Omit<ScoutingReport, 'id' | 'creat
 
 export async function deleteScoutingReport(id: string): Promise<void> {
   const { error } = await supabase.from('scouting_reports').delete().eq('id', id)
+  if (error) throw error
+}
+
+export async function updateScoutingReport(r: ScoutingReport): Promise<void> {
+  const { error } = await supabase.from('scouting_reports').update({
+    titulo: r.titulo ?? null,
+    texto: r.texto ?? null,
+    persona: r.persona ?? null,
+    conclusion: r.conclusion ?? null,
+    fecha: r.fecha ?? null,
+  }).eq('id', r.id)
+  if (error) throw error
+}
+
+// ── Scouting Matches ────────────────────────────────────────
+
+function dbToScoutingMatch(row: Record<string, unknown>): ScoutingMatch {
+  return {
+    id: row.id as string,
+    date: row.date as string,
+    homeTeam: row.home_team as string,
+    awayTeam: row.away_team as string,
+    competition: (row.competition as string) ?? undefined,
+    assignedTo: (row.assigned_to as string) ?? undefined,
+    notes: (row.notes as string) ?? undefined,
+    createdAt: row.created_at as string,
+  }
+}
+
+export async function fetchScoutingMatches(): Promise<ScoutingMatch[]> {
+  try {
+    const { data, error } = await supabase
+      .from('scouting_matches').select('*').order('date', { ascending: false })
+    if (error) return [] // table may not exist yet
+    return (data ?? []).map(dbToScoutingMatch)
+  } catch {
+    return []
+  }
+}
+
+export async function createScoutingMatch(m: Omit<ScoutingMatch, 'id' | 'createdAt'>): Promise<ScoutingMatch> {
+  const { data, error } = await supabase.from('scouting_matches').insert({
+    date: m.date,
+    home_team: m.homeTeam,
+    away_team: m.awayTeam,
+    competition: m.competition ?? null,
+    assigned_to: m.assignedTo ?? null,
+    notes: m.notes ?? null,
+  }).select().single()
+  if (error) throw error
+  return dbToScoutingMatch(data)
+}
+
+export async function updateScoutingMatch(m: ScoutingMatch): Promise<void> {
+  const { error } = await supabase.from('scouting_matches').update({
+    date: m.date,
+    home_team: m.homeTeam,
+    away_team: m.awayTeam,
+    competition: m.competition ?? null,
+    assigned_to: m.assignedTo ?? null,
+    notes: m.notes ?? null,
+  }).eq('id', m.id)
+  if (error) throw error
+}
+
+export async function deleteScoutingMatch(id: string): Promise<void> {
+  const { error } = await supabase.from('scouting_matches').delete().eq('id', id)
   if (error) throw error
 }

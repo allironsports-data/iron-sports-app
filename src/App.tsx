@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from './contexts/AuthContext'
-import type { Player, Task, ScoutingPlayer, ScoutingReport } from './types'
+import type { Player, Task, ScoutingPlayer, ScoutingReport, ScoutingMatch } from './types'
 import * as db from './lib/db'
 import { supabase } from './lib/supabase'
 import type { Profile } from './contexts/AuthContext'
@@ -57,6 +57,7 @@ export default function App() {
   // Captación state
   const [scoutingPlayers, setScoutingPlayers] = useState<ScoutingPlayer[]>([])
   const [scoutingReports, setScoutingReports] = useState<ScoutingReport[]>([])
+  const [scoutingMatches, setScoutingMatches] = useState<ScoutingMatch[]>([])
 
   const addNotification = useCallback((msg: string, type: AppNotification['type'], playerId?: string) => {
     setNotifications((prev) => [
@@ -82,7 +83,8 @@ export default function App() {
       db.fetchNegotiations(),
       db.fetchScoutingPlayers(),
       db.fetchScoutingReports(),
-    ]).then(([p, t, pr, cl, de, ng, sp, sr]) => {
+      db.fetchScoutingMatches(),
+    ]).then(([p, t, pr, cl, de, ng, sp, sr, sm]) => {
       setPlayers(p)
       setTasks(t)
       setProfiles(pr as Profile[])
@@ -91,6 +93,7 @@ export default function App() {
       setNegotiations(ng as ClubNegotiation[])
       setScoutingPlayers(sp as ScoutingPlayer[])
       setScoutingReports(sr as ScoutingReport[])
+      setScoutingMatches(sm as ScoutingMatch[])
     }).finally(() => setDataLoading(false))
   }, [user])
 
@@ -258,8 +261,20 @@ export default function App() {
   const handleAddScoutingReport = (r: ScoutingReport) => {
     setScoutingReports(prev => [r, ...prev])
   }
+  const handleUpdateScoutingReport = (r: ScoutingReport) => {
+    setScoutingReports(prev => prev.map(x => x.id === r.id ? r : x))
+  }
   const handleDeleteScoutingReport = (id: string) => {
     setScoutingReports(prev => prev.filter(r => r.id !== id))
+  }
+  const handleAddScoutingMatch = (m: ScoutingMatch) => {
+    setScoutingMatches(prev => [m, ...prev])
+  }
+  const handleUpdateScoutingMatch = (m: ScoutingMatch) => {
+    setScoutingMatches(prev => prev.map(x => x.id === m.id ? m : x))
+  }
+  const handleDeleteScoutingMatch = (id: string) => {
+    setScoutingMatches(prev => prev.filter(x => x.id !== id))
   }
 
   // ── helpers ─────────────────────────────────────────────────
@@ -381,6 +396,8 @@ export default function App() {
       <Captacion
         scoutingPlayers={scoutingPlayers}
         scoutingReports={scoutingReports}
+        scoutingMatches={scoutingMatches}
+        profiles={profiles}
         currentProfile={profile}
         onBack={() => setMainSection('tareas')}
         onGoToSection={(s) => setMainSection(s)}
@@ -390,7 +407,11 @@ export default function App() {
         onUpdatePlayer={handleUpdateScoutingPlayer}
         onDeletePlayer={handleDeleteScoutingPlayer}
         onAddReport={handleAddScoutingReport}
+        onUpdateReport={handleUpdateScoutingReport}
         onDeleteReport={handleDeleteScoutingReport}
+        onAddMatch={handleAddScoutingMatch}
+        onUpdateMatch={handleUpdateScoutingMatch}
+        onDeleteMatch={handleDeleteScoutingMatch}
       />
     )
   }

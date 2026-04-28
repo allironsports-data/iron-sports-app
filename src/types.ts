@@ -242,8 +242,19 @@ export interface ScoutingReport {
   titulo?: string
   texto?: string
   persona?: string          // "NB", "PP", "RP", "AV"
-  conclusion?: string       // "Seguir", "Descartar", "Firmar", "Decidir"
+  conclusion?: string       // "Llamar", "Seguir", "Descartar"
   authorId?: string
+  createdAt: string
+}
+
+export interface ScoutingMatch {
+  id: string
+  date: string              // "YYYY-MM-DD"
+  homeTeam: string
+  awayTeam: string
+  competition?: string
+  assignedTo?: string       // persona initials, e.g. "NB"
+  notes?: string
   createdAt: string
 }
 
