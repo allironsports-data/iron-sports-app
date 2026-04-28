@@ -70,7 +70,8 @@ export default function App() {
     setNotifications((prev) => prev.filter((n) => n.id !== id))
   }, [])
 
-  // Load all data once authenticated
+  // Load all data once authenticated — depend on user.id not the object reference
+  // so token refreshes (which create a new user object) don't trigger a reload
   useEffect(() => {
     if (!user) return
     setDataLoading(true)
@@ -95,7 +96,8 @@ export default function App() {
       setScoutingReports(sr as ScoutingReport[])
       setScoutingMatches(sm as ScoutingMatch[])
     }).finally(() => setDataLoading(false))
-  }, [user])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id])  // user.id — not the object — so token refreshes don't re-trigger this
 
   // Supabase realtime: listen for task changes from other users
   useEffect(() => {

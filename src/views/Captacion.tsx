@@ -672,7 +672,7 @@ export function Captacion({
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-20">
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 flex items-center gap-3 h-12 sm:h-14">
           <img src={logoImg} alt="All Iron Sports" className="h-7 sm:h-8 w-auto rounded" />
           <span className="text-xs font-bold text-slate-800 tracking-wide uppercase hidden sm:block">All Iron Sports</span>
@@ -1276,8 +1276,8 @@ export function Captacion({
         </div>
       )}
 
-      {/* ── Side panel (jugadores tab) ──────────────────────── */}
-      {captTab === 'jugadores' && hasPanel && (
+      {/* ── Side panel (persists across tabs) ─────────────────── */}
+      {hasPanel && (
         <>
           {!fullscreen && (
             <div className="fixed inset-0 bg-black/20 z-30" onClick={closePanel} />
