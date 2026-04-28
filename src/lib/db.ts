@@ -661,10 +661,22 @@ function dbToScoutingMatch(row: Record<string, unknown>): ScoutingMatch {
 
 export async function fetchScoutingMatches(): Promise<ScoutingMatch[]> {
   try {
-    const { data, error } = await supabase
-      .from('scouting_matches').select('*').order('date', { ascending: false })
-    if (error) return [] // table may not exist yet
-    return (data ?? []).map(dbToScoutingMatch)
+    const PAGE = 1000
+    const all: ScoutingMatch[] = []
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase
+        .from('scouting_matches')
+        .select('*')
+        .order('date', { ascending: false })
+        .range(from, from + PAGE - 1)
+      if (error) return all.length ? all : [] // table may not exist yet
+      const rows = (data ?? []).map(dbToScoutingMatch)
+      all.push(...rows)
+      if (rows.length < PAGE) break   // last page
+      from += PAGE
+    }
+    return all
   } catch {
     return []
   }
