@@ -307,6 +307,16 @@ export function ClubDetail({
                           {need.salaryBudget && <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">Salario: {need.salaryBudget}</span>}
                         </div>
                         {need.notes && <p className="text-xs text-slate-500 mt-1">{need.notes}</p>}
+                        {(need.createdAt || need.addedBy) && (
+                          <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-400">
+                            {need.createdAt && (
+                              <span>{new Date(need.createdAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                            )}
+                            {need.addedBy && currentProfile.is_admin && (
+                              <span className="font-mono bg-slate-100 px-1 rounded">{need.addedBy}</span>
+                            )}
+                          </div>
+                        )}
 
                         {/* Matching players */}
                         {(() => {

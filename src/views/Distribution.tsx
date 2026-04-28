@@ -1246,10 +1246,10 @@ export function Distribution({
                               </div>
                               <div className="flex items-center gap-1.5 text-[10px] text-slate-400 mt-0.5 flex-wrap">
                                 {need.createdAt && (
-                                  <span>{new Date(need.createdAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                                  <span>📅 {new Date(need.createdAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                                 )}
                                 {need.addedBy && currentProfile.is_admin && (
-                                  <span className="font-mono bg-slate-100 px-1 rounded">{need.addedBy}</span>
+                                  <span className="font-mono bg-slate-100 text-slate-600 px-1 rounded">{need.addedBy}</span>
                                 )}
                               </div>
                             </div>
