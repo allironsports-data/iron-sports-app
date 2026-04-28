@@ -2314,8 +2314,10 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
 
       {/* ── SIDE PANEL (slide-over) ── */}
       {panelNeg && panelClub && (() => {
-        const scfg = STATUS_CONFIG_D[panelNeg.status]
-        const sortedUpdates = [...(panelNeg.updates ?? [])].sort((a, b) => b.date.localeCompare(a.date))
+        // capture as non-null locals so TypeScript is happy inside closures
+        const neg = panelNeg!
+        const club = panelClub!
+        const sortedUpdates = [...(neg.updates ?? [])].sort((a, b) => b.date.localeCompare(a.date))
 
         async function addUpdate() {
           if (!panelUpdateText.trim() || !onUpdateNegotiation) return
@@ -2327,14 +2329,14 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
               date: new Date().toISOString(),
               author: currentProfile.avatar,
             }
-            await onUpdateNegotiation({ ...panelNeg, updates: [...(panelNeg.updates ?? []), newUpdate] })
+            await onUpdateNegotiation({ ...neg, updates: [...(neg.updates ?? []), newUpdate] })
             setPanelUpdateText('')
           } finally { setSavingUpdate(false) }
         }
 
         async function changeStatus(s: ClubNegotiation['status']) {
           if (!onUpdateNegotiation) return
-          await onUpdateNegotiation({ ...panelNeg, status: s })
+          await onUpdateNegotiation({ ...neg, status: s })
         }
 
         return (
@@ -2349,8 +2351,8 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
               {/* Header */}
               <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 flex-shrink-0">
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-slate-800 text-sm truncate">{panelClub.name}</div>
-                  {panelClub.league && <div className="text-xs text-slate-400">{panelClub.league}</div>}
+                  <div className="font-semibold text-slate-800 text-sm truncate">{club.name}</div>
+                  {club.league && <div className="text-xs text-slate-400">{club.league}</div>}
                 </div>
                 <button onClick={() => setPanelNegId(null)} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400">
                   <X className="w-4 h-4" />
@@ -2369,7 +2371,7 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
                         <button
                           key={s}
                           onClick={() => changeStatus(s)}
-                          className={`px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${panelNeg.status === s ? cfg.color + ' ring-1 ring-current' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                          className={`px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${neg.status === s ? cfg.color + ' ring-1 ring-current' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
                         >
                           {cfg.label}
                         </button>
@@ -2379,18 +2381,18 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
                 </div>
                 {/* Meta */}
                 <div className="flex items-center gap-3 text-xs text-slate-500">
-                  {panelNeg.aisManager && (
-                    <span className="font-mono bg-slate-100 px-2 py-1 rounded">{panelNeg.aisManager}</span>
+                  {neg.aisManager && (
+                    <span className="font-mono bg-slate-100 px-2 py-1 rounded">{neg.aisManager}</span>
                   )}
-                  <span className="text-slate-400">{new Date(panelNeg.createdAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                  <span className="text-slate-400">{new Date(neg.createdAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                 </div>
-                {panelNeg.notes && (
-                  <p className="text-xs text-slate-600 bg-slate-50 rounded-lg px-3 py-2">{panelNeg.notes}</p>
+                {neg.notes && (
+                  <p className="text-xs text-slate-600 bg-slate-50 rounded-lg px-3 py-2">{neg.notes}</p>
                 )}
                 {/* Go to club link */}
                 {onSelectClub && (
                   <button
-                    onClick={() => { setPanelNegId(null); onSelectClub(panelClub.id) }}
+                    onClick={() => { setPanelNegId(null); onSelectClub(club.id) }}
                     className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
                   >
                     <ExternalLink className="w-3 h-3" /> Ver ficha del club

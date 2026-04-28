@@ -206,7 +206,7 @@ export interface ClubNegotiation {
   status: 'pendiente' | 'ofrecido' | 'interesado' | 'negociando' | 'cerrado' | 'descartado'
   aisManager?: string
   notes?: string
-  updates: ClubNegotiationUpdate[]
+  updates?: ClubNegotiationUpdate[]
   createdAt: string
   updatedAt: string
 }
