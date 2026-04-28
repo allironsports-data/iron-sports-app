@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation } from '../types'
+import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation, ScoutingPlayer, ScoutingReport } from '../types'
 
 // ── helpers ──────────────────────────────────────────────────
 
@@ -487,5 +487,125 @@ export async function updateNegotiation(n: ClubNegotiation): Promise<void> {
 
 export async function deleteNegotiation(id: string): Promise<void> {
   const { error } = await supabase.from('club_negotiations').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── SCOUTING / CAPTACIÓN ─────────────────────────────────────
+
+function dbToScoutingPlayer(row: Record<string, unknown>): ScoutingPlayer {
+  return {
+    id: row.id as string,
+    fullName: row.full_name as string,
+    position1: (row.position_1 as string) ?? undefined,
+    position2: (row.position_2 as string) ?? undefined,
+    birthdate: (row.birthdate as string) ?? undefined,
+    foot: (row.foot as string) ?? undefined,
+    team: (row.team as string) ?? undefined,
+    assessment: (row.assessment as ScoutingPlayer['assessment']) ?? undefined,
+    nationality: (row.nationality as string) ?? undefined,
+    agency: (row.agency as string) ?? undefined,
+    clubContract: (row.club_contract as string) ?? undefined,
+    contacto: (row.contacto as string) ?? undefined,
+    categoria: (row.categoria as string) ?? undefined,
+    comentarios: (row.comentarios as string) ?? undefined,
+    createdAt: row.created_at as string,
+  }
+}
+
+function dbToScoutingReport(row: Record<string, unknown>): ScoutingReport {
+  return {
+    id: row.id as string,
+    playerId: row.player_id as string,
+    fecha: (row.fecha as string) ?? undefined,
+    titulo: (row.titulo as string) ?? undefined,
+    texto: (row.texto as string) ?? undefined,
+    authorId: (row.author_id as string) ?? undefined,
+    createdAt: row.created_at as string,
+  }
+}
+
+export async function fetchScoutingPlayers(): Promise<ScoutingPlayer[]> {
+  const all: ScoutingPlayer[] = []
+  const pageSize = 1000
+  let from = 0
+  while (true) {
+    const { data, error } = await supabase
+      .from('scouting_players').select('*').order('full_name')
+      .range(from, from + pageSize - 1)
+    if (error) throw error
+    const page = (data ?? []).map(dbToScoutingPlayer)
+    all.push(...page)
+    if (page.length < pageSize) break
+    from += pageSize
+  }
+  return all
+}
+
+export async function fetchScoutingReports(playerId?: string): Promise<ScoutingReport[]> {
+  let q = supabase.from('scouting_reports').select('*').order('fecha', { ascending: false })
+  if (playerId) q = q.eq('player_id', playerId)
+  const { data, error } = await q
+  if (error) throw error
+  return (data ?? []).map(dbToScoutingReport)
+}
+
+export async function createScoutingPlayer(p: Omit<ScoutingPlayer, 'id' | 'createdAt'>): Promise<ScoutingPlayer> {
+  const { data, error } = await supabase.from('scouting_players').insert({
+    full_name: p.fullName,
+    position_1: p.position1 ?? null,
+    position_2: p.position2 ?? null,
+    birthdate: p.birthdate ?? null,
+    foot: p.foot ?? null,
+    team: p.team ?? null,
+    assessment: p.assessment ?? null,
+    nationality: p.nationality ?? null,
+    agency: p.agency ?? null,
+    club_contract: p.clubContract ?? null,
+    contacto: p.contacto ?? null,
+    categoria: p.categoria ?? null,
+    comentarios: p.comentarios ?? null,
+  }).select().single()
+  if (error) throw error
+  return dbToScoutingPlayer(data)
+}
+
+export async function updateScoutingPlayer(p: ScoutingPlayer): Promise<void> {
+  const { error } = await supabase.from('scouting_players').update({
+    full_name: p.fullName,
+    position_1: p.position1 ?? null,
+    position_2: p.position2 ?? null,
+    birthdate: p.birthdate ?? null,
+    foot: p.foot ?? null,
+    team: p.team ?? null,
+    assessment: p.assessment ?? null,
+    nationality: p.nationality ?? null,
+    agency: p.agency ?? null,
+    club_contract: p.clubContract ?? null,
+    contacto: p.contacto ?? null,
+    categoria: p.categoria ?? null,
+    comentarios: p.comentarios ?? null,
+  }).eq('id', p.id)
+  if (error) throw error
+}
+
+export async function deleteScoutingPlayer(id: string): Promise<void> {
+  const { error } = await supabase.from('scouting_players').delete().eq('id', id)
+  if (error) throw error
+}
+
+export async function createScoutingReport(r: Omit<ScoutingReport, 'id' | 'createdAt'>): Promise<ScoutingReport> {
+  const { data, error } = await supabase.from('scouting_reports').insert({
+    player_id: r.playerId,
+    fecha: r.fecha ?? new Date().toISOString(),
+    titulo: r.titulo ?? null,
+    texto: r.texto ?? null,
+    author_id: r.authorId ?? null,
+  }).select().single()
+  if (error) throw error
+  return dbToScoutingReport(data)
+}
+
+export async function deleteScoutingReport(id: string): Promise<void> {
+  const { error } = await supabase.from('scouting_reports').delete().eq('id', id)
   if (error) throw error
 }

@@ -3,7 +3,7 @@ import {
   Plus, Search, Star, Building2, Users,
   ChevronRight, X, Check, Pencil, Trash2, LogOut,
   TrendingUp, AlertCircle, CircleDot, Flag, ChevronDown,
-  LayoutGrid, Table,
+  LayoutGrid, Table, Eye,
 } from 'lucide-react'
 import logoImg from '../assets/logo.jpeg'
 import type { Player, Club, ClubNeed, DistributionEntry, ClubNegotiation } from '../types'
@@ -242,6 +242,7 @@ interface Props {
   currentProfile: Profile
   onBack: () => void          // go to Tareas
   onGoToJugadores?: () => void
+  onGoToCaptacion?: () => void
   onLogout: () => void
   onAdmin?: () => void
   onSelectPlayer?: (id: string) => void
@@ -262,7 +263,7 @@ interface Props {
 
 export function Distribution({
   players, clubs, entries, negotiations, currentProfile,
-  onBack, onGoToJugadores, onLogout, onAdmin, onSelectPlayer, onSelectClub,
+  onBack, onGoToJugadores, onGoToCaptacion, onLogout, onAdmin, onSelectPlayer, onSelectClub,
   onCreateClub, onUpdateClub, onDeleteClub,
   onCreateEntry, onUpdateEntry, onDeleteEntry,
   onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation,
@@ -526,6 +527,7 @@ export function Distribution({
             { id: 'tareas',       label: 'Tareas',       icon: null,                                    onClick: onBack },
             { id: 'jugadores',    label: 'Jugadores',    icon: null,                                    onClick: onGoToJugadores ?? onBack },
             { id: 'distribucion', label: 'Distribución', icon: <TrendingUp className="w-3.5 h-3.5" />, onClick: undefined },
+            { id: 'captacion',    label: 'Captación',    icon: <Eye className="w-3.5 h-3.5" />,        onClick: onGoToCaptacion },
           ] as { id: string; label: string; icon: React.ReactNode; onClick: (() => void) | undefined }[]).map(tab => (
             <button
               key={tab.id}
@@ -534,7 +536,7 @@ export function Distribution({
                 tab.id === 'distribucion'
                   ? 'border-[hsl(220,72%,26%)] text-[hsl(220,72%,26%)]'
                   : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
-              }`}
+              } ${!tab.onClick ? 'cursor-default' : ''}`}
             >
               {tab.icon}
               {tab.label}

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from './contexts/AuthContext'
-import type { Player, Task } from './types'
+import type { Player, Task, ScoutingPlayer, ScoutingReport } from './types'
 import * as db from './lib/db'
 import { supabase } from './lib/supabase'
 import type { Profile } from './contexts/AuthContext'
@@ -12,6 +12,7 @@ import { OverviewPanel } from './views/OverviewPanel'
 import { PlayersTable } from './views/PlayersTable'
 import { Distribution } from './views/Distribution'
 import { ClubDetail } from './views/ClubDetail'
+import { Captacion } from './views/Captacion'
 import type { Club, DistributionEntry, ClubNegotiation } from './types'
 
 export interface AppNotification {
@@ -39,8 +40,8 @@ export default function App() {
   const [dataLoading, setDataLoading] = useState(false)
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
   const [selectedClubId, setSelectedClubId] = useState<string | null>(null)
-  // three main sections
-  const [mainSection, setMainSection] = useState<'tareas' | 'jugadores' | 'distribucion'>('tareas')
+  // four main sections
+  const [mainSection, setMainSection] = useState<'tareas' | 'jugadores' | 'distribucion' | 'captacion'>('tareas')
   // where to return after closing PlayerDetail
   const [playerReturnToClub, setPlayerReturnToClub] = useState(false)
   const [showAdmin, setShowAdmin] = useState(false)
@@ -52,6 +53,10 @@ export default function App() {
   const [clubs, setClubs] = useState<Club[]>([])
   const [distEntries, setDistEntries] = useState<DistributionEntry[]>([])
   const [negotiations, setNegotiations] = useState<ClubNegotiation[]>([])
+
+  // Captación state
+  const [scoutingPlayers, setScoutingPlayers] = useState<ScoutingPlayer[]>([])
+  const [scoutingReports, setScoutingReports] = useState<ScoutingReport[]>([])
 
   const addNotification = useCallback((msg: string, type: AppNotification['type'], playerId?: string) => {
     setNotifications((prev) => [
@@ -75,13 +80,17 @@ export default function App() {
       db.fetchClubs(),
       db.fetchDistributionEntries(),
       db.fetchNegotiations(),
-    ]).then(([p, t, pr, cl, de, ng]) => {
+      db.fetchScoutingPlayers(),
+      db.fetchScoutingReports(),
+    ]).then(([p, t, pr, cl, de, ng, sp, sr]) => {
       setPlayers(p)
       setTasks(t)
       setProfiles(pr as Profile[])
       setClubs(cl as Club[])
       setDistEntries(de as DistributionEntry[])
       setNegotiations(ng as ClubNegotiation[])
+      setScoutingPlayers(sp as ScoutingPlayer[])
+      setScoutingReports(sr as ScoutingReport[])
     }).finally(() => setDataLoading(false))
   }, [user])
 
@@ -234,6 +243,25 @@ export default function App() {
     setNegotiations(prev => prev.filter(x => x.id !== id))
   }
 
+  // ── scouting handlers ────────────────────────────────────────
+
+  const handleAddScoutingPlayer = (p: ScoutingPlayer) => {
+    setScoutingPlayers(prev => [...prev, p].sort((a, b) => a.fullName.localeCompare(b.fullName)))
+  }
+  const handleUpdateScoutingPlayer = (p: ScoutingPlayer) => {
+    setScoutingPlayers(prev => prev.map(x => x.id === p.id ? p : x))
+  }
+  const handleDeleteScoutingPlayer = (id: string) => {
+    setScoutingPlayers(prev => prev.filter(x => x.id !== id))
+    setScoutingReports(prev => prev.filter(r => r.playerId !== id))
+  }
+  const handleAddScoutingReport = (r: ScoutingReport) => {
+    setScoutingReports(prev => [r, ...prev])
+  }
+  const handleDeleteScoutingReport = (id: string) => {
+    setScoutingReports(prev => prev.filter(r => r.id !== id))
+  }
+
   // ── helpers ─────────────────────────────────────────────────
 
   function navigateToPlayer(id: string, fromClub = false) {
@@ -348,6 +376,25 @@ export default function App() {
     )
   }
 
+  if (mainSection === 'captacion') {
+    return (
+      <Captacion
+        scoutingPlayers={scoutingPlayers}
+        scoutingReports={scoutingReports}
+        currentProfile={profile}
+        onBack={() => setMainSection('tareas')}
+        onGoToSection={(s) => setMainSection(s)}
+        onLogout={signOut}
+        onAdmin={profile.is_admin ? () => { setMainSection('tareas'); setShowAdmin(true) } : undefined}
+        onAddPlayer={handleAddScoutingPlayer}
+        onUpdatePlayer={handleUpdateScoutingPlayer}
+        onDeletePlayer={handleDeleteScoutingPlayer}
+        onAddReport={handleAddScoutingReport}
+        onDeleteReport={handleDeleteScoutingReport}
+      />
+    )
+  }
+
   if (mainSection === 'distribucion') {
     return (
       <Distribution
@@ -358,6 +405,7 @@ export default function App() {
         currentProfile={profile}
         onBack={() => setMainSection('tareas')}
         onGoToJugadores={() => setMainSection('jugadores')}
+        onGoToCaptacion={() => setMainSection('captacion')}
         onLogout={signOut}
         onAdmin={profile.is_admin ? () => { setMainSection('tareas'); setShowAdmin(true) } : undefined}
         onSelectPlayer={(id) => navigateToPlayer(id, false)}

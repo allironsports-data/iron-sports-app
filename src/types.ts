@@ -211,6 +211,38 @@ export interface ClubNegotiation {
   updatedAt: string
 }
 
+// ── SCOUTING / CAPTACIÓN ────────────────────────────────────
+
+export type ScoutingAssessment = 'Visto' | 'Seguir' | 'Llamar' | 'Basque'
+
+export interface ScoutingPlayer {
+  id: string
+  fullName: string
+  position1?: string
+  position2?: string
+  birthdate?: string        // "YYYY-MM-DD"
+  foot?: string
+  team?: string
+  assessment?: ScoutingAssessment
+  nationality?: string
+  agency?: string
+  clubContract?: string     // "30/06/2027"
+  contacto?: string
+  categoria?: string
+  comentarios?: string
+  createdAt: string
+}
+
+export interface ScoutingReport {
+  id: string
+  playerId: string
+  fecha?: string            // ISO datetime string
+  titulo?: string
+  texto?: string
+  authorId?: string
+  createdAt: string
+}
+
 // ---- Helpers ----
 export function calcAge(birthDate: string): number {
   const today = new Date();

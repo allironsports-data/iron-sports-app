@@ -27,13 +27,14 @@ import {
   Table,
   Zap,
   TrendingUp,
+  Eye,
 } from "lucide-react";
 
 const PRIMARY = "hsl(220,72%,26%)";
 
 interface Props {
   view?: 'tareas' | 'jugadores';   // which section to show
-  onViewChange?: (v: 'tareas' | 'jugadores' | 'distribucion') => void;
+  onViewChange?: (v: 'tareas' | 'jugadores' | 'distribucion' | 'captacion') => void;
   players: Player[];
   tasks: Task[];
   profiles: Profile[];
@@ -402,8 +403,9 @@ export function Dashboard({
               { id: 'tareas' as const,       label: 'Tareas' },
               { id: 'jugadores' as const,    label: 'Jugadores' },
               { id: 'distribucion' as const, label: 'Distribución', icon: <TrendingUp className="w-3.5 h-3.5" /> },
+              { id: 'captacion' as const,    label: 'Captación',    icon: <Eye className="w-3.5 h-3.5" /> },
             ]).map(tab => {
-              const isActive = tab.id === 'distribucion' ? false : view === tab.id;
+              const isActive = (tab.id === 'distribucion' || tab.id === 'captacion') ? false : view === tab.id;
               return (
                 <button
                   key={tab.id}
