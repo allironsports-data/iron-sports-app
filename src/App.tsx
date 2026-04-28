@@ -370,6 +370,7 @@ export default function App() {
         onCreateNegotiation={handleCreateNegotiation}
         onUpdateNegotiation={handleUpdateNegotiation}
         onDeleteNegotiation={handleDeleteNegotiation}
+        onCreatePlayer={handleAddPlayer}
       />
     )
   }

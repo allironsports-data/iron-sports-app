@@ -14,7 +14,7 @@ import {
   TrendingUp, User, Plus, X, Calendar, AlertCircle,
   Clock, CheckCircle2, Trash2, Edit3, Star, Users,
   Paperclip, Download, ExternalLink, Link2,
-  Video, BarChart2, BookOpen,
+  Video, BarChart2, BookOpen, Search, Filter,
 } from "lucide-react";
 
 const PRIMARY = "hsl(220,72%,26%)";
@@ -2007,6 +2007,34 @@ function DistributionTab({ player, entry, negotiations, clubs, onUpdateEntry, on
   const [savingNeg, setSavingNeg] = useState(false)
   const [editingNeg, setEditingNeg] = useState<ClubNegotiation | null>(null)
 
+  // filter state
+  const [negSearch, setNegSearch]           = useState('')
+  const [negStatusFilter, setNegStatusFilter] = useState<ClubNegotiation['status'][]>([])
+  const [negLeagueFilter, setNegLeagueFilter] = useState('')
+  const [negGestorFilter, setNegGestorFilter] = useState('')
+  const [hideDescartado, setHideDescartado]   = useState(false)
+
+  // derived: unique leagues / gestores present in this player's negotiations
+  const availableLeagues = Array.from(new Set(
+    negotiations.map(n => clubs.find(c => c.id === n.clubId)?.league).filter(Boolean) as string[]
+  )).sort()
+  const availableGestores = Array.from(new Set(
+    negotiations.map(n => n.aisManager).filter(Boolean) as string[]
+  )).sort()
+
+  const hasFilters = !!negSearch || negStatusFilter.length > 0 || !!negLeagueFilter || !!negGestorFilter || hideDescartado
+
+  const filteredNegs = negotiations.filter(neg => {
+    const club = clubs.find(c => c.id === neg.clubId)
+    if (!club) return false
+    if (hideDescartado && neg.status === 'descartado') return false
+    if (negStatusFilter.length > 0 && !negStatusFilter.includes(neg.status)) return false
+    if (negLeagueFilter && club.league !== negLeagueFilter) return false
+    if (negGestorFilter && neg.aisManager !== negGestorFilter) return false
+    if (negSearch && !club.name.toLowerCase().includes(negSearch.toLowerCase()) && !club.league?.toLowerCase().includes(negSearch.toLowerCase())) return false
+    return true
+  })
+
   async function saveEntry() {
     if (!entry) return
     setSavingEntry(true)
@@ -2085,14 +2113,23 @@ function DistributionTab({ player, entry, negotiations, clubs, onUpdateEntry, on
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 p-4">
+        {/* Header */}
         <div className="flex items-center justify-between mb-3">
-          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Clubes contactados ({negotiations.length})</span>
+          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            Clubes contactados{' '}
+            {hasFilters
+              ? <span className="text-blue-600">({filteredNegs.length}/{negotiations.length})</span>
+              : <span>({negotiations.length})</span>
+            }
+          </span>
           {onCreateNegotiation && (
             <button onClick={() => setShowAddNeg(true)} className="flex items-center gap-1 text-xs text-blue-600 font-medium">
               <Plus className="w-3.5 h-3.5" /> Añadir club
             </button>
           )}
         </div>
+
+        {/* Add negotiation form */}
         {showAddNeg && (
           <div className="bg-slate-50 rounded-lg p-3 mb-3 space-y-2">
             <select value={negClubId} onChange={e => setNegClubId(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
@@ -2113,8 +2150,96 @@ function DistributionTab({ player, entry, negotiations, clubs, onUpdateEntry, on
             </div>
           </div>
         )}
-        <div className="space-y-2">
-          {negotiations.map(neg => {
+
+        {/* ── FILTER BAR (only shown when there are negotiations) ── */}
+        {negotiations.length > 0 && (
+          <div className="space-y-2 mb-3">
+            {/* Row 1: Search + Solo activos toggle */}
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+                <input
+                  value={negSearch}
+                  onChange={e => setNegSearch(e.target.value)}
+                  placeholder="Buscar club…"
+                  className="w-full pl-7 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-200"
+                />
+              </div>
+              <button
+                onClick={() => setHideDescartado(v => !v)}
+                title="Ocultar descartados y cerrados"
+                className={`flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
+                  hideDescartado
+                    ? 'bg-slate-800 text-white border-slate-800'
+                    : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                }`}
+              >
+                <Filter className="w-3 h-3" /> Solo activos
+              </button>
+            </div>
+
+            {/* Row 2: Status chips */}
+            <div className="flex gap-1 flex-wrap">
+              {NEG_STATUSES_D.map(s => {
+                const cfg = STATUS_CONFIG_D[s]
+                const active = negStatusFilter.includes(s)
+                const count = negotiations.filter(n => n.status === s).length
+                if (count === 0) return null
+                return (
+                  <button
+                    key={s}
+                    onClick={() => setNegStatusFilter(prev => active ? prev.filter(x => x !== s) : [...prev, s])}
+                    className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-colors ${
+                      active ? cfg.color + ' ring-1 ring-current' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                    }`}
+                  >
+                    {cfg.label} <span className="opacity-60 text-[10px]">{count}</span>
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Row 3: Liga + Gestor selects */}
+            {(availableLeagues.length > 1 || availableGestores.length > 1) && (
+              <div className="flex gap-2">
+                {availableLeagues.length > 1 && (
+                  <select
+                    value={negLeagueFilter}
+                    onChange={e => setNegLeagueFilter(e.target.value)}
+                    className="flex-1 min-w-0 text-xs rounded-lg border border-slate-200 px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-200 text-slate-600 bg-white"
+                  >
+                    <option value="">Todas las ligas</option>
+                    {availableLeagues.map(l => <option key={l} value={l}>{l}</option>)}
+                  </select>
+                )}
+                {availableGestores.length > 1 && (
+                  <select
+                    value={negGestorFilter}
+                    onChange={e => setNegGestorFilter(e.target.value)}
+                    className="flex-1 min-w-0 text-xs rounded-lg border border-slate-200 px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-200 text-slate-600 bg-white"
+                  >
+                    <option value="">Todos los gestores</option>
+                    {availableGestores.map(g => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                )}
+              </div>
+            )}
+
+            {/* Clear filters */}
+            {hasFilters && (
+              <button
+                onClick={() => { setNegSearch(''); setNegStatusFilter([]); setNegLeagueFilter(''); setNegGestorFilter(''); setHideDescartado(false) }}
+                className="text-xs text-slate-400 hover:text-slate-600 underline"
+              >
+                Limpiar filtros
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Negotiations list */}
+        <div className="space-y-1">
+          {filteredNegs.map(neg => {
             const club = clubs.find(c => c.id === neg.clubId)
             if (!club) return null
             const scfg = STATUS_CONFIG_D[neg.status]
@@ -2139,7 +2264,7 @@ function DistributionTab({ player, entry, negotiations, clubs, onUpdateEntry, on
               )
             }
             return (
-              <div key={neg.id} className="flex items-start gap-3 p-3 rounded-lg hover:bg-slate-50">
+              <div key={neg.id} className={`flex items-start gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-50 transition-colors ${neg.status === 'descartado' ? 'opacity-50' : ''}`}>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-medium text-slate-700 text-sm">{club.name}</span>
@@ -2164,6 +2289,9 @@ function DistributionTab({ player, entry, negotiations, clubs, onUpdateEntry, on
           })}
           {negotiations.length === 0 && !showAddNeg && (
             <p className="text-center text-slate-400 text-xs py-4">Sin clubes contactados aún</p>
+          )}
+          {negotiations.length > 0 && filteredNegs.length === 0 && (
+            <p className="text-center text-slate-400 text-xs py-4">Sin resultados con estos filtros</p>
           )}
         </div>
       </div>

@@ -255,6 +255,7 @@ interface Props {
   onCreateNegotiation: (n: Omit<ClubNegotiation, 'id' | 'createdAt' | 'updatedAt'>) => Promise<ClubNegotiation>
   onUpdateNegotiation: (n: ClubNegotiation) => Promise<void>
   onDeleteNegotiation: (id: string) => Promise<void>
+  onCreatePlayer?: (p: Player) => Promise<Player>
 }
 
 // ── main component ────────────────────────────────────────────
@@ -265,6 +266,7 @@ export function Distribution({
   onCreateClub, onUpdateClub, onDeleteClub,
   onCreateEntry, onUpdateEntry, onDeleteEntry,
   onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation,
+  onCreatePlayer,
 }: Props) {
   const [tab, setTab] = useState<'jugadores' | 'clubes' | 'solicitudes' | 'pipeline'>('jugadores')
   const season = CURRENT_SEASON
@@ -1808,6 +1810,7 @@ export function Distribution({
           existingPlayerIds={seasonEntries.map(e => e.playerId)}
           season={season}
           onClose={() => setShowAddPlayer(false)}
+          onCreatePlayer={onCreatePlayer}
           onSave={async (data) => {
             const saved = await onCreateEntry(data)
             setSelectedEntryId(saved.id)
@@ -1968,15 +1971,28 @@ function ClubCard({ club, negotiations, isSelected, onClick, onOffer }: {
 
 // ── ADD PLAYER MODAL ──────────────────────────────────────────
 
-function AddPlayerModal({ players, existingPlayerIds, season, onClose, onSave }: {
+function AddPlayerModal({ players, existingPlayerIds, season, onClose, onSave, onCreatePlayer }: {
   players: Player[]
   existingPlayerIds: string[]
   season: string
   onClose: () => void
   onSave: (data: Omit<DistributionEntry, 'id' | 'createdAt'>) => Promise<void>
+  onCreatePlayer?: (p: Player) => Promise<Player>
 }) {
+  const [mode, setMode] = useState<'existing' | 'intermediar'>('existing')
+
+  // Existing player state
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<Player | null>(null)
+
+  // New intermediar player state
+  const [newName, setNewName] = useState('')
+  const [newPosition, setNewPosition] = useState('')
+  const [newNationality, setNewNationality] = useState('')
+  const [newBirthYear, setNewBirthYear] = useState('')
+  const [newClub, setNewClub] = useState('')
+
+  // Shared state
   const [priority, setPriority] = useState<'A' | 'B' | 'C'>('B')
   const [condition, setCondition] = useState('')
   const [transferFee, setTransferFee] = useState('')
@@ -1985,7 +2001,7 @@ function AddPlayerModal({ players, existingPlayerIds, season, onClose, onSave }:
 
   const available = players.filter(p =>
     !existingPlayerIds.includes(p.id) &&
-    (p.name.toLowerCase().includes(query.toLowerCase()))
+    p.name.toLowerCase().includes(query.toLowerCase())
   )
 
   async function handleSave() {
@@ -2004,107 +2020,176 @@ function AddPlayerModal({ players, existingPlayerIds, season, onClose, onSave }:
     } finally { setSaving(false) }
   }
 
+  async function handleCreateIntermediar() {
+    if (!newName || !newPosition || !onCreatePlayer) return
+    setSaving(true)
+    try {
+      const newPlayer: Player = {
+        id: crypto.randomUUID(),
+        name: newName,
+        birthDate: newBirthYear ? `${newBirthYear}-01-01` : '',
+        positions: [newPosition],
+        nationality: newNationality,
+        photo: '',
+        clubs: newClub ? [{ name: newClub, type: 'principal' as const }] : [],
+        partner: undefined,
+        managedBy: [],
+        hiddenFromManagement: true,
+        representationContract: { start: '', end: '' },
+        clubContract: { endDate: '' },
+        contractHistory: [],
+        clubInterests: [],
+        matchReports: [],
+        videoSessions: [],
+        links: [],
+        performance: [],
+        info: { family: '', personality: '', phone: '' },
+      }
+      const saved = await onCreatePlayer(newPlayer)
+      await onSave({
+        playerId: saved.id,
+        season,
+        priority,
+        condition: condition || undefined,
+        transferFee: transferFee || undefined,
+        notes: notes || undefined,
+        active: true,
+      })
+    } finally { setSaving(false) }
+  }
+
+  // Shared priority + condition fields (reused in both modes)
+  const sharedFields = (
+    <div className="space-y-3 pt-1">
+      <div>
+        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1.5">Prioridad</label>
+        <div className="flex gap-2">
+          {(['A', 'B', 'C'] as const).map(p => {
+            const cfg = PRIORITY_CONFIG[p]
+            return (
+              <button key={p} onClick={() => setPriority(p)}
+                className={`flex-1 py-2 rounded-lg text-sm font-bold border-2 transition-all ${priority === p ? `${cfg.bg} ${cfg.text} border-current` : 'bg-white text-slate-400 border-slate-200'}`}
+              >{p}</button>
+            )
+          })}
+        </div>
+      </div>
+      <div>
+        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1.5">Condición de salida</label>
+        <select value={condition} onChange={e => setCondition(e.target.value)}
+          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
+          <option value="">Sin especificar</option>
+          {CONDITIONS.map(c => <option key={c}>{c}</option>)}
+        </select>
+      </div>
+      {(condition.includes('Traspaso') || condition.includes('traspaso')) && (
+        <input value={transferFee} onChange={e => setTransferFee(e.target.value)}
+          placeholder="Importe: 400k, 2M…"
+          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+      )}
+      <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Notas (opcional)"
+        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none" />
+    </div>
+  )
+
   return (
     <ModalShell title="Añadir jugador a distribución" onClose={onClose}>
-      {!selected ? (
-        <div>
-          <input
-            autoFocus
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            placeholder="Buscar jugador…"
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 mb-2"
-          />
-          <div className="max-h-60 overflow-y-auto space-y-1">
-            {available.slice(0, 20).map(p => (
-              <button
-                key={p.id}
-                onClick={() => setSelected(p)}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-100 text-left"
-              >
-                <Avatar name={p.name} photo={p.photo} />
-                <div>
-                  <div className="text-sm font-medium text-slate-800">{p.name}</div>
-                  <div className="text-xs text-slate-500">{p.positions[0]}</div>
-                </div>
-              </button>
-            ))}
-            {available.length === 0 && (
-              <div className="text-sm text-slate-400 text-center py-4">Sin resultados</div>
-            )}
-          </div>
+      {/* Mode toggle */}
+      {onCreatePlayer && (
+        <div className="flex gap-1 mb-4 p-1 bg-slate-100 rounded-lg">
+          <button
+            onClick={() => setMode('existing')}
+            className={`flex-1 py-1.5 rounded-md text-xs font-medium transition-colors ${mode === 'existing' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            Cartera AIS
+          </button>
+          <button
+            onClick={() => setMode('intermediar')}
+            className={`flex-1 py-1.5 rounded-md text-xs font-medium transition-colors ${mode === 'intermediar' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            Solo intermediar
+          </button>
         </div>
-      ) : (
-        <div className="space-y-4">
-          <div className="flex items-center gap-3 bg-slate-50 rounded-lg px-3 py-2">
-            <Avatar name={selected.name} photo={selected.photo} size="md" />
-            <div>
-              <div className="font-medium text-slate-800">{selected.name}</div>
-              <div className="text-xs text-slate-500">{selected.positions[0]}</div>
+      )}
+
+      {mode === 'existing' ? (
+        /* ── Existing player flow ── */
+        !selected ? (
+          <div>
+            <input autoFocus value={query} onChange={e => setQuery(e.target.value)}
+              placeholder="Buscar jugador…"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 mb-2"
+            />
+            <div className="max-h-60 overflow-y-auto space-y-1">
+              {available.slice(0, 20).map(p => (
+                <button key={p.id} onClick={() => setSelected(p)}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-100 text-left">
+                  <Avatar name={p.name} photo={p.photo} />
+                  <div>
+                    <div className="text-sm font-medium text-slate-800">{p.name}</div>
+                    <div className="text-xs text-slate-500">{p.positions[0]}</div>
+                  </div>
+                </button>
+              ))}
+              {available.length === 0 && <div className="text-sm text-slate-400 text-center py-4">Sin resultados</div>}
             </div>
-            <button onClick={() => setSelected(null)} className="ml-auto text-slate-400 hover:text-slate-600">
-              <X className="w-4 h-4" />
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 bg-slate-50 rounded-lg px-3 py-2">
+              <Avatar name={selected.name} photo={selected.photo} size="md" />
+              <div>
+                <div className="font-medium text-slate-800">{selected.name}</div>
+                <div className="text-xs text-slate-500">{selected.positions[0]}</div>
+              </div>
+              <button onClick={() => setSelected(null)} className="ml-auto text-slate-400 hover:text-slate-600">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {sharedFields}
+            <button onClick={handleSave} disabled={saving}
+              className="w-full py-2 bg-[hsl(220,72%,36%)] text-white text-sm rounded-lg hover:bg-[hsl(220,72%,30%)] disabled:opacity-60">
+              {saving ? 'Guardando…' : 'Añadir a distribución'}
             </button>
           </div>
-
-          <div>
-            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1.5">Prioridad</label>
-            <div className="flex gap-2">
-              {(['A', 'B', 'C'] as const).map(p => {
-                const cfg = PRIORITY_CONFIG[p]
-                return (
-                  <button
-                    key={p}
-                    onClick={() => setPriority(p)}
-                    className={`flex-1 py-2 rounded-lg text-sm font-bold border-2 transition-all ${
-                      priority === p ? `${cfg.bg} ${cfg.text} border-current` : 'bg-white text-slate-400 border-slate-200'
-                    }`}
-                  >{p}</button>
-                )
-              })}
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1.5">Condición de salida</label>
-            <select
-              value={condition}
-              onChange={e => setCondition(e.target.value)}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-            >
-              <option value="">Sin especificar</option>
-              {CONDITIONS.map(c => <option key={c}>{c}</option>)}
-            </select>
-          </div>
-
-          {(condition.includes('Traspaso') || condition.includes('traspaso')) && (
-            <div>
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1.5">Importe</label>
-              <input
-                value={transferFee}
-                onChange={e => setTransferFee(e.target.value)}
-                placeholder="Ej: 400k, 2M…"
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-              />
-            </div>
-          )}
-
-          <div>
-            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1.5">Notas (opcional)</label>
-            <textarea
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              rows={2}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none"
+        )
+      ) : (
+        /* ── Nuevo jugador Solo Intermediar ── */
+        <div className="space-y-3">
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+            Este jugador aparecerá solo en Distribución. No tendrá ficha de mantenimiento (tareas, contrato, etc.).
+          </p>
+          <input autoFocus value={newName} onChange={e => setNewName(e.target.value)}
+            placeholder="Nombre completo *"
+            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+          />
+          <select value={newPosition} onChange={e => setNewPosition(e.target.value)}
+            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 text-slate-700">
+            <option value="">Posición *</option>
+            {FOOTBALL_POSITIONS.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+          <div className="flex gap-2">
+            <input value={newNationality} onChange={e => setNewNationality(e.target.value)}
+              placeholder="Nacionalidad"
+              className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+            />
+            <input value={newBirthYear} onChange={e => setNewBirthYear(e.target.value)}
+              placeholder="Año nacimiento"
+              type="number" min="1985" max="2010"
+              className="w-32 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
             />
           </div>
-
+          <input value={newClub} onChange={e => setNewClub(e.target.value)}
+            placeholder="Club actual (opcional)"
+            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+          />
+          {sharedFields}
           <button
-            onClick={handleSave}
-            disabled={saving}
+            onClick={handleCreateIntermediar}
+            disabled={!newName || !newPosition || saving}
             className="w-full py-2 bg-[hsl(220,72%,36%)] text-white text-sm rounded-lg hover:bg-[hsl(220,72%,30%)] disabled:opacity-60"
           >
-            {saving ? 'Guardando…' : 'Añadir a distribución'}
+            {saving ? 'Creando…' : 'Crear y añadir a distribución'}
           </button>
         </div>
       )}
