@@ -44,6 +44,22 @@ const CONCLUSION_STYLE: Record<string, string> = {
 
 const MONTHS_ES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 
+const COMPETITION_OPTIONS = [
+  // Competiciones profesionales
+  'Primera', 'Segunda', 'Primera RFEF', 'Segunda RFEF', 'Tercera RFEF', 'Tercera', 'Preferente',
+  // Categorías base
+  'Juvenil DH', 'Juvenil LN', 'Juvenil Pref', 'Juvenil Autonómico', 'Juvenil LC',
+  'Cadete DH', 'Cadete Pref', 'Cadete Autonómico', 'Cadete', 'Infantil',
+  'División Honor',
+  // Internacionales / selecciones
+  'Internacional', 'Selecciones', 'Youth League',
+  'Euro U17', 'Euro U21', 'Mundial U20', 'Mundialito Juveniles',
+  // Torneos
+  'MIC', 'COTIF', 'Copa del Rey', 'Copa del Rey Juv', 'Amistoso', 'Pretemporada',
+  // Ligas extranjeras
+  'Ligue 1', 'Eredivisie', 'Serie A', 'Belgium 1', 'CESA',
+]
+
 // ── Helpers ─────────────────────────────────────────────────
 
 function birthYearFromBirthdate(birthdate?: string): string {
@@ -282,7 +298,11 @@ function MatchCard({
         <div className="text-[10px] text-slate-400 uppercase">{MONTHS_ES[parseInt(match.date.slice(5, 7)) - 1]} '{match.date.slice(2, 4)}</div>
       </div>
       <div className="flex-1 min-w-0">
-        <div className="font-semibold text-slate-800 text-sm truncate">{match.homeTeam} vs {match.awayTeam}</div>
+        <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+          <span className="font-semibold text-slate-800 text-sm">{match.homeTeam}</span>
+          <span className="text-[10px] font-bold text-slate-400 flex-shrink-0">vs</span>
+          <span className="font-semibold text-slate-800 text-sm">{match.awayTeam}</span>
+        </div>
         <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 mt-0.5">
           {match.competition && <span className="bg-slate-100 px-1.5 py-0.5 rounded">{match.competition}</span>}
           {match.assignedTo && (
@@ -1221,7 +1241,16 @@ export function Captacion({
                   <input type="date" value={matchForm.date} onChange={e => setMatchForm(f => ({ ...f, date: e.target.value }))} className="field" />
                 </FormRow>
                 <FormRow label="Competición">
-                  <input value={matchForm.competition} onChange={e => setMatchForm(f => ({ ...f, competition: e.target.value }))} className="field" placeholder="Liga, Copa..." />
+                  <input
+                    value={matchForm.competition}
+                    onChange={e => setMatchForm(f => ({ ...f, competition: e.target.value }))}
+                    list="competition-options"
+                    className="field"
+                    placeholder="Liga, Copa..."
+                  />
+                  <datalist id="competition-options">
+                    {COMPETITION_OPTIONS.map(c => <option key={c} value={c} />)}
+                  </datalist>
                 </FormRow>
               </div>
               <div className="grid grid-cols-2 gap-2">
