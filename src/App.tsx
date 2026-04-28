@@ -135,9 +135,10 @@ export default function App() {
 
   // ── handlers ────────────────────────────────────────────────
 
-  const handleAddPlayer = async (player: Player) => {
+  const handleAddPlayer = async (player: Player): Promise<Player> => {
     const saved = await db.createPlayer(player)
     setPlayers((prev) => [...prev, saved])
+    return saved
   }
 
   const handleUpdatePlayer = async (updated: Player) => {
