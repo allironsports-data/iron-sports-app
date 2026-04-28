@@ -487,7 +487,7 @@ export function Captacion({
     const reportsByPlayer: Record<string, number> = {}
     scoutingReports.forEach(r => { reportsByPlayer[r.playerId] = (reportsByPlayer[r.playerId] ?? 0) + 1 })
     const topPlayers = Object.entries(reportsByPlayer)
-      .sort((a, b) => b[1] - a[1]).slice(0, 6)
+      .sort((a, b) => b[1] - a[1]).slice(0, 30)
       .map(([id, count]) => ({ name: scoutingPlayers.find(p => p.id === id)?.fullName ?? id, count }))
 
     return { byPersona, personaRanked, byConclusion, byAssessment, positionRanked, months, topPlayers }
@@ -1175,9 +1175,12 @@ export function Captacion({
             </div>
 
             {/* Top players by reports */}
-            <div className="bg-white border border-slate-200 rounded-xl p-4">
-              <h3 className="text-sm font-semibold text-slate-700 mb-3">Jugadores más seguidos</h3>
-              <div className="space-y-2">
+            <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col">
+              <h3 className="text-sm font-semibold text-slate-700 mb-3">
+                Jugadores más seguidos
+                <span className="ml-2 text-xs font-normal text-slate-400">top {stats.topPlayers.length}</span>
+              </h3>
+              <div className="overflow-y-auto max-h-72 space-y-2 pr-1">
                 {stats.topPlayers.map(({ name, count }) => (
                   <StatBar
                     key={name}
