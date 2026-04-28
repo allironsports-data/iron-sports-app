@@ -6,7 +6,7 @@ import {
   BarChart2, ClipboardList, Users,
 } from 'lucide-react'
 import logoImg from '../assets/logo.jpeg'
-import type { ScoutingPlayer, ScoutingReport, ScoutingAssessment, ScoutingMatch } from '../types'
+import type { ScoutingPlayer, ScoutingReport, ScoutingAssessment, ScoutingMatch, ScoutingMatchPlayer } from '../types'
 import type { Profile } from '../contexts/AuthContext'
 import * as db from '../lib/db'
 
@@ -133,6 +133,7 @@ function ReportCard({
   onDelete,
   onUpdate,
   playerName,
+  matchLabel,
 }: {
   report: ScoutingReport
   profiles: Profile[]
@@ -141,7 +142,8 @@ function ReportCard({
   onConfirmDelete: (id: string | null) => void
   onDelete: (id: string) => Promise<void>
   onUpdate?: (r: ScoutingReport) => Promise<void>
-  playerName?: string  // optional: shown in "informes recientes" tab
+  playerName?: string
+  matchLabel?: string   // e.g. "Real Madrid vs Barça · 12 Mar '25"
 }) {
   const isConfirming = confirmDeleteId === report.id
   const [editMode, setEditMode] = useState(false)
@@ -242,6 +244,11 @@ function ReportCard({
                 {report.conclusion}
               </span>
             )}
+            {matchLabel && (
+              <span className="px-1.5 py-0.5 bg-violet-50 text-violet-700 border border-violet-200 rounded text-[10px] flex items-center gap-0.5">
+                🏟 {matchLabel}
+              </span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-0.5 flex-shrink-0">
@@ -278,157 +285,183 @@ function ReportCard({
 // ── MatchRow ──────────────────────────────────────────────────
 
 function MatchRow({
-  match,
-  scoutName,
-  profiles,
-  currentProfile,
-  isAdmin,
-  onEdit,
-  onDelete,
-  onToggleStatus,
-  onAssign,
+  match, scoutName, profiles, currentProfile, isAdmin,
+  scoutingPlayers, linkedPlayerIds,
+  onEdit, onDelete, onToggleStatus, onAssign,
+  onAddMatchPlayer, onRemoveMatchPlayer,
 }: {
   match: ScoutingMatch
   scoutName: string
   profiles: Profile[]
   currentProfile: Profile
   isAdmin: boolean
+  scoutingPlayers: ScoutingPlayer[]
+  linkedPlayerIds: string[]
   onEdit: (m: ScoutingMatch) => void
   onDelete: (id: string) => void
   onToggleStatus: (m: ScoutingMatch) => void
   onAssign: (m: ScoutingMatch, assignedTo: string) => void
+  onAddMatchPlayer: (matchId: string, playerId: string) => Promise<void>
+  onRemoveMatchPlayer: (matchId: string, playerId: string) => Promise<void>
 }) {
   const [confirm, setConfirm] = useState(false)
   const [assignOpen, setAssignOpen] = useState(false)
+  const [playersOpen, setPlayersOpen] = useState(false)
+  const [playerSearch, setPlayerSearch] = useState('')
   const day = match.date.slice(8)
   const mon = MONTHS_ES[parseInt(match.date.slice(5, 7)) - 1]
   const yr = match.date.slice(2, 4)
   const isVisto = match.status === 'visto'
-  const isAssignedToMe = match.assignedTo === currentProfile.avatar
-  // highlight row if assigned to me and pending
-  const isPendingForMe = isAssignedToMe && !isVisto
+  const isPendingForMe = match.assignedTo === currentProfile.avatar && !isVisto
+
+  const linkedPlayers = scoutingPlayers.filter(p => linkedPlayerIds.includes(p.id))
+  const searchResults = playerSearch.length >= 2
+    ? scoutingPlayers.filter(p =>
+        !linkedPlayerIds.includes(p.id) &&
+        p.fullName.toLowerCase().includes(playerSearch.toLowerCase())
+      ).slice(0, 6)
+    : []
 
   return (
-    <tr className={`transition-colors ${isPendingForMe ? 'bg-amber-50/60 hover:bg-amber-50' : 'hover:bg-slate-50/60'}`}>
-      {/* Fecha */}
-      <td className="px-3 py-2 text-xs text-slate-500 whitespace-nowrap">
-        {day} {mon} '{yr}
-      </td>
-      {/* Local */}
-      <td className="px-3 py-2 text-sm font-medium text-slate-800 whitespace-nowrap">{match.homeTeam}</td>
-      {/* vs */}
-      <td className="px-2 py-2 text-[10px] font-bold text-slate-400 text-center">vs</td>
-      {/* Visitante */}
-      <td className="px-3 py-2 text-sm font-medium text-slate-800 whitespace-nowrap">{match.awayTeam}</td>
-      {/* Competición */}
-      <td className="px-3 py-2">
-        {match.competition && (
-          <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded whitespace-nowrap">{match.competition}</span>
-        )}
-      </td>
-      {/* Modo */}
-      <td className="px-3 py-2 text-xs whitespace-nowrap">
-        {match.viewMode === 'campo' ? (
-          <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded text-[10px] font-medium">
-            🏟️ Campo
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1 text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded text-[10px] font-medium">
-            📹 Vídeo
-          </span>
-        )}
-      </td>
-      {/* Scout / Asignación */}
-      <td className="px-3 py-2 text-xs whitespace-nowrap">
-        {assignOpen ? (
-          <select
-            autoFocus
-            className="text-xs border border-slate-200 rounded px-1 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
-            defaultValue={match.assignedTo ?? ''}
-            onBlur={() => setAssignOpen(false)}
-            onChange={e => { onAssign(match, e.target.value); setAssignOpen(false) }}
-          >
-            <option value="">Sin asignar</option>
-            {profiles.map(p => <option key={p.id} value={p.avatar}>{p.avatar} · {p.name}</option>)}
-          </select>
-        ) : (
-          <button
-            onClick={() => setAssignOpen(true)}
-            className={`text-left hover:underline ${match.assignedTo ? '' : 'text-slate-300 italic'}`}
-            title="Clic para reasignar"
-          >
-            {match.assignedTo ? (
-              <>
-                <span className="font-mono font-semibold text-slate-700">{match.assignedTo}</span>
-                {scoutName && scoutName !== match.assignedTo && (
-                  <span className="text-slate-400 ml-1">({scoutName})</span>
-                )}
-              </>
-            ) : (
-              <span className="text-slate-300">— asignar</span>
-            )}
-          </button>
-        )}
-      </td>
-      {/* Jugadores/notas */}
-      <td className="px-3 py-2 text-xs text-slate-500 max-w-[180px] truncate" title={match.notes ?? ''}>
-        {match.notes ?? '—'}
-      </td>
-      {/* Visto */}
-      <td className="px-3 py-2 text-center">
-        <button
-          onClick={() => onToggleStatus(match)}
-          title={isVisto ? 'Marcar como pendiente' : 'Marcar como visto'}
-          className={`inline-flex items-center justify-center w-6 h-6 rounded-full border transition-all ${
-            isVisto
-              ? 'bg-emerald-500 border-emerald-500 text-white'
-              : 'border-slate-300 text-slate-300 hover:border-emerald-400 hover:text-emerald-500'
-          }`}
-        >
-          <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="2.5,8 6,11.5 13.5,4" />
-          </svg>
-        </button>
-      </td>
-      {/* Acciones */}
-      <td className="px-3 py-2">
-        <div className="flex items-center gap-1 justify-end">
-          <button
-            onClick={() => onEdit(match)}
-            className="p-1 text-slate-300 hover:text-blue-500 transition-colors"
-            title="Editar"
-          >
-            <Pencil className="w-3.5 h-3.5" />
-          </button>
-          {isAdmin && (
-            confirm ? (
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => { onDelete(match.id); setConfirm(false) }}
-                  className="px-2 py-0.5 text-[10px] bg-red-600 text-white rounded font-medium"
-                >
-                  Sí
-                </button>
-                <button
-                  onClick={() => setConfirm(false)}
-                  className="px-2 py-0.5 text-[10px] border border-slate-200 rounded text-slate-600"
-                >
-                  No
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setConfirm(true)}
-                className="p-1 text-slate-300 hover:text-red-500 transition-colors"
-                title="Eliminar"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            )
+    <>
+      <tr className={`transition-colors ${isPendingForMe ? 'bg-amber-50/60 hover:bg-amber-50' : 'hover:bg-slate-50/60'}`}>
+        {/* Fecha */}
+        <td className="px-3 py-2 text-xs text-slate-500 whitespace-nowrap">{day} {mon} '{yr}</td>
+        {/* Local */}
+        <td className="px-3 py-2 text-sm font-medium text-slate-800 whitespace-nowrap">{match.homeTeam}</td>
+        {/* vs */}
+        <td className="px-2 py-2 text-[10px] font-bold text-slate-400 text-center">vs</td>
+        {/* Visitante */}
+        <td className="px-3 py-2 text-sm font-medium text-slate-800 whitespace-nowrap">{match.awayTeam}</td>
+        {/* Competición */}
+        <td className="px-3 py-2">
+          {match.competition && (
+            <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded whitespace-nowrap">{match.competition}</span>
           )}
-        </div>
-      </td>
-    </tr>
+        </td>
+        {/* Modo */}
+        <td className="px-3 py-2 text-xs whitespace-nowrap">
+          {match.viewMode === 'campo'
+            ? <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded text-[10px] font-medium">🏟️ Campo</span>
+            : <span className="inline-flex items-center gap-1 text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded text-[10px] font-medium">📹 Vídeo</span>
+          }
+        </td>
+        {/* Scout */}
+        <td className="px-3 py-2 text-xs whitespace-nowrap">
+          {assignOpen ? (
+            <select autoFocus
+              className="text-xs border border-slate-200 rounded px-1 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+              defaultValue={match.assignedTo ?? ''}
+              onBlur={() => setAssignOpen(false)}
+              onChange={e => { onAssign(match, e.target.value); setAssignOpen(false) }}
+            >
+              <option value="">Sin asignar</option>
+              {profiles.map(p => <option key={p.id} value={p.avatar}>{p.avatar} · {p.name}</option>)}
+            </select>
+          ) : (
+            <button onClick={() => setAssignOpen(true)} className="text-left hover:underline" title="Clic para reasignar">
+              {match.assignedTo
+                ? <><span className="font-mono font-semibold text-slate-700">{match.assignedTo}</span>{scoutName && scoutName !== match.assignedTo && <span className="text-slate-400 ml-1">({scoutName})</span>}</>
+                : <span className="text-slate-300">— asignar</span>
+              }
+            </button>
+          )}
+        </td>
+        {/* Jugadores vinculados */}
+        <td className="px-3 py-2">
+          <button
+            onClick={() => { setPlayersOpen(o => !o); setPlayerSearch('') }}
+            className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded border transition-colors ${
+              linkedPlayers.length > 0
+                ? 'bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100'
+                : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
+            }`}
+            title="Ver / añadir jugadores vistos en este partido"
+          >
+            👤 {linkedPlayers.length > 0 ? linkedPlayers.length : '+'}
+          </button>
+        </td>
+        {/* Notas */}
+        <td className="px-3 py-2 text-xs text-slate-500 max-w-[160px] truncate" title={match.notes ?? ''}>{match.notes ?? '—'}</td>
+        {/* Visto */}
+        <td className="px-3 py-2 text-center">
+          <button onClick={() => onToggleStatus(match)}
+            title={isVisto ? 'Marcar como pendiente' : 'Marcar como visto'}
+            className={`inline-flex items-center justify-center w-6 h-6 rounded-full border transition-all ${
+              isVisto ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 text-slate-300 hover:border-emerald-400 hover:text-emerald-500'
+            }`}
+          >
+            <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="2.5,8 6,11.5 13.5,4" />
+            </svg>
+          </button>
+        </td>
+        {/* Acciones */}
+        <td className="px-3 py-2">
+          <div className="flex items-center gap-1 justify-end">
+            <button onClick={() => onEdit(match)} className="p-1 text-slate-300 hover:text-blue-500 transition-colors" title="Editar">
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+            {isAdmin && (confirm
+              ? <div className="flex items-center gap-1">
+                  <button onClick={() => { onDelete(match.id); setConfirm(false) }} className="px-2 py-0.5 text-[10px] bg-red-600 text-white rounded font-medium">Sí</button>
+                  <button onClick={() => setConfirm(false)} className="px-2 py-0.5 text-[10px] border border-slate-200 rounded text-slate-600">No</button>
+                </div>
+              : <button onClick={() => setConfirm(true)} className="p-1 text-slate-300 hover:text-red-500 transition-colors" title="Eliminar"><Trash2 className="w-3.5 h-3.5" /></button>
+            )}
+          </div>
+        </td>
+      </tr>
+
+      {/* ── Fila expandida: jugadores vinculados ── */}
+      {playersOpen && (
+        <tr className="bg-violet-50/40">
+          <td colSpan={11} className="px-4 py-3">
+            <div className="flex flex-wrap gap-1.5 items-center mb-2">
+              <span className="text-[10px] font-semibold text-violet-600 uppercase tracking-wide mr-1">Jugadores vistos en este partido</span>
+              {linkedPlayers.map(p => (
+                <span key={p.id} className="inline-flex items-center gap-1 bg-white border border-violet-200 text-violet-800 text-xs px-2 py-0.5 rounded-full">
+                  {p.fullName}
+                  <button
+                    onClick={() => onRemoveMatchPlayer(match.id, p.id)}
+                    className="text-violet-400 hover:text-red-500 ml-0.5"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ))}
+              {linkedPlayers.length === 0 && (
+                <span className="text-xs text-slate-400">Ninguno aún</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+                <input
+                  value={playerSearch}
+                  onChange={e => setPlayerSearch(e.target.value)}
+                  placeholder="Buscar jugador para añadir..."
+                  className="pl-6 pr-3 py-1 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-violet-400/30 w-60"
+                />
+              </div>
+              {searchResults.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {searchResults.map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => { onAddMatchPlayer(match.id, p.id); setPlayerSearch('') }}
+                      className="text-xs bg-white border border-slate-200 hover:border-violet-400 hover:text-violet-700 px-2 py-0.5 rounded-full transition-colors"
+                    >
+                      + {p.fullName}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   )
 }
 
@@ -453,6 +486,9 @@ interface Props {
   onAddMatch: (m: ScoutingMatch) => void
   onUpdateMatch: (m: ScoutingMatch) => void
   onDeleteMatch: (id: string) => void
+  matchPlayers: ScoutingMatchPlayer[]
+  onAddMatchPlayer: (matchId: string, playerId: string) => Promise<void>
+  onRemoveMatchPlayer: (matchId: string, playerId: string) => Promise<void>
 }
 
 // ── Main component ───────────────────────────────────────────
@@ -475,8 +511,14 @@ export function Captacion({
   onAddMatch,
   onUpdateMatch,
   onDeleteMatch,
+  matchPlayers,
+  onAddMatchPlayer,
+  onRemoveMatchPlayer,
 }: Props) {
   const isAdmin = currentProfile.is_admin
+
+  // ── section tab ── (must be before header-height effect)
+  const [captTab, setCaptTab] = useState<CaptacionTab>('jugadores')
 
   // ── header height (for panel offset) ──
   const headerRef = React.useRef<HTMLElement>(null)
@@ -489,9 +531,6 @@ export function Captacion({
     window.addEventListener('resize', measure)
     return () => window.removeEventListener('resize', measure)
   }, [captTab]) // recalculate if tabs change row count
-
-  // ── section tab ──
-  const [captTab, setCaptTab] = useState<CaptacionTab>('jugadores')
 
   // ── filter state ──
   const [search, setSearch] = useState('')
@@ -512,6 +551,7 @@ export function Captacion({
   const [reportText, setReportText] = useState('')
   const [reportTitle, setReportTitle] = useState('')
   const [reportConclusion, setReportConclusion] = useState<ConclusionOption>('')
+  const [reportMatchId, setReportMatchId] = useState<string>('')
   const [savingReport, setSavingReport] = useState(false)
   const [confirmDeleteReport, setConfirmDeleteReport] = useState<string | null>(null)
   const [confirmDeletePlayer, setConfirmDeletePlayer] = useState(false)
@@ -717,12 +757,18 @@ export function Captacion({
         texto: reportText.trim(),
         persona: currentProfile.avatar,
         conclusion: reportConclusion || undefined,
+        matchId: reportMatchId || undefined,
         authorId: currentProfile.id,
       })
       onAddReport(saved)
+      // Also link player to the match if one was selected
+      if (reportMatchId) {
+        await onAddMatchPlayer(reportMatchId, panelPlayer.id)
+      }
       setReportTitle('')
       setReportText('')
       setReportConclusion('')
+      setReportMatchId('')
     } finally {
       setSavingReport(false)
     }
@@ -1749,7 +1795,8 @@ export function Captacion({
                       <th className="text-left px-3 py-2.5 font-semibold">Competición</th>
                       <th className="text-left px-3 py-2.5 font-semibold w-[90px]">Modo</th>
                       <th className="text-left px-3 py-2.5 font-semibold">Scout</th>
-                      <th className="text-left px-3 py-2.5 font-semibold">Jugadores</th>
+                      <th className="text-left px-3 py-2.5 font-semibold w-14">Vistos</th>
+                      <th className="text-left px-3 py-2.5 font-semibold">Notas</th>
                       <th className="text-center px-3 py-2.5 font-semibold w-12">Visto</th>
                       <th className="px-3 py-2.5 w-16" />
                     </tr>
@@ -1757,6 +1804,7 @@ export function Captacion({
                   <tbody className="divide-y divide-slate-100">
                     {filteredMatches.map(m => {
                       const scoutName = personaToName(m.assignedTo, profiles)
+                      const linkedPlayerIds = matchPlayers.filter(mp => mp.matchId === m.id).map(mp => mp.playerId)
                       return (
                         <MatchRow
                           key={m.id}
@@ -1765,10 +1813,14 @@ export function Captacion({
                           profiles={profiles}
                           currentProfile={currentProfile}
                           isAdmin={isAdmin}
+                          scoutingPlayers={scoutingPlayers}
+                          linkedPlayerIds={linkedPlayerIds}
                           onEdit={openEditMatch}
                           onDelete={handleDeleteMatch}
                           onToggleStatus={handleToggleMatchStatus}
                           onAssign={handleAssignMatch}
+                          onAddMatchPlayer={onAddMatchPlayer}
+                          onRemoveMatchPlayer={onRemoveMatchPlayer}
                         />
                       )
                     })}
@@ -2038,18 +2090,25 @@ export function Captacion({
                       <div className="space-y-3 mb-4">
                         {panelReports.length === 0 ? (
                           <p className="text-xs text-slate-400 italic">Sin informes todavía.</p>
-                        ) : panelReports.map(r => (
-                          <ReportCard
-                            key={r.id}
-                            report={r}
-                            profiles={profiles}
-                            currentProfile={currentProfile}
-                            confirmDeleteId={confirmDeleteReport}
-                            onConfirmDelete={setConfirmDeleteReport}
-                            onDelete={handleDeleteReport}
-                            onUpdate={handleUpdateReport}
-                          />
-                        ))}
+                        ) : panelReports.map(r => {
+                          const linkedMatch = r.matchId ? scoutingMatches.find(m => m.id === r.matchId) : undefined
+                          const matchLabel = linkedMatch
+                            ? `${linkedMatch.homeTeam} vs ${linkedMatch.awayTeam} · ${linkedMatch.date.slice(8)} ${MONTHS_ES[parseInt(linkedMatch.date.slice(5,7))-1]} '${linkedMatch.date.slice(2,4)}`
+                            : undefined
+                          return (
+                            <ReportCard
+                              key={r.id}
+                              report={r}
+                              profiles={profiles}
+                              currentProfile={currentProfile}
+                              confirmDeleteId={confirmDeleteReport}
+                              onConfirmDelete={setConfirmDeleteReport}
+                              onDelete={handleDeleteReport}
+                              onUpdate={handleUpdateReport}
+                              matchLabel={matchLabel}
+                            />
+                          )
+                        })}
                       </div>
 
                       {/* Add report form */}
@@ -2076,14 +2135,27 @@ export function Captacion({
                             if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); handleAddReport() }
                           }}
                         />
-                        <select
-                          value={reportConclusion}
-                          onChange={e => setReportConclusion(e.target.value as ConclusionOption)}
-                          className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-                        >
-                          <option value="">Sin conclusión</option>
-                          {CONCLUSION_OPTIONS.filter(Boolean).map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
+                        <div className="grid grid-cols-2 gap-2">
+                          <select
+                            value={reportConclusion}
+                            onChange={e => setReportConclusion(e.target.value as ConclusionOption)}
+                            className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                          >
+                            <option value="">Sin conclusión</option>
+                            {CONCLUSION_OPTIONS.filter(Boolean).map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                          <select
+                            value={reportMatchId}
+                            onChange={e => setReportMatchId(e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-violet-400/30"
+                          >
+                            <option value="">🏟 Sin partido vinculado</option>
+                            {scoutingMatches.slice(0, 80).map(m => {
+                              const d = `${m.date.slice(8)} ${MONTHS_ES[parseInt(m.date.slice(5,7))-1]} '${m.date.slice(2,4)}`
+                              return <option key={m.id} value={m.id}>{d} · {m.homeTeam} vs {m.awayTeam}</option>
+                            })}
+                          </select>
+                        </div>
                         <div className="flex items-center justify-between">
                           <span className="text-[10px] text-slate-400">⌘+Enter para guardar</span>
                           <button

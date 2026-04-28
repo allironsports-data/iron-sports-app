@@ -242,8 +242,16 @@ export interface ScoutingReport {
   titulo?: string
   texto?: string
   persona?: string          // "NB", "PP", "RP", "AV"
-  conclusion?: string       // "Llamar", "Seguir", "Descartar"
+  conclusion?: string       // "Seguir", "Firmar", "Descartar"
+  matchId?: string          // partido en el que fue visto (opcional)
   authorId?: string
+  createdAt: string
+}
+
+export interface ScoutingMatchPlayer {
+  id: string
+  matchId: string
+  playerId: string
   createdAt: string
 }
 

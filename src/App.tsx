@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from './contexts/AuthContext'
-import type { Player, Task, ScoutingPlayer, ScoutingReport, ScoutingMatch } from './types'
+import type { Player, Task, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer } from './types'
 import * as db from './lib/db'
 import { supabase } from './lib/supabase'
 import type { Profile } from './contexts/AuthContext'
@@ -58,6 +58,7 @@ export default function App() {
   const [scoutingPlayers, setScoutingPlayers] = useState<ScoutingPlayer[]>([])
   const [scoutingReports, setScoutingReports] = useState<ScoutingReport[]>([])
   const [scoutingMatches, setScoutingMatches] = useState<ScoutingMatch[]>([])
+  const [matchPlayers, setMatchPlayers] = useState<ScoutingMatchPlayer[]>([])
 
   const addNotification = useCallback((msg: string, type: AppNotification['type'], playerId?: string) => {
     setNotifications((prev) => [
@@ -85,7 +86,8 @@ export default function App() {
       db.fetchScoutingPlayers(),
       db.fetchScoutingReports(),
       db.fetchScoutingMatches(),
-    ]).then(([p, t, pr, cl, de, ng, sp, sr, sm]) => {
+      db.fetchMatchPlayers(),
+    ]).then(([p, t, pr, cl, de, ng, sp, sr, sm, mp]) => {
       setPlayers(p)
       setTasks(t)
       setProfiles(pr as Profile[])
@@ -95,6 +97,7 @@ export default function App() {
       setScoutingPlayers(sp as ScoutingPlayer[])
       setScoutingReports(sr as ScoutingReport[])
       setScoutingMatches(sm as ScoutingMatch[])
+      setMatchPlayers(mp as ScoutingMatchPlayer[])
     }).finally(() => setDataLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id])  // user.id — not the object — so token refreshes don't re-trigger this
@@ -277,6 +280,15 @@ export default function App() {
   }
   const handleDeleteScoutingMatch = (id: string) => {
     setScoutingMatches(prev => prev.filter(x => x.id !== id))
+    setMatchPlayers(prev => prev.filter(mp => mp.matchId !== id))
+  }
+  const handleAddMatchPlayer = async (matchId: string, playerId: string) => {
+    const mp = await db.addMatchPlayer(matchId, playerId)
+    setMatchPlayers(prev => prev.some(x => x.matchId === matchId && x.playerId === playerId) ? prev : [...prev, mp])
+  }
+  const handleRemoveMatchPlayer = async (matchId: string, playerId: string) => {
+    await db.removeMatchPlayer(matchId, playerId)
+    setMatchPlayers(prev => prev.filter(x => !(x.matchId === matchId && x.playerId === playerId)))
   }
 
   // ── helpers ─────────────────────────────────────────────────
@@ -414,6 +426,9 @@ export default function App() {
         onAddMatch={handleAddScoutingMatch}
         onUpdateMatch={handleUpdateScoutingMatch}
         onDeleteMatch={handleDeleteScoutingMatch}
+        matchPlayers={matchPlayers}
+        onAddMatchPlayer={handleAddMatchPlayer}
+        onRemoveMatchPlayer={handleRemoveMatchPlayer}
       />
     )
   }

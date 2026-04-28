@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation, ScoutingPlayer, ScoutingReport, ScoutingMatch } from '../types'
+import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer } from '../types'
 
 // ── helpers ──────────────────────────────────────────────────
 
@@ -523,6 +523,7 @@ function dbToScoutingReport(row: Record<string, unknown>): ScoutingReport {
     texto: (row.texto as string) ?? undefined,
     persona: (row.persona as string) ?? undefined,
     conclusion: (row.conclusion as string) ?? undefined,
+    matchId: (row.match_id as string) ?? undefined,
     authorId: (row.author_id as string) ?? undefined,
     createdAt: row.created_at as string,
   }
@@ -620,6 +621,7 @@ export async function createScoutingReport(r: Omit<ScoutingReport, 'id' | 'creat
     texto: r.texto ?? null,
     persona: r.persona ?? null,
     conclusion: r.conclusion ?? null,
+    match_id: r.matchId ?? null,
     author_id: r.authorId ?? null,
   }).select().single()
   if (error) throw error
@@ -638,7 +640,43 @@ export async function updateScoutingReport(r: ScoutingReport): Promise<void> {
     persona: r.persona ?? null,
     conclusion: r.conclusion ?? null,
     fecha: r.fecha ?? null,
+    match_id: r.matchId ?? null,
   }).eq('id', r.id)
+  if (error) throw error
+}
+
+// ── scouting_match_players ────────────────────────────────────
+
+function dbToMatchPlayer(row: Record<string, unknown>): ScoutingMatchPlayer {
+  return {
+    id: row.id as string,
+    matchId: row.match_id as string,
+    playerId: row.player_id as string,
+    createdAt: row.created_at as string,
+  }
+}
+
+export async function fetchMatchPlayers(): Promise<ScoutingMatchPlayer[]> {
+  try {
+    const { data, error } = await supabase.from('scouting_match_players').select('*')
+    if (error) return []
+    return (data ?? []).map(dbToMatchPlayer)
+  } catch {
+    return []
+  }
+}
+
+export async function addMatchPlayer(matchId: string, playerId: string): Promise<ScoutingMatchPlayer> {
+  const { data, error } = await supabase.from('scouting_match_players')
+    .upsert({ match_id: matchId, player_id: playerId }, { onConflict: 'match_id,player_id' })
+    .select().single()
+  if (error) throw error
+  return dbToMatchPlayer(data)
+}
+
+export async function removeMatchPlayer(matchId: string, playerId: string): Promise<void> {
+  const { error } = await supabase.from('scouting_match_players')
+    .delete().eq('match_id', matchId).eq('player_id', playerId)
   if (error) throw error
 }
 
