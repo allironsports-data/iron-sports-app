@@ -81,6 +81,7 @@ export function ClubDetail({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showAddNeed, setShowAddNeed] = useState(false)
   const [editingNeed, setEditingNeed] = useState<{ index: number; need: ClubNeed } | null>(null)
+  const [offeringPlayerId, setOfferingPlayerId] = useState<string | null>(null)
 
   const clubNegs = negotiations.filter(n => n.clubId === club.id)
 
@@ -331,15 +332,35 @@ export function ClubDetail({
                             <div className="mt-2 pt-2 border-t border-slate-100">
                               <p className="text-xs text-slate-400 mb-1.5">Jugadores que podrían encajar:</p>
                               <div className="flex flex-wrap gap-1.5">
-                                {matchingPlayers.slice(0, 5).map(p => {
+                                {matchingPlayers.slice(0, 8).map(p => {
                                   const alreadyAssigned = clubNegs.some(n => n.playerId === p.id)
+                                  const isOffering = offeringPlayerId === p.id
+                                  if (alreadyAssigned) {
+                                    return (
+                                      <span
+                                        key={p.id}
+                                        className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border bg-blue-50 border-blue-200 text-blue-700"
+                                      >
+                                        <Check className="w-3 h-3" />
+                                        {p.name.split(' ')[0]}
+                                      </span>
+                                    )
+                                  }
                                   return (
                                     <button
                                       key={p.id}
-                                      onClick={() => onSelectPlayer(p.id)}
-                                      className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-colors ${alreadyAssigned ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}`}
+                                      disabled={isOffering}
+                                      onClick={async () => {
+                                        setOfferingPlayerId(p.id)
+                                        try {
+                                          await onCreateNegotiation({ playerId: p.id, clubId: club.id, status: 'ofrecido' })
+                                        } finally {
+                                          setOfferingPlayerId(null)
+                                        }
+                                      }}
+                                      className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border bg-slate-50 border-slate-200 text-slate-600 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 disabled:opacity-50 transition-colors"
                                     >
-                                      {alreadyAssigned && <Check className="w-3 h-3" />}
+                                      {isOffering ? '…' : <Plus className="w-3 h-3" />}
                                       {p.name.split(' ')[0]}
                                     </button>
                                   )
