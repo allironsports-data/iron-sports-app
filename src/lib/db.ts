@@ -546,11 +546,22 @@ export async function fetchScoutingPlayers(): Promise<ScoutingPlayer[]> {
 }
 
 export async function fetchScoutingReports(playerId?: string): Promise<ScoutingReport[]> {
-  let q = supabase.from('scouting_reports').select('*').order('fecha', { ascending: false })
-  if (playerId) q = q.eq('player_id', playerId)
-  const { data, error } = await q
-  if (error) throw error
-  return (data ?? []).map(dbToScoutingReport)
+  const all: ScoutingReport[] = []
+  const pageSize = 1000
+  let from = 0
+  while (true) {
+    let q = supabase.from('scouting_reports').select('*')
+      .order('fecha', { ascending: false })
+      .range(from, from + pageSize - 1)
+    if (playerId) q = q.eq('player_id', playerId)
+    const { data, error } = await q
+    if (error) throw error
+    const page = (data ?? []).map(dbToScoutingReport)
+    all.push(...page)
+    if (page.length < pageSize) break
+    from += pageSize
+  }
+  return all
 }
 
 export async function createScoutingPlayer(p: Omit<ScoutingPlayer, 'id' | 'createdAt'>): Promise<ScoutingPlayer> {
