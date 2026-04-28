@@ -510,6 +510,13 @@ export function Captacion({
   const [matchForm, setMatchForm] = useState({ date: '', homeTeam: '', awayTeam: '', competition: '', assignedTo: '', viewMode: 'video' as 'video' | 'campo', notes: '' })
   const [savingMatch, setSavingMatch] = useState(false)
 
+  // ── match filters ──
+  const [matchSearch, setMatchSearch] = useState('')
+  const [matchPersonaFilter, setMatchPersonaFilter] = useState('all')
+  const [matchCompFilter, setMatchCompFilter] = useState('all')
+  const [matchModeFilter, setMatchModeFilter] = useState<'all' | 'video' | 'campo'>('all')
+  const [matchStatusFilter, setMatchStatusFilter] = useState<'all' | 'visto' | 'pendiente'>('all')
+
   // ── pagination ──
   const PAGE_SIZE = 50
   const [page, setPage] = useState(0)
@@ -661,6 +668,22 @@ export function Captacion({
 
     return { byPersona, personaRanked, video, campo, visto, pendiente, competitionRanked, teamRanked, matchMonths, pendienteByPersona }
   }, [scoutingMatches])
+
+  // ── filtered matches ──
+  const filteredMatches = useMemo(() => {
+    const q = matchSearch.toLowerCase().trim()
+    return scoutingMatches.filter(m => {
+      if (matchPersonaFilter !== 'all' && m.assignedTo !== matchPersonaFilter) return false
+      if (matchCompFilter !== 'all' && m.competition !== matchCompFilter) return false
+      if (matchModeFilter !== 'all' && (m.viewMode ?? 'video') !== matchModeFilter) return false
+      if (matchStatusFilter !== 'all' && (m.status ?? 'pendiente') !== matchStatusFilter) return false
+      if (q) {
+        const hay = `${m.homeTeam} ${m.awayTeam} ${m.competition ?? ''} ${m.notes ?? ''}`.toLowerCase()
+        if (!hay.includes(q)) return false
+      }
+      return true
+    })
+  }, [scoutingMatches, matchSearch, matchPersonaFilter, matchCompFilter, matchModeFilter, matchStatusFilter])
 
   // ── recent reports ──
   const recentReports = useMemo(() => {
@@ -1613,6 +1636,88 @@ export function Captacion({
             </div>
           )}
 
+          {/* Filtros */}
+          {scoutingMatches.length > 0 && (
+            <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex flex-wrap items-center gap-2">
+              {/* Búsqueda libre */}
+              <div className="relative flex-1 min-w-[160px] max-w-xs">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                <input
+                  value={matchSearch}
+                  onChange={e => setMatchSearch(e.target.value)}
+                  placeholder="Buscar equipo, jugador..."
+                  className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                />
+                {matchSearch && (
+                  <button onClick={() => setMatchSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+
+              {/* Scout */}
+              <select
+                value={matchPersonaFilter}
+                onChange={e => setMatchPersonaFilter(e.target.value)}
+                className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 text-slate-700"
+              >
+                <option value="all">Todos los scouts</option>
+                {profiles.map(p => (
+                  <option key={p.id} value={p.avatar}>{p.avatar} · {p.name}</option>
+                ))}
+              </select>
+
+              {/* Competición */}
+              <select
+                value={matchCompFilter}
+                onChange={e => setMatchCompFilter(e.target.value)}
+                className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 text-slate-700"
+              >
+                <option value="all">Todas las competiciones</option>
+                {Array.from(new Set(scoutingMatches.map(m => m.competition).filter(Boolean))).sort().map(c => (
+                  <option key={c} value={c!}>{c}</option>
+                ))}
+              </select>
+
+              {/* Modo */}
+              <select
+                value={matchModeFilter}
+                onChange={e => setMatchModeFilter(e.target.value as typeof matchModeFilter)}
+                className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 text-slate-700"
+              >
+                <option value="all">Vídeo + Campo</option>
+                <option value="video">📹 Vídeo</option>
+                <option value="campo">🏟️ Campo</option>
+              </select>
+
+              {/* Estado */}
+              <div className="flex items-center gap-1">
+                {(['all', 'visto', 'pendiente'] as const).map(s => (
+                  <button
+                    key={s}
+                    onClick={() => setMatchStatusFilter(s)}
+                    className={`px-2.5 py-1 text-xs font-medium rounded-full border transition-colors ${
+                      matchStatusFilter === s
+                        ? s === 'visto' ? 'bg-emerald-500 text-white border-emerald-500'
+                          : s === 'pendiente' ? 'bg-amber-400 text-white border-amber-400'
+                          : 'bg-slate-800 text-white border-slate-800'
+                        : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
+                    }`}
+                  >
+                    {s === 'all' ? 'Todos' : s === 'visto' ? '✓ Vistos' : '⏳ Pendientes'}
+                  </button>
+                ))}
+              </div>
+
+              {/* Resultados */}
+              <span className="text-xs text-slate-400 ml-auto">
+                {filteredMatches.length === scoutingMatches.length
+                  ? `${scoutingMatches.length} partidos`
+                  : `${filteredMatches.length} de ${scoutingMatches.length}`}
+              </span>
+            </div>
+          )}
+
           {scoutingMatches.length === 0 && !showAddMatch ? (
             <div className="text-center py-16 text-slate-400 text-sm">
               <ClipboardList className="w-10 h-10 mx-auto mb-2 opacity-20" />
@@ -1638,7 +1743,7 @@ export function Captacion({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {scoutingMatches.map(m => {
+                    {filteredMatches.map(m => {
                       const scoutName = personaToName(m.assignedTo, profiles)
                       return (
                         <MatchRow
@@ -1655,6 +1760,13 @@ export function Captacion({
                         />
                       )
                     })}
+                    {filteredMatches.length === 0 && (
+                      <tr>
+                        <td colSpan={10} className="text-center py-10 text-slate-400 text-sm">
+                          No hay partidos que coincidan con los filtros
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>

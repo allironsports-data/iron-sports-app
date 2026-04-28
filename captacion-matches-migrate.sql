@@ -1,6 +1,6 @@
 -- ─────────────────────────────────────────────────────────────────
 -- MIGRACIÓN: añadir view_mode y status a scouting_matches
--- Ejecutar UNA VEZ en Supabase SQL Editor
+-- Paso 1 de 2 — ejecutar PRIMERO, luego captacion-matches-status.sql
 -- ─────────────────────────────────────────────────────────────────
 
 -- 1. Nuevas columnas
@@ -20,7 +20,5 @@ SET
   )
 WHERE view_mode IS NULL;
 
--- 3. Marcar como 'visto' todos los partidos ya cargados (son datos históricos)
-UPDATE public.scouting_matches
-SET status = 'visto'
-WHERE status IS NULL OR status = 'pendiente';
+-- NOTA: el status (visto/pendiente) lo asigna captacion-matches-status.sql
+-- según la columna "Visto" del CSV original. NO ejecutar nada más aquí.
