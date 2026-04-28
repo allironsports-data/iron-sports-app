@@ -448,6 +448,7 @@ function dbToNegotiation(row: Record<string, unknown>): ClubNegotiation {
     status: (row.status as ClubNegotiation['status']) ?? 'ofrecido',
     aisManager: (row.ais_manager as string) ?? undefined,
     notes: (row.notes as string) ?? undefined,
+    updates: (row.updates as ClubNegotiation['updates']) ?? [],
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   }
@@ -479,6 +480,7 @@ export async function updateNegotiation(n: ClubNegotiation): Promise<void> {
     status: n.status,
     ais_manager: n.aisManager ?? null,
     notes: n.notes ?? null,
+    updates: n.updates ?? [],
   }).eq('id', n.id)
   if (error) throw error
 }

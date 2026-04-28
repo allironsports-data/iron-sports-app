@@ -316,6 +316,7 @@ export function Distribution({
   const [needsLeagueFilter, setNeedsLeagueFilter] = useState('')
   const [needsAgeFilter, setNeedsAgeFilter] = useState('')
   const [needsViewMode, setNeedsViewMode] = useState<'cards' | 'table'>('cards')
+  const [needsSort, setNeedsSort] = useState<'recent' | 'club'>('recent')
 
   const seasonEntries = entries.filter(e => e.season === season)
 
@@ -424,14 +425,25 @@ export function Distribution({
     clubs.forEach(club => club.needs.forEach(need => results.push({ club, need })))
     const pf = positionFilter.toLowerCase()
     const q = search.toLowerCase()
-    return results.filter(r =>
+    const filtered = results.filter(r =>
       (!pf || r.need.position.toLowerCase().includes(pf)) &&
       (!q || r.club.name.toLowerCase().includes(q) || r.club.league?.toLowerCase().includes(q) || r.need.position.toLowerCase().includes(q)) &&
       (needsTierFilter.length === 0 || needsTierFilter.includes(getClubTier(r.club.league, r.club.country))) &&
       (!needsLeagueFilter || r.club.league === needsLeagueFilter) &&
       (!needsAgeFilter || (r.need.ageMax !== undefined && r.need.ageMax <= Number(needsAgeFilter)))
     )
-  }, [clubs, positionFilter, search, needsTierFilter, needsLeagueFilter, needsAgeFilter])
+    if (needsSort === 'recent') {
+      filtered.sort((a, b) => {
+        const da = a.need.createdAt ?? ''
+        const db2 = b.need.createdAt ?? ''
+        if (!da && !db2) return 0
+        if (!da) return 1
+        if (!db2) return -1
+        return db2.localeCompare(da)
+      })
+    }
+    return filtered
+  }, [clubs, positionFilter, search, needsTierFilter, needsLeagueFilter, needsAgeFilter, needsSort])
 
   const needsLeagues = useMemo(() => {
     const m = new Map<string, number>()
@@ -1027,8 +1039,8 @@ export function Distribution({
             const hasNeedsFilters = needsTierFilter.length > 0 || !!needsLeagueFilter || !!needsAgeFilter || !!positionFilter
             return (
             <div className="max-w-5xl mx-auto">
-              {/* Top row: view toggle + add button */}
-              <div className="flex items-center justify-between mb-3">
+              {/* Top row: view toggle + sort + add button */}
+              <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => setNeedsViewMode('cards')}
@@ -1051,6 +1063,14 @@ export function Distribution({
                     }`}
                   >
                     <Table className="w-3.5 h-3.5" /> Tabla
+                  </button>
+                  <div className="w-px h-5 bg-slate-200 mx-1" />
+                  <button
+                    onClick={() => setNeedsSort(s => s === 'recent' ? 'club' : 'recent')}
+                    title={needsSort === 'recent' ? 'Ordenado por más reciente' : 'Ordenado por club'}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 border rounded-lg text-xs font-medium bg-white border-slate-200 text-slate-600 hover:border-slate-300 transition-colors"
+                  >
+                    {needsSort === 'recent' ? '↓ Reciente' : 'A–Z Club'}
                   </button>
                 </div>
                 <button
@@ -1181,7 +1201,9 @@ export function Distribution({
                             <NeedFormInline
                               initial={need}
                               onSave={async (updated) => {
-                                const newNeeds = club.needs.map((n, idx) => idx === needIndex ? updated : n)
+                                // preserve metadata from original need
+                                const withMeta = { ...updated, createdAt: need.createdAt, addedBy: need.addedBy }
+                                const newNeeds = club.needs.map((n, idx) => idx === needIndex ? withMeta : n)
                                 await onUpdateClub({ ...club, needs: newNeeds })
                                 setEditingNeed(null)
                               }}
@@ -1220,6 +1242,14 @@ export function Distribution({
                                 {need.salaryBudget && <span>· {need.salaryBudget}/mes</span>}
                                 {need.notes && <span className="text-slate-400 truncate">· {need.notes}</span>}
                               </div>
+                              <div className="flex items-center gap-1.5 text-[10px] text-slate-400 mt-0.5 flex-wrap">
+                                {need.createdAt && (
+                                  <span>{new Date(need.createdAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                                )}
+                                {need.addedBy && currentProfile.is_admin && (
+                                  <span className="font-mono bg-slate-100 px-1 rounded">{need.addedBy}</span>
+                                )}
+                              </div>
                             </div>
                             <div className="flex items-center gap-1 flex-shrink-0">
                               <button
@@ -1254,6 +1284,8 @@ export function Distribution({
                         <th className="text-left px-3 py-2.5 font-semibold">Traspaso</th>
                         <th className="text-left px-3 py-2.5 font-semibold">Salario/mes</th>
                         <th className="text-left px-3 py-2.5 font-semibold">Notas</th>
+                        <th className="text-left px-3 py-2.5 font-semibold">Añadida</th>
+                        {currentProfile.is_admin && <th className="text-left px-3 py-2.5 font-semibold">Por</th>}
                         <th className="text-left px-3 py-2.5 font-semibold">Jugadores</th>
                         <th className="px-3 py-2.5" />
                       </tr>
@@ -1276,7 +1308,8 @@ export function Distribution({
                                 <NeedFormInline
                                   initial={need}
                                   onSave={async (updated) => {
-                                    const newNeeds = club.needs.map((n, idx) => idx === needIndex ? updated : n)
+                                    const withMeta = { ...updated, createdAt: need.createdAt, addedBy: need.addedBy }
+                                    const newNeeds = club.needs.map((n, idx) => idx === needIndex ? withMeta : n)
                                     await onUpdateClub({ ...club, needs: newNeeds })
                                     setEditingNeed(null)
                                   }}
@@ -1310,6 +1343,16 @@ export function Distribution({
                                 <td className="px-3 py-2 text-xs text-slate-600 whitespace-nowrap">{need.transferBudget || <span className="text-slate-300">—</span>}</td>
                                 <td className="px-3 py-2 text-xs text-slate-600 whitespace-nowrap">{need.salaryBudget || <span className="text-slate-300">—</span>}</td>
                                 <td className="px-3 py-2 text-xs text-slate-400 max-w-[160px] truncate" title={need.notes}>{need.notes || <span className="text-slate-300">—</span>}</td>
+                                <td className="px-3 py-2 text-xs text-slate-400 whitespace-nowrap">
+                                  {need.createdAt
+                                    ? new Date(need.createdAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
+                                    : <span className="text-slate-300">—</span>}
+                                </td>
+                                {currentProfile.is_admin && (
+                                  <td className="px-3 py-2 text-xs font-mono text-slate-400 whitespace-nowrap">
+                                    {need.addedBy || <span className="text-slate-300">—</span>}
+                                  </td>
+                                )}
                                 <td className="px-3 py-2">
                                   {matchCount > 0 && (
                                     <span className="text-[10px] bg-green-50 text-green-700 border border-green-200 px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap">
@@ -1896,7 +1939,8 @@ export function Distribution({
           onSave={async (clubId, need) => {
             const club = clubs.find(c => c.id === clubId)
             if (!club) return
-            await onUpdateClub({ ...club, needs: [...club.needs, need] })
+            const enriched = { ...need, createdAt: new Date().toISOString(), addedBy: currentProfile.avatar }
+            await onUpdateClub({ ...club, needs: [...club.needs, enriched] })
             setShowAddNeed(false)
           }}
         />

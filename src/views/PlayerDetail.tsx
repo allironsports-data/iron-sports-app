@@ -254,6 +254,7 @@ export function PlayerDetail({
                 entry={distributionEntry}
                 negotiations={playerNegotiations}
                 clubs={clubs}
+                currentProfile={currentProfile}
                 onUpdateEntry={onUpdateEntry}
                 onCreateNegotiation={onCreateNegotiation}
                 onUpdateNegotiation={onUpdateNegotiation}
@@ -1981,11 +1982,12 @@ const PRIORITY_CONFIG_D = {
 }
 const CONDITIONS_D = ['Libre', 'Traspaso', 'Cesión', 'Cesión/Traspaso', 'Traspaso (porcentaje)', 'Cesión con opción']
 
-function DistributionTab({ player, entry, negotiations, clubs, onUpdateEntry, onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation, onSelectClub }: {
+function DistributionTab({ player, entry, negotiations, clubs, currentProfile, onUpdateEntry, onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation, onSelectClub }: {
   player: Player
   entry?: DistributionEntry
   negotiations: ClubNegotiation[]
   clubs: Club[]
+  currentProfile: Profile
   onUpdateEntry?: (e: DistributionEntry) => Promise<void>
   onCreateNegotiation?: (n: Omit<ClubNegotiation, 'id' | 'createdAt' | 'updatedAt'>) => Promise<ClubNegotiation>
   onUpdateNegotiation?: (n: ClubNegotiation) => Promise<void>
@@ -2006,6 +2008,13 @@ function DistributionTab({ player, entry, negotiations, clubs, onUpdateEntry, on
   const [negNotes, setNegNotes] = useState('')
   const [savingNeg, setSavingNeg] = useState(false)
   const [editingNeg, setEditingNeg] = useState<ClubNegotiation | null>(null)
+
+  // Side panel state
+  const [panelNegId, setPanelNegId] = useState<string | null>(null)
+  const [panelUpdateText, setPanelUpdateText] = useState('')
+  const [savingUpdate, setSavingUpdate] = useState(false)
+  const panelNeg = negotiations.find(n => n.id === panelNegId) ?? null
+  const panelClub = panelNeg ? clubs.find(c => c.id === panelNeg.clubId) ?? null : null
 
   // filter state
   const [negSearch, setNegSearch]           = useState('')
@@ -2264,23 +2273,30 @@ function DistributionTab({ player, entry, negotiations, clubs, onUpdateEntry, on
               )
             }
             return (
-              <div key={neg.id} className={`flex items-start gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-50 transition-colors ${neg.status === 'descartado' ? 'opacity-50' : ''}`}>
+              <div
+                key={neg.id}
+                onClick={() => setPanelNegId(neg.id)}
+                className={`flex items-start gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer group ${neg.status === 'descartado' ? 'opacity-50' : ''} ${panelNegId === neg.id ? 'bg-blue-50 ring-1 ring-blue-200' : ''}`}
+              >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-medium text-slate-700 text-sm">{club.name}</span>
                     {club.league && <span className="text-xs text-slate-400">{club.league}</span>}
                     <span className={`text-xs px-2 py-0.5 rounded-full ${scfg.color}`}>{scfg.label}</span>
                     {neg.aisManager && <span className="text-xs font-mono bg-slate-100 text-slate-500 px-1.5 rounded">{neg.aisManager}</span>}
+                    {neg.updates && neg.updates.length > 0 && (
+                      <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">{neg.updates.length} nota{neg.updates.length !== 1 ? 's' : ''}</span>
+                    )}
                   </div>
-                  {neg.notes && <p className="text-xs text-slate-500 mt-0.5">{neg.notes}</p>}
+                  {neg.notes && <p className="text-xs text-slate-500 mt-0.5 truncate">{neg.notes}</p>}
                 </div>
-                <div className="flex items-center gap-1 flex-shrink-0">
+                <div className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                   {onSelectClub && (
-                    <button onClick={() => onSelectClub(club.id)} className="p-1 text-slate-300 hover:text-blue-500" title="Ver ficha del club">
+                    <button onClick={e => { e.stopPropagation(); onSelectClub(club.id) }} className="p-1 text-slate-300 hover:text-blue-500" title="Ver ficha del club">
                       <ExternalLink className="w-3.5 h-3.5" />
                     </button>
                   )}
-                  <button onClick={() => setEditingNeg(neg)} className="p-1 text-slate-300 hover:text-slate-500">
+                  <button onClick={e => { e.stopPropagation(); setEditingNeg(neg) }} className="p-1 text-slate-300 hover:text-slate-500">
                     <Edit3 className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -2295,6 +2311,138 @@ function DistributionTab({ player, entry, negotiations, clubs, onUpdateEntry, on
           )}
         </div>
       </div>
+
+      {/* ── SIDE PANEL (slide-over) ── */}
+      {panelNeg && panelClub && (() => {
+        const scfg = STATUS_CONFIG_D[panelNeg.status]
+        const sortedUpdates = [...(panelNeg.updates ?? [])].sort((a, b) => b.date.localeCompare(a.date))
+
+        async function addUpdate() {
+          if (!panelUpdateText.trim() || !onUpdateNegotiation) return
+          setSavingUpdate(true)
+          try {
+            const newUpdate = {
+              id: crypto.randomUUID(),
+              text: panelUpdateText.trim(),
+              date: new Date().toISOString(),
+              author: currentProfile.avatar,
+            }
+            await onUpdateNegotiation({ ...panelNeg, updates: [...(panelNeg.updates ?? []), newUpdate] })
+            setPanelUpdateText('')
+          } finally { setSavingUpdate(false) }
+        }
+
+        async function changeStatus(s: ClubNegotiation['status']) {
+          if (!onUpdateNegotiation) return
+          await onUpdateNegotiation({ ...panelNeg, status: s })
+        }
+
+        return (
+          <>
+            {/* Backdrop */}
+            <div
+              className="fixed inset-0 z-30 bg-black/20"
+              onClick={() => setPanelNegId(null)}
+            />
+            {/* Panel */}
+            <div className="fixed right-0 top-0 h-full w-80 max-w-full z-40 bg-white border-l border-slate-200 shadow-xl flex flex-col">
+              {/* Header */}
+              <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 flex-shrink-0">
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-slate-800 text-sm truncate">{panelClub.name}</div>
+                  {panelClub.league && <div className="text-xs text-slate-400">{panelClub.league}</div>}
+                </div>
+                <button onClick={() => setPanelNegId(null)} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Status + info */}
+              <div className="px-4 py-3 border-b border-slate-100 flex-shrink-0 space-y-3">
+                {/* Status chips */}
+                <div>
+                  <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Estado</div>
+                  <div className="flex flex-wrap gap-1">
+                    {NEG_STATUSES_D.map(s => {
+                      const cfg = STATUS_CONFIG_D[s]
+                      return (
+                        <button
+                          key={s}
+                          onClick={() => changeStatus(s)}
+                          className={`px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${panelNeg.status === s ? cfg.color + ' ring-1 ring-current' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                        >
+                          {cfg.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+                {/* Meta */}
+                <div className="flex items-center gap-3 text-xs text-slate-500">
+                  {panelNeg.aisManager && (
+                    <span className="font-mono bg-slate-100 px-2 py-1 rounded">{panelNeg.aisManager}</span>
+                  )}
+                  <span className="text-slate-400">{new Date(panelNeg.createdAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                </div>
+                {panelNeg.notes && (
+                  <p className="text-xs text-slate-600 bg-slate-50 rounded-lg px-3 py-2">{panelNeg.notes}</p>
+                )}
+                {/* Go to club link */}
+                {onSelectClub && (
+                  <button
+                    onClick={() => { setPanelNegId(null); onSelectClub(panelClub.id) }}
+                    className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
+                  >
+                    <ExternalLink className="w-3 h-3" /> Ver ficha del club
+                  </button>
+                )}
+              </div>
+
+              {/* Updates/notes thread */}
+              <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2.5">
+                <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Notas de seguimiento</div>
+                {sortedUpdates.length === 0 && (
+                  <p className="text-xs text-slate-400 py-4 text-center">Sin notas aún</p>
+                )}
+                {sortedUpdates.map(u => (
+                  <div key={u.id} className="bg-slate-50 rounded-lg px-3 py-2.5">
+                    <div className="flex items-center gap-2 mb-1">
+                      {u.author && <span className="text-[10px] font-mono bg-white border border-slate-200 text-slate-500 px-1.5 py-0.5 rounded">{u.author}</span>}
+                      <span className="text-[10px] text-slate-400 ml-auto">
+                        {new Date(u.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
+                        {' '}
+                        {new Date(u.date).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-700">{u.text}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Add update */}
+              {onUpdateNegotiation && (
+                <div className="px-4 py-3 border-t border-slate-100 flex-shrink-0 space-y-2">
+                  <textarea
+                    value={panelUpdateText}
+                    onChange={e => setPanelUpdateText(e.target.value)}
+                    placeholder="Añadir nota de seguimiento…"
+                    rows={2}
+                    className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-blue-200"
+                    onKeyDown={e => { if (e.key === 'Enter' && e.metaKey) { e.preventDefault(); addUpdate() } }}
+                  />
+                  <button
+                    onClick={addUpdate}
+                    disabled={!panelUpdateText.trim() || savingUpdate}
+                    className="w-full py-1.5 text-xs bg-[hsl(220,72%,36%)] text-white rounded-lg disabled:opacity-50 hover:bg-[hsl(220,72%,30%)] transition-colors"
+                  >
+                    {savingUpdate ? '…' : 'Guardar nota'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </>
+        )
+      })()}
     </div>
   )
 }

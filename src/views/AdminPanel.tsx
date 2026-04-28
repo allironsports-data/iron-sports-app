@@ -4,7 +4,7 @@ import type { Profile } from '../contexts/AuthContext'
 import type { Task, Player } from '../types'
 import { updateProfile } from '../lib/db'
 import { supabase } from '../lib/supabase'
-import { ArrowLeft, LogOut, Shield, UserPlus, Check, X, Edit3, Copy, Trash2, KeyRound, AlertTriangle, BarChart3, Users } from 'lucide-react'
+import { ArrowLeft, LogOut, Shield, UserPlus, Check, X, Edit3, Copy, Trash2, KeyRound, AlertTriangle, BarChart3, Users, ChevronDown, ChevronRight, Clock, CheckCircle2, Circle } from 'lucide-react'
 
 const PRIMARY = 'hsl(220,72%,26%)'
 
@@ -340,66 +340,155 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
 
 /* ========== TASK TRACKING TAB ========== */
 function TaskTrackingTab({ profiles, tasks, players }: { profiles: Profile[]; tasks: Task[]; players: Player[] }) {
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'overdue'>('all')
+  const today = new Date()
+
+  const toggleExpand = (id: string) => setExpandedIds(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
+
+  const expandAll = () => setExpandedIds(new Set(profiles.map(p => p.id)))
+  const collapseAll = () => setExpandedIds(new Set())
+
+  function taskStatusIcon(t: Task) {
+    if (t.status === 'completada') return <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+    if (t.status === 'en_progreso') return <Clock className="w-3.5 h-3.5 text-violet-500 flex-shrink-0" />
+    return <Circle className="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Summary row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <SummaryBox label="Total tareas" value={tasks.length} color="blue" />
         <SummaryBox label="Completadas" value={tasks.filter(t => t.status === 'completada').length} color="green" />
-        <SummaryBox label="Pendientes" value={tasks.filter(t => t.status === 'pendiente').length} color="amber" />
-        <SummaryBox label="Vencidas" value={tasks.filter(t => t.status !== 'completada' && t.dueDate && new Date(t.dueDate) < new Date()).length} color="red" />
+        <SummaryBox label="En progreso" value={tasks.filter(t => t.status === 'en_progreso').length} color="violet" />
+        <SummaryBox label="Vencidas" value={tasks.filter(t => t.status !== 'completada' && t.dueDate && new Date(t.dueDate) < today).length} color="red" />
+      </div>
+
+      {/* Controls */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-1">
+          {(['all', 'active', 'overdue'] as const).map(f => (
+            <button
+              key={f}
+              onClick={() => setStatusFilter(f)}
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${statusFilter === f ? 'bg-slate-800 text-white' : 'bg-white border border-slate-200 text-slate-500 hover:border-slate-300'}`}
+            >
+              {f === 'all' ? 'Todas' : f === 'active' ? 'Activas' : 'Vencidas'}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={expandAll} className="text-xs text-slate-400 hover:text-slate-600 underline">Expandir todo</button>
+          <button onClick={collapseAll} className="text-xs text-slate-400 hover:text-slate-600 underline">Colapsar todo</button>
+        </div>
       </div>
 
       {/* Per-user cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="space-y-3">
         {profiles.map(p => {
           const assigned = tasks.filter(t => t.assigneeId === p.id)
           const completed = assigned.filter(t => t.status === 'completada')
-          const pending = assigned.filter(t => t.status !== 'completada')
-          const overdue = pending.filter(t => t.dueDate && new Date(t.dueDate) < new Date())
           const inProgress = assigned.filter(t => t.status === 'en_progreso')
+          const pending = assigned.filter(t => t.status !== 'completada')
+          const overdue = pending.filter(t => t.dueDate && new Date(t.dueDate) < today)
           const managedCount = players.filter(pl => pl.managedBy.includes(p.id)).length
+          const isExpanded = expandedIds.has(p.id)
+
+          // Apply filter to task list
+          const visibleTasks = assigned.filter(t => {
+            if (statusFilter === 'active') return t.status !== 'completada'
+            if (statusFilter === 'overdue') return t.status !== 'completada' && !!t.dueDate && new Date(t.dueDate) < today
+            return true
+          }).sort((a, b) => {
+            // Sort: overdue first, then in-progress, then pending, then done
+            const score = (t: Task) => {
+              if (t.status === 'completada') return 3
+              if (t.dueDate && new Date(t.dueDate) < today) return 0
+              if (t.status === 'en_progreso') return 1
+              return 2
+            }
+            return score(a) - score(b)
+          })
 
           return (
-            <div key={p.id} className="bg-white border border-slate-200 rounded-lg p-4">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-9 h-9 rounded-full text-white text-xs font-bold flex items-center justify-center" style={{ background: PRIMARY }}>{p.avatar}</div>
+            <div key={p.id} className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+              {/* Card header */}
+              <button
+                onClick={() => toggleExpand(p.id)}
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left"
+              >
+                <div className="w-9 h-9 rounded-full text-white text-xs font-bold flex items-center justify-center flex-shrink-0" style={{ background: PRIMARY }}>{p.avatar}</div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-slate-800">{p.name}</p>
-                  <p className="text-xs text-slate-400">{managedCount} jugador{managedCount !== 1 ? 'es' : ''}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-semibold text-slate-800">{p.name}</p>
+                    {overdue.length > 0 && (
+                      <span className="flex items-center gap-0.5 text-[10px] text-red-600 bg-red-50 border border-red-200 rounded-full px-1.5 py-0.5">
+                        <AlertTriangle className="w-2.5 h-2.5" /> {overdue.length} vencida{overdue.length !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-400">{managedCount} jugador{managedCount !== 1 ? 'es' : ''} · {assigned.length} tarea{assigned.length !== 1 ? 's' : ''}</p>
                 </div>
-                {overdue.length > 0 && (
-                  <div className="flex items-center gap-1 text-xs text-red-600 bg-red-50 rounded-full px-2 py-0.5">
-                    <AlertTriangle className="w-3 h-3" />
-                    <span>{overdue.length}</span>
+                {/* Mini progress bar */}
+                {assigned.length > 0 && (
+                  <div className="hidden sm:flex flex-col items-end gap-0.5 flex-shrink-0 w-28">
+                    <div className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
+                      <div className="h-full rounded-full bg-emerald-400 transition-all" style={{ width: `${(completed.length / assigned.length) * 100}%` }} />
+                    </div>
+                    <span className="text-[10px] text-slate-400">{Math.round((completed.length / assigned.length) * 100)}% hecho</span>
                   </div>
                 )}
-              </div>
-              <div className="grid grid-cols-4 gap-2 text-center">
-                <div className="bg-slate-50 rounded-lg p-2">
-                  <p className="text-lg font-bold text-slate-800">{assigned.length}</p>
-                  <p className="text-[10px] text-slate-500">Total</p>
+                {/* Stats pills */}
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <span className="text-[10px] bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded">{completed.length}✓</span>
+                  {inProgress.length > 0 && <span className="text-[10px] bg-violet-50 text-violet-600 px-1.5 py-0.5 rounded">{inProgress.length}▶</span>}
+                  {pending.length > 0 && <span className="text-[10px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded">{pending.filter(t => t.status === 'pendiente').length}○</span>}
                 </div>
-                <div className="bg-emerald-50 rounded-lg p-2">
-                  <p className="text-lg font-bold text-emerald-600">{completed.length}</p>
-                  <p className="text-[10px] text-emerald-600">Hechas</p>
-                </div>
-                <div className="bg-violet-50 rounded-lg p-2">
-                  <p className="text-lg font-bold text-violet-600">{inProgress.length}</p>
-                  <p className="text-[10px] text-violet-600">En curso</p>
-                </div>
-                <div className="bg-amber-50 rounded-lg p-2">
-                  <p className="text-lg font-bold text-amber-600">{pending.length}</p>
-                  <p className="text-[10px] text-amber-600">Pendientes</p>
-                </div>
-              </div>
-              {assigned.length > 0 && (
-                <div className="mt-3">
-                  <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                    <div className="h-full rounded-full bg-emerald-400 transition-all"
-                      style={{ width: `${(completed.length / assigned.length) * 100}%` }} />
-                  </div>
-                  <p className="text-[10px] text-slate-400 mt-1 text-right">{Math.round((completed.length / assigned.length) * 100)}% completado</p>
+                {isExpanded ? <ChevronDown className="w-4 h-4 text-slate-400 flex-shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 flex-shrink-0" />}
+              </button>
+
+              {/* Task list */}
+              {isExpanded && (
+                <div className="border-t border-slate-100">
+                  {visibleTasks.length === 0 ? (
+                    <p className="text-xs text-slate-400 text-center py-4">Sin tareas con este filtro</p>
+                  ) : (
+                    <div className="divide-y divide-slate-50">
+                      {visibleTasks.map(t => {
+                        const playerName = players.find(pl => pl.id === t.playerId)?.name ?? '—'
+                        const isOverdue = t.status !== 'completada' && !!t.dueDate && new Date(t.dueDate) < today
+                        return (
+                          <div key={t.id} className={`flex items-start gap-2.5 px-4 py-2.5 ${t.status === 'completada' ? 'opacity-50' : ''}`}>
+                            {taskStatusIcon(t)}
+                            <div className="flex-1 min-w-0">
+                              <div className="text-xs font-medium text-slate-700 truncate">{t.title}</div>
+                              <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-400 flex-wrap">
+                                <span className="truncate">{playerName}</span>
+                                {t.priority === 'alta' && <span className="text-red-500 font-semibold">Alta</span>}
+                                {t.dueDate && (
+                                  <span className={isOverdue ? 'text-red-500 font-semibold' : ''}>
+                                    {isOverdue ? '⚠ ' : ''}{new Date(t.dueDate).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${
+                              t.status === 'completada' ? 'bg-emerald-50 text-emerald-600' :
+                              t.status === 'en_progreso' ? 'bg-violet-50 text-violet-600' :
+                              'bg-slate-100 text-slate-500'
+                            }`}>
+                              {t.status === 'completada' ? 'Hecha' : t.status === 'en_progreso' ? 'En curso' : 'Pendiente'}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -416,6 +505,7 @@ function SummaryBox({ label, value, color }: { label: string; value: number; col
     green: 'bg-emerald-50 text-emerald-700',
     amber: 'bg-amber-50 text-amber-700',
     red: 'bg-red-50 text-red-600',
+    violet: 'bg-violet-50 text-violet-700',
   }
   return (
     <div className={`rounded-lg p-3 ${colors[color] || colors.blue}`}>

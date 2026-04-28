@@ -163,6 +163,8 @@ export interface ClubNeed {
   transferBudget?: string   // "400k", "2M", etc.
   salaryBudget?: string
   notes?: string
+  createdAt?: string        // ISO timestamp of when this need was added
+  addedBy?: string          // avatar/initials of the user who added it
 }
 
 export interface Club {
@@ -190,6 +192,13 @@ export interface DistributionEntry {
   createdAt: string
 }
 
+export interface ClubNegotiationUpdate {
+  id: string
+  text: string
+  date: string     // ISO timestamp
+  author?: string  // avatar/initials
+}
+
 export interface ClubNegotiation {
   id: string
   playerId: string
@@ -197,6 +206,7 @@ export interface ClubNegotiation {
   status: 'pendiente' | 'ofrecido' | 'interesado' | 'negociando' | 'cerrado' | 'descartado'
   aisManager?: string
   notes?: string
+  updates: ClubNegotiationUpdate[]
   createdAt: string
   updatedAt: string
 }
