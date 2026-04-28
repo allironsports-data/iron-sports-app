@@ -652,6 +652,8 @@ function dbToScoutingMatch(row: Record<string, unknown>): ScoutingMatch {
     awayTeam: row.away_team as string,
     competition: (row.competition as string) ?? undefined,
     assignedTo: (row.assigned_to as string) ?? undefined,
+    viewMode: (row.view_mode as ScoutingMatch['viewMode']) ?? undefined,
+    status: (row.status as ScoutingMatch['status']) ?? 'pendiente',
     notes: (row.notes as string) ?? undefined,
     createdAt: row.created_at as string,
   }
@@ -675,6 +677,8 @@ export async function createScoutingMatch(m: Omit<ScoutingMatch, 'id' | 'created
     away_team: m.awayTeam,
     competition: m.competition ?? null,
     assigned_to: m.assignedTo ?? null,
+    view_mode: m.viewMode ?? null,
+    status: m.status ?? 'pendiente',
     notes: m.notes ?? null,
   }).select().single()
   if (error) throw error
@@ -688,6 +692,8 @@ export async function updateScoutingMatch(m: ScoutingMatch): Promise<void> {
     away_team: m.awayTeam,
     competition: m.competition ?? null,
     assigned_to: m.assignedTo ?? null,
+    view_mode: m.viewMode ?? null,
+    status: m.status ?? 'pendiente',
     notes: m.notes ?? null,
   }).eq('id', m.id)
   if (error) throw error

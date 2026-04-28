@@ -31,14 +31,15 @@ const POSITIONS_SCOUTING = [
   'Extremo derecho', 'Extremo izquierdo', 'Delantero',
 ]
 
-const CONCLUSION_OPTIONS = ['', 'Llamar', 'Seguir', 'Descartar'] as const
+const CONCLUSION_OPTIONS = ['', 'Seguir', 'Firmar', 'Descartar'] as const
 type ConclusionOption = typeof CONCLUSION_OPTIONS[number]
 
 const CONCLUSION_STYLE: Record<string, string> = {
-  Llamar:    'bg-amber-100 text-amber-700 border border-amber-200',
   Seguir:    'bg-blue-100 text-blue-700 border border-blue-200',
-  Descartar: 'bg-red-100 text-red-600 border border-red-200',
   Firmar:    'bg-green-100 text-green-700 border border-green-200',
+  Descartar: 'bg-red-100 text-red-600 border border-red-200',
+  // legado — por si hay registros antiguos con estos valores
+  Llamar:    'bg-green-100 text-green-700 border border-green-200',
   Decidir:   'bg-orange-100 text-orange-700 border border-orange-200',
 }
 
@@ -279,47 +280,117 @@ function ReportCard({
 function MatchRow({
   match,
   scoutName,
+  profiles,
+  currentProfile,
   isAdmin,
   onEdit,
   onDelete,
+  onToggleStatus,
+  onAssign,
 }: {
   match: ScoutingMatch
   scoutName: string
+  profiles: Profile[]
+  currentProfile: Profile
   isAdmin: boolean
   onEdit: (m: ScoutingMatch) => void
   onDelete: (id: string) => void
+  onToggleStatus: (m: ScoutingMatch) => void
+  onAssign: (m: ScoutingMatch, assignedTo: string) => void
 }) {
   const [confirm, setConfirm] = useState(false)
+  const [assignOpen, setAssignOpen] = useState(false)
   const day = match.date.slice(8)
   const mon = MONTHS_ES[parseInt(match.date.slice(5, 7)) - 1]
   const yr = match.date.slice(2, 4)
+  const isVisto = match.status === 'visto'
+  const isAssignedToMe = match.assignedTo === currentProfile.avatar
+  // highlight row if assigned to me and pending
+  const isPendingForMe = isAssignedToMe && !isVisto
 
   return (
-    <tr className="hover:bg-slate-50/60 transition-colors">
+    <tr className={`transition-colors ${isPendingForMe ? 'bg-amber-50/60 hover:bg-amber-50' : 'hover:bg-slate-50/60'}`}>
+      {/* Fecha */}
       <td className="px-3 py-2 text-xs text-slate-500 whitespace-nowrap">
         {day} {mon} '{yr}
       </td>
+      {/* Local */}
       <td className="px-3 py-2 text-sm font-medium text-slate-800 whitespace-nowrap">{match.homeTeam}</td>
+      {/* vs */}
       <td className="px-2 py-2 text-[10px] font-bold text-slate-400 text-center">vs</td>
+      {/* Visitante */}
       <td className="px-3 py-2 text-sm font-medium text-slate-800 whitespace-nowrap">{match.awayTeam}</td>
+      {/* Competición */}
       <td className="px-3 py-2">
         {match.competition && (
           <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded whitespace-nowrap">{match.competition}</span>
         )}
       </td>
+      {/* Modo */}
       <td className="px-3 py-2 text-xs whitespace-nowrap">
-        {match.assignedTo && (
-          <>
-            <span className="font-mono font-semibold text-slate-700">{match.assignedTo}</span>
-            {scoutName && scoutName !== match.assignedTo && (
-              <span className="text-slate-400 ml-1">({scoutName})</span>
-            )}
-          </>
+        {match.viewMode === 'campo' ? (
+          <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded text-[10px] font-medium">
+            🏟️ Campo
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded text-[10px] font-medium">
+            📹 Vídeo
+          </span>
         )}
       </td>
-      <td className="px-3 py-2 text-xs text-slate-500 max-w-[220px] truncate" title={match.notes ?? ''}>
+      {/* Scout / Asignación */}
+      <td className="px-3 py-2 text-xs whitespace-nowrap">
+        {assignOpen ? (
+          <select
+            autoFocus
+            className="text-xs border border-slate-200 rounded px-1 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+            defaultValue={match.assignedTo ?? ''}
+            onBlur={() => setAssignOpen(false)}
+            onChange={e => { onAssign(match, e.target.value); setAssignOpen(false) }}
+          >
+            <option value="">Sin asignar</option>
+            {profiles.map(p => <option key={p.id} value={p.avatar}>{p.avatar} · {p.name}</option>)}
+          </select>
+        ) : (
+          <button
+            onClick={() => setAssignOpen(true)}
+            className={`text-left hover:underline ${match.assignedTo ? '' : 'text-slate-300 italic'}`}
+            title="Clic para reasignar"
+          >
+            {match.assignedTo ? (
+              <>
+                <span className="font-mono font-semibold text-slate-700">{match.assignedTo}</span>
+                {scoutName && scoutName !== match.assignedTo && (
+                  <span className="text-slate-400 ml-1">({scoutName})</span>
+                )}
+              </>
+            ) : (
+              <span className="text-slate-300">— asignar</span>
+            )}
+          </button>
+        )}
+      </td>
+      {/* Jugadores/notas */}
+      <td className="px-3 py-2 text-xs text-slate-500 max-w-[180px] truncate" title={match.notes ?? ''}>
         {match.notes ?? '—'}
       </td>
+      {/* Visto */}
+      <td className="px-3 py-2 text-center">
+        <button
+          onClick={() => onToggleStatus(match)}
+          title={isVisto ? 'Marcar como pendiente' : 'Marcar como visto'}
+          className={`inline-flex items-center justify-center w-6 h-6 rounded-full border transition-all ${
+            isVisto
+              ? 'bg-emerald-500 border-emerald-500 text-white'
+              : 'border-slate-300 text-slate-300 hover:border-emerald-400 hover:text-emerald-500'
+          }`}
+        >
+          <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="2.5,8 6,11.5 13.5,4" />
+          </svg>
+        </button>
+      </td>
+      {/* Acciones */}
       <td className="px-3 py-2">
         <div className="flex items-center gap-1 justify-end">
           <button
@@ -436,7 +507,7 @@ export function Captacion({
   // ── match state ──
   const [showAddMatch, setShowAddMatch] = useState(false)
   const [editingMatch, setEditingMatch] = useState<ScoutingMatch | null>(null)
-  const [matchForm, setMatchForm] = useState({ date: '', homeTeam: '', awayTeam: '', competition: '', assignedTo: '', notes: '' })
+  const [matchForm, setMatchForm] = useState({ date: '', homeTeam: '', awayTeam: '', competition: '', assignedTo: '', viewMode: 'video' as 'video' | 'campo', notes: '' })
   const [savingMatch, setSavingMatch] = useState(false)
 
   // ── pagination ──
@@ -535,6 +606,61 @@ export function Captacion({
 
     return { byPersona, personaRanked, byConclusion, byAssessment, positionRanked, months, topPlayers }
   }, [scoutingReports, scoutingPlayers])
+
+  // ── match statistics ──
+  const matchStats = useMemo(() => {
+    // Partidos por persona
+    const byPersona: Record<string, number> = {}
+    scoutingMatches.forEach(m => {
+      const k = m.assignedTo ?? '—'
+      byPersona[k] = (byPersona[k] ?? 0) + 1
+    })
+    const personaRanked = Object.entries(byPersona).sort((a, b) => b[1] - a[1])
+
+    // Vídeo vs campo
+    let video = 0, campo = 0
+    scoutingMatches.forEach(m => { m.viewMode === 'campo' ? campo++ : video++ })
+
+    // Vistos vs pendientes
+    const visto = scoutingMatches.filter(m => m.status === 'visto').length
+    const pendiente = scoutingMatches.length - visto
+
+    // Competiciones más vistas
+    const byCompetition: Record<string, number> = {}
+    scoutingMatches.forEach(m => {
+      const k = m.competition ?? 'Sin categoría'
+      byCompetition[k] = (byCompetition[k] ?? 0) + 1
+    })
+    const competitionRanked = Object.entries(byCompetition).sort((a, b) => b[1] - a[1]).slice(0, 10)
+
+    // Equipos más vistos (local + visitante)
+    const byTeam: Record<string, number> = {}
+    scoutingMatches.forEach(m => {
+      byTeam[m.homeTeam] = (byTeam[m.homeTeam] ?? 0) + 1
+      byTeam[m.awayTeam] = (byTeam[m.awayTeam] ?? 0) + 1
+    })
+    const teamRanked = Object.entries(byTeam).sort((a, b) => b[1] - a[1]).slice(0, 15)
+
+    // Actividad mensual de partidos (últimos 12 meses)
+    const now = new Date()
+    const matchMonths: { label: string; count: number }[] = []
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      const label = `${MONTHS_ES[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`
+      const count = scoutingMatches.filter(m => m.date.startsWith(key)).length
+      matchMonths.push({ label, count })
+    }
+
+    // Pendientes por persona
+    const pendienteByPersona: Record<string, number> = {}
+    scoutingMatches.filter(m => m.status !== 'visto' && m.assignedTo).forEach(m => {
+      const k = m.assignedTo!
+      pendienteByPersona[k] = (pendienteByPersona[k] ?? 0) + 1
+    })
+
+    return { byPersona, personaRanked, video, campo, visto, pendiente, competitionRanked, teamRanked, matchMonths, pendienteByPersona }
+  }, [scoutingMatches])
 
   // ── recent reports ──
   const recentReports = useMemo(() => {
@@ -654,13 +780,13 @@ export function Captacion({
   // ── match handlers ──
   function openAddMatch() {
     const today = new Date().toISOString().slice(0, 10)
-    setMatchForm({ date: today, homeTeam: '', awayTeam: '', competition: '', assignedTo: currentProfile.avatar, notes: '' })
+    setMatchForm({ date: today, homeTeam: '', awayTeam: '', competition: '', assignedTo: currentProfile.avatar, viewMode: 'video', notes: '' })
     setEditingMatch(null)
     setShowAddMatch(true)
   }
 
   function openEditMatch(m: ScoutingMatch) {
-    setMatchForm({ date: m.date, homeTeam: m.homeTeam, awayTeam: m.awayTeam, competition: m.competition ?? '', assignedTo: m.assignedTo ?? '', notes: m.notes ?? '' })
+    setMatchForm({ date: m.date, homeTeam: m.homeTeam, awayTeam: m.awayTeam, competition: m.competition ?? '', assignedTo: m.assignedTo ?? '', viewMode: m.viewMode ?? 'video', notes: m.notes ?? '' })
     setEditingMatch(m)
     setShowAddMatch(true)
   }
@@ -675,6 +801,8 @@ export function Captacion({
         awayTeam: matchForm.awayTeam.trim(),
         competition: matchForm.competition.trim() || undefined,
         assignedTo: matchForm.assignedTo.trim() || undefined,
+        viewMode: matchForm.viewMode,
+        status: (editingMatch?.status ?? 'pendiente') as 'pendiente' | 'visto',
         notes: matchForm.notes.trim() || undefined,
       }
       if (editingMatch) {
@@ -695,6 +823,18 @@ export function Captacion({
   async function handleDeleteMatch(id: string) {
     await db.deleteScoutingMatch(id)
     onDeleteMatch(id)
+  }
+
+  async function handleToggleMatchStatus(m: ScoutingMatch) {
+    const updated: ScoutingMatch = { ...m, status: m.status === 'visto' ? 'pendiente' : 'visto' }
+    await db.updateScoutingMatch(updated)
+    onUpdateMatch(updated)
+  }
+
+  async function handleAssignMatch(m: ScoutingMatch, assignedTo: string) {
+    const updated: ScoutingMatch = { ...m, assignedTo: assignedTo || undefined, status: 'pendiente' }
+    await db.updateScoutingMatch(updated)
+    onUpdateMatch(updated)
   }
 
   const closeCatMenu = () => setShowCatMenu(false)
@@ -1142,10 +1282,9 @@ export function Captacion({
                       value={count}
                       max={Math.max(...Object.values(stats.byConclusion))}
                       color={
-                        conclusion === 'Llamar' ? 'bg-amber-400' :
                         conclusion === 'Seguir' ? 'bg-blue-500' :
+                        conclusion === 'Firmar' || conclusion === 'Llamar' ? 'bg-green-500' :
                         conclusion === 'Descartar' ? 'bg-red-400' :
-                        conclusion === 'Firmar' ? 'bg-green-500' :
                         'bg-slate-300'
                       }
                     />
@@ -1236,12 +1375,172 @@ export function Captacion({
               </div>
             </div>
           </div>
+
+          {/* ── ESTADÍSTICAS DE PARTIDOS ── */}
+          <div className="mt-6">
+            <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide mb-3 flex items-center gap-2">
+              <ClipboardList className="w-4 h-4 text-slate-400" /> Estadísticas de partidos
+            </h2>
+            {scoutingMatches.length === 0 ? (
+              <p className="text-xs text-slate-400">No hay partidos registrados aún.</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+
+                {/* KPIs rápidos */}
+                <div className="bg-white border border-slate-200 rounded-xl p-4 md:col-span-2 xl:col-span-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+                    {[
+                      { label: 'Total partidos', value: scoutingMatches.length, color: 'text-slate-800' },
+                      { label: 'Vistos', value: matchStats.visto, color: 'text-emerald-600' },
+                      { label: 'Pendientes', value: matchStats.pendiente, color: 'text-amber-600' },
+                      { label: 'En campo', value: matchStats.campo, color: 'text-violet-600' },
+                    ].map(({ label, value, color }) => (
+                      <div key={label}>
+                        <div className={`text-2xl font-bold ${color}`}>{value}</div>
+                        <div className="text-xs text-slate-400 mt-0.5">{label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Partidos por scout */}
+                <div className="bg-white border border-slate-200 rounded-xl p-4">
+                  <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-slate-400" /> Partidos por explorador
+                  </h3>
+                  <div className="space-y-2">
+                    {matchStats.personaRanked.map(([persona, count]) => {
+                      const name = personaToName(persona, profiles)
+                      return (
+                        <StatBar
+                          key={persona}
+                          label={name && name !== persona ? `${persona} · ${name.split(' ')[0]}` : persona}
+                          value={count}
+                          max={matchStats.personaRanked[0]?.[1] ?? 1}
+                          color="bg-blue-500"
+                        />
+                      )
+                    })}
+                  </div>
+                  {/* Pendientes por persona */}
+                  {Object.keys(matchStats.pendienteByPersona).length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-slate-100">
+                      <div className="text-[10px] font-semibold text-amber-600 uppercase mb-2">Pendientes de ver</div>
+                      {Object.entries(matchStats.pendienteByPersona).map(([persona, count]) => (
+                        <StatBar
+                          key={persona}
+                          label={persona}
+                          value={count}
+                          max={Math.max(...Object.values(matchStats.pendienteByPersona))}
+                          color="bg-amber-400"
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Vídeo vs Campo */}
+                <div className="bg-white border border-slate-200 rounded-xl p-4">
+                  <h3 className="text-sm font-semibold text-slate-700 mb-3">Modo de visualización</h3>
+                  <div className="space-y-2">
+                    <StatBar label="📹 Vídeo" value={matchStats.video} max={scoutingMatches.length} color="bg-blue-400" />
+                    <StatBar label="🏟️ Campo" value={matchStats.campo} max={scoutingMatches.length} color="bg-emerald-500" />
+                  </div>
+                  <div className="mt-3 flex gap-2">
+                    {matchStats.video > 0 && (
+                      <div className="flex-1 text-center bg-blue-50 rounded-lg py-2">
+                        <div className="text-sm font-bold text-blue-700">{Math.round((matchStats.video / scoutingMatches.length) * 100)}%</div>
+                        <div className="text-[10px] text-blue-500">vídeo</div>
+                      </div>
+                    )}
+                    {matchStats.campo > 0 && (
+                      <div className="flex-1 text-center bg-emerald-50 rounded-lg py-2">
+                        <div className="text-sm font-bold text-emerald-700">{Math.round((matchStats.campo / scoutingMatches.length) * 100)}%</div>
+                        <div className="text-[10px] text-emerald-500">campo</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Competiciones más vistas */}
+                <div className="bg-white border border-slate-200 rounded-xl p-4">
+                  <h3 className="text-sm font-semibold text-slate-700 mb-3">Competiciones más vistas</h3>
+                  <div className="space-y-2">
+                    {matchStats.competitionRanked.map(([comp, count]) => (
+                      <StatBar
+                        key={comp}
+                        label={comp}
+                        value={count}
+                        max={matchStats.competitionRanked[0]?.[1] ?? 1}
+                        color="bg-violet-500"
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Equipos más vistos */}
+                <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col">
+                  <h3 className="text-sm font-semibold text-slate-700 mb-3">Equipos más vistos</h3>
+                  <div className="overflow-y-auto max-h-64 space-y-2 pr-1">
+                    {matchStats.teamRanked.map(([team, count]) => (
+                      <StatBar
+                        key={team}
+                        label={team}
+                        value={count}
+                        max={matchStats.teamRanked[0]?.[1] ?? 1}
+                        color="bg-orange-400"
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Actividad mensual de partidos */}
+                <div className="bg-white border border-slate-200 rounded-xl p-4 md:col-span-2">
+                  <h3 className="text-sm font-semibold text-slate-700 mb-3">Partidos por mes (últimos 12 meses)</h3>
+                  <div className="flex items-end gap-1 h-24">
+                    {matchStats.matchMonths.map(({ label, count }) => {
+                      const maxCount = Math.max(...matchStats.matchMonths.map(m => m.count), 1)
+                      const pct = Math.round((count / maxCount) * 100)
+                      return (
+                        <div key={label} className="flex-1 flex flex-col items-center gap-1">
+                          <div className="text-[9px] text-slate-500 font-medium">{count || ''}</div>
+                          <div className="w-full bg-slate-100 rounded-t" style={{ height: '60px' }}>
+                            <div
+                              className="w-full bg-orange-400 rounded-t transition-all"
+                              style={{ height: `${pct}%`, marginTop: `${100 - pct}%` }}
+                            />
+                          </div>
+                          <div className="text-[9px] text-slate-400 whitespace-nowrap">{label}</div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+              </div>
+            )}
+          </div>
         </div>
       )}
 
       {/* ── PARTIDOS TAB ──────────────────────────────────── */}
       {captTab === 'partidos' && (
-        <div className="flex-1 max-w-3xl mx-auto w-full px-3 sm:px-6 py-4 space-y-3">
+        <div className="flex-1 w-full px-3 sm:px-6 py-4 space-y-3">
+          {/* Notificación de partidos pendientes */}
+          {(() => {
+            const myPending = scoutingMatches.filter(m => m.assignedTo === currentProfile.avatar && m.status !== 'visto')
+            if (myPending.length === 0) return null
+            return (
+              <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-sm">
+                <span className="text-amber-500 text-base">🔔</span>
+                <div className="flex-1">
+                  <span className="font-semibold text-amber-800">Tienes {myPending.length} partido{myPending.length > 1 ? 's' : ''} pendiente{myPending.length > 1 ? 's' : ''} de ver</span>
+                  <span className="text-amber-600 ml-2 text-xs">{myPending.map(m => `${m.homeTeam} vs ${m.awayTeam}`).join(' · ')}</span>
+                </div>
+              </div>
+            )
+          })()}
+
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-sm font-semibold text-slate-800">Partidos visualizados</h2>
@@ -1259,7 +1558,7 @@ export function Captacion({
           {showAddMatch && (
             <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
               <h3 className="text-sm font-semibold text-slate-700">{editingMatch ? 'Editar partido' : 'Nuevo partido'}</h3>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <FormRow label="Fecha">
                   <input type="date" value={matchForm.date} onChange={e => setMatchForm(f => ({ ...f, date: e.target.value }))} className="field" />
                 </FormRow>
@@ -1274,6 +1573,12 @@ export function Captacion({
                   <datalist id="competition-options">
                     {COMPETITION_OPTIONS.map(c => <option key={c} value={c} />)}
                   </datalist>
+                </FormRow>
+                <FormRow label="Visualización">
+                  <select value={matchForm.viewMode} onChange={e => setMatchForm(f => ({ ...f, viewMode: e.target.value as 'video' | 'campo' }))} className="field">
+                    <option value="video">📹 Vídeo</option>
+                    <option value="campo">🏟️ Campo</option>
+                  </select>
                 </FormRow>
               </div>
               <div className="grid grid-cols-2 gap-2">
@@ -1320,13 +1625,15 @@ export function Captacion({
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50 text-[10px] text-slate-500 uppercase tracking-wide">
-                      <th className="text-left px-3 py-2.5 font-semibold w-[90px]">Fecha</th>
+                      <th className="text-left px-3 py-2.5 font-semibold w-[88px]">Fecha</th>
                       <th className="text-left px-3 py-2.5 font-semibold">Local</th>
-                      <th className="text-center px-2 py-2.5 font-semibold w-8">vs</th>
+                      <th className="text-center px-2 py-2.5 font-semibold w-6">vs</th>
                       <th className="text-left px-3 py-2.5 font-semibold">Visitante</th>
                       <th className="text-left px-3 py-2.5 font-semibold">Competición</th>
+                      <th className="text-left px-3 py-2.5 font-semibold w-[90px]">Modo</th>
                       <th className="text-left px-3 py-2.5 font-semibold">Scout</th>
                       <th className="text-left px-3 py-2.5 font-semibold">Jugadores</th>
+                      <th className="text-center px-3 py-2.5 font-semibold w-12">Visto</th>
                       <th className="px-3 py-2.5 w-16" />
                     </tr>
                   </thead>
@@ -1338,9 +1645,13 @@ export function Captacion({
                           key={m.id}
                           match={m}
                           scoutName={scoutName}
+                          profiles={profiles}
+                          currentProfile={currentProfile}
                           isAdmin={isAdmin}
                           onEdit={openEditMatch}
                           onDelete={handleDeleteMatch}
+                          onToggleStatus={handleToggleMatchStatus}
+                          onAssign={handleAssignMatch}
                         />
                       )
                     })}

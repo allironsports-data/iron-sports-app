@@ -254,6 +254,8 @@ export interface ScoutingMatch {
   awayTeam: string
   competition?: string
   assignedTo?: string       // persona initials, e.g. "NB"
+  viewMode?: 'video' | 'campo'
+  status?: 'pendiente' | 'visto'
   notes?: string
   createdAt: string
 }
