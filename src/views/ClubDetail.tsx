@@ -287,7 +287,8 @@ export function ClubDetail({
                     <NeedForm
                       initial={need}
                       onSave={async (updated) => {
-                        const newNeeds = club.needs.map((n, idx) => idx === i ? updated : n)
+                        const withMeta = { ...updated, createdAt: need.createdAt, addedBy: need.addedBy }
+                        const newNeeds = club.needs.map((n, idx) => idx === i ? withMeta : n)
                         await onUpdateClub({ ...club, needs: newNeeds })
                         setEditingNeed(null)
                       }}
@@ -364,7 +365,8 @@ export function ClubDetail({
                 <div className="bg-white rounded-xl border border-slate-200 p-4">
                   <NeedForm
                     onSave={async (need) => {
-                      await onUpdateClub({ ...club, needs: [...club.needs, need] })
+                      const enriched = { ...need, createdAt: new Date().toISOString(), addedBy: currentProfile.avatar }
+                      await onUpdateClub({ ...club, needs: [...club.needs, enriched] })
                       setShowAddNeed(false)
                     }}
                     onCancel={() => setShowAddNeed(false)}
