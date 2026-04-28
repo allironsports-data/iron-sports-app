@@ -315,12 +315,23 @@ function MatchRow({
   const isPendingForMe = match.assignedTo === currentProfile.avatar && !isVisto
 
   const linkedPlayers = scoutingPlayers.filter(p => linkedPlayerIds.includes(p.id))
+
+  // Auto-suggest: players whose team matches this match's teams
+  const homeL = match.homeTeam.toLowerCase()
+  const awayL = match.awayTeam.toLowerCase()
+  const teamSuggested = scoutingPlayers.filter(p => {
+    if (linkedPlayerIds.includes(p.id)) return false
+    if (!p.team) return false
+    const t = p.team.toLowerCase()
+    return homeL.includes(t) || awayL.includes(t) || t.includes(homeL) || t.includes(awayL)
+  }).slice(0, 10)
+
   const searchResults = playerSearch.length >= 2
     ? scoutingPlayers.filter(p =>
         !linkedPlayerIds.includes(p.id) &&
         p.fullName.toLowerCase().includes(playerSearch.toLowerCase())
-      ).slice(0, 6)
-    : []
+      ).slice(0, 8)
+    : teamSuggested
 
   return (
     <>
@@ -417,46 +428,58 @@ function MatchRow({
       {playersOpen && (
         <tr className="bg-violet-50/40">
           <td colSpan={11} className="px-4 py-3">
-            <div className="flex flex-wrap gap-1.5 items-center mb-2">
-              <span className="text-[10px] font-semibold text-violet-600 uppercase tracking-wide mr-1">Jugadores vistos en este partido</span>
-              {linkedPlayers.map(p => (
-                <span key={p.id} className="inline-flex items-center gap-1 bg-white border border-violet-200 text-violet-800 text-xs px-2 py-0.5 rounded-full">
-                  {p.fullName}
-                  <button
-                    onClick={() => onRemoveMatchPlayer(match.id, p.id)}
-                    className="text-violet-400 hover:text-red-500 ml-0.5"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              ))}
-              {linkedPlayers.length === 0 && (
-                <span className="text-xs text-slate-400">Ninguno aún</span>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="relative">
+            {/* Linked players row */}
+            {linkedPlayers.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 items-center mb-2.5">
+                <span className="text-[10px] font-semibold text-violet-600 uppercase tracking-wide mr-1">Vistos</span>
+                {linkedPlayers.map(p => (
+                  <span key={p.id} className="inline-flex items-center gap-1 bg-white border border-violet-200 text-violet-800 text-xs px-2 py-0.5 rounded-full">
+                    {p.fullName}
+                    <button onClick={() => onRemoveMatchPlayer(match.id, p.id)} className="text-violet-400 hover:text-red-500 ml-0.5">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Search + suggestions row */}
+            <div className="flex flex-wrap items-start gap-3">
+              <div className="relative flex-shrink-0">
                 <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
                 <input
                   value={playerSearch}
                   onChange={e => setPlayerSearch(e.target.value)}
-                  placeholder="Buscar jugador para añadir..."
-                  className="pl-6 pr-3 py-1 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-violet-400/30 w-60"
+                  placeholder="Buscar jugador..."
+                  className="pl-6 pr-3 py-1 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-violet-400/30 w-48"
                 />
               </div>
-              {searchResults.length > 0 && (
-                <div className="flex flex-wrap gap-1">
-                  {searchResults.map(p => (
-                    <button
-                      key={p.id}
-                      onClick={() => { onAddMatchPlayer(match.id, p.id); setPlayerSearch('') }}
-                      className="text-xs bg-white border border-slate-200 hover:border-violet-400 hover:text-violet-700 px-2 py-0.5 rounded-full transition-colors"
-                    >
-                      + {p.fullName}
-                    </button>
-                  ))}
-                </div>
-              )}
+
+              <div className="flex-1 min-w-0">
+                {searchResults.length > 0 ? (
+                  <div className="flex flex-wrap gap-1 items-center">
+                    {playerSearch.length < 2 && teamSuggested.length > 0 && (
+                      <span className="text-[10px] text-violet-500 font-semibold uppercase tracking-wide mr-1">
+                        En BD de este partido:
+                      </span>
+                    )}
+                    {searchResults.map(p => (
+                      <button
+                        key={p.id}
+                        onClick={() => { onAddMatchPlayer(match.id, p.id); setPlayerSearch('') }}
+                        className="text-xs bg-white border border-violet-200 text-violet-700 hover:bg-violet-100 px-2 py-0.5 rounded-full transition-colors flex items-center gap-1"
+                      >
+                        <Plus className="w-3 h-3" />{p.fullName}
+                        {p.team && <span className="text-violet-400 text-[10px]">· {p.team}</span>}
+                      </button>
+                    ))}
+                  </div>
+                ) : playerSearch.length >= 2 ? (
+                  <span className="text-xs text-slate-400 italic">Sin resultados</span>
+                ) : teamSuggested.length === 0 && linkedPlayers.length === 0 ? (
+                  <span className="text-xs text-slate-400 italic">Busca un jugador para vincular</span>
+                ) : null}
+              </div>
             </div>
           </td>
         </tr>
@@ -2239,6 +2262,54 @@ export function Captacion({
                         })}
                       </div>
                     </div>
+
+                    {/* ── Partidos vistos ── */}
+                    {(() => {
+                      if (!panelPlayerId) return null
+                      const playerMatchIds = matchPlayers
+                        .filter(mp => mp.playerId === panelPlayerId)
+                        .map(mp => mp.matchId)
+                      if (playerMatchIds.length === 0) return null
+                      const playerMatchList = scoutingMatches
+                        .filter(m => playerMatchIds.includes(m.id))
+                        .sort((a, b) => b.date.localeCompare(a.date))
+                      return (
+                        <div className="border-t border-slate-100 pt-4 mt-2">
+                          <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-1.5 mb-2">
+                            <ClipboardList className="w-4 h-4 text-slate-400" />
+                            Partidos vistos
+                            <span className="ml-1 text-xs bg-violet-100 text-violet-700 rounded-full px-1.5 py-0.5 font-semibold">{playerMatchList.length}</span>
+                          </h3>
+                          <div className="space-y-1.5">
+                            {playerMatchList.map(m => {
+                              const d = `${m.date.slice(8)} ${MONTHS_ES[parseInt(m.date.slice(5,7))-1]} '${m.date.slice(2,4)}`
+                              return (
+                                <div key={m.id} className="flex items-center gap-2 bg-slate-50 rounded-lg px-2.5 py-1.5 group">
+                                  <span className="text-[10px] text-slate-400 font-mono flex-shrink-0 w-20">{d}</span>
+                                  <span className="text-xs text-slate-700 font-medium flex-1 min-w-0 truncate">
+                                    {m.homeTeam} <span className="text-slate-400 font-normal">vs</span> {m.awayTeam}
+                                  </span>
+                                  {m.competition && (
+                                    <span className="text-[10px] bg-white border border-slate-200 text-slate-500 px-1.5 py-0.5 rounded flex-shrink-0">{m.competition}</span>
+                                  )}
+                                  {m.viewMode === 'campo'
+                                    ? <span className="text-[10px] text-emerald-600 flex-shrink-0">🏟</span>
+                                    : <span className="text-[10px] text-blue-500 flex-shrink-0">📹</span>
+                                  }
+                                  <button
+                                    onClick={() => onRemoveMatchPlayer(m.id, panelPlayerId)}
+                                    className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-400 flex-shrink-0 transition-opacity"
+                                    title="Desvincular de este partido"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )
+                    })()}
                   </div>
                 </div>
               )}
