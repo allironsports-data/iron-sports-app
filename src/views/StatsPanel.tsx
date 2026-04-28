@@ -486,8 +486,6 @@ export function StatsPanel({ scoutingReports, scoutingPlayers, onBack, onLogout 
                     <div className="flex items-end gap-1.5 h-32">
                       {activityByMonth.map(([month, count]) => {
                         const pct = Math.round((count / maxMonthCount) * 100);
-                        const [yr, mo] = month.split("-");
-                        const monthName = new Date(Number(yr), Number(mo) - 1).toLocaleDateString("es-ES", { month: "short" });
                         return (
                           <div key={month} className="flex-1 flex flex-col items-center gap-1 group">
                             <span className="text-[9px] font-bold text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity tabular-nums">{count}</span>
@@ -498,14 +496,14 @@ export function StatsPanel({ scoutingReports, scoutingPlayers, onBack, onLogout 
                     </div>
                     {/* X-axis labels */}
                     <div className="flex items-center gap-1.5 mt-2">
-                      {activityByMonth.map(([month, count]) => {
+                      {activityByMonth.map(([month]) => {
                         const [yr, mo] = month.split("-");
-                        const monthName = new Date(Number(yr), Number(mo) - 1).toLocaleDateString("es-ES", { month: "short" });
+                        const shortMonth = new Date(Number(yr), Number(mo) - 1).toLocaleDateString("es-ES", { month: "short" });
                         const isFirst = mo === "01";
                         return (
                           <div key={month} className="flex-1 text-center">
                             <span className={`text-[8px] ${isFirst ? "font-bold text-slate-600" : "text-slate-400"}`}>
-                              {isFirst ? yr : monthName.slice(0, 1).toUpperCase()}
+                              {isFirst ? yr : shortMonth.slice(0, 1).toUpperCase()}
                             </span>
                           </div>
                         );
