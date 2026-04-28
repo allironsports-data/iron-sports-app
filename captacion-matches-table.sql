@@ -18,6 +18,11 @@ CREATE TABLE IF NOT EXISTS public.scouting_matches (
 -- RLS (Row Level Security)
 ALTER TABLE public.scouting_matches ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "scouting_matches_select" ON public.scouting_matches;
+DROP POLICY IF EXISTS "scouting_matches_insert" ON public.scouting_matches;
+DROP POLICY IF EXISTS "scouting_matches_update" ON public.scouting_matches;
+DROP POLICY IF EXISTS "scouting_matches_delete" ON public.scouting_matches;
+
 CREATE POLICY "scouting_matches_select" ON public.scouting_matches
   FOR SELECT USING (auth.role() = 'authenticated');
 
