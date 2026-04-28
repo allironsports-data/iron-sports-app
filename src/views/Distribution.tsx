@@ -544,10 +544,13 @@ export function Distribution({
                 : 'border-transparent text-slate-500 hover:text-slate-700'
             }`}
           >
-            {t === 'jugadores' ? `Jugadores (${seasonEntries.length})` :
-             t === 'clubes' ? `Clubes (${clubs.length})` :
-             t === 'solicitudes' ? `Solicitudes${clubNeeds.length > 0 ? ` (${clubNeeds.length})` : ''}` :
-             'Pipeline'}
+            {t === 'jugadores' ? (
+              <><span className="hidden sm:inline">Jugadores </span>({seasonEntries.length})</>
+            ) : t === 'clubes' ? (
+              <><span className="hidden sm:inline">Clubes </span>({clubs.length})</>
+            ) : t === 'solicitudes' ? (
+              <><span className="hidden sm:inline">Solicitudes</span><span className="sm:hidden">Solic.</span>{clubNeeds.length > 0 ? ` (${clubNeeds.length})` : ''}</>
+            ) : 'Pipeline'}
           </button>
         ))}
       </div>
@@ -1149,8 +1152,64 @@ export function Distribution({
                     : 'Sin resultados para este filtro'}
                 </div>
               ) : (
-                /* ── TABLE VIEW ── */
-                <div className="bg-white rounded-lg border border-slate-200 overflow-x-auto">
+                <>
+                {/* ── MOBILE CARD VIEW (hidden sm+) ── */}
+                <div className="sm:hidden space-y-2">
+                  {clubNeeds.map(({ club, need }, i) => {
+                    const needIndex = club.needs.indexOf(need)
+                    const tier = getClubTier(club.league, club.country)
+                    const tierCfg = TIER_CONFIG[tier]
+                    const offeredCount = negotiations.filter(n => n.clubId === club.id && n.status !== 'descartado').length
+                    return (
+                      <div
+                        key={`${club.id}-mobile-${i}`}
+                        className="bg-white border border-slate-200 rounded-xl p-3 cursor-pointer active:bg-slate-50"
+                        onClick={() => { setSelectedNeed({ clubId: club.id, needIndex }); setSelectedEntryId(null); setSelectedClubId(null) }}
+                      >
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded text-xs font-semibold">
+                                <AlertCircle className="w-3 h-3 flex-shrink-0" />{need.position}
+                              </span>
+                              {need.ageMax && <span className="text-xs bg-slate-100 px-1.5 py-0.5 rounded font-medium text-slate-600">Sub-{need.ageMax}</span>}
+                            </div>
+                            <div className="text-sm font-semibold text-slate-800">{club.name}</div>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${tierCfg.bg} ${tierCfg.text}`}>{tier}</span>
+                              <span className="text-xs text-slate-500 truncate">{club.league ?? '—'}</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            {offeredCount > 0 && (
+                              <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded-full font-medium">
+                                {offeredCount} jugadores
+                              </span>
+                            )}
+                            <ChevronRight className="w-4 h-4 text-slate-300" />
+                          </div>
+                        </div>
+                        {(need.transferBudget || need.salaryBudget || need.notes) && (
+                          <div className="text-xs text-slate-500 space-y-0.5">
+                            {(need.transferBudget || need.salaryBudget) && (
+                              <div className="flex gap-3">
+                                {need.transferBudget && <span>Traspaso: <span className="text-slate-700 font-medium">{need.transferBudget}</span></span>}
+                                {need.salaryBudget && <span>Salario: <span className="text-slate-700 font-medium">{need.salaryBudget}</span></span>}
+                              </div>
+                            )}
+                            {need.notes && <div className="truncate text-slate-400">{need.notes}</div>}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                  {clubNeeds.length === 0 && (
+                    <div className="text-center py-10 text-slate-400 text-sm">Sin resultados</div>
+                  )}
+                </div>
+
+                {/* ── DESKTOP TABLE VIEW (hidden on mobile) ── */}
+                <div className="hidden sm:block bg-white rounded-lg border border-slate-200 overflow-x-auto">
                   <table className="w-full min-w-[700px] text-sm">
                     <thead>
                       <tr className="border-b border-slate-100 bg-slate-50 text-[10px] text-slate-500 uppercase tracking-wider">
@@ -1271,6 +1330,7 @@ export function Distribution({
                     </tbody>
                   </table>
                 </div>
+                </>
               )}
             </div>
             )
@@ -1556,7 +1616,14 @@ export function Distribution({
                     </>)})()}
                   </div>
 
-                  <div className="px-4 py-3 border-t border-slate-100 flex-shrink-0">
+                  <div className="px-4 py-3 border-t border-slate-100 flex-shrink-0 space-y-2">
+                    {/* Close — mobile only */}
+                    <button
+                      onClick={closePanel}
+                      className="sm:hidden w-full py-2.5 text-sm font-medium text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50"
+                    >
+                      Cerrar
+                    </button>
                     <button
                       onClick={async () => {
                         if (!confirm('¿Quitar este jugador de distribución?')) return
@@ -1714,6 +1781,12 @@ export function Distribution({
                         Todos los jugadores de {need.position} ya están ofrecidos a este club
                       </p>
                     )}
+                  </div>
+                  {/* Close — mobile only */}
+                  <div className="sm:hidden flex-shrink-0 px-4 py-3 border-t border-slate-100 safe-area-bottom">
+                    <button onClick={closePanel} className="w-full py-2.5 text-sm font-medium text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50">
+                      Cerrar
+                    </button>
                   </div>
                 </div>
               )
@@ -1875,6 +1948,12 @@ export function Distribution({
                       </button>
                     </div>
                   )}
+                  {/* Close — mobile only */}
+                  <div className="sm:hidden flex-shrink-0 px-4 py-3 border-t border-slate-100 safe-area-bottom">
+                    <button onClick={closePanel} className="w-full py-2.5 text-sm font-medium text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50">
+                      Cerrar
+                    </button>
+                  </div>
                 </div>
               )
             })()}

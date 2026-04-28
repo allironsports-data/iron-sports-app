@@ -255,21 +255,21 @@ function ReportCard({
           {onUpdate && (
             <button
               onClick={() => setEditMode(true)}
-              className="text-slate-300 hover:text-blue-500 p-0.5"
+              className="text-slate-300 hover:text-blue-500 p-2 sm:p-0.5 rounded"
               title="Editar informe"
             >
-              <Pencil className="w-3 h-3" />
+              <Pencil className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
             </button>
           )}
           {currentProfile.is_admin && (
             isConfirming ? (
               <div className="flex items-center gap-1">
-                <button onClick={() => onDelete(report.id)} className="px-2 py-0.5 text-[10px] bg-red-600 text-white rounded font-medium">Eliminar</button>
-                <button onClick={() => onConfirmDelete(null)} className="px-2 py-0.5 text-[10px] border border-slate-200 rounded text-slate-600">No</button>
+                <button onClick={() => onDelete(report.id)} className="px-2 py-1 text-xs bg-red-600 text-white rounded font-medium">Eliminar</button>
+                <button onClick={() => onConfirmDelete(null)} className="px-2 py-1 text-xs border border-slate-200 rounded text-slate-600">No</button>
               </div>
             ) : (
-              <button onClick={() => onConfirmDelete(report.id)} className="text-slate-300 hover:text-red-500 p-0.5">
-                <Trash2 className="w-3 h-3" />
+              <button onClick={() => onConfirmDelete(report.id)} className="text-slate-300 hover:text-red-500 p-2 sm:p-0.5 rounded">
+                <Trash2 className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
               </button>
             )
           )}
@@ -976,7 +976,7 @@ export function Captacion({
         </div>
 
         {/* Main nav tabs */}
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 flex items-center border-t border-slate-100">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 flex items-center border-t border-slate-100 overflow-x-auto scrollbar-none">
           {([
             { id: 'tareas' as const, label: 'Tareas' },
             { id: 'jugadores' as const, label: 'Jugadores' },
@@ -988,7 +988,7 @@ export function Captacion({
               <button
                 key={tab.id}
                 onClick={() => tab.id === 'captacion' ? undefined : onGoToSection(tab.id as 'tareas' | 'jugadores' | 'distribucion')}
-                className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                className={`flex items-center gap-1.5 px-3 sm:px-4 py-3 text-sm font-medium border-b-2 transition-colors flex-shrink-0 ${
                   isActive
                     ? 'border-[hsl(220,72%,26%)] text-[hsl(220,72%,26%)]'
                     : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
@@ -1002,24 +1002,25 @@ export function Captacion({
         </div>
 
         {/* Captación sub-tabs */}
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 flex items-center gap-1 py-1.5 border-t border-slate-100 bg-slate-50/60">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 flex items-center gap-1 py-1.5 border-t border-slate-100 bg-slate-50/60 overflow-x-auto scrollbar-none">
           {([
-            { id: 'jugadores' as CaptacionTab, label: 'Jugadores', icon: <Users className="w-3.5 h-3.5" /> },
-            { id: 'informes' as CaptacionTab, label: 'Informes recientes', icon: <FileText className="w-3.5 h-3.5" /> },
-            { id: 'estadisticas' as CaptacionTab, label: 'Estadísticas', icon: <BarChart2 className="w-3.5 h-3.5" /> },
-            { id: 'partidos' as CaptacionTab, label: 'Partidos', icon: <ClipboardList className="w-3.5 h-3.5" /> },
+            { id: 'jugadores' as CaptacionTab, label: 'Jugadores', labelMobile: 'Jugadores', icon: <Users className="w-3.5 h-3.5" /> },
+            { id: 'informes' as CaptacionTab, label: 'Informes recientes', labelMobile: 'Informes', icon: <FileText className="w-3.5 h-3.5" /> },
+            { id: 'estadisticas' as CaptacionTab, label: 'Estadísticas', labelMobile: 'Stats', icon: <BarChart2 className="w-3.5 h-3.5" /> },
+            { id: 'partidos' as CaptacionTab, label: 'Partidos', labelMobile: 'Partidos', icon: <ClipboardList className="w-3.5 h-3.5" /> },
           ]).map(t => (
             <button
               key={t.id}
               onClick={() => setCaptTab(t.id)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                 captTab === t.id
                   ? 'bg-[hsl(220,72%,26%)] text-white'
                   : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
               }`}
             >
               {t.icon}
-              {t.label}
+              <span className="hidden sm:inline">{t.label}</span>
+              <span className="sm:hidden">{t.labelMobile}</span>
             </button>
           ))}
         </div>
@@ -1665,7 +1666,7 @@ export function Captacion({
           {showAddMatch && (
             <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
               <h3 className="text-sm font-semibold text-slate-700">{editingMatch ? 'Editar partido' : 'Nuevo partido'}</h3>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <FormRow label="Fecha">
                   <input type="date" value={matchForm.date} onChange={e => setMatchForm(f => ({ ...f, date: e.target.value }))} className="field" />
                 </FormRow>
@@ -1688,7 +1689,7 @@ export function Captacion({
                   </select>
                 </FormRow>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <FormRow label="Local">
                   <input value={matchForm.homeTeam} onChange={e => setMatchForm(f => ({ ...f, homeTeam: e.target.value }))} className="field" placeholder="Equipo local" />
                 </FormRow>
@@ -1809,58 +1810,125 @@ export function Captacion({
               <p className="text-xs mt-1 text-slate-300">Si acabas de activar esta función, recuerda ejecutar el SQL de creación de tabla en Supabase</p>
             </div>
           ) : (
-            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50 text-[10px] text-slate-500 uppercase tracking-wide">
-                      <th className="text-left px-3 py-2.5 font-semibold w-[88px]">Fecha</th>
-                      <th className="text-left px-3 py-2.5 font-semibold">Local</th>
-                      <th className="text-center px-2 py-2.5 font-semibold w-6">vs</th>
-                      <th className="text-left px-3 py-2.5 font-semibold">Visitante</th>
-                      <th className="text-left px-3 py-2.5 font-semibold">Competición</th>
-                      <th className="text-left px-3 py-2.5 font-semibold w-[90px]">Modo</th>
-                      <th className="text-left px-3 py-2.5 font-semibold">Scout</th>
-                      <th className="text-left px-3 py-2.5 font-semibold w-14">Vistos</th>
-                      <th className="text-left px-3 py-2.5 font-semibold">Notas</th>
-                      <th className="text-center px-3 py-2.5 font-semibold w-12">Visto</th>
-                      <th className="px-3 py-2.5 w-16" />
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {filteredMatches.map(m => {
-                      const scoutName = personaToName(m.assignedTo, profiles)
-                      const linkedPlayerIds = matchPlayers.filter(mp => mp.matchId === m.id).map(mp => mp.playerId)
-                      return (
-                        <MatchRow
-                          key={m.id}
-                          match={m}
-                          scoutName={scoutName}
-                          profiles={profiles}
-                          currentProfile={currentProfile}
-                          isAdmin={isAdmin}
-                          scoutingPlayers={scoutingPlayers}
-                          linkedPlayerIds={linkedPlayerIds}
-                          onEdit={openEditMatch}
-                          onDelete={handleDeleteMatch}
-                          onToggleStatus={handleToggleMatchStatus}
-                          onAssign={handleAssignMatch}
-                          onAddMatchPlayer={onAddMatchPlayer}
-                          onRemoveMatchPlayer={onRemoveMatchPlayer}
-                        />
-                      )
-                    })}
-                    {filteredMatches.length === 0 && (
-                      <tr>
-                        <td colSpan={10} className="text-center py-10 text-slate-400 text-sm">
-                          No hay partidos que coincidan con los filtros
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+            <>
+              {/* ── Mobile card list (hidden on sm+) ── */}
+              <div className="sm:hidden space-y-2">
+                {filteredMatches.length === 0 ? (
+                  <div className="text-center py-10 text-slate-400 text-sm">No hay partidos que coincidan con los filtros</div>
+                ) : filteredMatches.map(m => {
+                  const scoutName = personaToName(m.assignedTo, profiles)
+                  const linkedPlayerIds = matchPlayers.filter(mp => mp.matchId === m.id).map(mp => mp.playerId)
+                  const linkedPlayers = scoutingPlayers.filter(p => linkedPlayerIds.includes(p.id))
+                  const isVisto = m.status === 'visto'
+                  const day = m.date.slice(8); const mon = MONTHS_ES[parseInt(m.date.slice(5, 7)) - 1]; const yr = m.date.slice(2, 4)
+                  return (
+                    <div key={m.id} className={`bg-white border rounded-xl p-3 space-y-2 ${isVisto ? 'border-slate-200' : 'border-amber-200 bg-amber-50/30'}`}>
+                      {/* Header row */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-semibold text-slate-800 leading-tight">
+                            {m.homeTeam} <span className="text-slate-400 font-normal text-xs">vs</span> {m.awayTeam}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                            <span className="text-xs text-slate-400">{day} {mon} &apos;{yr}</span>
+                            {m.competition && <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">{m.competition}</span>}
+                            {m.viewMode === 'campo'
+                              ? <span className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">🏟️ Campo</span>
+                              : <span className="text-xs text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">📹 Vídeo</span>
+                            }
+                            {m.assignedTo && <span className="text-xs font-mono font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">{m.assignedTo}</span>}
+                          </div>
+                          {m.notes && <div className="text-xs text-slate-400 mt-1 truncate">{m.notes}</div>}
+                        </div>
+                        {/* Right: visto + actions */}
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <button
+                            onClick={() => handleToggleMatchStatus(m)}
+                            className={`inline-flex items-center justify-center w-8 h-8 rounded-full border transition-all ${
+                              isVisto ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 text-slate-300'
+                            }`}
+                          >
+                            <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="2.5,8 6,11.5 13.5,4" />
+                            </svg>
+                          </button>
+                          <button onClick={() => openEditMatch(m)} className="p-2 text-slate-400 hover:text-blue-500">
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                      {/* Linked players */}
+                      {linkedPlayers.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {linkedPlayers.map(p => (
+                            <span key={p.id} className="inline-flex items-center gap-1 bg-violet-50 border border-violet-200 text-violet-700 text-xs px-2 py-0.5 rounded-full">
+                              {p.fullName}
+                              <button onClick={() => onRemoveMatchPlayer(m.id, p.id)} className="text-violet-400 hover:text-red-500 ml-0.5">
+                                <X className="w-3 h-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
-            </div>
+
+              {/* ── Desktop table (hidden on mobile) ── */}
+              <div className="hidden sm:block bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500 uppercase tracking-wide">
+                        <th className="text-left px-3 py-2.5 font-semibold w-[88px]">Fecha</th>
+                        <th className="text-left px-3 py-2.5 font-semibold">Local</th>
+                        <th className="text-center px-2 py-2.5 font-semibold w-6">vs</th>
+                        <th className="text-left px-3 py-2.5 font-semibold">Visitante</th>
+                        <th className="text-left px-3 py-2.5 font-semibold">Competición</th>
+                        <th className="text-left px-3 py-2.5 font-semibold w-[90px]">Modo</th>
+                        <th className="text-left px-3 py-2.5 font-semibold">Scout</th>
+                        <th className="text-left px-3 py-2.5 font-semibold w-14">Vistos</th>
+                        <th className="text-left px-3 py-2.5 font-semibold">Notas</th>
+                        <th className="text-center px-3 py-2.5 font-semibold w-12">Visto</th>
+                        <th className="px-3 py-2.5 w-16" />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredMatches.map(m => {
+                        const scoutName = personaToName(m.assignedTo, profiles)
+                        const linkedPlayerIds = matchPlayers.filter(mp => mp.matchId === m.id).map(mp => mp.playerId)
+                        return (
+                          <MatchRow
+                            key={m.id}
+                            match={m}
+                            scoutName={scoutName}
+                            profiles={profiles}
+                            currentProfile={currentProfile}
+                            isAdmin={isAdmin}
+                            scoutingPlayers={scoutingPlayers}
+                            linkedPlayerIds={linkedPlayerIds}
+                            onEdit={openEditMatch}
+                            onDelete={handleDeleteMatch}
+                            onToggleStatus={handleToggleMatchStatus}
+                            onAssign={handleAssignMatch}
+                            onAddMatchPlayer={onAddMatchPlayer}
+                            onRemoveMatchPlayer={onRemoveMatchPlayer}
+                          />
+                        )
+                      })}
+                      {filteredMatches.length === 0 && (
+                        <tr>
+                          <td colSpan={10} className="text-center py-10 text-slate-400 text-sm">
+                            No hay partidos que coincidan con los filtros
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
           )}
         </div>
       )}
@@ -1924,7 +1992,7 @@ export function Captacion({
             </div>
 
             {/* Panel body */}
-            <div className={`flex-1 overflow-y-auto ${fullscreen ? 'max-w-4xl mx-auto w-full' : ''}`}>
+            <div className={`flex-1 overflow-y-auto ${fullscreen ? 'max-w-4xl mx-auto w-full' : ''} pb-14 sm:pb-0`}>
 
               {/* ── Add / Edit player form ── */}
               {(showAddPlayer || showEditPlayer) && (
@@ -1933,7 +2001,7 @@ export function Captacion({
                     <input value={form.fullName} onChange={e => setForm(f => ({ ...f, fullName: e.target.value }))}
                       className="field" placeholder="Nombre completo" />
                   </FormRow>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <FormRow label="Posición 1">
                       <select value={form.position1 ?? ''} onChange={e => setForm(f => ({ ...f, position1: e.target.value }))} className="field">
                         <option value="">—</option>
@@ -1947,7 +2015,7 @@ export function Captacion({
                       </select>
                     </FormRow>
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <FormRow label="Fecha nac.">
                       <input type="date" value={form.birthdate ?? ''} onChange={e => setForm(f => ({ ...f, birthdate: e.target.value }))}
                         className="field" />
@@ -1963,7 +2031,7 @@ export function Captacion({
                     <input value={form.team ?? ''} onChange={e => setForm(f => ({ ...f, team: e.target.value }))}
                       className="field" placeholder="Club actual" />
                   </FormRow>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <FormRow label="Categoría">
                       <input value={form.categoria ?? ''} onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))}
                         className="field" placeholder="Primera, Sub-18..." />
@@ -2314,6 +2382,18 @@ export function Captacion({
                 </div>
               )}
             </div>
+
+            {/* Sticky close bar — mobile only */}
+            {!fullscreen && (
+              <div className="sm:hidden flex-shrink-0 border-t border-slate-200 px-4 py-3 bg-white safe-area-bottom">
+                <button
+                  onClick={closePanel}
+                  className="w-full py-2.5 text-sm font-medium text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 active:bg-slate-100"
+                >
+                  Cerrar
+                </button>
+              </div>
+            )}
           </div>
         </>
       )}

@@ -785,7 +785,7 @@ function NeedForm({ initial, onSave, onCancel }: {
           ))}
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Edad máx.</label>
           <input type="number" value={ageMax} onChange={e => setAgeMax(e.target.value)} placeholder="Ej: 23"
@@ -797,7 +797,7 @@ function NeedForm({ initial, onSave, onCancel }: {
             className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Salario</label>
           <input value={salaryBudget} onChange={e => setSalaryBudget(e.target.value)} placeholder="60k/año…"
@@ -842,7 +842,7 @@ function InfoEditForm({ club, onSave, onCancel }: {
         <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Nombre</label>
         <input value={name} onChange={e => setName(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">País</label>
           <input value={country} onChange={e => setCountry(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
@@ -852,7 +852,7 @@ function InfoEditForm({ club, onSave, onCancel }: {
           <input value={league} onChange={e => setLeague(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Contacto club</label>
           <input value={contactPerson} onChange={e => setContactPerson(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
