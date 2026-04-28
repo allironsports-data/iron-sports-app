@@ -3,7 +3,7 @@ import {
   Plus, Search, Star, Building2, Users,
   ChevronRight, X, Check, Pencil, Trash2, LogOut,
   TrendingUp, AlertCircle, CircleDot, Flag, ChevronDown,
-  LayoutGrid, Table, Eye,
+  Eye,
 } from 'lucide-react'
 import logoImg from '../assets/logo.jpeg'
 import type { Player, Club, ClubNeed, DistributionEntry, ClubNegotiation } from '../types'
@@ -316,7 +316,6 @@ export function Distribution({
   const [needsTierFilter, setNeedsTierFilter] = useState<LeagueTier[]>([])
   const [needsLeagueFilter, setNeedsLeagueFilter] = useState('')
   const [needsAgeFilter, setNeedsAgeFilter] = useState('')
-  const [needsViewMode, setNeedsViewMode] = useState<'cards' | 'table'>('cards')
   const [needsSort, setNeedsSort] = useState<'recent' | 'club'>('recent')
 
   const seasonEntries = entries.filter(e => e.season === season)
@@ -451,20 +450,6 @@ export function Distribution({
     clubs.forEach(c => { if (c.league && c.needs.length > 0) m.set(c.league, (m.get(c.league) ?? 0) + c.needs.length) })
     return Array.from(m.entries()).sort((a, b) => a[0].localeCompare(b[0]))
   }, [clubs])
-
-  // For each position, how many distribution players match it
-  const matchCountByPosition = useMemo(() => {
-    const map: Record<string, number> = {}
-    FOOTBALL_POSITIONS.forEach(pos => {
-      const abbrs = POSITION_ABBRS[pos] ?? [pos]
-      const count = seasonEntries.filter(e => {
-        const p = players.find(pl => pl.id === e.playerId)
-        return p?.positions.some(pp => abbrs.some(a => pp.toLowerCase() === a.toLowerCase()))
-      }).length
-      map[pos] = count
-    })
-    return map
-  }, [seasonEntries, players])
 
   const selectedEntry = seasonEntries.find(e => e.id === selectedEntryId) ?? null
   const selectedClub = clubs.find(c => c.id === selectedClubId) ?? null
@@ -1041,32 +1026,9 @@ export function Distribution({
             const hasNeedsFilters = needsTierFilter.length > 0 || !!needsLeagueFilter || !!needsAgeFilter || !!positionFilter
             return (
             <div className="max-w-5xl mx-auto">
-              {/* Top row: view toggle + sort + add button */}
+              {/* Top row: sort + add button */}
               <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
                 <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setNeedsViewMode('cards')}
-                    title="Vista tarjetas"
-                    className={`flex items-center gap-1.5 px-2.5 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
-                      needsViewMode === 'cards'
-                        ? 'bg-[hsl(220,72%,36%)] text-white border-[hsl(220,72%,36%)]'
-                        : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-                    }`}
-                  >
-                    <LayoutGrid className="w-3.5 h-3.5" /> Tarjetas
-                  </button>
-                  <button
-                    onClick={() => setNeedsViewMode('table')}
-                    title="Vista tabla"
-                    className={`flex items-center gap-1.5 px-2.5 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
-                      needsViewMode === 'table'
-                        ? 'bg-[hsl(220,72%,36%)] text-white border-[hsl(220,72%,36%)]'
-                        : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-                    }`}
-                  >
-                    <Table className="w-3.5 h-3.5" /> Tabla
-                  </button>
-                  <div className="w-px h-5 bg-slate-200 mx-1" />
                   <button
                     onClick={() => setNeedsSort(s => s === 'recent' ? 'club' : 'recent')}
                     title={needsSort === 'recent' ? 'Ordenado por más reciente' : 'Ordenado por club'}
@@ -1184,95 +1146,6 @@ export function Distribution({
                     ? 'Ningún club tiene solicitudes registradas aún'
                     : 'Sin resultados para este filtro'}
                 </div>
-              ) : needsViewMode === 'cards' ? (
-                /* ── CARD VIEW ── */
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-1.5">
-                  {clubNeeds.map(({ club, need }, i) => {
-                    const needIndex = club.needs.indexOf(need)
-                    const isEditing = editingNeed?.clubId === club.id && editingNeed?.index === needIndex
-                    const tier = getClubTier(club.league, club.country)
-                    const tierCfg = TIER_CONFIG[tier]
-                    return (
-                      <div key={`${club.id}-${i}`} className="bg-white rounded-lg border border-slate-200 hover:shadow-sm transition-all">
-                        {isEditing ? (
-                          <div className="p-3">
-                            <div className="flex items-center gap-2 mb-3">
-                              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Editar — {club.name}</span>
-                              <button onClick={() => setEditingNeed(null)} className="ml-auto text-slate-300 hover:text-slate-500"><X className="w-3.5 h-3.5" /></button>
-                            </div>
-                            <NeedFormInline
-                              initial={need}
-                              onSave={async (updated) => {
-                                // preserve metadata from original need
-                                const withMeta = { ...updated, createdAt: need.createdAt, addedBy: need.addedBy }
-                                const newNeeds = club.needs.map((n, idx) => idx === needIndex ? withMeta : n)
-                                await onUpdateClub({ ...club, needs: newNeeds })
-                                setEditingNeed(null)
-                              }}
-                              onCancel={() => setEditingNeed(null)}
-                            />
-                          </div>
-                        ) : (
-                          <div className="px-3 py-2 flex items-start gap-2.5">
-                            <div
-                              className="flex-shrink-0 mt-0.5 cursor-pointer"
-                              onClick={() => { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(need.position) }}
-                            >
-                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-md text-xs font-semibold">
-                                <AlertCircle className="w-3 h-3" />{need.position}
-                              </span>
-                            </div>
-                            <div
-                              className="flex-1 min-w-0 cursor-pointer"
-                              onClick={() => { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(need.position) }}
-                            >
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="font-medium text-slate-800 text-sm truncate">{club.name}</span>
-                                {club.league && (
-                                  <span className={`text-[10px] font-bold px-1 py-0.5 rounded ${tierCfg.bg} ${tierCfg.text}`}>{tier}</span>
-                                )}
-                                {club.league && <span className="text-xs text-slate-400">{club.league}</span>}
-                                {(matchCountByPosition[need.position] ?? 0) > 0 && (
-                                  <span className="text-[10px] bg-green-50 text-green-700 border border-green-200 px-1.5 py-0.5 rounded-full font-medium flex-shrink-0">
-                                    {matchCountByPosition[need.position]} jugadores
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-0.5 flex-wrap">
-                                {need.ageMax && <span>Sub-{need.ageMax}</span>}
-                                {need.transferBudget && <span>· {need.transferBudget}</span>}
-                                {need.salaryBudget && <span>· {need.salaryBudget}/mes</span>}
-                                {need.notes && <span className="text-slate-400 truncate">· {need.notes}</span>}
-                              </div>
-                              <div className="flex items-center gap-1.5 text-[10px] text-slate-400 mt-0.5 flex-wrap">
-                                {need.createdAt && (
-                                  <span>📅 {new Date(need.createdAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-                                )}
-                                {need.addedBy && currentProfile.is_admin && (
-                                  <span className="font-mono bg-slate-100 text-slate-600 px-1 rounded">{need.addedBy}</span>
-                                )}
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-1 flex-shrink-0">
-                              <button
-                                onClick={() => setEditingNeed({ clubId: club.id, index: needIndex })}
-                                className="p-1 text-slate-300 hover:text-slate-500 transition-colors"
-                              >
-                                <Pencil className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => setShowAddNeg({ clubId: club.id })}
-                                className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium px-1.5 py-1 rounded hover:bg-blue-50 transition-colors"
-                              >
-                                <Plus className="w-3 h-3" /> Ofrecer
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
               ) : (
                 /* ── TABLE VIEW ── */
                 <div className="bg-white rounded-lg border border-slate-200 overflow-x-auto">
@@ -1288,7 +1161,7 @@ export function Distribution({
                         <th className="text-left px-3 py-2.5 font-semibold">Notas</th>
                         <th className="text-left px-3 py-2.5 font-semibold">Añadida</th>
                         {currentProfile.is_admin && <th className="text-left px-3 py-2.5 font-semibold">Por</th>}
-                        <th className="text-left px-3 py-2.5 font-semibold">Jugadores</th>
+                        <th className="text-left px-3 py-2.5 font-semibold">Ofrecidos</th>
                         <th className="px-3 py-2.5" />
                       </tr>
                     </thead>
@@ -1298,7 +1171,7 @@ export function Distribution({
                         const isEditing = editingNeed?.clubId === club.id && editingNeed?.index === needIndex
                         const tier = getClubTier(club.league, club.country)
                         const tierCfg = TIER_CONFIG[tier]
-                        const matchCount = matchCountByPosition[need.position] ?? 0
+                        const offeredCount = negotiations.filter(n => n.clubId === club.id && n.status !== 'descartado').length
                         return (
                           <tr key={`${club.id}-${i}`} className="hover:bg-slate-50/60 transition-colors">
                             {isEditing ? (
@@ -1356,10 +1229,15 @@ export function Distribution({
                                   </td>
                                 )}
                                 <td className="px-3 py-2">
-                                  {matchCount > 0 && (
-                                    <span className="text-[10px] bg-green-50 text-green-700 border border-green-200 px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap">
-                                      {matchCount} jugadores
-                                    </span>
+                                  {offeredCount > 0 ? (
+                                    <button
+                                      onClick={() => { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(null) }}
+                                      className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap hover:bg-blue-100 transition-colors"
+                                    >
+                                      {offeredCount} jugadores
+                                    </button>
+                                  ) : (
+                                    <span className="text-slate-300 text-xs">—</span>
                                   )}
                                 </td>
                                 <td className="px-3 py-2">
