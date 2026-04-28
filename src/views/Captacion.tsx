@@ -338,6 +338,93 @@ function MatchCard({
   )
 }
 
+// ── MatchRow ──────────────────────────────────────────────────
+
+function MatchRow({
+  match,
+  scoutName,
+  isAdmin,
+  onEdit,
+  onDelete,
+}: {
+  match: ScoutingMatch
+  scoutName: string
+  isAdmin: boolean
+  onEdit: (m: ScoutingMatch) => void
+  onDelete: (id: string) => void
+}) {
+  const [confirm, setConfirm] = useState(false)
+  const day = match.date.slice(8)
+  const mon = MONTHS_ES[parseInt(match.date.slice(5, 7)) - 1]
+  const yr = match.date.slice(2, 4)
+
+  return (
+    <tr className="hover:bg-slate-50/60 transition-colors">
+      <td className="px-3 py-2 text-xs text-slate-500 whitespace-nowrap">
+        {day} {mon} '{yr}
+      </td>
+      <td className="px-3 py-2 text-sm font-medium text-slate-800 whitespace-nowrap">{match.homeTeam}</td>
+      <td className="px-2 py-2 text-[10px] font-bold text-slate-400 text-center">vs</td>
+      <td className="px-3 py-2 text-sm font-medium text-slate-800 whitespace-nowrap">{match.awayTeam}</td>
+      <td className="px-3 py-2">
+        {match.competition && (
+          <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded whitespace-nowrap">{match.competition}</span>
+        )}
+      </td>
+      <td className="px-3 py-2 text-xs whitespace-nowrap">
+        {match.assignedTo && (
+          <>
+            <span className="font-mono font-semibold text-slate-700">{match.assignedTo}</span>
+            {scoutName && scoutName !== match.assignedTo && (
+              <span className="text-slate-400 ml-1">({scoutName})</span>
+            )}
+          </>
+        )}
+      </td>
+      <td className="px-3 py-2 text-xs text-slate-500 max-w-[220px] truncate" title={match.notes ?? ''}>
+        {match.notes ?? '—'}
+      </td>
+      <td className="px-3 py-2">
+        <div className="flex items-center gap-1 justify-end">
+          <button
+            onClick={() => onEdit(match)}
+            className="p-1 text-slate-300 hover:text-blue-500 transition-colors"
+            title="Editar"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+          {isAdmin && (
+            confirm ? (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => { onDelete(match.id); setConfirm(false) }}
+                  className="px-2 py-0.5 text-[10px] bg-red-600 text-white rounded font-medium"
+                >
+                  Sí
+                </button>
+                <button
+                  onClick={() => setConfirm(false)}
+                  className="px-2 py-0.5 text-[10px] border border-slate-200 rounded text-slate-600"
+                >
+                  No
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirm(true)}
+                className="p-1 text-slate-300 hover:text-red-500 transition-colors"
+                title="Eliminar"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )
+          )}
+        </div>
+      </td>
+    </tr>
+  )
+}
+
 // ── Props ────────────────────────────────────────────────────
 
 interface Props {
@@ -1292,17 +1379,38 @@ export function Captacion({
               <p className="text-xs mt-1 text-slate-300">Si acabas de activar esta función, recuerda ejecutar el SQL de creación de tabla en Supabase</p>
             </div>
           ) : (
-            <div className="space-y-2">
-              {scoutingMatches.map(m => (
-                <MatchCard
-                  key={m.id}
-                  match={m}
-                  profiles={profiles}
-                  isAdmin={isAdmin}
-                  onEdit={openEditMatch}
-                  onDelete={handleDeleteMatch}
-                />
-              ))}
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-50 text-[10px] text-slate-500 uppercase tracking-wide">
+                      <th className="text-left px-3 py-2.5 font-semibold w-[90px]">Fecha</th>
+                      <th className="text-left px-3 py-2.5 font-semibold">Local</th>
+                      <th className="text-center px-2 py-2.5 font-semibold w-8">vs</th>
+                      <th className="text-left px-3 py-2.5 font-semibold">Visitante</th>
+                      <th className="text-left px-3 py-2.5 font-semibold">Competición</th>
+                      <th className="text-left px-3 py-2.5 font-semibold">Scout</th>
+                      <th className="text-left px-3 py-2.5 font-semibold">Jugadores</th>
+                      <th className="px-3 py-2.5 w-16" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {scoutingMatches.map(m => {
+                      const scoutName = personaToName(m.assignedTo, profiles)
+                      return (
+                        <MatchRow
+                          key={m.id}
+                          match={m}
+                          scoutName={scoutName}
+                          isAdmin={isAdmin}
+                          onEdit={openEditMatch}
+                          onDelete={handleDeleteMatch}
+                        />
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
