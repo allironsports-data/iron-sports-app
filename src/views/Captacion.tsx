@@ -1816,7 +1816,6 @@ export function Captacion({
                 {filteredMatches.length === 0 ? (
                   <div className="text-center py-10 text-slate-400 text-sm">No hay partidos que coincidan con los filtros</div>
                 ) : filteredMatches.map(m => {
-                  const scoutName = personaToName(m.assignedTo, profiles)
                   const linkedPlayerIds = matchPlayers.filter(mp => mp.matchId === m.id).map(mp => mp.playerId)
                   const linkedPlayers = scoutingPlayers.filter(p => linkedPlayerIds.includes(p.id))
                   const isVisto = m.status === 'visto'
