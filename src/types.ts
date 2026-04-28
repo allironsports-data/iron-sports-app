@@ -213,7 +213,7 @@ export interface ClubNegotiation {
 
 // ── SCOUTING / CAPTACIÓN ────────────────────────────────────
 
-export type ScoutingAssessment = 'Visto' | 'Seguir' | 'Llamar' | 'Basque'
+export type ScoutingAssessment = 'Visto' | 'Seguir' | 'Llamar' | 'Basque' | 'Descartado' | 'Decidir'
 
 export interface ScoutingPlayer {
   id: string
@@ -225,10 +225,12 @@ export interface ScoutingPlayer {
   team?: string
   assessment?: ScoutingAssessment
   nationality?: string
+  nationalTeam?: string
   agency?: string
   clubContract?: string     // "30/06/2027"
   contacto?: string
   categoria?: string
+  segundaCategoria?: string
   comentarios?: string
   createdAt: string
 }
@@ -239,6 +241,8 @@ export interface ScoutingReport {
   fecha?: string            // ISO datetime string
   titulo?: string
   texto?: string
+  persona?: string          // "NB", "PP", "RP", "AV"
+  conclusion?: string       // "Seguir", "Descartar", "Firmar", "Decidir"
   authorId?: string
   createdAt: string
 }

@@ -13,13 +13,15 @@ import { calcAge } from '../types'
 // ── constants ──────────────────────────────────────────────────
 
 const ASSESSMENT_CONFIG: Record<ScoutingAssessment, { label: string; bg: string; text: string; border: string }> = {
-  Visto:   { label: 'Visto',   bg: 'bg-slate-100',   text: 'text-slate-600',   border: 'border-slate-200' },
-  Seguir:  { label: 'Seguir',  bg: 'bg-blue-100',    text: 'text-blue-700',    border: 'border-blue-200' },
-  Llamar:  { label: 'Llamar',  bg: 'bg-amber-100',   text: 'text-amber-700',   border: 'border-amber-200' },
-  Basque:  { label: 'Basque',  bg: 'bg-violet-100',  text: 'text-violet-700',  border: 'border-violet-200' },
+  Llamar:     { label: 'Llamar',     bg: 'bg-amber-100',   text: 'text-amber-700',   border: 'border-amber-200' },
+  Seguir:     { label: 'Seguir',     bg: 'bg-blue-100',    text: 'text-blue-700',    border: 'border-blue-200' },
+  Decidir:    { label: 'Decidir',    bg: 'bg-orange-100',  text: 'text-orange-700',  border: 'border-orange-200' },
+  Basque:     { label: 'Basque',     bg: 'bg-violet-100',  text: 'text-violet-700',  border: 'border-violet-200' },
+  Visto:      { label: 'Visto',      bg: 'bg-slate-100',   text: 'text-slate-600',   border: 'border-slate-200' },
+  Descartado: { label: 'Descartado', bg: 'bg-red-100',     text: 'text-red-600',     border: 'border-red-200' },
 }
 
-const ALL_ASSESSMENTS: ScoutingAssessment[] = ['Seguir', 'Llamar', 'Basque', 'Visto']
+const ALL_ASSESSMENTS: ScoutingAssessment[] = ['Llamar', 'Seguir', 'Decidir', 'Basque', 'Visto', 'Descartado']
 
 const POSITIONS_SCOUTING = [
   'Portero', 'Central', 'Lateral derecho', 'Lateral izquierdo',
@@ -840,9 +842,22 @@ function ReportCard({
           {report.titulo && (
             <div className="font-semibold text-slate-700 text-sm mb-0.5 truncate">{report.titulo}</div>
           )}
-          <div className="text-[10px] text-slate-400 flex items-center gap-1">
-            <Calendar className="w-3 h-3" />
-            {report.fecha ? new Date(report.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+          <div className="text-[10px] text-slate-400 flex items-center gap-2">
+            <span className="flex items-center gap-1">
+              <Calendar className="w-3 h-3" />
+              {report.fecha ? new Date(report.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+            </span>
+            {report.persona && (
+              <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded font-mono font-semibold">{report.persona}</span>
+            )}
+            {report.conclusion && report.conclusion !== 'Sin conclusion' && (
+              <span className={`px-1.5 py-0.5 rounded font-medium ${
+                report.conclusion === 'Firmar' ? 'bg-green-100 text-green-700' :
+                report.conclusion === 'Seguir' ? 'bg-blue-100 text-blue-700' :
+                report.conclusion === 'Descartar' ? 'bg-red-100 text-red-600' :
+                'bg-orange-100 text-orange-700'
+              }`}>{report.conclusion}</span>
+            )}
           </div>
         </div>
         {isAdmin && (

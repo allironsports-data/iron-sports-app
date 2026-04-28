@@ -503,10 +503,12 @@ function dbToScoutingPlayer(row: Record<string, unknown>): ScoutingPlayer {
     team: (row.team as string) ?? undefined,
     assessment: (row.assessment as ScoutingPlayer['assessment']) ?? undefined,
     nationality: (row.nationality as string) ?? undefined,
+    nationalTeam: (row.national_team as string) ?? undefined,
     agency: (row.agency as string) ?? undefined,
     clubContract: (row.club_contract as string) ?? undefined,
     contacto: (row.contacto as string) ?? undefined,
     categoria: (row.categoria as string) ?? undefined,
+    segundaCategoria: (row.segunda_categoria as string) ?? undefined,
     comentarios: (row.comentarios as string) ?? undefined,
     createdAt: row.created_at as string,
   }
@@ -519,6 +521,8 @@ function dbToScoutingReport(row: Record<string, unknown>): ScoutingReport {
     fecha: (row.fecha as string) ?? undefined,
     titulo: (row.titulo as string) ?? undefined,
     texto: (row.texto as string) ?? undefined,
+    persona: (row.persona as string) ?? undefined,
+    conclusion: (row.conclusion as string) ?? undefined,
     authorId: (row.author_id as string) ?? undefined,
     createdAt: row.created_at as string,
   }
@@ -559,10 +563,12 @@ export async function createScoutingPlayer(p: Omit<ScoutingPlayer, 'id' | 'creat
     team: p.team ?? null,
     assessment: p.assessment ?? null,
     nationality: p.nationality ?? null,
+    national_team: p.nationalTeam ?? null,
     agency: p.agency ?? null,
     club_contract: p.clubContract ?? null,
     contacto: p.contacto ?? null,
     categoria: p.categoria ?? null,
+    segunda_categoria: p.segundaCategoria ?? null,
     comentarios: p.comentarios ?? null,
   }).select().single()
   if (error) throw error
@@ -579,10 +585,12 @@ export async function updateScoutingPlayer(p: ScoutingPlayer): Promise<void> {
     team: p.team ?? null,
     assessment: p.assessment ?? null,
     nationality: p.nationality ?? null,
+    national_team: p.nationalTeam ?? null,
     agency: p.agency ?? null,
     club_contract: p.clubContract ?? null,
     contacto: p.contacto ?? null,
     categoria: p.categoria ?? null,
+    segunda_categoria: p.segundaCategoria ?? null,
     comentarios: p.comentarios ?? null,
   }).eq('id', p.id)
   if (error) throw error
@@ -599,6 +607,8 @@ export async function createScoutingReport(r: Omit<ScoutingReport, 'id' | 'creat
     fecha: r.fecha ?? new Date().toISOString(),
     titulo: r.titulo ?? null,
     texto: r.texto ?? null,
+    persona: r.persona ?? null,
+    conclusion: r.conclusion ?? null,
     author_id: r.authorId ?? null,
   }).select().single()
   if (error) throw error
