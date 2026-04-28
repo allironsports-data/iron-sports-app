@@ -13,6 +13,7 @@ import { PlayersTable } from './views/PlayersTable'
 import { Distribution } from './views/Distribution'
 import { ClubDetail } from './views/ClubDetail'
 import { Captacion } from './views/Captacion'
+import { StatsPanel } from './views/StatsPanel'
 import type { Club, DistributionEntry, ClubNegotiation } from './types'
 
 export interface AppNotification {
@@ -41,7 +42,7 @@ export default function App() {
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
   const [selectedClubId, setSelectedClubId] = useState<string | null>(null)
   // four main sections
-  const [mainSection, setMainSection] = useState<'tareas' | 'jugadores' | 'distribucion' | 'captacion'>('tareas')
+  const [mainSection, setMainSection] = useState<'tareas' | 'jugadores' | 'distribucion' | 'captacion' | 'estadisticas'>('tareas')
   // where to return after closing PlayerDetail
   const [playerReturnToClub, setPlayerReturnToClub] = useState(false)
   const [showAdmin, setShowAdmin] = useState(false)
@@ -401,6 +402,18 @@ export default function App() {
         onCreateNegotiation={handleCreateNegotiation}
         onUpdateNegotiation={handleUpdateNegotiation}
         onDeleteNegotiation={handleDeleteNegotiation}
+      />
+    )
+  }
+
+  if (mainSection === 'estadisticas' && profile.is_admin) {
+    return (
+      <StatsPanel
+        scoutingReports={scoutingReports}
+        scoutingPlayers={scoutingPlayers}
+        profiles={profiles}
+        onBack={() => setMainSection('tareas')}
+        onLogout={signOut}
       />
     )
   }

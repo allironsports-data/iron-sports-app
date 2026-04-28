@@ -28,13 +28,14 @@ import {
   Zap,
   TrendingUp,
   Eye,
+  BarChart2,
 } from "lucide-react";
 
 const PRIMARY = "hsl(220,72%,26%)";
 
 interface Props {
   view?: 'tareas' | 'jugadores';   // which section to show
-  onViewChange?: (v: 'tareas' | 'jugadores' | 'distribucion' | 'captacion') => void;
+  onViewChange?: (v: 'tareas' | 'jugadores' | 'distribucion' | 'captacion' | 'estadisticas') => void;
   players: Player[];
   tasks: Task[];
   profiles: Profile[];
@@ -405,19 +406,22 @@ export function Dashboard({
 
         {/* Tab nav: Tareas | Jugadores | Distribución */}
         {onViewChange && (
-          <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center border-t border-slate-100">
+          <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center border-t border-slate-100 overflow-x-auto scrollbar-none">
             {([
-              { id: 'tareas' as const,       label: 'Tareas' },
-              { id: 'jugadores' as const,    label: 'Jugadores' },
+              { id: 'tareas'       as const, label: 'Tareas' },
+              { id: 'jugadores'    as const, label: 'Jugadores' },
               { id: 'distribucion' as const, label: 'Distribución', icon: <TrendingUp className="w-3.5 h-3.5" /> },
-              { id: 'captacion' as const,    label: 'Captación',    icon: <Eye className="w-3.5 h-3.5" /> },
+              { id: 'captacion'    as const, label: 'Captación',    icon: <Eye className="w-3.5 h-3.5" /> },
+              ...(currentProfile.is_admin
+                ? [{ id: 'estadisticas' as const, label: 'Stats', icon: <BarChart2 className="w-3.5 h-3.5" /> }]
+                : []),
             ]).map(tab => {
-              const isActive = (tab.id === 'distribucion' || tab.id === 'captacion') ? false : view === tab.id;
+              const isActive = (tab.id === 'distribucion' || tab.id === 'captacion' || tab.id === 'estadisticas') ? false : view === tab.id;
               return (
                 <button
                   key={tab.id}
                   onClick={() => onViewChange(tab.id)}
-                  className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                  className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
                     isActive
                       ? 'border-[hsl(220,72%,26%)] text-[hsl(220,72%,26%)]'
                       : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
