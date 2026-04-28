@@ -939,6 +939,7 @@ export function Distribution({
                         else { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(null) }
                       }}
                       onOffer={() => setShowAddNeg({ clubId: club.id })}
+                      onTogglePriority={() => onUpdateClub({ ...club, isPriority: !club.isPriority })}
                     />
                   ))}
                 </div>
@@ -968,6 +969,7 @@ export function Distribution({
                                 else { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(null) }
                               }}
                               onOffer={() => setShowAddNeg({ clubId: club.id })}
+                              onTogglePriority={() => onUpdateClub({ ...club, isPriority: !club.isPriority })}
                             />
                           ))}
                         </div>
@@ -1002,6 +1004,7 @@ export function Distribution({
                                 else { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(null) }
                               }}
                               onOffer={() => setShowAddNeg({ clubId: club.id })}
+                              onTogglePriority={() => onUpdateClub({ ...club, isPriority: !club.isPriority })}
                             />
                           ))}
                         </div>
@@ -1918,12 +1921,13 @@ export function Distribution({
 
 // ── CLUB CARD ────────────────────────────────────────────────
 
-function ClubCard({ club, negotiations, isSelected, onClick, onOffer }: {
+function ClubCard({ club, negotiations, isSelected, onClick, onOffer, onTogglePriority }: {
   club: Club
   negotiations: ClubNegotiation[]
   isSelected: boolean
   onClick: () => void
   onOffer?: () => void
+  onTogglePriority?: () => void
 }) {
   const activeNegs = negotiations.filter(n => n.clubId === club.id && n.status !== 'descartado')
   const tier = getClubTier(club.league, club.country)
@@ -1941,7 +1945,6 @@ function ClubCard({ club, negotiations, isSelected, onClick, onOffer }: {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="font-medium text-slate-800 text-sm truncate">{club.name}</span>
-          {club.isPriority && <Star className="w-3 h-3 text-green-500 fill-green-500 flex-shrink-0" />}
           {club.needs.length > 0 && (
             <span className="text-xs bg-amber-50 text-amber-600 border border-amber-200 px-1.5 py-0.5 rounded-full flex-shrink-0">
               {club.needs.length} nec.
@@ -1955,16 +1958,31 @@ function ClubCard({ club, negotiations, isSelected, onClick, onOffer }: {
           )}
         </div>
       </div>
-      {onOffer ? (
-        <button
-          onClick={e => { e.stopPropagation(); onOffer() }}
-          className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium px-1.5 py-1 rounded hover:bg-blue-50"
-        >
-          <Plus className="w-3 h-3" /> Ofrecer
-        </button>
-      ) : (
-        <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
-      )}
+      <div className="flex items-center gap-1 flex-shrink-0">
+        {onTogglePriority && (
+          <button
+            onClick={e => { e.stopPropagation(); onTogglePriority() }}
+            title={club.isPriority ? 'Quitar prioritario' : 'Marcar como prioritario'}
+            className={`p-1 rounded transition-all ${
+              club.isPriority
+                ? 'text-green-500 hover:text-green-600'
+                : 'text-slate-300 opacity-0 group-hover:opacity-100 hover:text-amber-400'
+            }`}
+          >
+            <Star className={`w-4 h-4 ${club.isPriority ? 'fill-green-500' : ''}`} />
+          </button>
+        )}
+        {onOffer ? (
+          <button
+            onClick={e => { e.stopPropagation(); onOffer() }}
+            className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium px-1.5 py-1 rounded hover:bg-blue-50"
+          >
+            <Plus className="w-3 h-3" /> Ofrecer
+          </button>
+        ) : (
+          <ChevronRight className="w-4 h-4 text-slate-300" />
+        )}
+      </div>
     </div>
   )
 }
