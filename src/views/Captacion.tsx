@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import {
   Search, X, Plus, LogOut, Trash2, ChevronDown,
-  User, FileText, Shield, Calendar, ChevronRight,
+  FileText, Calendar, ChevronRight,
   TrendingUp, Eye,
 } from 'lucide-react'
 import logoImg from '../assets/logo.jpeg'
@@ -69,7 +69,6 @@ export function Captacion({
   scoutingPlayers,
   scoutingReports,
   currentProfile,
-  onBack,
   onGoToSection,
   onLogout,
   onAdmin,
