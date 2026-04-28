@@ -478,6 +478,18 @@ export function Captacion({
 }: Props) {
   const isAdmin = currentProfile.is_admin
 
+  // ── header height (for panel offset) ──
+  const headerRef = React.useRef<HTMLElement>(null)
+  const [headerHeight, setHeaderHeight] = useState(0)
+  useEffect(() => {
+    const measure = () => {
+      if (headerRef.current) setHeaderHeight(headerRef.current.offsetHeight)
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [captTab]) // recalculate if tabs change row count
+
   // ── section tab ──
   const [captTab, setCaptTab] = useState<CaptacionTab>('jugadores')
 
@@ -878,7 +890,7 @@ export function Captacion({
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
+      <header ref={headerRef} className="bg-white border-b border-slate-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 flex items-center gap-3 h-12 sm:h-14">
           <img src={logoImg} alt="All Iron Sports" className="h-7 sm:h-8 w-auto rounded" />
           <span className="text-xs font-bold text-slate-800 tracking-wide uppercase hidden sm:block">All Iron Sports</span>
@@ -1779,14 +1791,24 @@ export function Captacion({
       {hasPanel && (
         <>
           {!fullscreen && (
-            <div className="fixed inset-0 bg-black/20 z-30" onClick={closePanel} />
+            <div
+              className="fixed inset-x-0 bottom-0 bg-black/20 z-30"
+              style={{ top: headerHeight }}
+              onClick={closePanel}
+            />
           )}
 
-          <div className={
-            fullscreen
-              ? 'fixed inset-0 z-40 flex flex-col bg-white overflow-hidden'
-              : 'fixed top-0 right-0 h-full w-full sm:w-[480px] bg-white shadow-2xl z-40 flex flex-col border-l border-slate-200'
-          }>
+          <div
+            className={
+              fullscreen
+                ? 'fixed inset-0 z-40 flex flex-col bg-white overflow-hidden'
+                : 'fixed right-0 w-full sm:w-[480px] bg-white shadow-2xl z-40 flex flex-col border-l border-slate-200'
+            }
+            style={fullscreen ? undefined : {
+              top: headerHeight,
+              height: `calc(100vh - ${headerHeight}px)`,
+            }}
+          >
             {/* Panel header */}
             <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-200 bg-slate-50 flex-shrink-0">
               <div className="flex-1 min-w-0">
