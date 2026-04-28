@@ -24,6 +24,7 @@ import {
   ChevronDown,
   LayoutList,
   LayoutGrid,
+  Table,
   Zap,
   TrendingUp,
 } from "lucide-react";
@@ -107,7 +108,7 @@ export function Dashboard({
   const [bulkLoading, setBulkLoading] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showCompletedMine, setShowCompletedMine] = useState(false);
-  const [listView, setListView] = useState(false);
+  const [playerView, setPlayerView] = useState<'grid' | 'list' | 'table'>('grid');
   const [showSearch, setShowSearch] = useState(false);
   const [quickTaskPlayer, setQuickTaskPlayer] = useState<Player | null>(null);
 
@@ -766,21 +767,26 @@ export function Dashboard({
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs text-slate-400">{filtered.length} jugador{filtered.length !== 1 ? "es" : ""}</span>
           <div className="flex items-center gap-1 bg-slate-100 rounded-md p-0.5">
-            <button onClick={() => setListView(false)}
-              className={`p-1.5 rounded transition-colors ${!listView ? "bg-white shadow-sm text-slate-700" : "text-slate-400 hover:text-slate-600"}`}
+            <button onClick={() => setPlayerView('grid')}
+              className={`p-1.5 rounded transition-colors ${playerView === 'grid' ? "bg-white shadow-sm text-slate-700" : "text-slate-400 hover:text-slate-600"}`}
               title="Vista tarjetas">
               <LayoutGrid className="w-3.5 h-3.5" />
             </button>
-            <button onClick={() => setListView(true)}
-              className={`p-1.5 rounded transition-colors ${listView ? "bg-white shadow-sm text-slate-700" : "text-slate-400 hover:text-slate-600"}`}
+            <button onClick={() => setPlayerView('list')}
+              className={`p-1.5 rounded transition-colors ${playerView === 'list' ? "bg-white shadow-sm text-slate-700" : "text-slate-400 hover:text-slate-600"}`}
               title="Vista lista">
               <LayoutList className="w-3.5 h-3.5" />
+            </button>
+            <button onClick={() => setPlayerView('table')}
+              className={`p-1.5 rounded transition-colors ${playerView === 'table' ? "bg-white shadow-sm text-slate-700" : "text-slate-400 hover:text-slate-600"}`}
+              title="Vista tabla">
+              <Table className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
 
         {/* ── GRID VIEW ── */}
-        {!listView && (
+        {playerView === 'grid' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {filtered.map((player) => {
               const playerTasks = tasks.filter((t) => t.playerId === player.id && t.status !== "completada");
@@ -867,7 +873,7 @@ export function Dashboard({
         )}
 
         {/* ── LIST VIEW ── */}
-        {listView && (
+        {playerView === 'list' && (
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
             {filtered.map((player, idx) => {
               const playerTasks = tasks.filter((t) => t.playerId === player.id && t.status !== "completada");
@@ -950,7 +956,121 @@ export function Dashboard({
           </div>
         )}
 
-        {filtered.length === 0 && (
+        {/* ── TABLE VIEW ── */}
+        {playerView === 'table' && (
+          <div className="bg-white border border-slate-200 rounded-xl overflow-x-auto">
+            <table className="w-full min-w-[700px] text-sm">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50 text-[10px] text-slate-500 uppercase tracking-wider">
+                  <th className="text-left px-4 py-2.5 font-semibold">Jugador</th>
+                  <th className="text-left px-3 py-2.5 font-semibold">Posición</th>
+                  <th className="text-left px-3 py-2.5 font-semibold">Edad</th>
+                  <th className="text-left px-3 py-2.5 font-semibold">Nac.</th>
+                  <th className="text-left px-3 py-2.5 font-semibold">Club</th>
+                  {currentProfile.is_admin && <th className="text-left px-3 py-2.5 font-semibold">Repr.</th>}
+                  <th className="text-left px-3 py-2.5 font-semibold">Contrato</th>
+                  <th className="text-left px-3 py-2.5 font-semibold">Gestor</th>
+                  <th className="text-left px-3 py-2.5 font-semibold">Tareas</th>
+                  {selectMode && <th className="px-3 py-2.5 w-8" />}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {filtered.map((player) => {
+                  const playerTasks = tasks.filter(t => t.playerId === player.id && t.status !== 'completada')
+                  const urgent = playerTasks.filter(t => t.priority === 'alta')
+                  const age = calcAge(player.birthDate)
+                  const repEnd = player.representationContract.end
+                  const repDaysLeft = repEnd ? Math.ceil((new Date(repEnd).getTime() - Date.now()) / (1000*60*60*24)) : Infinity
+                  const repEndStr = repEnd ? new Date(repEnd).toLocaleDateString('es-ES', { month: 'short', year: '2-digit' }) : '—'
+                  const clubEnd = player.clubContract.endDate
+                  const clubDaysLeft = clubEnd ? Math.ceil((new Date(clubEnd).getTime() - Date.now()) / (1000*60*60*24)) : Infinity
+                  const clubEndStr = clubEnd ? new Date(clubEnd).toLocaleDateString('es-ES', { month: 'short', year: '2-digit' }) : '—'
+                  const managers = player.managedBy.map(id => profiles.find(m => m.id === id)).filter(Boolean) as Profile[]
+                  const isSelected = selected.has(player.id)
+                  const isBday = isBirthdayToday(player.birthDate)
+
+                  return (
+                    <tr
+                      key={player.id}
+                      onClick={() => selectMode ? toggleSelect(player.id) : onSelectPlayer(player.id)}
+                      className={`cursor-pointer hover:bg-slate-50 transition-colors ${isSelected ? 'bg-blue-50' : ''}`}
+                    >
+                      {/* Name */}
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-[9px] font-bold text-white" style={{ background: PRIMARY }}>
+                            {player.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1">
+                              {isBday && <span className="text-xs">🎂</span>}
+                              <span className="font-semibold text-slate-800 text-xs truncate">{player.name}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      {/* Position */}
+                      <td className="px-3 py-2.5 text-xs text-slate-600 whitespace-nowrap">
+                        {player.positions[0]}{player.positions[1] ? <span className="text-slate-400"> / {player.positions[1]}</span> : ''}
+                      </td>
+                      {/* Age */}
+                      <td className="px-3 py-2.5 text-xs text-slate-600 whitespace-nowrap">{age}a</td>
+                      {/* Nationality */}
+                      <td className="px-3 py-2.5 text-xs text-slate-500 whitespace-nowrap">{player.nationality || '—'}</td>
+                      {/* Club */}
+                      <td className="px-3 py-2.5 text-xs text-slate-600 max-w-[140px] truncate">{clubsLabel(player.clubs)}</td>
+                      {/* Repr contract */}
+                      {currentProfile.is_admin && (
+                        <td className="px-3 py-2.5">
+                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded whitespace-nowrap ${
+                            repDaysLeft < 183 ? 'bg-red-50 text-red-600' : repDaysLeft < 365 ? 'bg-amber-50 text-amber-600' : 'bg-slate-50 text-slate-500'
+                          }`}>{repEndStr}</span>
+                        </td>
+                      )}
+                      {/* Club contract */}
+                      <td className="px-3 py-2.5">
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded whitespace-nowrap ${
+                          clubDaysLeft < 183 ? 'bg-red-50 text-red-600' : clubDaysLeft < 365 ? 'bg-amber-50 text-amber-600' : 'bg-slate-50 text-slate-500'
+                        }`}>{clubEndStr}</span>
+                      </td>
+                      {/* Managers */}
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-0.5">
+                          {managers.map(m => (
+                            <span key={m.id} className="w-5 h-5 rounded-full text-[8px] font-bold flex items-center justify-center text-white flex-shrink-0" style={{ background: PRIMARY }}>{m.avatar}</span>
+                          ))}
+                          {managers.length === 0 && <span className="text-slate-300 text-xs">—</span>}
+                        </div>
+                      </td>
+                      {/* Tasks */}
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-1">
+                          {urgent.length > 0 && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200 whitespace-nowrap">{urgent.length}⚡</span>
+                          )}
+                          {playerTasks.length > 0 && (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">{playerTasks.length}</span>
+                          )}
+                        </div>
+                      </td>
+                      {/* Select checkbox */}
+                      {selectMode && (
+                        <td className="px-3 py-2.5">
+                          {isSelected ? <CheckSquare className="w-4 h-4 text-blue-600" /> : <Square className="w-4 h-4 text-slate-300" />}
+                        </td>
+                      )}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+            {filtered.length === 0 && (
+              <div className="text-center py-10 text-sm text-slate-400">No se encontraron jugadores</div>
+            )}
+          </div>
+        )}
+
+        {filtered.length === 0 && playerView !== 'table' && (
           <div className="text-center py-12 text-sm text-slate-400">No se encontraron jugadores</div>
         )}
 
