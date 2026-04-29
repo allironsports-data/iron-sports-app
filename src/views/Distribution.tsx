@@ -280,7 +280,7 @@ export function Distribution({
   // modals
   const [showAddPlayer, setShowAddPlayer] = useState(false)
   const [showAddClub, setShowAddClub] = useState(false)
-  const [showAddNeg, setShowAddNeg] = useState<{ playerId?: string; clubId?: string } | null>(null)
+  const [showAddNeg, setShowAddNeg] = useState<{ playerId?: string; clubId?: string; needPosition?: string } | null>(null)
   const [editingEntry, setEditingEntry] = useState<DistributionEntry | null>(null)
   const [editingClub, setEditingClub] = useState<Club | null>(null)
   const [editingNeg, setEditingNeg] = useState<ClubNegotiation | null>(null)
@@ -1647,13 +1647,15 @@ export function Distribution({
               const tier = getClubTier(club.league, club.country)
               const tierCfg = TIER_CONFIG[tier]
               const offeredToClub = negotiations.filter(n => n.clubId === club.id)
+              // Negs linked to this specific need (by needPosition when set, fallback to position matching for old data)
               const offeredForNeed = offeredToClub.filter(neg => {
+                if (neg.needPosition) return neg.needPosition === need.position
                 const p = players.find(pl => pl.id === neg.playerId)
                 return p && playerMatchesNeedPosition(p.positions, need.position)
               })
-              const offeredPlayerIds = new Set(offeredToClub.map(n => n.playerId))
+              const offeredForNeedPlayerIds = new Set(offeredForNeed.map(n => n.playerId))
               const suggestedPlayers = players.filter(p => {
-                if (offeredPlayerIds.has(p.id)) return false
+                if (offeredForNeedPlayerIds.has(p.id)) return false
                 if (!entries.some(e => e.playerId === p.id)) return false
                 return playerMatchesNeedPosition(p.positions, need.position)
               })
@@ -1704,7 +1706,7 @@ export function Distribution({
                           Ofrecidos · {need.position} ({offeredForNeed.length})
                         </span>
                         <button
-                          onClick={() => setShowAddNeg({ clubId: club.id })}
+                          onClick={() => setShowAddNeg({ clubId: club.id, needPosition: need.position })}
                           className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
                         >
                           <Plus className="w-3.5 h-3.5" /> Ofrecer
@@ -1763,7 +1765,11 @@ export function Distribution({
                                 </div>
                                 <button
                                   onClick={async () => {
-                                    await onCreateNegotiation({ playerId: p.id, clubId: club.id, status: 'ofrecido' })
+                                    try {
+                                      await onCreateNegotiation({ playerId: p.id, clubId: club.id, needPosition: need.position, status: 'ofrecido' })
+                                    } catch (e) {
+                                      console.error('Error al ofrecer jugador:', e)
+                                    }
                                   }}
                                   className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium px-2 py-1 rounded hover:bg-blue-50 transition-colors flex-shrink-0"
                                 >
@@ -1794,9 +1800,10 @@ export function Distribution({
 
             {selectedClub && (() => {
               const clubNegsPanel = negotiations.filter(n => n.clubId === selectedClub.id)
-              // when opened from a solicitud, filter offered players to matching position
+              // when opened from a solicitud, filter by needPosition or fall back to position matching for old data
               const displayedNegs = selectedNeedPosition
                 ? clubNegsPanel.filter(neg => {
+                    if (neg.needPosition) return neg.needPosition === selectedNeedPosition
                     const p = players.find(pl => pl.id === neg.playerId)
                     return p && playerMatchesNeedPosition(p.positions, selectedNeedPosition)
                   })
@@ -1909,8 +1916,13 @@ export function Distribution({
                                   <span className={`text-xs px-1.5 py-0.5 rounded font-bold ${pcfg.bg} ${pcfg.text}`}>{entry?.priority}</span>
                                 )}
                               </div>
-                              <div className="flex items-center gap-2 mt-0.5">
+                              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                                 <span className={`text-xs px-2 py-0.5 rounded-full ${scfg.color}`}>{scfg.label}</span>
+                                {neg.needPosition && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-medium">
+                                    {neg.needPosition}
+                                  </span>
+                                )}
                                 {neg.aisManager && <span className="text-xs font-mono text-slate-500">{neg.aisManager}</span>}
                               </div>
                               {neg.notes && <p className="text-xs text-slate-500 mt-1">{neg.notes}</p>}
@@ -1997,6 +2009,7 @@ export function Distribution({
           entries={entries}
           fixedPlayerId={showAddNeg.playerId}
           fixedClubId={showAddNeg.clubId}
+          fixedNeedPosition={showAddNeg.needPosition}
           onClose={() => setShowAddNeg(null)}
           onSave={async (data) => {
             await onCreateNegotiation(data)
@@ -2561,12 +2574,13 @@ function AddClubModal({ onClose, onSave, leagueOptions }: {
 
 // ── ADD NEGOTIATION MODAL ─────────────────────────────────────
 
-function AddNegotiationModal({ players, clubs, entries, fixedPlayerId, fixedClubId, onClose, onSave }: {
+function AddNegotiationModal({ players, clubs, entries, fixedPlayerId, fixedClubId, fixedNeedPosition, onClose, onSave }: {
   players: Player[]
   clubs: Club[]
   entries: DistributionEntry[]
   fixedPlayerId?: string
   fixedClubId?: string
+  fixedNeedPosition?: string
   onClose: () => void
   onSave: (data: Omit<ClubNegotiation, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>
 }) {
@@ -2584,13 +2598,19 @@ function AddNegotiationModal({ players, clubs, entries, fixedPlayerId, fixedClub
     if (!playerId || !clubId) return
     setSaving(true)
     try {
-      await onSave({ playerId, clubId, status, aisManager: aisManager || undefined, notes: notes || undefined })
+      await onSave({ playerId, clubId, needPosition: fixedNeedPosition, status, aisManager: aisManager || undefined, notes: notes || undefined })
     } finally { setSaving(false) }
   }
 
   return (
     <ModalShell title="Añadir negociación" onClose={onClose}>
       <div className="space-y-3">
+        {fixedNeedPosition && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+            <AlertCircle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+            <span className="text-xs text-amber-700">Petición: <strong>{fixedNeedPosition}</strong></span>
+          </div>
+        )}
         {!fixedPlayerId && (
           <div>
             <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Jugador *</label>
@@ -2805,6 +2825,12 @@ function EditNegotiationModal({ neg, clubs, players, onClose, onSave, onDelete }
             <span className="text-slate-400">→</span>
             <Building2 className="w-4 h-4 text-slate-400" />
             <span>{club.name}</span>
+          </div>
+        )}
+        {neg.needPosition && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+            <AlertCircle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+            <span className="text-xs text-amber-700">Petición: <strong>{neg.needPosition}</strong></span>
           </div>
         )}
         <div>

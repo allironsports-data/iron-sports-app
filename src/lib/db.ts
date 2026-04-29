@@ -445,6 +445,7 @@ function dbToNegotiation(row: Record<string, unknown>): ClubNegotiation {
     id: row.id as string,
     playerId: row.player_id as string,
     clubId: row.club_id as string,
+    needPosition: (row.need_position as string) ?? undefined,
     status: (row.status as ClubNegotiation['status']) ?? 'ofrecido',
     aisManager: (row.ais_manager as string) ?? undefined,
     notes: (row.notes as string) ?? undefined,
@@ -467,6 +468,7 @@ export async function createNegotiation(n: Omit<ClubNegotiation, 'id' | 'created
   const { data, error } = await supabase.from('club_negotiations').insert({
     player_id: n.playerId,
     club_id: n.clubId,
+    need_position: n.needPosition ?? null,
     status: n.status,
     ais_manager: n.aisManager ?? null,
     notes: n.notes ?? null,
@@ -477,6 +479,7 @@ export async function createNegotiation(n: Omit<ClubNegotiation, 'id' | 'created
 
 export async function updateNegotiation(n: ClubNegotiation): Promise<void> {
   const { error } = await supabase.from('club_negotiations').update({
+    need_position: n.needPosition ?? null,
     status: n.status,
     ais_manager: n.aisManager ?? null,
     notes: n.notes ?? null,

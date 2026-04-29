@@ -203,6 +203,7 @@ export interface ClubNegotiation {
   id: string
   playerId: string
   clubId: string
+  needPosition?: string   // petición concreta a la que va ligada esta negociación
   status: 'pendiente' | 'ofrecido' | 'interesado' | 'negociando' | 'cerrado' | 'descartado'
   aisManager?: string
   notes?: string
