@@ -530,30 +530,30 @@ export function Distribution({
             </button>
           ))}
         </div>
-      </header>
 
-      {/* Tabs */}
-      <div className="bg-white border-b border-slate-200 px-4 flex gap-1 overflow-x-auto">
-        {(['jugadores', 'clubes', 'solicitudes', 'pipeline'] as const).map(t => (
-          <button
-            key={t}
-            onClick={() => switchTab(t)}
-            className={`flex-shrink-0 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-              tab === t
-                ? 'border-[hsl(220,72%,36%)] text-[hsl(220,72%,36%)]'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            {t === 'jugadores' ? (
-              <><span className="hidden sm:inline">Jugadores </span>({seasonEntries.length})</>
-            ) : t === 'clubes' ? (
-              <><span className="hidden sm:inline">Clubes </span>({clubs.length})</>
-            ) : t === 'solicitudes' ? (
-              <><span className="hidden sm:inline">Solicitudes</span><span className="sm:hidden">Solic.</span>{clubNeeds.length > 0 ? ` (${clubNeeds.length})` : ''}</>
-            ) : 'Pipeline'}
-          </button>
-        ))}
-      </div>
+        {/* Sub-tabs — inside header so they stay sticky */}
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 flex gap-1 border-t border-slate-100 overflow-x-auto scrollbar-none">
+          {(['jugadores', 'clubes', 'solicitudes', 'pipeline'] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => switchTab(t)}
+              className={`flex-shrink-0 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                tab === t
+                  ? 'border-[hsl(220,72%,36%)] text-[hsl(220,72%,36%)]'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              {t === 'jugadores' ? (
+                <><span className="hidden sm:inline">Jugadores </span>({seasonEntries.length})</>
+              ) : t === 'clubes' ? (
+                <><span className="hidden sm:inline">Clubes </span>({clubs.length})</>
+              ) : t === 'solicitudes' ? (
+                <><span className="hidden sm:inline">Solicitudes</span><span className="sm:hidden">Solic.</span>{clubNeeds.length > 0 ? ` (${clubNeeds.length})` : ''}</>
+              ) : 'Pipeline'}
+            </button>
+          ))}
+        </div>
+      </header>
 
       {/* Search bar */}
       {tab !== 'pipeline' && (

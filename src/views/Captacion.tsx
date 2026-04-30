@@ -1042,7 +1042,7 @@ export function Captacion({
     <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* Header */}
       <header ref={headerRef} className="bg-white border-b border-slate-200 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 flex items-center gap-3 h-12 sm:h-14">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center gap-3 h-12 sm:h-14">
           <img src={logoImg} alt="All Iron Sports" className="h-7 sm:h-8 w-auto rounded" />
           <span className="text-xs font-bold text-slate-800 tracking-wide uppercase hidden sm:block">All Iron Sports</span>
           <div className="flex-1" />
@@ -1055,7 +1055,7 @@ export function Captacion({
         </div>
 
         {/* Main nav tabs */}
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 flex items-center border-t border-slate-100 overflow-x-auto scrollbar-none">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center border-t border-slate-100 overflow-x-auto scrollbar-none">
           {([
             { id: 'tareas' as const, label: 'Tareas' },
             { id: 'jugadores' as const, label: 'Jugadores' },
@@ -1081,7 +1081,7 @@ export function Captacion({
         </div>
 
         {/* Captación sub-tabs */}
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 flex items-center gap-1 py-1.5 border-t border-slate-100 bg-slate-50/60 overflow-x-auto scrollbar-none">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center gap-1 py-1.5 border-t border-slate-100 bg-slate-50/60 overflow-x-auto scrollbar-none">
           {([
             { id: 'jugadores' as CaptacionTab, label: 'Jugadores', labelMobile: 'Jugadores', icon: <Users className="w-3.5 h-3.5" /> },
             { id: 'informes' as CaptacionTab, label: 'Informes recientes', labelMobile: 'Informes', icon: <FileText className="w-3.5 h-3.5" /> },
@@ -1110,7 +1110,7 @@ export function Captacion({
         <>
           {/* Filters bar */}
           <div className="bg-white border-b border-slate-200 px-3 sm:px-6 py-3">
-            <div className="max-w-7xl mx-auto flex flex-wrap items-center gap-2">
+            <div className="max-w-6xl mx-auto flex flex-wrap items-center gap-2">
               {/* Search */}
               <div className="relative flex-1 min-w-[180px] max-w-xs">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
@@ -1235,7 +1235,7 @@ export function Captacion({
           </div>
 
           {/* Table */}
-          <div className="flex-1 max-w-7xl mx-auto w-full px-3 sm:px-6 py-4">
+          <div className="flex-1 max-w-6xl mx-auto w-full px-3 sm:px-6 py-4">
             <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
