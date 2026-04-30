@@ -37,6 +37,8 @@ export interface TaskComment {
   attachments: TaskAttachment[];
 }
 
+export type TaskLabel = 'General' | 'Scouting' | 'Distribución' | 'Negociación' | 'Reunión/Comida' | 'Administrativa' | 'Seguimiento' | 'Informe'
+
 export interface Task {
   id: string;
   playerId: string;
@@ -47,6 +49,7 @@ export interface Task {
   dependsOnId?: string;
   status: "pendiente" | "en_progreso" | "completada";
   priority: "alta" | "media" | "baja";
+  label?: TaskLabel;          // optional task type tag
   dueDate?: string;           // optional
   createdAt: string;
   comments: TaskComment[];

@@ -6,7 +6,7 @@ import {
   Eye,
 } from 'lucide-react'
 import logoImg from '../assets/logo.jpeg'
-import type { Player, Club, ClubNeed, DistributionEntry, ClubNegotiation } from '../types'
+import type { Player, Club, ClubNeed, DistributionEntry, ClubNegotiation, ClubNegotiationUpdate } from '../types'
 import type { Profile } from '../contexts/AuthContext'
 
 // ── constants ─────────────────────────────────────────────────
@@ -2046,10 +2046,16 @@ export function Distribution({
           neg={editingNeg}
           clubs={clubs}
           players={players}
+          currentProfile={currentProfile}
           onClose={() => setEditingNeg(null)}
           onSave={async (data) => {
             await onUpdateNegotiation({ ...editingNeg, ...data })
             setEditingNeg(null)
+          }}
+          onSaveUpdate={async (update) => {
+            const updated = { ...editingNeg, updates: [...(editingNeg.updates ?? []), update] }
+            await onUpdateNegotiation(updated)
+            setEditingNeg(updated)
           }}
           onDelete={async () => {
             await onDeleteNegotiation(editingNeg.id)
@@ -2794,25 +2800,44 @@ function EditClubModal({ club, leagueOptions = [], onClose, onSave }: {
 
 // ── EDIT NEGOTIATION MODAL ────────────────────────────────────
 
-function EditNegotiationModal({ neg, clubs, players, onClose, onSave, onDelete }: {
+function EditNegotiationModal({ neg, clubs, players, currentProfile, onClose, onSave, onSaveUpdate, onDelete }: {
   neg: ClubNegotiation
   clubs: Club[]
   players: Player[]
+  currentProfile: Profile
   onClose: () => void
   onSave: (data: Partial<ClubNegotiation>) => Promise<void>
+  onSaveUpdate: (update: ClubNegotiationUpdate) => Promise<void>
   onDelete: () => Promise<void>
 }) {
   const [status, setStatus] = useState(neg.status)
   const [aisManager, setAisManager] = useState(neg.aisManager ?? '')
   const [notes, setNotes] = useState(neg.notes ?? '')
   const [saving, setSaving] = useState(false)
+  const [updateText, setUpdateText] = useState('')
+  const [savingUpdate, setSavingUpdate] = useState(false)
   const player = players.find(p => p.id === neg.playerId)
   const club = clubs.find(c => c.id === neg.clubId)
+  const sortedUpdates = [...(neg.updates ?? [])].sort((a, b) => b.date.localeCompare(a.date))
 
   async function handleSave() {
     setSaving(true)
     try { await onSave({ status, aisManager: aisManager || undefined, notes: notes || undefined }) }
     finally { setSaving(false) }
+  }
+
+  async function handleAddUpdate() {
+    if (!updateText.trim()) return
+    setSavingUpdate(true)
+    try {
+      await onSaveUpdate({
+        id: crypto.randomUUID(),
+        text: updateText.trim(),
+        date: new Date().toISOString(),
+        author: currentProfile.avatar,
+      })
+      setUpdateText('')
+    } finally { setSavingUpdate(false) }
   }
 
   return (
@@ -2855,7 +2880,48 @@ function EditNegotiationModal({ neg, clubs, players, onClose, onSave, onDelete }
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Notas</label>
           <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none" />
         </div>
-        <div className="flex gap-2">
+
+        {/* ── Notas de seguimiento ── */}
+        <div className="border-t border-slate-100 pt-3">
+          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Notas de seguimiento</div>
+          {sortedUpdates.length > 0 && (
+            <div className="space-y-1.5 mb-3 max-h-40 overflow-y-auto">
+              {sortedUpdates.map(u => (
+                <div key={u.id} className="bg-slate-50 rounded-lg px-3 py-2">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    {u.author && <span className="text-[10px] font-mono bg-white border border-slate-200 text-slate-500 px-1.5 py-0.5 rounded">{u.author}</span>}
+                    <span className="text-[10px] text-slate-400 ml-auto">
+                      {new Date(u.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
+                      {' '}
+                      {new Date(u.date).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-700">{u.text}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          {sortedUpdates.length === 0 && (
+            <p className="text-xs text-slate-400 text-center py-2 mb-2">Sin notas aún</p>
+          )}
+          <textarea
+            value={updateText}
+            onChange={e => setUpdateText(e.target.value)}
+            placeholder="Añadir nota de seguimiento…"
+            rows={2}
+            className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-blue-200"
+            onKeyDown={e => { if (e.key === 'Enter' && e.metaKey) { e.preventDefault(); handleAddUpdate() } }}
+          />
+          <button
+            onClick={handleAddUpdate}
+            disabled={!updateText.trim() || savingUpdate}
+            className="mt-1.5 w-full py-1.5 text-xs bg-slate-100 text-slate-600 rounded-lg disabled:opacity-40 hover:bg-slate-200 transition-colors font-medium"
+          >
+            {savingUpdate ? '…' : 'Guardar nota'}
+          </button>
+        </div>
+
+        <div className="flex gap-2 pt-1">
           <button
             onClick={async () => { if (!confirm('¿Eliminar esta negociación?')) return; await onDelete() }}
             className="flex-1 py-2 border border-red-200 text-red-500 text-sm rounded-lg hover:bg-red-50"

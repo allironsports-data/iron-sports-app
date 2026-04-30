@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { X, Trash2, ChevronRight, Send } from "lucide-react";
-import type { Task, Player } from "../types";
+import type { Task, Player, TaskLabel } from "../types";
 import type { Profile } from "../contexts/AuthContext";
 import * as db from "../lib/db";
 
@@ -28,6 +28,7 @@ export function TaskDetailPanel({
   const [description, setDescription] = useState(task.description);
   const [status, setStatus]         = useState<Task["status"]>(task.status);
   const [assigneeId, setAssigneeId] = useState(task.assigneeId);
+  const [label, setLabel]           = useState<TaskLabel | "">(task.label ?? "");
   const [watchers, setWatchers]     = useState<string[]>(task.watchers ?? []);
   const [commentText, setCommentText] = useState("");
   const [localComments, setLocalComments] = useState(task.comments ?? []);
@@ -47,17 +48,18 @@ export function TaskDetailPanel({
     setDescription(task.description);
     setStatus(task.status);
     setAssigneeId(task.assigneeId);
+    setLabel(task.label ?? "");
     setWatchers(task.watchers ?? []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task.id, task.status]);
 
   const handleSave = () => {
-    onSaveAndClose({ ...task, title, description, status, assigneeId, watchers });
+    onSaveAndClose({ ...task, title, description, status, assigneeId, label: label || undefined, watchers });
   };
 
   const handleStatusChange = (newStatus: Task["status"]) => {
     setStatus(newStatus);
-    onUpdate({ ...task, title, description, status: newStatus, assigneeId, watchers });
+    onUpdate({ ...task, title, description, status: newStatus, assigneeId, label: label || undefined, watchers });
   };
 
   const toggleWatcher = (profileId: string) => {
@@ -139,6 +141,11 @@ export function TaskDetailPanel({
                     >
                       {priorityBadge.label}
                     </span>
+                    {task.label && (
+                      <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200">
+                        {task.label}
+                      </span>
+                    )}
                     {isOverdue && (
                       <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200">
                         Vencida
@@ -290,6 +297,29 @@ export function TaskDetailPanel({
                     >
                       {task.priority === "alta" ? "Alta" : task.priority === "media" ? "Media" : "Baja"}
                     </span>
+                  </div>
+
+                  {/* Label / Tipo */}
+                  <div className="bg-slate-50 rounded-xl p-3 col-span-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Tipo</p>
+                    {canEdit ? (
+                      <select
+                        value={label}
+                        onChange={e => setLabel(e.target.value as TaskLabel | "")}
+                        className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+                      >
+                        <option value="">— Sin tipo —</option>
+                        {(['General','Scouting','Distribución','Negociación','Reunión/Comida','Administrativa','Seguimiento','Informe'] as const).map(l => (
+                          <option key={l} value={l}>{l}</option>
+                        ))}
+                      </select>
+                    ) : task.label ? (
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200">
+                        {task.label}
+                      </span>
+                    ) : (
+                      <p className="text-xs text-slate-400">Sin tipo</p>
+                    )}
                   </div>
 
                   {/* Created */}

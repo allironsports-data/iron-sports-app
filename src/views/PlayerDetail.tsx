@@ -61,7 +61,7 @@ export function PlayerDetail({
   const [showEditPlayer, setShowEditPlayer] = useState(false);
 
   const pendingCount   = tasks.filter((t) => t.status !== "completada").length;
-  const rendimCount    = (player.matchReports?.length ?? 0) + player.performance.length + (player.videoSessions?.length ?? 0);
+  const rendimCount    = player.performance.length + (player.videoSessions?.length ?? 0);
   const distribCount   = playerNegotiations.length || undefined;
 
   const navGroups: NavGroup[] = [
@@ -939,37 +939,18 @@ function ContractTab({ player, onUpdate, isAdmin }: { player: Player; onUpdate: 
 
 /* ========== PERFORMANCE TAB ========== */
 function PerformanceTab({ player, profiles, onUpdate }: { player: Player; profiles: Profile[]; onUpdate: (p: Player) => void }) {
-  const [section, setSection] = useState<"partidos" | "informes" | "video">("partidos");
-  const [showAddMatch, setShowAddMatch] = useState(false);
+  const [section, setSection] = useState<"informes" | "video">("informes");
   const [showAddNote, setShowAddNote] = useState(false);
   const [showAddVideo, setShowAddVideo] = useState(false);
-  const [editingMatch, setEditingMatch] = useState<MatchReport | null>(null);
 
-  const matches = [...(player.matchReports ?? [])].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   const videos = [...(player.videoSessions ?? [])].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   const notes = [...player.performance].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-  // Auto-calculated stats from match reports
-  const played = matches.filter(m => m.role !== "no_convocado");
-  const starters = matches.filter(m => m.role === "titular");
-  const subs = matches.filter(m => m.role === "suplente");
-  const totalMins = played.reduce((s, m) => s + m.minutesPlayed, 0);
-  const totalGoals = played.reduce((s, m) => s + m.goals, 0);
-  const totalAssists = played.reduce((s, m) => s + m.assists, 0);
-  const totalYellow = played.reduce((s, m) => s + m.yellowCards, 0);
-  const totalRed = played.filter(m => m.redCard).length;
-  const goalsP90 = totalMins > 0 ? ((totalGoals / totalMins) * 90).toFixed(2) : "—";
-  const assistsP90 = totalMins > 0 ? ((totalAssists / totalMins) * 90).toFixed(2) : "—";
-  const avgRating = played.filter(m => m.rating).length > 0
-    ? (played.reduce((s, m) => s + (m.rating ?? 0), 0) / played.filter(m => m.rating).length).toFixed(1)
-    : "—";
 
   return (
     <div className="space-y-4">
       {/* Sub-nav */}
       <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
         {([
-          { id: "partidos", label: "Partidos", icon: <BarChart2 className="w-3.5 h-3.5" />, count: matches.length },
           { id: "informes", label: "Informes", icon: <BookOpen className="w-3.5 h-3.5" />, count: notes.length },
           { id: "video", label: "Vídeoanalisis", icon: <Video className="w-3.5 h-3.5" />, count: videos.length },
         ] as const).map(s => (
@@ -982,106 +963,6 @@ function PerformanceTab({ player, profiles, onUpdate }: { player: Player; profil
           </button>
         ))}
       </div>
-
-      {/* PARTIDOS SECTION */}
-      {section === "partidos" && (
-        <div className="space-y-4">
-          {/* Stats grid */}
-          {played.length > 0 && (
-            <div className="bg-white border border-slate-200 rounded-lg p-4">
-              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Estadísticas de temporada</h3>
-              <div className="grid grid-cols-4 gap-3 mb-3">
-                {[
-                  { label: "PJ", value: played.length, sub: `${starters.length}T / ${subs.length}S` },
-                  { label: "Minutos", value: totalMins, sub: `${Math.round(totalMins / Math.max(played.length, 1))} prom.` },
-                  { label: "Goles", value: totalGoals, sub: `${goalsP90}/90` },
-                  { label: "Asist.", value: totalAssists, sub: `${assistsP90}/90` },
-                ].map(stat => (
-                  <div key={stat.label} className="text-center">
-                    <p className="text-2xl font-bold text-slate-800">{stat.value}</p>
-                    <p className="text-[10px] font-semibold text-slate-500 uppercase">{stat.label}</p>
-                    <p className="text-[10px] text-slate-400">{stat.sub}</p>
-                  </div>
-                ))}
-              </div>
-              <div className="grid grid-cols-3 gap-3 border-t border-slate-100 pt-3">
-                {[
-                  { label: "Nota media", value: avgRating, color: "text-amber-600" },
-                  { label: "Tarjetas 🟨", value: totalYellow, color: "text-amber-500" },
-                  { label: "Tarjetas 🟥", value: totalRed, color: "text-red-600" },
-                ].map(stat => (
-                  <div key={stat.label} className="text-center">
-                    <p className={`text-xl font-bold ${stat.color}`}>{stat.value}</p>
-                    <p className="text-[10px] text-slate-400">{stat.label}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Match list */}
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-slate-800">Fichas de partido</h3>
-            <button onClick={() => setShowAddMatch(true)}
-              className="inline-flex items-center gap-1 rounded-md text-white text-xs font-medium px-2.5 py-1.5"
-              style={{ background: PRIMARY }}>
-              <Plus className="w-3.5 h-3.5" />Nueva ficha
-            </button>
-          </div>
-
-          {matches.length === 0 && (
-            <div className="text-center py-10 text-sm text-slate-400 bg-white border border-slate-200 rounded-lg">
-              Sin fichas de partido — añade la primera
-            </div>
-          )}
-
-          <div className="space-y-2">
-            {matches.map(match => (
-              <div key={match.id} className="bg-white border border-slate-200 rounded-lg p-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${
-                        match.role === "titular" ? "bg-blue-100 text-blue-700"
-                        : match.role === "suplente" ? "bg-amber-100 text-amber-700"
-                        : "bg-slate-100 text-slate-500"
-                      }`}>{match.role === "no_convocado" ? "NC" : match.role === "titular" ? "Titular" : "Suplente"}</span>
-                      <span className="text-sm font-semibold text-slate-800">vs {match.opponent}</span>
-                      <span className="text-[10px] text-slate-400 bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded">{match.competition}</span>
-                      <span className="text-[10px] text-slate-400">{match.venue}</span>
-                    </div>
-                    <p className="text-[11px] text-slate-400 mt-0.5">{new Date(match.date).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}</p>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {match.rating && (
-                      <span className={`text-sm font-bold ${match.rating >= 8 ? "text-emerald-600" : match.rating >= 6 ? "text-amber-600" : "text-red-500"}`}>
-                        {match.rating}/10
-                      </span>
-                    )}
-                    <button onClick={() => setEditingMatch(match)} className="p-1 text-slate-400 hover:text-slate-600">
-                      <Edit3 className="w-3.5 h-3.5" />
-                    </button>
-                    <button onClick={() => onUpdate({ ...player, matchReports: player.matchReports.filter(m => m.id !== match.id) })}
-                      className="p-1 text-slate-300 hover:text-red-500">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-                {match.role !== "no_convocado" && (
-                  <div className="flex items-center gap-4 mt-2 pt-2 border-t border-slate-50">
-                    <StatChip label="min" value={match.minutesPlayed} />
-                    <StatChip label="⚽" value={match.goals} highlight={match.goals > 0} />
-                    <StatChip label="🅰️" value={match.assists} highlight={match.assists > 0} />
-                    {match.yellowCards > 0 && <StatChip label="🟨" value={match.yellowCards} />}
-                    {match.redCard && <span className="text-[10px] font-semibold text-red-600">🟥 Roja</span>}
-                    {match.notes && <p className="text-[11px] text-slate-400 ml-auto truncate max-w-[120px]" title={match.notes}>{match.notes}</p>}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* INFORMES SECTION */}
       {section === "informes" && (
@@ -1176,19 +1057,6 @@ function PerformanceTab({ player, profiles, onUpdate }: { player: Player; profil
       )}
 
       {/* Modals */}
-      {(showAddMatch || editingMatch) && (
-        <MatchReportModal
-          initial={editingMatch ?? undefined}
-          onClose={() => { setShowAddMatch(false); setEditingMatch(null); }}
-          onSave={(m) => {
-            const reports = editingMatch
-              ? player.matchReports.map(r => r.id === m.id ? m : r)
-              : [m, ...player.matchReports];
-            onUpdate({ ...player, matchReports: reports });
-            setShowAddMatch(false); setEditingMatch(null);
-          }}
-        />
-      )}
       {showAddNote && (
         <AddPerformanceModal profiles={profiles} onClose={() => setShowAddNote(false)}
           onAdd={(note) => { onUpdate({ ...player, performance: [note, ...player.performance] }); setShowAddNote(false); }} />

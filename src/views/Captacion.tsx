@@ -79,6 +79,17 @@ function fmtDate(iso?: string): string {
   return new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+function relativeDate(iso?: string): string {
+  if (!iso) return ''
+  const diff = Date.now() - new Date(iso).getTime()
+  const days = Math.floor(diff / 86400000)
+  if (days === 0) return 'hoy'
+  if (days === 1) return 'ayer'
+  if (days < 7) return `hace ${days}d`
+  if (days < 30) return `hace ${Math.floor(days / 7)}sem`
+  return ''
+}
+
 // ── Sub-components ───────────────────────────────────────────
 
 function AssessmentChip({ a, small }: { a?: ScoutingAssessment; small?: boolean }) {
@@ -514,6 +525,68 @@ interface Props {
   onRemoveMatchPlayer: (matchId: string, playerId: string) => Promise<void>
 }
 
+// ── MatchFormPanel — isolated so keystrokes don't re-render the whole list ──
+type MatchFormState = { date: string; homeTeam: string; awayTeam: string; competition: string; assignedTo: string; viewMode: 'video' | 'campo'; notes: string }
+function emptyMatchForm(): MatchFormState {
+  return { date: '', homeTeam: '', awayTeam: '', competition: '', assignedTo: '', viewMode: 'video', notes: '' }
+}
+function MatchFormPanel({ initial, profiles, onSave, onCancel }: {
+  initial?: ScoutingMatch
+  profiles: Profile[]
+  onSave: (f: MatchFormState) => Promise<void>
+  onCancel: () => void
+}) {
+  const [form, setForm] = useState<MatchFormState>(initial
+    ? { date: initial.date, homeTeam: initial.homeTeam, awayTeam: initial.awayTeam, competition: initial.competition ?? '', assignedTo: initial.assignedTo ?? '', viewMode: initial.viewMode ?? 'video', notes: initial.notes ?? '' }
+    : emptyMatchForm()
+  )
+  const [saving, setSaving] = useState(false)
+  const set = (k: keyof MatchFormState, v: string) => setForm(f => ({ ...f, [k]: v }))
+  async function handleSave() {
+    if (!form.homeTeam.trim() || !form.awayTeam.trim() || !form.date) return
+    setSaving(true)
+    try { await onSave(form) } finally { setSaving(false) }
+  }
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+      <h3 className="text-sm font-semibold text-slate-700">{initial ? 'Editar partido' : 'Nuevo partido'}</h3>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <FormRow label="Fecha"><input type="date" value={form.date} onChange={e => set('date', e.target.value)} className="field" /></FormRow>
+        <FormRow label="Competición">
+          <input value={form.competition} onChange={e => set('competition', e.target.value)} list="competition-options" className="field" placeholder="Liga, Copa..." />
+          <datalist id="competition-options">{COMPETITION_OPTIONS.map(c => <option key={c} value={c} />)}</datalist>
+        </FormRow>
+        <FormRow label="Visualización">
+          <select value={form.viewMode} onChange={e => set('viewMode', e.target.value as 'video' | 'campo')} className="field">
+            <option value="video">📹 Vídeo</option>
+            <option value="campo">🏟️ Campo</option>
+          </select>
+        </FormRow>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <FormRow label="Local"><input value={form.homeTeam} onChange={e => set('homeTeam', e.target.value)} className="field" placeholder="Equipo local" /></FormRow>
+        <FormRow label="Visitante"><input value={form.awayTeam} onChange={e => set('awayTeam', e.target.value)} className="field" placeholder="Equipo visitante" /></FormRow>
+      </div>
+      <FormRow label="Asignado a">
+        <select value={form.assignedTo} onChange={e => set('assignedTo', e.target.value)} className="field">
+          <option value="">Sin asignar</option>
+          {profiles.map(p => <option key={p.id} value={p.avatar}>{p.avatar} · {p.name}</option>)}
+        </select>
+      </FormRow>
+      <FormRow label="Notas">
+        <textarea value={form.notes} onChange={e => set('notes', e.target.value)} rows={2} className="field resize-none" placeholder="Jugadores vistos, observaciones..." />
+      </FormRow>
+      <div className="flex gap-2">
+        <button onClick={onCancel} className="flex-1 py-2 text-sm border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50">Cancelar</button>
+        <button onClick={handleSave} disabled={saving || !form.homeTeam.trim() || !form.awayTeam.trim() || !form.date}
+          className="flex-1 py-2 text-sm bg-[hsl(220,72%,26%)] text-white rounded-lg font-medium hover:bg-[hsl(220,72%,20%)] disabled:opacity-40">
+          {saving ? 'Guardando...' : initial ? 'Guardar cambios' : 'Añadir partido'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ── Main component ───────────────────────────────────────────
 
 export function Captacion({
@@ -585,8 +658,6 @@ export function Captacion({
   // ── match state ──
   const [showAddMatch, setShowAddMatch] = useState(false)
   const [editingMatch, setEditingMatch] = useState<ScoutingMatch | null>(null)
-  const [matchForm, setMatchForm] = useState({ date: '', homeTeam: '', awayTeam: '', competition: '', assignedTo: '', viewMode: 'video' as 'video' | 'campo', notes: '' })
-  const [savingMatch, setSavingMatch] = useState(false)
 
   // ── match filters ──
   const [matchSearch, setMatchSearch] = useState('')
@@ -594,6 +665,7 @@ export function Captacion({
   const [matchCompFilter, setMatchCompFilter] = useState('all')
   const [matchModeFilter, setMatchModeFilter] = useState<'all' | 'video' | 'campo'>('all')
   const [matchStatusFilter, setMatchStatusFilter] = useState<'all' | 'visto' | 'pendiente'>('all')
+  const [reportPersonaFilter, setReportPersonaFilter] = useState('all')
 
   // ── pagination ──
   const PAGE_SIZE = 50
@@ -763,12 +835,28 @@ export function Captacion({
     })
   }, [scoutingMatches, matchSearch, matchPersonaFilter, matchCompFilter, matchModeFilter, matchStatusFilter])
 
+  // ── matchPlayers lookup map (avoids O(n*m) scan per row during render) ──
+  const matchPlayersByMatchId = useMemo(() => {
+    const map: Record<string, string[]> = {}
+    for (const mp of matchPlayers) {
+      if (!map[mp.matchId]) map[mp.matchId] = []
+      map[mp.matchId].push(mp.playerId)
+    }
+    return map
+  }, [matchPlayers])
+
   // ── recent reports ──
+  const reportPersonas = useMemo(() => {
+    const set = new Set(scoutingReports.map(r => r.persona).filter(Boolean) as string[])
+    return Array.from(set).sort()
+  }, [scoutingReports])
+
   const recentReports = useMemo(() => {
     return [...scoutingReports]
       .sort((a, b) => (b.fecha ?? b.createdAt).localeCompare(a.fecha ?? a.createdAt))
+      .filter(r => reportPersonaFilter === 'all' || r.persona === reportPersonaFilter)
       .slice(0, 60)
-  }, [scoutingReports])
+  }, [scoutingReports, reportPersonaFilter])
 
   // ── handlers ──
 
@@ -893,38 +981,31 @@ export function Captacion({
   }
 
   function openEditMatch(m: ScoutingMatch) {
-    setMatchForm({ date: m.date, homeTeam: m.homeTeam, awayTeam: m.awayTeam, competition: m.competition ?? '', assignedTo: m.assignedTo ?? '', viewMode: m.viewMode ?? 'video', notes: m.notes ?? '' })
     setEditingMatch(m)
     setShowAddMatch(true)
   }
 
-  async function handleSaveMatch() {
-    if (!matchForm.homeTeam.trim() || !matchForm.awayTeam.trim() || !matchForm.date) return
-    setSavingMatch(true)
-    try {
-      const payload = {
-        date: matchForm.date,
-        homeTeam: matchForm.homeTeam.trim(),
-        awayTeam: matchForm.awayTeam.trim(),
-        competition: matchForm.competition.trim() || undefined,
-        assignedTo: matchForm.assignedTo.trim() || undefined,
-        viewMode: matchForm.viewMode,
-        status: (editingMatch?.status ?? 'pendiente') as 'pendiente' | 'visto',
-        notes: matchForm.notes.trim() || undefined,
-      }
-      if (editingMatch) {
-        const updated: ScoutingMatch = { ...editingMatch, ...payload }
-        await db.updateScoutingMatch(updated)
-        onUpdateMatch(updated)
-      } else {
-        const saved = await db.createScoutingMatch(payload)
-        onAddMatch(saved)
-      }
-      setShowAddMatch(false)
-      setEditingMatch(null)
-    } finally {
-      setSavingMatch(false)
+  async function handleSaveMatch(form: MatchFormState) {
+    const payload = {
+      date: form.date,
+      homeTeam: form.homeTeam.trim(),
+      awayTeam: form.awayTeam.trim(),
+      competition: form.competition.trim() || undefined,
+      assignedTo: form.assignedTo.trim() || undefined,
+      viewMode: form.viewMode,
+      status: (editingMatch?.status ?? 'pendiente') as 'pendiente' | 'visto',
+      notes: form.notes.trim() || undefined,
     }
+    if (editingMatch) {
+      const updated: ScoutingMatch = { ...editingMatch, ...payload }
+      await db.updateScoutingMatch(updated)
+      onUpdateMatch(updated)
+    } else {
+      const saved = await db.createScoutingMatch(payload)
+      onAddMatch(saved)
+    }
+    setShowAddMatch(false)
+    setEditingMatch(null)
   }
 
   async function handleDeleteMatch(id: string) {
@@ -1297,13 +1378,36 @@ export function Captacion({
 
           {/* Recent reports list */}
           <div>
-            <h3 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
-              <FileText className="w-4 h-4 text-slate-400" />
-              Últimos {recentReports.length} informes
-            </h3>
+            <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+              <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                <FileText className="w-4 h-4 text-slate-400" />
+                Últimos informes ({recentReports.length})
+              </h3>
+              {/* Persona filter chips */}
+              {reportPersonas.length > 0 && (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <button
+                    onClick={() => setReportPersonaFilter('all')}
+                    className={`text-[11px] px-2 py-0.5 rounded-full font-medium transition-colors ${reportPersonaFilter === 'all' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                  >
+                    Todos
+                  </button>
+                  {reportPersonas.map(p => (
+                    <button
+                      key={p}
+                      onClick={() => setReportPersonaFilter(prev => prev === p ? 'all' : p)}
+                      className={`text-[11px] px-2 py-0.5 rounded-full font-mono font-semibold transition-colors ${reportPersonaFilter === p ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <div className="space-y-2">
               {recentReports.map(r => {
                 const player = scoutingPlayers.find(p => p.id === r.playerId)
+                const rel = relativeDate(r.fecha)
                 return (
                   <div
                     key={r.id}
@@ -1324,16 +1428,26 @@ export function Captacion({
                         {r.titulo && <div className="text-xs font-medium text-slate-600 mb-0.5">{r.titulo}</div>}
                         {r.texto && <p className="text-xs text-slate-500 leading-relaxed line-clamp-2">{r.texto}</p>}
                       </div>
-                      <div className="flex-shrink-0 text-right">
-                        <div className="text-[10px] text-slate-400">{fmtDate(r.fecha)}</div>
-                        {r.persona && (
-                          <span className="text-[10px] font-mono font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded mt-1 inline-block">{r.persona}</span>
-                        )}
+                      <div className="flex-shrink-0 text-right min-w-[72px]">
+                        <div className="flex flex-col items-end gap-0.5">
+                          {rel && (
+                            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${rel === 'hoy' ? 'bg-green-100 text-green-700' : rel === 'ayer' ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>
+                              {rel}
+                            </span>
+                          )}
+                          <div className="text-[10px] text-slate-400">{fmtDate(r.fecha)}</div>
+                          {r.persona && (
+                            <span className="text-[10px] font-mono font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">{r.persona}</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
                 )
               })}
+              {recentReports.length === 0 && (
+                <p className="text-xs text-slate-400 text-center py-6">Sin informes de {reportPersonaFilter !== 'all' ? reportPersonaFilter : 'ningún explorador'}</p>
+              )}
             </div>
           </div>
         </div>
@@ -1664,61 +1778,13 @@ export function Captacion({
 
           {/* Add/edit match form */}
           {showAddMatch && (
-            <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
-              <h3 className="text-sm font-semibold text-slate-700">{editingMatch ? 'Editar partido' : 'Nuevo partido'}</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <FormRow label="Fecha">
-                  <input type="date" value={matchForm.date} onChange={e => setMatchForm(f => ({ ...f, date: e.target.value }))} className="field" />
-                </FormRow>
-                <FormRow label="Competición">
-                  <input
-                    value={matchForm.competition}
-                    onChange={e => setMatchForm(f => ({ ...f, competition: e.target.value }))}
-                    list="competition-options"
-                    className="field"
-                    placeholder="Liga, Copa..."
-                  />
-                  <datalist id="competition-options">
-                    {COMPETITION_OPTIONS.map(c => <option key={c} value={c} />)}
-                  </datalist>
-                </FormRow>
-                <FormRow label="Visualización">
-                  <select value={matchForm.viewMode} onChange={e => setMatchForm(f => ({ ...f, viewMode: e.target.value as 'video' | 'campo' }))} className="field">
-                    <option value="video">📹 Vídeo</option>
-                    <option value="campo">🏟️ Campo</option>
-                  </select>
-                </FormRow>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <FormRow label="Local">
-                  <input value={matchForm.homeTeam} onChange={e => setMatchForm(f => ({ ...f, homeTeam: e.target.value }))} className="field" placeholder="Equipo local" />
-                </FormRow>
-                <FormRow label="Visitante">
-                  <input value={matchForm.awayTeam} onChange={e => setMatchForm(f => ({ ...f, awayTeam: e.target.value }))} className="field" placeholder="Equipo visitante" />
-                </FormRow>
-              </div>
-              <FormRow label="Asignado a">
-                <select value={matchForm.assignedTo} onChange={e => setMatchForm(f => ({ ...f, assignedTo: e.target.value }))} className="field">
-                  <option value="">Sin asignar</option>
-                  {profiles.map(p => (
-                    <option key={p.id} value={p.avatar}>{p.avatar} · {p.name}</option>
-                  ))}
-                </select>
-              </FormRow>
-              <FormRow label="Notas">
-                <textarea value={matchForm.notes} onChange={e => setMatchForm(f => ({ ...f, notes: e.target.value }))} rows={2} className="field resize-none" placeholder="Jugadores vistos, observaciones..." />
-              </FormRow>
-              <div className="flex gap-2">
-                <button onClick={() => { setShowAddMatch(false); setEditingMatch(null) }} className="flex-1 py-2 text-sm border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50">Cancelar</button>
-                <button
-                  onClick={handleSaveMatch}
-                  disabled={savingMatch || !matchForm.homeTeam.trim() || !matchForm.awayTeam.trim() || !matchForm.date}
-                  className="flex-1 py-2 text-sm bg-[hsl(220,72%,26%)] text-white rounded-lg font-medium hover:bg-[hsl(220,72%,20%)] disabled:opacity-40"
-                >
-                  {savingMatch ? 'Guardando...' : editingMatch ? 'Guardar cambios' : 'Añadir partido'}
-                </button>
-              </div>
-            </div>
+            <MatchFormPanel
+              key={editingMatch?.id ?? 'new'}
+              initial={editingMatch ?? undefined}
+              profiles={profiles}
+              onSave={handleSaveMatch}
+              onCancel={() => { setShowAddMatch(false); setEditingMatch(null) }}
+            />
           )}
 
           {/* Filtros */}
@@ -1816,7 +1882,7 @@ export function Captacion({
                 {filteredMatches.length === 0 ? (
                   <div className="text-center py-10 text-slate-400 text-sm">No hay partidos que coincidan con los filtros</div>
                 ) : filteredMatches.map(m => {
-                  const linkedPlayerIds = matchPlayers.filter(mp => mp.matchId === m.id).map(mp => mp.playerId)
+                  const linkedPlayerIds = matchPlayersByMatchId[m.id] ?? []
                   const linkedPlayers = scoutingPlayers.filter(p => linkedPlayerIds.includes(p.id))
                   const isVisto = m.status === 'visto'
                   const day = m.date.slice(8); const mon = MONTHS_ES[parseInt(m.date.slice(5, 7)) - 1]; const yr = m.date.slice(2, 4)
@@ -1896,7 +1962,7 @@ export function Captacion({
                     <tbody className="divide-y divide-slate-100">
                       {filteredMatches.map(m => {
                         const scoutName = personaToName(m.assignedTo, profiles)
-                        const linkedPlayerIds = matchPlayers.filter(mp => mp.matchId === m.id).map(mp => mp.playerId)
+                        const linkedPlayerIds = matchPlayersByMatchId[m.id] ?? []
                         return (
                           <MatchRow
                             key={m.id}

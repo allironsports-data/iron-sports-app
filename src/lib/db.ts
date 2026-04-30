@@ -142,6 +142,7 @@ function dbToTask(row: Record<string, unknown>): Task {
     dependsOnId: row.depends_on_id as string | undefined,
     status: row.status as Task['status'],
     priority: row.priority as Task['priority'],
+    label: (row.label as Task['label']) ?? undefined,
     dueDate: (row.due_date as string) ?? undefined,
     createdAt: row.created_at as string,
     comments: [],
@@ -168,6 +169,7 @@ export async function createTask(t: Task): Promise<Task> {
     depends_on_id: t.dependsOnId || null,
     status: t.status,
     priority: t.priority,
+    label: t.label ?? null,
     due_date: t.dueDate || null,
     admin_only: t.adminOnly ?? false,
   }).select().single()
@@ -184,6 +186,7 @@ export async function updateTask(t: Task): Promise<void> {
     depends_on_id: t.dependsOnId || null,
     status: t.status,
     priority: t.priority,
+    label: t.label ?? null,
     due_date: t.dueDate || null,
     admin_only: t.adminOnly ?? false,
   }).eq('id', t.id)

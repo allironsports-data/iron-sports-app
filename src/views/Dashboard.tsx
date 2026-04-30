@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { TaskDetailPanel } from "../components/TaskDetailPanel";
 import logoImg from '../assets/logo.jpeg';
-import type { Player, Task } from "../types";
+import type { Player, Task, TaskLabel } from "../types";
 import { calcAge, clubsLabel } from "../types";
 import type { Profile } from "../contexts/AuthContext";
 import type { AppNotification } from "../App";
@@ -244,6 +244,11 @@ export function Dashboard({
     ...myPlayerTasksCompleted,
     ...generalTasksCompleted,
   ].filter((t, i, arr) => arr.findIndex(x => x.id === t.id) === i);
+
+  // Same pool but filtered by the assignee chip (used in Equipo kanban)
+  const completedTasksForEquipo = assigneeFilter === "all"
+    ? completedTasksForKanban
+    : completedTasksForKanban.filter(t => t.assigneeId === assigneeFilter);
 
   // "Yo" tab computed
   const overdueMyTasks = myTasks.filter(t => t.dueDate && new Date(t.dueDate) < new Date());
@@ -731,7 +736,7 @@ export function Dashboard({
                   players={players} profiles={profiles}
                   onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
                   showCompleted={showCompletedMine} onToggleCompleted={() => setShowCompletedMine(v => !v)}
-                  completedCount={completedTasksForKanban.length} completedTasks={completedTasksForKanban}
+                  completedCount={completedTasksForEquipo.length} completedTasks={completedTasksForEquipo}
                 />
                 <KanbanCol
                   label="En progreso" dotColor="#378ADD"
@@ -745,7 +750,7 @@ export function Dashboard({
                   players={players} profiles={profiles}
                   onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
                   showCompleted={showCompletedMine} onToggleCompleted={() => setShowCompletedMine(v => !v)}
-                  completedCount={completedTasksForKanban.length} completedTasks={completedTasksForKanban}
+                  completedCount={completedTasksForEquipo.length} completedTasks={completedTasksForEquipo}
                   isCompletedCol
                 />
               </div>
@@ -1382,6 +1387,11 @@ function TaskListRow({
         </p>
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
           {player && <span className="text-xs text-slate-400 truncate">{player.name}</span>}
+          {task.label && (
+            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
+              {task.label}
+            </span>
+          )}
           {task.dueDate && (
             <span className={`text-xs ${overdue ? "text-red-500 font-medium" : "text-slate-400"}`}>
               {new Date(task.dueDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
@@ -1685,6 +1695,7 @@ function AddGeneralTaskModal({ profiles, onClose, onAdd }: {
   const [description, setDescription] = useState("");
   const [assigneeId, setAssigneeId] = useState("");
   const [priority, setPriority] = useState<"alta" | "media" | "baja">("media");
+  const [label, setLabel] = useState<TaskLabel | "">("");
   const [dueDate, setDueDate] = useState("");
   const [adminOnly, setAdminOnly] = useState(false);
 
@@ -1697,6 +1708,7 @@ function AddGeneralTaskModal({ profiles, onClose, onAdd }: {
       playerId: "general",
       assigneeId,
       priority,
+      label: label || undefined,
       status: "pendiente",
       dueDate: dueDate || undefined,
       createdAt: new Date().toISOString(),
@@ -1736,6 +1748,16 @@ function AddGeneralTaskModal({ profiles, onClose, onAdd }: {
               <option value="alta">Alta</option>
             </select>
           </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Tipo</label>
+            <select value={label} onChange={(e) => setLabel(e.target.value as TaskLabel | "")}
+              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
+              <option value="">— Sin tipo —</option>
+              {(['General','Scouting','Distribución','Negociación','Reunión/Comida','Administrativa','Seguimiento','Informe'] as const).map(l => (
+                <option key={l} value={l}>{l}</option>
+              ))}
+            </select>
+          </div>
           <F label="Fecha de vencimiento" value={dueDate} onChange={setDueDate} type="date" />
           {/* Admin-only toggle */}
           <label className="flex items-center gap-2.5 cursor-pointer select-none py-1">
@@ -1773,6 +1795,7 @@ function EditGeneralTaskModal({ task, profiles, onClose, onUpdate, onDelete }: {
   const [description, setDescription] = useState(task.description);
   const [assigneeId, setAssigneeId] = useState(task.assigneeId);
   const [priority, setPriority] = useState<"alta" | "media" | "baja">(task.priority);
+  const [label, setLabel] = useState<TaskLabel | "">(task.label ?? "");
   const [status, setStatus] = useState<"pendiente" | "en_progreso" | "completada">(task.status);
   const [dueDate, setDueDate] = useState(task.dueDate ?? "");
 
@@ -1784,6 +1807,7 @@ function EditGeneralTaskModal({ task, profiles, onClose, onUpdate, onDelete }: {
       description,
       assigneeId,
       priority,
+      label: label || undefined,
       status,
       dueDate: dueDate || undefined,
     });
@@ -1829,6 +1853,16 @@ function EditGeneralTaskModal({ task, profiles, onClose, onUpdate, onDelete }: {
               className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
               <option value="">— Sin asignar —</option>
               {profiles.map((m) => <option key={m.id} value={m.id}>{m.avatar} {m.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Tipo</label>
+            <select value={label} onChange={(e) => setLabel(e.target.value as TaskLabel | "")}
+              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
+              <option value="">— Sin tipo —</option>
+              {(['General','Scouting','Distribución','Negociación','Reunión/Comida','Administrativa','Seguimiento','Informe'] as const).map(l => (
+                <option key={l} value={l}>{l}</option>
+              ))}
             </select>
           </div>
           <F label="Fecha de vencimiento" value={dueDate} onChange={setDueDate} type="date" />
