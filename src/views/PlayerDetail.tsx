@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import logoImg from '../assets/logo.jpeg';
 import type {
   Player, Task,
-  PerformanceNote, PlayerLink, MatchReport, VideoSession,
+  PerformanceNote, PlayerLink, VideoSession,
   DistributionEntry, ClubNegotiation, Club,
 } from "../types";
 import { calcAge } from "../types";
