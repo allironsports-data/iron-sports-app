@@ -974,8 +974,6 @@ export function Captacion({
 
   // ── match handlers ──
   function openAddMatch() {
-    const today = new Date().toISOString().slice(0, 10)
-    setMatchForm({ date: today, homeTeam: '', awayTeam: '', competition: '', assignedTo: currentProfile.avatar, viewMode: 'video', notes: '' })
     setEditingMatch(null)
     setShowAddMatch(true)
   }
