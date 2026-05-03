@@ -6,6 +6,47 @@ import {
 } from 'lucide-react'
 import { CONTACTS as STATIC_CONTACTS, type Contact } from '../data/contactos'
 
+// ── Confederation grouping ────────────────────────────────────────────────────
+
+const CONFEDERATIONS: { label: string; code: string; regions: Set<string> }[] = [
+  {
+    label: 'UEFA', code: 'UEFA',
+    regions: new Set([
+      'Alemania', 'Austria', 'Azerbaijan', 'Bielorrusia', 'Bulgaria', 'Bélgica',
+      'Chipre', 'Croacia', 'Dinamarca', 'Escocia', 'Eslovaquia', 'Eslovenia',
+      'España', 'Finlandia', 'Francia', 'Georgia', 'Grecia', 'Hungría', 'Inglaterra',
+      'Israel', 'Italia', 'Kazajistán', 'Letonia', 'Lituania', 'Noruega', 'País de Gales',
+      'Países Bajos', 'Polonia', 'Portugal', 'República Checa', 'Rumanía', 'Rusia',
+      'Serbia', 'Suecia', 'Suiza', 'Turquía', 'Ucrania', 'Uzbekistán',
+    ]),
+  },
+  {
+    label: 'CONMEBOL', code: 'CONMEBOL',
+    regions: new Set([
+      'Argentina', 'Brasil', 'Chile', 'Colombia', 'Ecuador', 'Perú', 'Uruguay',
+    ]),
+  },
+  {
+    label: 'CONCACAF', code: 'CONCACAF',
+    regions: new Set(['México', 'USA / MLS', 'Costa Rica']),
+  },
+  {
+    label: 'AFC', code: 'AFC',
+    regions: new Set(['Japón', 'India', 'Irán', 'Oriente Medio', 'Asia']),
+  },
+  {
+    label: 'CAF', code: 'CAF',
+    regions: new Set(['Egipto']),
+  },
+]
+
+function getConfederation(region: string) {
+  for (const conf of CONFEDERATIONS) {
+    if (conf.regions.has(region)) return conf.code
+  }
+  return 'Otros'
+}
+
 // ── LocalStorage keys ─────────────────────────────────────────────────────────
 
 const LS_FAVORITES = 'ais_contact_favorites'
@@ -84,6 +125,7 @@ export function Contactos({ onBack }: { onBack: () => void }) {
   const [expandedTeams,  setExpandedTeams]  = useState<Set<string>>(new Set())
   const [roleFilter,     setRoleFilter]     = useState<string | null>(null)
   const [tierFilter,     setTierFilter]     = useState<string | null>(null)
+  const [expandedConfs,  setExpandedConfs]  = useState<Set<string>>(new Set(['UEFA', 'CONMEBOL', 'CONCACAF', 'AFC', 'CAF', 'Otros']))
   const [modal,          setModal]          = useState<ModalState | null>(null)
   const [deleteState,    setDeleteState]    = useState<DeleteState | null>(null)
   const [selected,       setSelected]       = useState<Set<string>>(new Set())
@@ -105,6 +147,21 @@ export function Contactos({ onBack }: { onBack: () => void }) {
   const ALL_REGIONS = useMemo(() =>
     [...new Set(ALL_CONTACTS.map(c => c.region ?? 'Sin clasificar'))].filter(Boolean).sort((a, b) => a.localeCompare(b))
   , [ALL_CONTACTS])
+
+  // Regions grouped by confederation (for sidebar)
+  const regionsByConfederation = useMemo(() => {
+    const map = new Map<string, string[]>()
+    for (const r of ALL_REGIONS) {
+      const conf = getConfederation(r)
+      if (!map.has(conf)) map.set(conf, [])
+      map.get(conf)!.push(r)
+    }
+    // Sort confederation order to match CONFEDERATIONS array
+    const confOrder = [...CONFEDERATIONS.map(c => c.code), 'Otros']
+    return confOrder
+      .filter(c => map.has(c))
+      .map(c => ({ code: c, label: CONFEDERATIONS.find(x => x.code === c)?.label ?? c, regions: map.get(c)! }))
+  }, [ALL_REGIONS])
 
   const ALL_ROLES = useMemo(() =>
     [...new Set(REAL_CONTACTS.map(c => c.role).filter((r): r is string => !!r))].sort()
@@ -410,29 +467,57 @@ export function Contactos({ onBack }: { onBack: () => void }) {
                 </span>
               </button>
 
-              {/* Region list */}
-              {ALL_REGIONS.map(region => {
-                const counts = regionCounts.get(region) ?? { total: 0, withContact: 0 }
-                const missing = counts.total - counts.withContact
-                const active = selectedRegion === region && !isSearching && !showFavorites && viewMode === 'regions'
+              {/* Region list grouped by confederation */}
+              {regionsByConfederation.map(({ code, label, regions }) => {
+                const isConfOpen = expandedConfs.has(code)
+                const confTotal = regions.reduce((s, r) => s + (regionCounts.get(r)?.withContact ?? 0), 0)
                 return (
-                  <button
-                    key={region}
-                    onClick={() => selectRegion(region)}
-                    className={`w-full text-left flex items-center justify-between px-3 py-2 text-sm transition-colors ${
-                      active ? 'bg-blue-50 text-blue-800 font-medium' : 'text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <span className="truncate flex-1 min-w-0 flex items-center gap-1">
-                      {missing > 0 && (
-                        <span title={`${missing} sin contacto`}><AlertCircle className="w-3 h-3 text-amber-400 flex-shrink-0" /></span>
-                      )}
-                      {region}
-                    </span>
-                    <span className={`ml-1 flex-shrink-0 text-[11px] rounded-full px-1.5 ${
-                      active ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-400'
-                    }`}>{counts.withContact}</span>
-                  </button>
+                  <div key={code}>
+                    {/* Confederation header */}
+                    <button
+                      onClick={() => setExpandedConfs(prev => {
+                        const next = new Set(prev)
+                        next.has(code) ? next.delete(code) : next.add(code)
+                        return next
+                      })}
+                      className="w-full flex items-center justify-between px-3 py-1.5 bg-slate-50 border-y border-slate-100 hover:bg-slate-100 transition-colors"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        {isConfOpen
+                          ? <ChevronDown className="w-3 h-3 text-slate-400" />
+                          : <ChevronRight className="w-3 h-3 text-slate-400" />
+                        }
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{label}</span>
+                      </span>
+                      <span className="text-[10px] text-slate-400">{confTotal}</span>
+                    </button>
+
+                    {/* Regions in this confederation */}
+                    {isConfOpen && regions.map(region => {
+                      const counts = regionCounts.get(region) ?? { total: 0, withContact: 0 }
+                      const missing = counts.total - counts.withContact
+                      const active = selectedRegion === region && !isSearching && !showFavorites && viewMode === 'regions'
+                      return (
+                        <button
+                          key={region}
+                          onClick={() => selectRegion(region)}
+                          className={`w-full text-left flex items-center justify-between px-3 pl-7 py-1.5 text-sm transition-colors ${
+                            active ? 'bg-blue-50 text-blue-800 font-medium' : 'text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span className="truncate flex-1 min-w-0 flex items-center gap-1">
+                            {missing > 0 && (
+                              <span title={`${missing} sin contacto`}><AlertCircle className="w-3 h-3 text-amber-400 flex-shrink-0" /></span>
+                            )}
+                            {region}
+                          </span>
+                          <span className={`ml-1 flex-shrink-0 text-[11px] rounded-full px-1.5 ${
+                            active ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-400'
+                          }`}>{counts.withContact}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
                 )
               })}
             </div>
