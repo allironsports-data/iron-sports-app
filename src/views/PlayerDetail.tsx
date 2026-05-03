@@ -992,6 +992,7 @@ function PerformanceTab({ player, profiles, onUpdate }: { player: Player; profil
                     <span className="ml-1 text-xs font-semibold text-slate-600">{note.rating}/10</span>
                   </div>
                 </div>
+                {note.title && <p className="text-sm font-semibold text-slate-800 mb-1">{note.title}</p>}
                 <p className="text-sm text-slate-700 leading-relaxed">{note.content}</p>
                 {author && (
                   <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between">
@@ -1113,6 +1114,7 @@ function AddPerformanceModal({ profiles, onClose, onAdd }: {
   const [author, setAuthor] = useState("");
   const [category, setCategory] = useState("Partido");
   const [rating, setRating] = useState(7);
+  const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
 
   return (
@@ -1122,7 +1124,7 @@ function AddPerformanceModal({ profiles, onClose, onAdd }: {
           <h2 className="text-sm font-semibold text-slate-800">Nuevo informe</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
         </div>
-        <form onSubmit={(e) => { e.preventDefault(); onAdd({ id: "pn" + Date.now(), date, authorId: author, category, rating, content }); }}
+        <form onSubmit={(e) => { e.preventDefault(); onAdd({ id: "pn" + Date.now(), date, authorId: author, category, rating, content, title: title || undefined }); }}
           className="p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <TF label="Fecha" value={date} onChange={setDate} type="date" />
@@ -1150,6 +1152,7 @@ function AddPerformanceModal({ profiles, onClose, onAdd }: {
               <input type="range" min={1} max={10} value={rating} onChange={(e) => setRating(parseInt(e.target.value))} className="w-full mt-2" />
             </div>
           </div>
+          <TF label="Título / Partido (opcional)" value={title} onChange={setTitle} placeholder="Ej: Alavés vs Athletic, 02/05/2026" />
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Informe / Observaciones</label>
             <textarea value={content} onChange={(e) => setContent(e.target.value)} required rows={4}
@@ -1400,13 +1403,13 @@ function IF({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-function TF({ label, value, onChange, type = "text", required = false }: {
-  label: string; value: string; onChange: (v: string) => void; type?: string; required?: boolean;
+function TF({ label, value, onChange, type = "text", required = false, placeholder }: {
+  label: string; value: string; onChange: (v: string) => void; type?: string; required?: boolean; placeholder?: string;
 }) {
   return (
     <div>
       <label className="block text-xs font-medium text-slate-600 mb-1">{label}</label>
-      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} required={required}
+      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} required={required} placeholder={placeholder}
         className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2" />
     </div>
   );

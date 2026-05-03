@@ -80,6 +80,7 @@ export interface PerformanceNote {
   category: string;
   rating: number;
   content: string;
+  title?: string;
 }
 
 // ---- Match report ----
