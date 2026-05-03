@@ -28,7 +28,7 @@ const ALL_ASSESSMENTS: ScoutingAssessment[] = ['Llamar', 'Seguir', 'Decidir', 'B
 const POSITIONS_SCOUTING = [
   'Portero', 'Central', 'Lateral derecho', 'Lateral izquierdo',
   'Pivote', 'Mediocentro', 'Mediapunta',
-  'Extremo derecho', 'Extremo izquierdo', 'Delantero',
+  'Extremo derecho', 'Extremo izquierdo', 'Extremo', 'Delantero',
 ]
 
 const CONCLUSION_OPTIONS = ['', 'Seguir', 'Firmar', 'Descartar'] as const
