@@ -2,8 +2,6 @@ import { useState, useMemo } from 'react'
 import { Search, ChevronRight, ChevronDown, Phone, X, ArrowLeft, Users } from 'lucide-react'
 import { CONTACTS as ALL_CONTACTS, type Contact } from '../data/contactos'
 
-const PRIMARY = 'hsl(220,72%,26%)'
-
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const EXCLUDED_REGIONS = new Set(['Agents', 'COACHS', 'PLAYERS', 'FEDERACIONES', 'Coach'])
@@ -98,7 +96,7 @@ export function Contactos({ onBack }: { onBack: () => void }) {
 
   // When searching, auto-expand all teams
   const effectiveExpanded = isSearching
-    ? new Set([...grouped.values()].flatMap(teams => [...teams.keys()]).map((t, i, arr) => arr[i]))
+    ? new Set([...grouped.values()].flatMap(teams => [...teams.keys()]))
     : expandedTeams
 
   const totalFiltered = filtered.length
