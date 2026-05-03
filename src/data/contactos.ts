@@ -1,6 +1,7 @@
 // Auto-generated — do not edit by hand
 // Source: contactos final 2 _ 160426.xlsx
 // Cleaned: regions split, teams normalized, duplicates removed, IDs for favorites
+// @ts-nocheck
 
 export interface Contact {
   id: string
@@ -11,6 +12,8 @@ export interface Contact {
   phone1?: string
   phone2?: string
   tier?: string
+  _noContact?: boolean
+  _noClub?: boolean
 }
 
 export const CONTACTS: Contact[] = [
@@ -1924,7 +1927,7 @@ export const CONTACTS: Contact[] = [
     "id": "6c4b7996aaa8",
     "region": "Croacia",
     "name": "Darko Blazincic",
-    "team": "HNK Gorice",
+    "team": "HNK Gorica",
     "role": "Tecnichal Director",
     "phone1": "+385 992646570",
     "tier": "Tier 3"
@@ -12784,7 +12787,7 @@ export const CONTACTS: Contact[] = [
     "id": "ba6776b88618",
     "region": "Alemania",
     "name": "Roland Virkus",
-    "team": "Borussia M'gladbach",
+    "team": "Borussia Mönchengladbach",
     "role": "Director general",
     "phone1": "+49 172 2523578",
     "tier": "Tier 1"
@@ -12793,7 +12796,7 @@ export const CONTACTS: Contact[] = [
     "id": "eec08008faa6",
     "region": "Alemania",
     "name": "Mirko Sandmöller",
-    "team": "Borussia M'gladbach",
+    "team": "Borussia Mönchengladbach",
     "role": "Director of Development",
     "phone2": "49 1511 477616",
     "tier": "Tier 1"
@@ -12802,7 +12805,7 @@ export const CONTACTS: Contact[] = [
     "id": "6493d8678783",
     "region": "Alemania",
     "name": "Mario Vossen",
-    "team": "Borussia M'gladbach",
+    "team": "Borussia Mönchengladbach",
     "role": "Chief Scout",
     "phone1": "49 1515 501487",
     "tier": "Tier 1"
@@ -12811,7 +12814,7 @@ export const CONTACTS: Contact[] = [
     "id": "937bf13d026f",
     "region": "Alemania",
     "name": "Roland Virkus Managing",
-    "team": "Borussia M'gladbach",
+    "team": "Borussia Mönchengladbach",
     "role": "Director Sport Borussia Mönchengladbach",
     "tier": "Tier 1"
   },
@@ -12819,7 +12822,7 @@ export const CONTACTS: Contact[] = [
     "id": "278b44ed1130",
     "region": "Alemania",
     "name": "Markus Hausweiler youth Sporting",
-    "team": "Borussia M'gladbach",
+    "team": "Borussia Mönchengladbach",
     "role": "Director Germany Borussia Mönchengladbach",
     "tier": "Tier 1"
   },
@@ -14527,7 +14530,7 @@ export const CONTACTS: Contact[] = [
     "id": "9ac25c29ca4c",
     "region": "Grecia",
     "name": "Petros Kariatoglou",
-    "team": "AE Larissa",
+    "team": "AEL Larissa",
     "role": "Head Scout",
     "phone1": "+306986879349",
     "tier": "Tier 3"
@@ -14581,7 +14584,7 @@ export const CONTACTS: Contact[] = [
     "id": "e1ec43a58579",
     "region": "Grecia",
     "name": "Antonis Manikas",
-    "team": "AO Egaleo",
+    "team": "Atromitos Aigaleo",
     "role": "Tecnichal Director",
     "phone1": "+30 694 777 6131",
     "tier": "Tier 3"
@@ -14617,7 +14620,7 @@ export const CONTACTS: Contact[] = [
     "id": "d07a244c3c6e",
     "region": "Chipre",
     "name": "Nicos Kirzis",
-    "team": "Apol Limassol",
+    "team": "Apollon Limassol",
     "role": "President",
     "phone1": "+357 99 636050",
     "tier": "Tier 3"
@@ -14635,7 +14638,7 @@ export const CONTACTS: Contact[] = [
     "id": "870169fd0b06",
     "region": "Grecia",
     "name": "Albert Puig",
-    "team": "Aris Selanik",
+    "team": "Aris Thessaloniki",
     "role": "Asisstan Coach",
     "phone1": "+34 646 01 89 54",
     "tier": "Tier 2"
@@ -14644,7 +14647,7 @@ export const CONTACTS: Contact[] = [
     "id": "8ec4e4c893e9",
     "region": "Grecia",
     "name": "Antonis Tsalouchidis",
-    "team": "Aris Selanik",
+    "team": "Aris Thessaloniki",
     "role": "CEO",
     "phone1": "+30 697 373 8514",
     "tier": "Tier 2"
@@ -14805,7 +14808,7 @@ export const CONTACTS: Contact[] = [
     "id": "dd195a616469",
     "region": "Grecia",
     "name": "Konstantinos Fliskas",
-    "team": "Panseraikos",
+    "team": "Panserraikos",
     "role": "Sporting director",
     "phone1": "+30 694 285 5377",
     "tier": "Tier 3"
@@ -15224,7 +15227,7 @@ export const CONTACTS: Contact[] = [
     "id": "762e3e6fd3e0",
     "region": "Bélgica",
     "name": "Harm van Veldhoven",
-    "team": "Lommel Sk",
+    "team": "Lommel SK",
     "role": "President",
     "phone1": "+ 32 476 99 52 10",
     "tier": "Tier 2"
@@ -15617,7 +15620,7 @@ export const CONTACTS: Contact[] = [
     "id": "80d0211e6075",
     "region": "Bélgica",
     "name": "Bormans",
-    "team": "Union SG",
+    "team": "Union Saint-Gilloise",
     "role": "Sporting Director",
     "phone1": "+32 474 17 35 43",
     "tier": "Tier 1"
@@ -15626,7 +15629,7 @@ export const CONTACTS: Contact[] = [
     "id": "e296d94481bd",
     "region": "Bélgica",
     "name": "Chris O'Loughin",
-    "team": "Union SG",
+    "team": "Union Saint-Gilloise",
     "role": "Sporting Director",
     "tier": "Tier 1"
   },
@@ -15634,7 +15637,7 @@ export const CONTACTS: Contact[] = [
     "id": "198185ae84d5",
     "region": "Bélgica",
     "name": "Henk Mariman Academy",
-    "team": "Union SG",
+    "team": "Union Saint-Gilloise",
     "role": "Manager Royale Union Saint-Gilloise SCRL",
     "tier": "Tier 1"
   },
@@ -15642,7 +15645,7 @@ export const CONTACTS: Contact[] = [
     "id": "f1a60ca4ccbc",
     "region": "Bélgica",
     "name": "Chris O‘Loughlin Union SG Sporting",
-    "team": "Union SG",
+    "team": "Union Saint-Gilloise",
     "role": "Director Saint Gilloise",
     "tier": "Tier 1"
   },
@@ -15736,7 +15739,7 @@ export const CONTACTS: Contact[] = [
     "id": "2e449e396d62",
     "region": "Bélgica",
     "name": "Joachim VercaigneRoyal Antwerp Head of",
-    "team": "Royal Antwerpen",
+    "team": "Royal Antwerp FC",
     "role": "Scouting",
     "tier": "Tier 2"
   },
@@ -15744,7 +15747,7 @@ export const CONTACTS: Contact[] = [
     "id": "804421dd7ea7",
     "region": "Bélgica",
     "name": "Sven Jaecques General",
-    "team": "Royal Antwerpen",
+    "team": "Royal Antwerp FC",
     "role": "Manager at Royal Antwerp F.C",
     "tier": "Tier 2"
   },
@@ -15752,7 +15755,7 @@ export const CONTACTS: Contact[] = [
     "id": "bf5ea6b894f0",
     "region": "Bélgica",
     "name": "Marc Overmars",
-    "team": "Royal Antwerpen",
+    "team": "Royal Antwerp FC",
     "role": "Technical director",
     "phone2": "621543554",
     "tier": "Tier 2"
@@ -15761,7 +15764,7 @@ export const CONTACTS: Contact[] = [
     "id": "97b8568007a9",
     "region": "Bélgica",
     "name": "Jerry Vanacker",
-    "team": "Royal Antwerpen",
+    "team": "Royal Antwerp FC",
     "role": "scout Royal Antwerpen",
     "tier": "Tier 2"
   },
@@ -15945,7 +15948,7 @@ export const CONTACTS: Contact[] = [
     "id": "f2ad2b2e4042",
     "region": "Bélgica",
     "name": "Felice Mazzu OH Leuven",
-    "team": "Oh Leuven",
+    "team": "OH Leuven",
     "role": "Manager",
     "tier": "Tier 2"
   },
@@ -15953,7 +15956,7 @@ export const CONTACTS: Contact[] = [
     "id": "5486d5ecdbf4",
     "region": "Bélgica",
     "name": "Ariel Jacobs Managing",
-    "team": "Oh Leuven",
+    "team": "OH Leuven",
     "role": "Director Professional Football Oud-Heverlee Leuven",
     "tier": "Tier 2"
   },
@@ -15961,7 +15964,7 @@ export const CONTACTS: Contact[] = [
     "id": "2dd0fcf59b19",
     "region": "Bélgica",
     "name": "Gyorgy Csepregi",
-    "team": "Oh Leuven",
+    "team": "OH Leuven",
     "role": "Sporting Director",
     "phone1": "32478442543",
     "phone2": "32478442543",
@@ -15971,7 +15974,7 @@ export const CONTACTS: Contact[] = [
     "id": "5ee540059ddb",
     "region": "Bélgica",
     "name": "Jan Versleijen",
-    "team": "Oh Leuven",
+    "team": "OH Leuven",
     "role": "Scout",
     "phone1": "50 488 8575",
     "tier": "Tier 2"
@@ -16584,7 +16587,7 @@ export const CONTACTS: Contact[] = [
     "id": "ef2d7563ba6b",
     "region": "Israel",
     "name": "Alona Barkat",
-    "team": "Hapoel Ber Shava",
+    "team": "Hapoel Beer Sheva",
     "role": "Director",
     "phone1": "+972 52-422-8799",
     "tier": "Tier 3"
@@ -16593,7 +16596,7 @@ export const CONTACTS: Contact[] = [
     "id": "f9259a0d990b",
     "region": "Israel",
     "name": "Evyatar Iluz",
-    "team": "Hapoel Ber Shava",
+    "team": "Hapoel Beer Sheva",
     "role": "Team Manager",
     "phone1": "+972 50-217-0175",
     "tier": "Tier 3"
@@ -16629,7 +16632,7 @@ export const CONTACTS: Contact[] = [
     "id": "b089fa3b092d",
     "region": "Israel",
     "name": "Idan Shum",
-    "team": "Hapoel Kfar Saba",
+    "team": "Hapoel Kfar Saba FC",
     "role": "Coach",
     "phone1": "+972 52-895-7775",
     "tier": "Tier 3"
@@ -16701,7 +16704,7 @@ export const CONTACTS: Contact[] = [
     "id": "8a839541ddcc",
     "region": "Israel",
     "name": "Naor",
-    "team": "Maccabi Petach",
+    "team": "Maccabi Petah Tikva",
     "role": "Director",
     "phone1": "+972 54-980-8284",
     "tier": "Tier 3"
@@ -18635,7 +18638,7 @@ export const CONTACTS: Contact[] = [
     "id": "4dbc01e88dcf",
     "region": "Letonia",
     "name": "rihard ivanos",
-    "team": "Fc riga",
+    "team": "Riga FC",
     "role": "Head youth scout",
     "phone1": "+371 26 899 167",
     "tier": "Tier 4"
@@ -18671,7 +18674,7 @@ export const CONTACTS: Contact[] = [
     "id": "db4e04e882c9",
     "region": "Letonia",
     "name": "Girts Mihelsons",
-    "team": "Fk Metta",
+    "team": "FK Metta",
     "role": "President",
     "phone1": "+371 29 502 211",
     "tier": "Tier 4"
@@ -18689,7 +18692,7 @@ export const CONTACTS: Contact[] = [
     "id": "fd11b9337235",
     "region": "Letonia",
     "name": "Aleks Usovs",
-    "team": "Fk Riga",
+    "team": "FK Riga",
     "role": "Sporting Director",
     "phone1": "+371 27 747 087",
     "tier": "Tier 4"
@@ -18707,7 +18710,7 @@ export const CONTACTS: Contact[] = [
     "id": "59efbf0f72d8",
     "region": "Lituania",
     "name": "Tadas Simaitis",
-    "team": "Fk Riterlai",
+    "team": "FK Riteriai",
     "role": "Sporting Director",
     "phone1": "+370 600 35285",
     "tier": "Tier 4"
@@ -18716,7 +18719,7 @@ export const CONTACTS: Contact[] = [
     "id": "79595dafead4",
     "region": "Letonia",
     "name": "Andris Riherts",
-    "team": "Fk Ritta",
+    "team": "FK Riga",
     "role": "Coach",
     "phone1": "+371 29 454 949",
     "tier": "Tier 4"
@@ -18725,7 +18728,7 @@ export const CONTACTS: Contact[] = [
     "id": "ee45cfad6e81",
     "region": "Lituania",
     "name": "Andrius Murauskas",
-    "team": "Fk Suduva",
+    "team": "FK Sūduva",
     "role": "Director",
     "phone1": "+370 687 89592",
     "tier": "Tier 4"
@@ -18770,7 +18773,7 @@ export const CONTACTS: Contact[] = [
     "id": "047596e1b84d",
     "region": "Letonia",
     "name": "Uldis Pucitis",
-    "team": "Vakmiera",
+    "team": "Valmiera FC",
     "role": "President",
     "phone1": "+371 26 389 887",
     "tier": "Tier 4"
@@ -18981,7 +18984,7 @@ export const CONTACTS: Contact[] = [
     "id": "f62122a24add",
     "region": "Noruega",
     "name": "Aasmund Bjorkan",
-    "team": "Bodo Glimt",
+    "team": "FK Bodø/Glimt",
     "role": "Chief Scout",
     "phone1": "+ 47 957 37 337",
     "tier": "Tier 2"
@@ -18990,7 +18993,7 @@ export const CONTACTS: Contact[] = [
     "id": "b8b0c206874e",
     "region": "Noruega",
     "name": "Frode Thomassen",
-    "team": "Bodo Glimt",
+    "team": "FK Bodø/Glimt",
     "role": "CEO",
     "phone1": "+47 917 52 973",
     "tier": "Tier 2"
@@ -19063,7 +19066,7 @@ export const CONTACTS: Contact[] = [
     "id": "e07b81a8ad02",
     "region": "Suecia",
     "name": "Bo Andersson",
-    "team": "Djurgarden",
+    "team": "Djurgårdens IF",
     "role": "Sport Chef",
     "phone1": "46 70 629 61 64",
     "tier": "Tier 2"
@@ -19243,7 +19246,7 @@ export const CONTACTS: Contact[] = [
     "id": "78546c6b304f",
     "region": "Suecia",
     "name": "Enes",
-    "team": "Ifk Varnamo",
+    "team": "IFK Värnamo",
     "role": "Sporting Director",
     "phone1": "+460764922552",
     "tier": "Tier 3"
@@ -19288,7 +19291,7 @@ export const CONTACTS: Contact[] = [
     "id": "80c2589199e8",
     "region": "Noruega",
     "name": "Eirik Hoseth",
-    "team": "Kristianeund",
+    "team": "Kristiansund BK",
     "role": "Director",
     "phone1": "+47 412 05 297",
     "tier": "Tier 3"
@@ -19405,7 +19408,7 @@ export const CONTACTS: Contact[] = [
     "id": "ce91bc99c3a9",
     "region": "Noruega",
     "name": "Einar Håndlykken",
-    "team": "Odd Bk",
+    "team": "Odd BK",
     "role": "CEO",
     "phone1": "+47 416 86 437",
     "tier": "Tier 3"
@@ -19423,7 +19426,7 @@ export const CONTACTS: Contact[] = [
     "id": "f8e91058496d",
     "region": "Suecia",
     "name": "Jimmy Hagberg",
-    "team": "Örebro",
+    "team": "Örebro SK",
     "role": "Director",
     "phone1": "+46 70 918 16 24",
     "tier": "Tier 3"
@@ -19432,7 +19435,7 @@ export const CONTACTS: Contact[] = [
     "id": "257276df53c1",
     "region": "Suecia",
     "name": "Marcus Persson",
-    "team": "Ostersund",
+    "team": "Östersunds FK",
     "role": "Director",
     "phone1": "+ 46 70 612 70 79",
     "tier": "Tier 3"
@@ -19494,7 +19497,7 @@ export const CONTACTS: Contact[] = [
     "id": "a30da6d18a70",
     "region": "Noruega",
     "name": "Espen Bugge Pettersen",
-    "team": "Sandefjord",
+    "team": "Sandefjord Fotball",
     "role": "CEO",
     "phone1": "+47 922 91 649",
     "tier": "Tier 3"
@@ -19566,7 +19569,7 @@ export const CONTACTS: Contact[] = [
     "id": "31d3ed3321bb",
     "region": "Noruega",
     "name": "Jon Tunold",
-    "team": "Stabaek",
+    "team": "Stabæk",
     "role": "CEO",
     "phone1": "+47 416 25 355",
     "tier": "Tier 3"
@@ -19575,7 +19578,7 @@ export const CONTACTS: Contact[] = [
     "id": "fd3ee3713ede",
     "region": "Noruega",
     "name": "Jostein",
-    "team": "Stromsgodset",
+    "team": "Strømsgodset",
     "role": "Sporting Director",
     "phone1": "+47 970 39 111",
     "tier": "Tier 3"
@@ -19584,7 +19587,7 @@ export const CONTACTS: Contact[] = [
     "id": "1cacda3bfdbb",
     "region": "Noruega",
     "name": "Oyvind Alapnes",
-    "team": "Tromso",
+    "team": "Tromsø IL",
     "role": "General Director",
     "phone1": "+47 911 32 044",
     "tier": "Tier 3"
@@ -19780,7 +19783,7 @@ export const CONTACTS: Contact[] = [
     "id": "b25559b8a277",
     "region": "Polonia",
     "name": "Pitor Rutkowski",
-    "team": "Jagiellonia",
+    "team": "Jagiellonia Białystok",
     "role": "Scout",
     "phone1": "+48 696 486 381",
     "tier": "Tier 2"
@@ -19789,7 +19792,7 @@ export const CONTACTS: Contact[] = [
     "id": "b3fcf76b1ea8",
     "region": "Polonia",
     "name": "Grzegorz Mankowski",
-    "team": "Jagiellonia",
+    "team": "Jagiellonia Białystok",
     "role": "Head Scout",
     "phone1": "(+48)796055884",
     "tier": "Tier 2"
@@ -19843,7 +19846,7 @@ export const CONTACTS: Contact[] = [
     "id": "7620dc1a68e9",
     "region": "Polonia",
     "name": "Bogdan Wilk",
-    "team": "Piast Gilwice",
+    "team": "Piast Gliwice",
     "role": "Sporting Director",
     "phone1": "+48 604 483 260",
     "tier": "Tier 2"
@@ -19897,7 +19900,7 @@ export const CONTACTS: Contact[] = [
     "id": "85e517d351fa",
     "region": "Polonia",
     "name": "Michal Hetel",
-    "team": "Slask Wroclaw",
+    "team": "Śląsk Wrocław",
     "role": "Chief Scout",
     "phone1": "+48 508 987 444",
     "tier": "Tier 2"
@@ -19942,7 +19945,7 @@ export const CONTACTS: Contact[] = [
     "id": "47f397e2641e",
     "region": "Polonia",
     "name": "Kiko Ramírez",
-    "team": "Wisla Krakow",
+    "team": "Wisła Kraków",
     "role": "Director Football",
     "tier": "Tier 2"
   },
@@ -19950,7 +19953,7 @@ export const CONTACTS: Contact[] = [
     "id": "ac05efb8f60f",
     "region": "Polonia",
     "name": "Maciej Balazinski",
-    "team": "Wisla Krakow",
+    "team": "Wisła Kraków",
     "phone1": "48604968446",
     "tier": "Tier 2"
   },
@@ -19958,7 +19961,7 @@ export const CONTACTS: Contact[] = [
     "id": "4b2d7057ed50",
     "region": "Polonia",
     "name": "Bartlomiej",
-    "team": "Wisla Plock",
+    "team": "Wisła Płock",
     "role": "Chief Scout",
     "phone1": "+48 509 335 192",
     "tier": "Tier 3"
@@ -19967,7 +19970,7 @@ export const CONTACTS: Contact[] = [
     "id": "6fd9f04b873b",
     "region": "Polonia",
     "name": "Dariusz Sztylka",
-    "team": "Wisla Plock",
+    "team": "Wisła Płock",
     "role": "Sporting Director",
     "phone1": "+48 695 205 174",
     "tier": "Tier 3"
@@ -20029,7 +20032,7 @@ export const CONTACTS: Contact[] = [
     "id": "c7347c743844",
     "region": "Polonia",
     "name": "Radek Mozyrko",
-    "team": "Legia Warsaw",
+    "team": "Legia Warszawa",
     "role": "Scouting Director",
     "phone1": "(+)48600334200",
     "tier": "Tier 1"
@@ -20038,7 +20041,7 @@ export const CONTACTS: Contact[] = [
     "id": "e6e7db6952d2",
     "region": "Polonia",
     "name": "Dariusz Mioduski",
-    "team": "Legia Warsaw",
+    "team": "Legia Warszawa",
     "role": "Owner",
     "phone1": "+48 607 036 599",
     "tier": "Tier 1"
@@ -20047,7 +20050,7 @@ export const CONTACTS: Contact[] = [
     "id": "cba452053ca3",
     "region": "Polonia",
     "name": "Radoslaw Mozyrko",
-    "team": "Legia Warsaw",
+    "team": "Legia Warszawa",
     "role": "Scouting Direcor",
     "phone1": "+48 600 334 200",
     "tier": "Tier 1"
@@ -20142,7 +20145,7 @@ export const CONTACTS: Contact[] = [
     "id": "4c23db6be786",
     "region": "Polonia",
     "name": "Paweł Belina (Football Senior",
-    "team": "WKS Śląsk Wrocław SA",
+    "team": "Śląsk Wrocław",
     "role": "Scout)",
     "phone2": "48 725 867",
     "tier": "Tier 2"
@@ -20151,7 +20154,7 @@ export const CONTACTS: Contact[] = [
     "id": "49003c805911",
     "region": "Polonia",
     "name": "Dariusz Sztylka Sporting",
-    "team": "WKS Śląsk Wrocław SA",
+    "team": "Śląsk Wrocław",
     "role": "Director Slask Wroclaw ‬",
     "phone2": "48 530 999",
     "tier": "Tier 2"
@@ -20186,7 +20189,7 @@ export const CONTACTS: Contact[] = [
     "id": "cd7122092b49",
     "region": "Polonia",
     "name": "Pawel Magdon",
-    "team": "Wisla Plock",
+    "team": "Wisła Płock",
     "role": "sporting director",
     "phone2": "48 609 030",
     "tier": "Tier 3"
@@ -20195,7 +20198,7 @@ export const CONTACTS: Contact[] = [
     "id": "cc1f5acda669",
     "region": "Polonia",
     "name": "Radosław Kucharski (sporting",
-    "team": "Wisla Plock",
+    "team": "Wisła Płock",
     "role": "director)",
     "tier": "Tier 3"
   },
@@ -20203,7 +20206,7 @@ export const CONTACTS: Contact[] = [
     "id": "7044c74b75c3",
     "region": "Polonia",
     "name": "Bartłomiej Sielewski (DIRECTOR PROFESSIONAL SCOUTING)",
-    "team": "Wisla Plock",
+    "team": "Wisła Płock",
     "phone2": "48 509 335",
     "tier": "Tier 3"
   },
@@ -20211,7 +20214,7 @@ export const CONTACTS: Contact[] = [
     "id": "9e020b23be6b",
     "region": "Polonia",
     "name": "Arkadiusz Stelmach",
-    "team": "Wisla Plock",
+    "team": "Wisła Płock",
     "role": "SCOUTING DIRECTOR",
     "phone2": "48 504 627",
     "tier": "Tier 3"
@@ -20242,7 +20245,7 @@ export const CONTACTS: Contact[] = [
     "id": "24ccda0b79cf",
     "region": "Polonia",
     "name": "Lukasz Maslowski",
-    "team": "jagiellonia bialystok fc",
+    "team": "Jagiellonia Białystok",
     "role": "sports director",
     "phone2": "48 502 570",
     "tier": "Tier 2"
@@ -20251,7 +20254,7 @@ export const CONTACTS: Contact[] = [
     "id": "afdc906c4f89",
     "region": "Polonia",
     "name": "Agnieszka Syczewska Sporting",
-    "team": "jagiellonia bialystok fc",
+    "team": "Jagiellonia Białystok",
     "role": "Director Poland Jagiellonia",
     "tier": "Tier 2"
   },
@@ -20259,14 +20262,14 @@ export const CONTACTS: Contact[] = [
     "id": "bea0e2c21331",
     "region": "Polonia",
     "name": "Maciej Stolarczyk",
-    "team": "jagiellonia bialystok fc",
+    "team": "Jagiellonia Białystok",
     "tier": "Tier 2"
   },
   {
     "id": "b3159a3b2558",
     "region": "Polonia",
     "name": "Lechia Gdańsk Adam Mandziara (",
-    "team": "jagiellonia bialystok fc",
+    "team": "Jagiellonia Białystok",
     "role": "CEO) 0 or 435",
     "phone1": "49 172 686006",
     "phone2": "48 515 330",
@@ -20276,14 +20279,14 @@ export const CONTACTS: Contact[] = [
     "id": "55a09dc2a717",
     "region": "Polonia",
     "name": "Marcin Kaczmarek",
-    "team": "jagiellonia bialystok fc",
+    "team": "Jagiellonia Białystok",
     "tier": "Tier 2"
   },
   {
     "id": "66272e1bd37f",
     "region": "Polonia",
     "name": "MKS Miedź Legnica S.A Marek Ubych (Sporting",
-    "team": "Slask Wrocław",
+    "team": "Śląsk Wrocław",
     "role": "Director",
     "tier": "Tier 2"
   },
@@ -20291,7 +20294,7 @@ export const CONTACTS: Contact[] = [
     "id": "b79ed59d3976",
     "region": "Polonia",
     "name": "Mateusz Kamowski",
-    "team": "Warta Poznań S.A.",
+    "team": "Warta Poznań",
     "role": "head of Scouting",
     "phone2": "48 604 593",
     "tier": "Tier 3"
@@ -20300,7 +20303,7 @@ export const CONTACTS: Contact[] = [
     "id": "a63217f29969",
     "region": "Polonia",
     "name": "Dariusz Lis",
-    "team": "ŁKS Łódź S.A",
+    "team": "ŁKS Łódź",
     "role": "Director of the ŁKS Łódź sports club",
     "tier": "Tier 3"
   },
@@ -20325,7 +20328,7 @@ export const CONTACTS: Contact[] = [
     "id": "5db5669c080f",
     "region": "Polonia",
     "name": "Dawid Blaszczykowski",
-    "team": "Wisla Kraków",
+    "team": "Wisła Kraków",
     "role": "President",
     "phone1": "48 604 167",
     "tier": "Tier 2"
@@ -21314,7 +21317,7 @@ export const CONTACTS: Contact[] = [
     "id": "48c17db385b0",
     "region": "Rumanía",
     "name": "Rufo Collado",
-    "team": "Dinamo Bucarest",
+    "team": "Dinamo București",
     "role": "Sporting Director",
     "phone1": "+34 629 68 97 49",
     "tier": "Tier 3"
@@ -21377,7 +21380,7 @@ export const CONTACTS: Contact[] = [
     "id": "c8ce23fca8cb",
     "region": "Rumanía",
     "name": "Victor Angelescu",
-    "team": "Rapid Bucarest",
+    "team": "Rapid București",
     "role": "Director",
     "phone1": "+40 731 277 239",
     "tier": "Tier 2"
@@ -21386,7 +21389,7 @@ export const CONTACTS: Contact[] = [
     "id": "c434d424a37b",
     "region": "Rumanía",
     "name": "Attila hadnagy",
-    "team": "Sepsi Sf. Georghe",
+    "team": "Sepsi OSK Sfântu Gheorghe",
     "role": "Sporting Director",
     "phone1": "+40 740 573 308",
     "tier": "Tier 3"
@@ -21395,7 +21398,7 @@ export const CONTACTS: Contact[] = [
     "id": "2f16cc90d693",
     "region": "Rumanía",
     "name": "Endrr Matyas",
-    "team": "Sepsi Sf. Georghe",
+    "team": "Sepsi OSK Sfântu Gheorghe",
     "role": "Chief Scout",
     "phone1": "+40 758 174 067",
     "tier": "Tier 3"
@@ -22048,7 +22051,7 @@ export const CONTACTS: Contact[] = [
     "id": "b9750c2a20f9",
     "region": "Eslovaquia",
     "name": "Gleb Platov",
-    "team": "DAC",
+    "team": "DAC Dunajská Streda",
     "role": "Director Football",
     "phone1": "380633941983",
     "tier": "Tier 3"
@@ -22057,7 +22060,7 @@ export const CONTACTS: Contact[] = [
     "id": "e221e83c3f25",
     "region": "Eslovaquia",
     "name": "Jan Van Daele",
-    "team": "Dunajska Streda",
+    "team": "DAC Dunajská Streda",
     "role": "Sporting Director",
     "tier": "Tier 3"
   },
@@ -22065,7 +22068,7 @@ export const CONTACTS: Contact[] = [
     "id": "9ab219a8b5c9",
     "region": "Eslovaquia",
     "name": "Tamas Darazs",
-    "team": "Dunajska Streda",
+    "team": "DAC Dunajská Streda",
     "role": "Scout",
     "phone1": "+36 30 568 4828",
     "tier": "Tier 3"
@@ -22155,7 +22158,7 @@ export const CONTACTS: Contact[] = [
     "id": "d78e2cdddda3",
     "region": "Eslovaquia",
     "name": "Milan Cuninka",
-    "team": "Spartak Tranava",
+    "team": "Spartak Trnava",
     "role": "Director General",
     "phone1": "+421 902 170 843",
     "tier": "Tier 3"
@@ -22254,7 +22257,7 @@ export const CONTACTS: Contact[] = [
     "id": "260672135f53",
     "region": "Eslovenia",
     "name": "Andro Fistonic",
-    "team": "Kalcer Radomlje",
+    "team": "NK Radomlje",
     "role": "Sporting Director",
     "phone1": "+385 91 619 5879",
     "tier": "Tier 3"
@@ -22263,7 +22266,7 @@ export const CONTACTS: Contact[] = [
     "id": "f64d4c5674c9",
     "region": "Eslovenia",
     "name": "Metod Cerar",
-    "team": "Kalcer Radomlje",
+    "team": "NK Radomlje",
     "role": "Director",
     "phone1": "+386 41 934 916",
     "tier": "Tier 3"
@@ -22272,7 +22275,7 @@ export const CONTACTS: Contact[] = [
     "id": "70ff36ecce8c",
     "region": "Eslovenia",
     "name": "Dejan Mocnik",
-    "team": "Nk Bravo",
+    "team": "NK Bravo",
     "role": "Asisstan Director",
     "phone1": "+386 41 352 327",
     "tier": "Tier 3"
@@ -22380,7 +22383,7 @@ export const CONTACTS: Contact[] = [
     "id": "e6f2a1cff5f2",
     "region": "Eslovenia",
     "name": "Boštjan Blažinčič",
-    "team": "Olimipja Ljubljana",
+    "team": "Olimpija Ljubljana",
     "role": "Director",
     "phone1": "+386 51 388 333",
     "tier": "Tier 3"
@@ -22389,7 +22392,7 @@ export const CONTACTS: Contact[] = [
     "id": "1f6c64c0bfd3",
     "region": "Eslovenia",
     "name": "Goran Boromisa",
-    "team": "Olimipja Ljubljana",
+    "team": "Olimpija Ljubljana",
     "role": "Sporting Director",
     "phone1": "+385 95 867 1404",
     "tier": "Tier 3"
@@ -23052,7 +23055,7 @@ export const CONTACTS: Contact[] = [
     "id": "12d5b36cb410",
     "region": "Turquía",
     "name": "Emrah Yildiz",
-    "team": "Genclerbirligi",
+    "team": "Gençlerbirliği",
     "role": "Sporting Director",
     "phone1": "+90 533 602 93 33",
     "tier": "Tier 2"
@@ -23061,7 +23064,7 @@ export const CONTACTS: Contact[] = [
     "id": "c19acfc3b02a",
     "region": "Turquía",
     "name": "Niyazi Akdaş",
-    "team": "Genclerbirligi",
+    "team": "Gençlerbirliği",
     "role": "President",
     "phone1": "+90 532 212 74 62",
     "tier": "Tier 2"
@@ -23070,7 +23073,7 @@ export const CONTACTS: Contact[] = [
     "id": "a4f4cee53781",
     "region": "Turquía",
     "name": "Bolivar Silveira",
-    "team": "Göztepe",
+    "team": "Göztepe SK",
     "role": "Head Scout",
     "tier": "Tier 2"
   },
@@ -23078,7 +23081,7 @@ export const CONTACTS: Contact[] = [
     "id": "4e8f73d041a7",
     "region": "Turquía",
     "name": "Aktug Sönmez",
-    "team": "Göztepe",
+    "team": "Göztepe SK",
     "role": "Head Scout",
     "phone1": "+90 532 305 65 75",
     "tier": "Tier 2"
@@ -23087,7 +23090,7 @@ export const CONTACTS: Contact[] = [
     "id": "3bf02351c81e",
     "region": "Turquía",
     "name": "Alessio Del Sarto",
-    "team": "Göztepe",
+    "team": "Göztepe SK",
     "role": "Scout",
     "phone1": "+39 327 111 3234",
     "tier": "Tier 2"
@@ -23096,7 +23099,7 @@ export const CONTACTS: Contact[] = [
     "id": "d52f421c4201",
     "region": "Turquía",
     "name": "Ivan Mance",
-    "team": "Göztepe",
+    "team": "Göztepe SK",
     "role": "Sporting Director",
     "phone1": "+385 99 308 0372",
     "tier": "Tier 2"
@@ -23141,7 +23144,7 @@ export const CONTACTS: Contact[] = [
     "id": "f8165e4523bf",
     "region": "Turquía",
     "name": "Murat Akin",
-    "team": "Karagumruk",
+    "team": "Fatih Karagümrük",
     "role": "Sporting Director",
     "phone1": "+90 532 052 88 52",
     "tier": "Tier 2"
@@ -23150,7 +23153,7 @@ export const CONTACTS: Contact[] = [
     "id": "3a1911969e1b",
     "region": "Turquía",
     "name": "Süleyman Hurma",
-    "team": "Karagumruk",
+    "team": "Fatih Karagümrük",
     "role": "President",
     "phone1": "+90 533 214 22 22",
     "tier": "Tier 2"
@@ -23159,7 +23162,7 @@ export const CONTACTS: Contact[] = [
     "id": "3f0defbc868c",
     "region": "Turquía",
     "name": "Serkan Recber",
-    "team": "Kasimpasa",
+    "team": "Kasımpaşa",
     "role": "Sporting Director",
     "phone1": "+90 533 300 00 34",
     "tier": "Tier 2"
@@ -23177,7 +23180,7 @@ export const CONTACTS: Contact[] = [
     "id": "fbee47ed71f1",
     "region": "Turquía",
     "name": "iskender özbalta",
-    "team": "Keciörengücü",
+    "team": "Keçiörengücü",
     "role": "Sporting Director",
     "phone1": "+90 531 253 17 00",
     "tier": "Tier 2"
@@ -23612,7 +23615,7 @@ export const CONTACTS: Contact[] = [
     "id": "75d9ae40dd92",
     "region": "Turquía",
     "name": "Aktug Sonmez Turkey Goztepe",
-    "team": "Göztepe",
+    "team": "Göztepe SK",
     "tier": "Tier 2"
   },
   {
@@ -25429,5 +25432,197 @@ export const CONTACTS: Contact[] = [
     "id": "0979d3079fd3",
     "region": "Escocia",
     "name": "Sergio Marquez"
+  },
+  {
+    "id": "90af2594b211",
+    "region": "Austria",
+    "team": "FC Blau-Weiss Linz",
+    "_noContact": true
+  },
+  {
+    "id": "885f79fb2224",
+    "region": "Austria",
+    "team": "Grazer AK",
+    "_noContact": true
+  },
+  {
+    "id": "018349e2956b",
+    "region": "Bélgica",
+    "team": "La Louvière Centre",
+    "_noContact": true
+  },
+  {
+    "id": "5de069e312a4",
+    "region": "Bulgaria",
+    "team": "CSKA Sofia",
+    "_noContact": true
+  },
+  {
+    "id": "ad44c9455c0a",
+    "region": "Chipre",
+    "team": "Ethnikos Achnas",
+    "_noContact": true
+  },
+  {
+    "id": "b01aa537184e",
+    "region": "Croacia",
+    "team": "GNK Dinamo Zagreb",
+    "_noContact": true
+  },
+  {
+    "id": "28684f867c1e",
+    "region": "Croacia",
+    "team": "NK Šibenik",
+    "_noContact": true
+  },
+  {
+    "id": "e4701642b381",
+    "region": "Croacia",
+    "team": "NK Rudes",
+    "_noContact": true
+  },
+  {
+    "id": "01aeb957314f",
+    "region": "Dinamarca",
+    "team": "Fredericia FC",
+    "_noContact": true
+  },
+  {
+    "id": "c00a2d8764fe",
+    "region": "Escocia",
+    "team": "Dundee FC",
+    "_noContact": true
+  },
+  {
+    "id": "333505b3a415",
+    "region": "Escocia",
+    "team": "Falkirk",
+    "_noContact": true
+  },
+  {
+    "id": "c6b3716cd9e3",
+    "region": "Eslovaquia",
+    "team": "FK Pohronie",
+    "_noContact": true
+  },
+  {
+    "id": "d7527b1056d0",
+    "region": "Georgia",
+    "team": "Saburtalo Tbilisi",
+    "_noContact": true
+  },
+  {
+    "id": "f464f492c2d3",
+    "region": "Georgia",
+    "team": "FC Locomotive Tbilisi",
+    "_noContact": true
+  },
+  {
+    "id": "4072021c3720",
+    "region": "Hungría",
+    "team": "Kecskeméti TE",
+    "_noContact": true
+  },
+  {
+    "id": "fcc4d8fbc110",
+    "region": "Hungría",
+    "team": "Zalaegerszegi TE",
+    "_noContact": true
+  },
+  {
+    "id": "2be9429320db",
+    "region": "Israel",
+    "team": "Maccabi Haifa",
+    "_noContact": true
+  },
+  {
+    "id": "53ba487063e8",
+    "region": "Noruega",
+    "team": "Vålerenga",
+    "_noContact": true
+  },
+  {
+    "id": "41f1a241bb95",
+    "region": "Noruega",
+    "team": "KFUM Oslo",
+    "_noContact": true
+  },
+  {
+    "id": "02225a0feab6",
+    "region": "Países Bajos",
+    "team": "Heracles Almelo",
+    "_noContact": true
+  },
+  {
+    "id": "7568f2225d22",
+    "region": "Polonia",
+    "team": "Korona Kielce",
+    "_noContact": true
+  },
+  {
+    "id": "61a543191222",
+    "region": "Polonia",
+    "team": "Lechia Gdańsk",
+    "_noContact": true
+  },
+  {
+    "id": "7816d872772e",
+    "region": "Rumanía",
+    "team": "Petrolul Ploiești",
+    "_noContact": true
+  },
+  {
+    "id": "4040c46ef01f",
+    "region": "Rumanía",
+    "team": "Oțelul Galați",
+    "_noContact": true
+  },
+  {
+    "id": "cac184a655aa",
+    "region": "Rumanía",
+    "team": "Csíkszereda Miercurea Ciuc",
+    "_noContact": true
+  },
+  {
+    "id": "7c5359ec0683",
+    "region": "Rumanía",
+    "team": "Metaloglobus București",
+    "_noContact": true
+  },
+  {
+    "id": "9b3f19af82b7",
+    "region": "Rumanía",
+    "team": "Unirea Slobozia",
+    "_noContact": true
+  },
+  {
+    "id": "ed4eb9b3a352",
+    "region": "Suecia",
+    "team": "IFK Göteborg",
+    "_noContact": true
+  },
+  {
+    "id": "319be14221d8",
+    "region": "Suecia",
+    "team": "Mjällby AIF",
+    "_noContact": true
+  },
+  {
+    "id": "7e1e5b73e401",
+    "region": "Suecia",
+    "team": "Västerås SK",
+    "_noContact": true
+  },
+  {
+    "id": "6f9bf5cade08",
+    "region": "Suecia",
+    "team": "Örgryte IS",
+    "_noContact": true
+  },
+  {
+    "id": "c80463699aaa",
+    "region": "Suiza",
+    "team": "FC Winterthur",
+    "_noContact": true
   }
 ]
