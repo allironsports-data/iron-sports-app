@@ -13,6 +13,7 @@ import { PlayersTable } from './views/PlayersTable'
 import { Distribution } from './views/Distribution'
 import { ClubDetail } from './views/ClubDetail'
 import { Captacion } from './views/Captacion'
+import { Contactos } from './views/Contactos'
 import type { Club, DistributionEntry, ClubNegotiation } from './types'
 
 export interface AppNotification {
@@ -47,6 +48,7 @@ export default function App() {
   const [showAdmin, setShowAdmin] = useState(false)
   const [showOverview, setShowOverview] = useState(false)
   const [showTable, setShowTable] = useState(false)
+  const [showContacts, setShowContacts] = useState(() => window.location.hash === '#contactos')
   const [notifications, setNotifications] = useState<AppNotification[]>([])
 
   // Distribution state
@@ -143,6 +145,13 @@ export default function App() {
 
     return () => { supabase.removeChannel(channel) }
   }, [user, profile, addNotification])
+
+  // Listen for hash changes so navigating to #contactos opens the panel
+  useEffect(() => {
+    const onHashChange = () => setShowContacts(window.location.hash === '#contactos')
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
 
   if (loading) return <Spinner />
   if (!user || !profile) return <LoginScreen onLogin={signIn} />
@@ -314,6 +323,17 @@ export default function App() {
   }
 
   // ── routing ─────────────────────────────────────────────────
+
+  if (showContacts && profile.is_admin) {
+    return (
+      <Contactos
+        onBack={() => {
+          window.location.hash = ''
+          setShowContacts(false)
+        }}
+      />
+    )
+  }
 
   if (showTable && profile.is_admin) {
     return (
