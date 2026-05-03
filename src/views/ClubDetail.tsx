@@ -22,9 +22,10 @@ const STATUS_CONFIG: Record<ClubNegotiation['status'], { label: string; color: s
 }
 
 const PRIORITY_CONFIG = {
-  A: { bg: 'bg-red-100',   text: 'text-red-700',   label: 'A' },
-  B: { bg: 'bg-amber-100', text: 'text-amber-700', label: 'B' },
-  C: { bg: 'bg-slate-100', text: 'text-slate-600', label: 'C' },
+  A: { bg: 'bg-red-100',    text: 'text-red-700',    label: 'A' },
+  B: { bg: 'bg-amber-100',  text: 'text-amber-700',  label: 'B' },
+  C: { bg: 'bg-slate-100',  text: 'text-slate-600',  label: 'C' },
+  D: { bg: 'bg-orange-50',  text: 'text-orange-600', label: 'D' },
 }
 
 const ACTIVE_STATUSES: ClubNegotiation['status'][] = ['pendiente', 'ofrecido', 'interesado', 'negociando']

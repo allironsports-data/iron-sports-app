@@ -1722,6 +1722,7 @@ const PRIORITY_CONFIG_D = {
   A: { bg: 'bg-red-100',   text: 'text-red-700' },
   B: { bg: 'bg-amber-100', text: 'text-amber-700' },
   C: { bg: 'bg-slate-100', text: 'text-slate-600' },
+  D: { bg: 'bg-orange-50', text: 'text-orange-600' },
 }
 const CONDITIONS_D = ['Libre', 'Traspaso', 'Cesión', 'Cesión/Traspaso', 'Traspaso (porcentaje)', 'Cesión con opción']
 
@@ -1738,7 +1739,7 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
   onSelectClub?: (id: string) => void
 }) {
   const [editingEntry, setEditingEntry] = useState(false)
-  const [editPriority, setEditPriority] = useState<'A'|'B'|'C'>(entry?.priority ?? 'B')
+  const [editPriority, setEditPriority] = useState<'A'|'B'|'C'|'D'>(entry?.priority ?? 'B')
   const [editCondition, setEditCondition] = useState(entry?.condition ?? '')
   const [editFee, setEditFee] = useState(entry?.transferFee ?? '')
   const [editNotes, setEditNotes] = useState(entry?.notes ?? '')
@@ -1843,7 +1844,7 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
         ) : (
           <div className="space-y-3">
             <div className="flex gap-2">
-              {(['A', 'B', 'C'] as const).map(p => {
+              {(['A', 'B', 'C', 'D'] as const).map(p => {
                 const cfg = PRIORITY_CONFIG_D[p]
                 return <button key={p} onClick={() => setEditPriority(p)} className={`flex-1 py-2 rounded-lg text-sm font-bold border-2 transition-all ${editPriority === p ? `${cfg.bg} ${cfg.text} border-current` : 'bg-white text-slate-400 border-slate-200'}`}>{p}</button>
               })}
