@@ -8085,7 +8085,7 @@ export const CONTACTS: Contact[] = [
   },
   {
     "id": "26e410723032",
-    "name": "Miguel Pérez 'Michu\\\"",
+    "name": "Miguel Pérez 'Michu\\\\\\\"",
     "team": "Burgos CF",
     "region": "España",
     "role": "Sporting Director",
@@ -8942,7 +8942,7 @@ export const CONTACTS: Contact[] = [
   },
   {
     "id": "0987b9ec2897",
-    "name": "Sergio Paulo Barbosa Valente \\\"Duda\\\" (",
+    "name": "Sergio Paulo Barbosa Valente \\\\\\\"Duda\\\\\\\" (",
     "team": "Málaga CF",
     "region": "España",
     "role": "director youth academy)",
@@ -9221,7 +9221,7 @@ export const CONTACTS: Contact[] = [
     "name": "Ramón Rodríguez Verdejo",
     "team": "Real Unión Club",
     "region": "España",
-    "role": "\\\"Monchi\\\"",
+    "role": "\\\\\\\"Monchi\\\\\\\"",
     "tier": "Tier 3"
   },
   {
@@ -17369,7 +17369,7 @@ export const CONTACTS: Contact[] = [
   },
   {
     "id": "c0df46d6fcb1",
-    "name": "Aniello \\\"Nello\\\" Parisi (All U17)",
+    "name": "Aniello \\\\\\\"Nello\\\\\\\" Parisi (All U17)",
     "team": "Torino",
     "region": "Italia",
     "phone2": "39 347 092",
@@ -24891,6 +24891,1049 @@ export const CONTACTS: Contact[] = [
     "id": "c80463699aaa",
     "team": "FC Winterthur",
     "region": "Suiza",
+    "_noContact": true
+  },
+  {
+    "id": "dbfda584ea2c",
+    "team": "SV Elversberg",
+    "region": "Alemania",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "71492be8eaac",
+    "team": "Preußen Münster",
+    "region": "Alemania",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "23da2b2c074b",
+    "team": "SSV Ulm 1846",
+    "region": "Alemania",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "dc9f80ac1563",
+    "team": "UD Eldense",
+    "region": "España",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "e72366b5498d",
+    "team": "SS Juve Stabia",
+    "region": "Italia",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "01005258da6b",
+    "team": "Carrarese Calcio",
+    "region": "Italia",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "2142f1074243",
+    "team": "AC Reggiana",
+    "region": "Italia",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "baf9413bc0ad",
+    "team": "FC Südtirol",
+    "region": "Italia",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "04e628db0a3f",
+    "team": "Perugia Calcio",
+    "region": "Italia",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "0053bf5a7edf",
+    "team": "VVV-Venlo",
+    "region": "Países Bajos",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "94d95ab49a70",
+    "team": "MVV Maastricht",
+    "region": "Países Bajos",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "e5208e6dc6a5",
+    "team": "Helmond Sport",
+    "region": "Países Bajos",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "13d8f995af18",
+    "team": "FC Eindhoven",
+    "region": "Países Bajos",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "92415888d87d",
+    "team": "FC Den Bosch",
+    "region": "Países Bajos",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "77af979a81ce",
+    "team": "FC Dordrecht",
+    "region": "Países Bajos",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "83c8c4162b64",
+    "team": "Jong AZ",
+    "region": "Países Bajos",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "42347d124908",
+    "team": "Partick Thistle",
+    "region": "Escocia",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "dc39f95f67f3",
+    "team": "Raith Rovers",
+    "region": "Escocia",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "e7f74a999fee",
+    "team": "Greenock Morton",
+    "region": "Escocia",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "874a9fe50ca3",
+    "team": "Hamilton Academical",
+    "region": "Escocia",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "7b2f1219f565",
+    "team": "Inverness CT",
+    "region": "Escocia",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "7a560b259419",
+    "team": "Arbroath",
+    "region": "Escocia",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "15cde06c5790",
+    "team": "Dunfermline Athletic",
+    "region": "Escocia",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "257863f554b7",
+    "team": "Altay SK",
+    "region": "Turquía",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "4a1a93eb43ff",
+    "team": "Tuzlaspor",
+    "region": "Turquía",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "0322719d502f",
+    "team": "Çorum FK",
+    "region": "Turquía",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "4ef0e22f1fc3",
+    "team": "Adıyaman FK",
+    "region": "Turquía",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "41e5eddebc45",
+    "team": "Şanlıurfaspor",
+    "region": "Turquía",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "da92ac635035",
+    "team": "Kırklarelispor",
+    "region": "Turquía",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "6f641c01b7bb",
+    "team": "AaB Aalborg",
+    "region": "Dinamarca",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "4be605ef59c3",
+    "team": "Lyngby BK",
+    "region": "Dinamarca",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "a92adfac3314",
+    "team": "GAIS",
+    "region": "Suecia",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "40d476dd070c",
+    "team": "Halmstads BK",
+    "region": "Suecia",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "017383896fb2",
+    "team": "IK Brommapojkarna",
+    "region": "Suecia",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "cdab55fbffb1",
+    "team": "AFC Eskilstuna",
+    "region": "Suecia",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "3d80f40fa83f",
+    "team": "Ranheim",
+    "region": "Noruega",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "e6d69c4eab6f",
+    "team": "Åsane Fotball",
+    "region": "Noruega",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "ddd74af3d91e",
+    "team": "Levanger FK",
+    "region": "Noruega",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "e22ed1e1a058",
+    "team": "FK Jerv",
+    "region": "Noruega",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "f11e32d90d5e",
+    "team": "AVS Futebol SAD",
+    "region": "Portugal",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "79abcb463cea",
+    "team": "FC Feirense",
+    "region": "Portugal",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "53308f74f0df",
+    "team": "UD Vilafranquense",
+    "region": "Portugal",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "ee5fdfa16f19",
+    "team": "RE Virton",
+    "region": "Bélgica",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "78493be57c89",
+    "team": "Club NXT",
+    "region": "Bélgica",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "346f4b7894bf",
+    "team": "Volos NFC",
+    "region": "Grecia",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "c6f8946a1f3a",
+    "team": "Lamia FC",
+    "region": "Grecia",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "1a796fbf2c32",
+    "team": "Ionikos FC",
+    "region": "Grecia",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "4128b69b686c",
+    "team": "Gloria Buzău",
+    "region": "Rumanía",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "c76cad924204",
+    "team": "FC Voluntari",
+    "region": "Rumanía",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "87edf96aee8f",
+    "team": "FC Poli Iași",
+    "region": "Rumanía",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "bac51b1da003",
+    "team": "FK Jablonec",
+    "region": "República Checa",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "2796ed1dffb6",
+    "team": "FK Příbram",
+    "region": "República Checa",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "5fac61d246a1",
+    "team": "Red Star Belgrade",
+    "region": "Serbia",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "afbe37c56ce3",
+    "team": "Partizan Belgrade",
+    "region": "Serbia",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "46ac68e24fef",
+    "team": "FK Vojvodina",
+    "region": "Serbia",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "c59ff3ec0ce9",
+    "team": "FK Čukarički",
+    "region": "Serbia",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "64c657eb4e61",
+    "team": "FK Spartak Subotica",
+    "region": "Serbia",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "e68539ffe87b",
+    "team": "FK Rad Beograd",
+    "region": "Serbia",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "d7453c225e0c",
+    "team": "FK TSC Bačka Topola",
+    "region": "Serbia",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "8464d73581f7",
+    "team": "FK IMT Novi Beograd",
+    "region": "Serbia",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "b017f0c4d81a",
+    "team": "FK Radnički Niš",
+    "region": "Serbia",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "6363d5d2c7fd",
+    "team": "OFK Beograd",
+    "region": "Serbia",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "64a3d8cad084",
+    "team": "FK Napredak Kruševac",
+    "region": "Serbia",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "3b9a7542986c",
+    "team": "FK Proleter Novi Sad",
+    "region": "Serbia",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "163db91886f8",
+    "team": "FK Javor Ivanjica",
+    "region": "Serbia",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "bfd23d2a36f9",
+    "team": "FK Mačva Šabac",
+    "region": "Serbia",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "c6f703004a08",
+    "team": "FK Radnik Surdulica",
+    "region": "Serbia",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "82dc1f713ca2",
+    "team": "Boca Juniors",
+    "region": "Argentina",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "7e506cdfffaa",
+    "team": "San Lorenzo",
+    "region": "Argentina",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "48e5d06ea28d",
+    "team": "Estudiantes de La Plata",
+    "region": "Argentina",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "30dd987c86ca",
+    "team": "Banfield",
+    "region": "Argentina",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "abc88f025a50",
+    "team": "Lanús",
+    "region": "Argentina",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "b1a43c86ca87",
+    "team": "Huracán",
+    "region": "Argentina",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "24f06dc6478e",
+    "team": "CA Belgrano",
+    "region": "Argentina",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "6f83d3ff45aa",
+    "team": "Defensa y Justicia",
+    "region": "Argentina",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "0b50cd6d9952",
+    "team": "Club Atlético Platense",
+    "region": "Argentina",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "d6cedb2de9ed",
+    "team": "Godoy Cruz",
+    "region": "Argentina",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "09d08fe36cd4",
+    "team": "Unión Santa Fe",
+    "region": "Argentina",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "f54547e9ee62",
+    "team": "Sarmiento de Junín",
+    "region": "Argentina",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "377e8a6a9fbb",
+    "team": "Tigre",
+    "region": "Argentina",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "8025110db1ad",
+    "team": "Argentinos Juniors",
+    "region": "Argentina",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "1734b697fe90",
+    "team": "Barracas Central",
+    "region": "Argentina",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "d72c52435577",
+    "team": "San Martín de Tucumán",
+    "region": "Argentina",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "c5eb7d92a9f2",
+    "team": "Atlético Tucumán",
+    "region": "Argentina",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "d8df29facffb",
+    "team": "Colón de Santa Fe",
+    "region": "Argentina",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "d9cf24025fc4",
+    "team": "Instituto Córdoba",
+    "region": "Argentina",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "02b1c0aef022",
+    "team": "Rosario Central",
+    "region": "Argentina",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "823c109849f8",
+    "team": "Palmeiras",
+    "region": "Brasil",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "39c1eae3f520",
+    "team": "Corinthians",
+    "region": "Brasil",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "c4e02768a67b",
+    "team": "São Paulo FC",
+    "region": "Brasil",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "294a00375376",
+    "team": "Fluminense",
+    "region": "Brasil",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "ca014bae8240",
+    "team": "Botafogo",
+    "region": "Brasil",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "7886462a8fb4",
+    "team": "Athletico Paranaense",
+    "region": "Brasil",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "2ae2b7c7ce3b",
+    "team": "Cruzeiro",
+    "region": "Brasil",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "e56796bb6b66",
+    "team": "Bahia",
+    "region": "Brasil",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "7742e332d958",
+    "team": "Fortaleza",
+    "region": "Brasil",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "b8b4b85a4d64",
+    "team": "Bragantino",
+    "region": "Brasil",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "2042e942ba62",
+    "team": "Cuiabá",
+    "region": "Brasil",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "a2835819e1d4",
+    "team": "América Mineiro",
+    "region": "Brasil",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "7009ed77d2df",
+    "team": "Sport Recife",
+    "region": "Brasil",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "81b00bdef0cd",
+    "team": "Criciúma",
+    "region": "Brasil",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "b2c857498ff0",
+    "team": "Ceará SC",
+    "region": "Brasil",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "bb362575766c",
+    "team": "Vitória",
+    "region": "Brasil",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "0435473e8249",
+    "team": "Millonarios FC",
+    "region": "Colombia",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "aff39e1270c4",
+    "team": "Junior FC",
+    "region": "Colombia",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "c6e46fb3af75",
+    "team": "América de Cali",
+    "region": "Colombia",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "58dddd442a17",
+    "team": "Envigado FC",
+    "region": "Colombia",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "a3df12c40bd6",
+    "team": "Peñarol Colombia",
+    "region": "Colombia",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "7447a46f5814",
+    "team": "Independiente Medellín",
+    "region": "Colombia",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "8286f1a0c2fa",
+    "team": "Águilas Doradas",
+    "region": "Colombia",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "8d18959ed192",
+    "team": "Bucaramanga",
+    "region": "Colombia",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "86a53ceb5ef0",
+    "team": "Once Caldas",
+    "region": "Colombia",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "7fc1ae385839",
+    "team": "Patriotas Boyacá",
+    "region": "Colombia",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "5f1975de6fa4",
+    "team": "Universidad de Chile",
+    "region": "Chile",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "e146f086bc64",
+    "team": "Universidad Católica",
+    "region": "Chile",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "c3edf42fefbc",
+    "team": "Huachipato",
+    "region": "Chile",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "8cb2a44a0670",
+    "team": "Cobresal",
+    "region": "Chile",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "ba55514d4756",
+    "team": "Palestino",
+    "region": "Chile",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "70c3d392462e",
+    "team": "O'Higgins FC",
+    "region": "Chile",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "e16aac4c257e",
+    "team": "Everton de Viña del Mar",
+    "region": "Chile",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "2e00445b066b",
+    "team": "Curicó Unido",
+    "region": "Chile",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "9c1b5938ebfb",
+    "team": "Deportes Iquique",
+    "region": "Chile",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "12cd462b4b53",
+    "team": "Deportes Antofagasta",
+    "region": "Chile",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "e488977feddc",
+    "team": "Guadalajara (Chivas)",
+    "region": "México",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "dea9d92ebed5",
+    "team": "Cruz Azul",
+    "region": "México",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "7f9e1e375b5d",
+    "team": "Club Atlas",
+    "region": "México",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "b784abb73c7f",
+    "team": "FC Juárez",
+    "region": "México",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "6930186d08c5",
+    "team": "Santos Laguna",
+    "region": "México",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "553eb2bd5428",
+    "team": "Querétaro FC",
+    "region": "México",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "6bf9b9bba6bd",
+    "team": "Club León",
+    "region": "México",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "f45f341eacec",
+    "team": "Kawasaki Frontale",
+    "region": "Japón",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "a5b39f571aee",
+    "team": "Vissel Kobe",
+    "region": "Japón",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "82bd582c9cfd",
+    "team": "Nagoya Grampus",
+    "region": "Japón",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "bfd537e752d8",
+    "team": "Cerezo Osaka",
+    "region": "Japón",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "0489e58e7d5e",
+    "team": "Sanfrecce Hiroshima",
+    "region": "Japón",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "9a7598797b7d",
+    "team": "Gamba Osaka",
+    "region": "Japón",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "936364c294a6",
+    "team": "Yokohama F. Marinos",
+    "region": "Japón",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "2978784ef24c",
+    "team": "Shonan Bellmare",
+    "region": "Japón",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "0ecff6af7338",
+    "team": "Sagan Tosu",
+    "region": "Japón",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "1416a52a5c16",
+    "team": "Avispa Fukuoka",
+    "region": "Japón",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "3f9c9956e11c",
+    "team": "Kyoto Sanga FC",
+    "region": "Japón",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "c7d6c3e99f51",
+    "team": "Jubilo Iwata",
+    "region": "Japón",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "204475d65923",
+    "team": "Albirex Niigata",
+    "region": "Japón",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "435e547f679b",
+    "team": "Consadole Sapporo",
+    "region": "Japón",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "35f45624d80b",
+    "team": "Machida Zelvia",
+    "region": "Japón",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "d038821c865a",
+    "team": "FC Seoul",
+    "region": "Asia",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "c7152a99db57",
+    "team": "Seongnam FC",
+    "region": "Asia",
+    "tier": "Tier 2",
+    "_noContact": true
+  },
+  {
+    "id": "92c79f1462de",
+    "team": "Jeonnam Dragons FC",
+    "region": "Asia",
+    "tier": "Tier 1",
+    "_noContact": true
+  },
+  {
+    "id": "a67c803510aa",
+    "team": "Al-Qadsia SC",
+    "region": "Oriente Medio",
+    "tier": "Tier 2",
     "_noContact": true
   }
 ]
