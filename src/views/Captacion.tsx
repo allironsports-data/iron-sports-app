@@ -293,6 +293,24 @@ function ReportCard({
   )
 }
 
+// ── Scout color palette (cycles through profiles deterministically) ──────────
+const SCOUT_COLORS = [
+  { bg: 'bg-blue-100',   text: 'text-blue-800',   border: 'border-blue-200' },
+  { bg: 'bg-violet-100', text: 'text-violet-800',  border: 'border-violet-200' },
+  { bg: 'bg-emerald-100',text: 'text-emerald-800', border: 'border-emerald-200' },
+  { bg: 'bg-amber-100',  text: 'text-amber-800',   border: 'border-amber-200' },
+  { bg: 'bg-rose-100',   text: 'text-rose-800',    border: 'border-rose-200' },
+  { bg: 'bg-cyan-100',   text: 'text-cyan-800',    border: 'border-cyan-200' },
+  { bg: 'bg-orange-100', text: 'text-orange-800',  border: 'border-orange-200' },
+]
+
+// Returns a stable color for a given avatar string
+function scoutColor(avatar: string) {
+  let hash = 0
+  for (let i = 0; i < avatar.length; i++) hash = avatar.charCodeAt(i) + ((hash << 5) - hash)
+  return SCOUT_COLORS[Math.abs(hash) % SCOUT_COLORS.length]
+}
+
 // ── MatchRow ──────────────────────────────────────────────────
 
 function MatchRow({
@@ -381,11 +399,16 @@ function MatchRow({
               {profiles.map(p => <option key={p.id} value={p.avatar}>{p.avatar} · {p.name}</option>)}
             </select>
           ) : (
-            <button onClick={() => setAssignOpen(true)} className="text-left hover:underline" title="Clic para reasignar">
-              {match.assignedTo
-                ? <><span className="font-mono font-semibold text-slate-700">{match.assignedTo}</span>{scoutName && scoutName !== match.assignedTo && <span className="text-slate-400 ml-1">({scoutName})</span>}</>
-                : <span className="text-slate-300">— asignar</span>
-              }
+            <button onClick={() => setAssignOpen(true)} className="text-left hover:opacity-80 transition-opacity" title="Clic para reasignar">
+              {match.assignedTo ? (() => {
+                const c = scoutColor(match.assignedTo)
+                return (
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-semibold ${c.bg} ${c.text} ${c.border}`}>
+                    <span className="font-mono">{match.assignedTo}</span>
+                    {scoutName && scoutName !== match.assignedTo && <span className="font-normal opacity-70">({scoutName})</span>}
+                  </span>
+                )
+              })() : <span className="text-slate-300 text-xs">— asignar</span>}
             </button>
           )}
         </td>
