@@ -58,6 +58,7 @@ const PRIORITY_CONFIG = {
   A: { label: 'A', bg: 'bg-red-100',    text: 'text-red-700',    border: 'border-red-200',    ring: 'ring-red-400' },
   B: { label: 'B', bg: 'bg-amber-100',  text: 'text-amber-700',  border: 'border-amber-200',  ring: 'ring-amber-400' },
   C: { label: 'C', bg: 'bg-slate-100',  text: 'text-slate-600',  border: 'border-slate-200',  ring: 'ring-slate-400' },
+  D: { label: 'D', bg: 'bg-orange-50',  text: 'text-orange-600', border: 'border-orange-200', ring: 'ring-orange-300' },
 }
 
 // ── League / Club metadata ─────────────────────────────────────
@@ -477,12 +478,20 @@ export function Distribution({
     setNeedsAgeFilter('')
   }
 
-  // group entries by priority
-  const byPriority = useMemo(() => ({
-    A: filteredEntries.filter(e => e.priority === 'A'),
-    B: filteredEntries.filter(e => e.priority === 'B'),
-    C: filteredEntries.filter(e => e.priority === 'C'),
-  }), [filteredEntries])
+  // group entries by priority — intermediar players always go to D
+  const byPriority = useMemo(() => {
+    const withEffectivePriority = filteredEntries.map(e => {
+      const player = players.find(p => p.id === e.playerId)
+      const effectivePriority = player?.hiddenFromManagement ? 'D' : e.priority
+      return { ...e, priority: effectivePriority as 'A' | 'B' | 'C' | 'D' }
+    })
+    return {
+      A: withEffectivePriority.filter(e => e.priority === 'A'),
+      B: withEffectivePriority.filter(e => e.priority === 'B'),
+      C: withEffectivePriority.filter(e => e.priority === 'C'),
+      D: withEffectivePriority.filter(e => e.priority === 'D'),
+    }
+  }, [filteredEntries, players])
 
 
   return (
@@ -623,7 +632,7 @@ export function Distribution({
               </div>
 
               <div className="space-y-3">
-                {(['A', 'B', 'C'] as const).map(pr => {
+                {(['A', 'B', 'C', 'D'] as const).map(pr => {
                   const group = byPriority[pr]
                   if (group.length === 0) return null
                   const cfg = PRIORITY_CONFIG[pr]
@@ -2193,7 +2202,7 @@ function AddPlayerModal({ players, existingPlayerIds, season, onClose, onSave, o
   const [newClub, setNewClub] = useState('')
 
   // Shared state
-  const [priority, setPriority] = useState<'A' | 'B' | 'C'>('B')
+  const [priority, setPriority] = useState<'A' | 'B' | 'C' | 'D'>('B')
   const [condition, setCondition] = useState('')
   const [transferFee, setTransferFee] = useState('')
   const [notes, setNotes] = useState('')
@@ -2264,7 +2273,7 @@ function AddPlayerModal({ players, existingPlayerIds, season, onClose, onSave, o
       <div>
         <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1.5">Prioridad</label>
         <div className="flex gap-2">
-          {(['A', 'B', 'C'] as const).map(p => {
+          {(['A', 'B', 'C', 'D'] as const).map(p => {
             const cfg = PRIORITY_CONFIG[p]
             return (
               <button key={p} onClick={() => setPriority(p)}

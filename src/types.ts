@@ -188,7 +188,7 @@ export interface DistributionEntry {
   id: string
   playerId: string
   season: string
-  priority: 'A' | 'B' | 'C'
+  priority: 'A' | 'B' | 'C' | 'D'
   condition?: string        // "Libre", "Traspaso", "Cesión", "Cesión/Traspaso"
   transferFee?: string
   notes?: string
