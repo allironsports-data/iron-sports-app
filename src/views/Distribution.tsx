@@ -1168,7 +1168,12 @@ export function Distribution({
                     const needIndex = club.needs.indexOf(need)
                     const tier = getClubTier(club.league, club.country)
                     const tierCfg = TIER_CONFIG[tier]
-                    const offeredCount = negotiations.filter(n => n.clubId === club.id && n.status !== 'descartado').length
+                    const offeredCount = negotiations.filter(n => {
+                      if (n.clubId !== club.id || n.status === 'descartado') return false
+                      if (n.needPosition) return n.needPosition === need.position
+                      const p = players.find(pl => pl.id === n.playerId)
+                      return p ? playerMatchesNeedPosition(p.positions, need.position) : false
+                    }).length
                     return (
                       <div
                         key={`${club.id}-mobile-${i}`}
@@ -1240,7 +1245,12 @@ export function Distribution({
                         const isEditing = editingNeed?.clubId === club.id && editingNeed?.index === needIndex
                         const tier = getClubTier(club.league, club.country)
                         const tierCfg = TIER_CONFIG[tier]
-                        const offeredCount = negotiations.filter(n => n.clubId === club.id && n.status !== 'descartado').length
+                        const offeredCount = negotiations.filter(n => {
+                          if (n.clubId !== club.id || n.status === 'descartado') return false
+                          if (n.needPosition) return n.needPosition === need.position
+                          const p = players.find(pl => pl.id === n.playerId)
+                          return p ? playerMatchesNeedPosition(p.positions, need.position) : false
+                        }).length
                         return (
                           <tr
                             key={`${club.id}-${i}`}
