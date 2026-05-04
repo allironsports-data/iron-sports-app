@@ -1002,7 +1002,7 @@ function PerformanceTab({ player, profiles, onUpdate }: { player: Player; profil
                   </div>
                 </div>
                 {note.title && <p className="text-sm font-semibold text-slate-800 mb-1">{note.title}</p>}
-                <p className="text-sm text-slate-700 leading-relaxed">{note.content}</p>
+                <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{note.content}</p>
                 {author && (
                   <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
@@ -1171,8 +1171,8 @@ function AddPerformanceModal({ profiles, onClose, onAdd }: {
           <TF label="Título / Partido (opcional)" value={title} onChange={setTitle} placeholder="Ej: Alavés vs Athletic, 02/05/2026" />
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Informe / Observaciones</label>
-            <textarea value={content} onChange={(e) => setContent(e.target.value)} required rows={4}
-              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 resize-none" />
+            <textarea value={content} onChange={(e) => setContent(e.target.value)} required rows={8}
+              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 resize-y" />
           </div>
           <button type="submit" disabled={!author || !content}
             className="w-full rounded-md text-white text-sm font-medium py-2 disabled:opacity-40"
