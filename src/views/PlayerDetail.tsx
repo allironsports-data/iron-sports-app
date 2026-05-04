@@ -968,7 +968,7 @@ function PerformanceTab({ player, profiles, onUpdate }: { player: Player; profil
               section === s.id ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"
             }`}>
             {s.icon}{s.label}
-            {s.count > 0 && <span className={`text-[10px] rounded-full px-1.5 py-0.5 ${section === s.id ? "bg-slate-100 text-slate-600" : "bg-slate-200 text-slate-500"}`}>{s.count}</span>}
+            {(s.count ?? 0) > 0 && <span className={`text-[10px] rounded-full px-1.5 py-0.5 ${section === s.id ? "bg-slate-100 text-slate-600" : "bg-slate-200 text-slate-500"}`}>{s.count}</span>}
           </button>
         ))}
       </div>
