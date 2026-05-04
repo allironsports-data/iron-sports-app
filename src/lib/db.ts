@@ -275,6 +275,7 @@ function dbToNote(row: Record<string, unknown>): PerformanceNote {
     category: (row.category as string) ?? '',
     rating: (row.rating as number) ?? 0,
     content: (row.content as string) ?? '',
+    title: (row.title as string) ?? undefined,
   }
 }
 
