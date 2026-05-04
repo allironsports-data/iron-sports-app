@@ -296,6 +296,7 @@ export async function createNote(playerId: string, note: Omit<PerformanceNote, '
     category: note.category,
     rating: note.rating,
     content: note.content,
+    title: note.title ?? null,
   }).select().single()
   if (error) throw error
   return dbToNote(data)

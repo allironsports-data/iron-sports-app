@@ -1148,7 +1148,21 @@ function AddPerformanceModal({ profiles, onClose, onAdd, initialNote }: {
   const [rating, setRating] = useState(initialNote?.rating ?? 7);
   const [title, setTitle] = useState(initialNote?.title ?? "");
   const [content, setContent] = useState(initialNote?.content ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const isEdit = !!initialNote;
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await onAdd({ date, authorId: author, category, rating, content, title: title || undefined });
+    } catch (err) {
+      setError('Error al guardar. Inténtalo de nuevo.');
+      setSaving(false);
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
@@ -1157,8 +1171,7 @@ function AddPerformanceModal({ profiles, onClose, onAdd, initialNote }: {
           <h2 className="text-sm font-semibold text-slate-800">{isEdit ? 'Editar informe' : 'Nuevo informe'}</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
         </div>
-        <form onSubmit={(e) => { e.preventDefault(); onAdd({ date, authorId: author, category, rating, content, title: title || undefined }); }}
-          className="p-4 space-y-3">
+        <form onSubmit={handleSubmit} className="p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <TF label="Fecha" value={date} onChange={setDate} type="date" />
             <div>
@@ -1191,9 +1204,12 @@ function AddPerformanceModal({ profiles, onClose, onAdd, initialNote }: {
             <textarea value={content} onChange={(e) => setContent(e.target.value)} required rows={8}
               className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 resize-y" />
           </div>
-          <button type="submit" disabled={!author || !content}
+          {error && <p className="text-xs text-red-500 text-center">{error}</p>}
+          <button type="submit" disabled={!author || !content || saving}
             className="w-full rounded-md text-white text-sm font-medium py-2 disabled:opacity-40"
-            style={{ background: PRIMARY }}>{isEdit ? 'Guardar cambios' : 'Guardar informe'}</button>
+            style={{ background: PRIMARY }}>
+            {saving ? 'Guardando…' : isEdit ? 'Guardar cambios' : 'Guardar informe'}
+          </button>
         </form>
       </div>
     </div>
