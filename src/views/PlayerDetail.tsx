@@ -7,7 +7,7 @@ import type {
 } from "../types";
 import { calcAge } from "../types";
 import type { Profile } from "../contexts/AuthContext";
-import { uploadContractPdf, fetchNotes, createNote, deleteNote } from "../lib/db";
+import { uploadContractPdf, fetchNotes, createNote, updateNote, deleteNote } from "../lib/db";
 import { TaskDetailPanel } from "../components/TaskDetailPanel";
 import {
   ArrowLeft, LogOut, ClipboardList, FileText,
@@ -942,6 +942,7 @@ function PerformanceTab({ player, profiles, onUpdate }: { player: Player; profil
   const [section, setSection] = useState<"informes" | "video">("informes");
   const [showAddNote, setShowAddNote] = useState(false);
   const [showAddVideo, setShowAddVideo] = useState(false);
+  const [editingNote, setEditingNote] = useState<PerformanceNote | null>(null);
   const [dbNotes, setDbNotes] = useState<PerformanceNote[]>(player.performance);
   const [notesLoading, setNotesLoading] = useState(true);
 
@@ -1009,13 +1010,19 @@ function PerformanceTab({ player, profiles, onUpdate }: { player: Player; profil
                       <span className="w-5 h-5 rounded-full bg-slate-100 text-[9px] font-semibold flex items-center justify-center">{author.avatar}</span>
                       <span className="text-xs text-slate-400">{author.name}</span>
                     </div>
-                    <button onClick={async () => {
-                        await deleteNote(note.id);
-                        setDbNotes(prev => prev.filter(n => n.id !== note.id));
-                      }}
-                      className="p-1 text-slate-300 hover:text-red-500">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => setEditingNote(note)}
+                        className="p-1 text-slate-300 hover:text-blue-500">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={async () => {
+                          await deleteNote(note.id);
+                          setDbNotes(prev => prev.filter(n => n.id !== note.id));
+                        }}
+                        className="p-1 text-slate-300 hover:text-red-500">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1078,6 +1085,15 @@ function PerformanceTab({ player, profiles, onUpdate }: { player: Player; profil
             setShowAddNote(false);
           }} />
       )}
+      {editingNote && (
+        <AddPerformanceModal profiles={profiles} initialNote={editingNote} onClose={() => setEditingNote(null)}
+          onAdd={async (note) => {
+            const updated: PerformanceNote = { ...note, id: editingNote.id };
+            await updateNote(updated);
+            setDbNotes(prev => prev.map(n => n.id === editingNote.id ? updated : n));
+            setEditingNote(null);
+          }} />
+      )}
       {showAddVideo && (
         <AddVideoSessionModal onClose={() => setShowAddVideo(false)}
           onSave={(v) => { onUpdate({ ...player, videoSessions: [v, ...(player.videoSessions ?? [])] }); setShowAddVideo(false); }} />
@@ -1123,21 +1139,22 @@ function AddVideoSessionModal({ onClose, onSave }: {
   );
 }
 
-function AddPerformanceModal({ profiles, onClose, onAdd }: {
-  profiles: Profile[]; onClose: () => void; onAdd: (n: Omit<PerformanceNote, 'id'>) => Promise<void>;
+function AddPerformanceModal({ profiles, onClose, onAdd, initialNote }: {
+  profiles: Profile[]; onClose: () => void; onAdd: (n: Omit<PerformanceNote, 'id'>) => Promise<void>; initialNote?: PerformanceNote;
 }) {
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
-  const [author, setAuthor] = useState("");
-  const [category, setCategory] = useState("Partido");
-  const [rating, setRating] = useState(7);
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
+  const [date, setDate] = useState(initialNote?.date ?? new Date().toISOString().split("T")[0]);
+  const [author, setAuthor] = useState(initialNote?.authorId ?? "");
+  const [category, setCategory] = useState(initialNote?.category ?? "Partido");
+  const [rating, setRating] = useState(initialNote?.rating ?? 7);
+  const [title, setTitle] = useState(initialNote?.title ?? "");
+  const [content, setContent] = useState(initialNote?.content ?? "");
+  const isEdit = !!initialNote;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
       <div className="bg-white rounded-lg border border-slate-200 shadow-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-          <h2 className="text-sm font-semibold text-slate-800">Nuevo informe</h2>
+          <h2 className="text-sm font-semibold text-slate-800">{isEdit ? 'Editar informe' : 'Nuevo informe'}</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
         </div>
         <form onSubmit={(e) => { e.preventDefault(); onAdd({ date, authorId: author, category, rating, content, title: title || undefined }); }}
@@ -1176,7 +1193,7 @@ function AddPerformanceModal({ profiles, onClose, onAdd }: {
           </div>
           <button type="submit" disabled={!author || !content}
             className="w-full rounded-md text-white text-sm font-medium py-2 disabled:opacity-40"
-            style={{ background: PRIMARY }}>Guardar informe</button>
+            style={{ background: PRIMARY }}>{isEdit ? 'Guardar cambios' : 'Guardar informe'}</button>
         </form>
       </div>
     </div>

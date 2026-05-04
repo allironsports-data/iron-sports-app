@@ -301,6 +301,18 @@ export async function createNote(playerId: string, note: Omit<PerformanceNote, '
   return dbToNote(data)
 }
 
+export async function updateNote(note: PerformanceNote): Promise<void> {
+  const { error } = await supabase.from('performance_notes').update({
+    author_id: note.authorId || null,
+    date: note.date,
+    category: note.category,
+    rating: note.rating,
+    content: note.content,
+    title: note.title ?? null,
+  }).eq('id', note.id)
+  if (error) throw error
+}
+
 export async function deleteNote(id: string): Promise<void> {
   const { error } = await supabase.from('performance_notes').delete().eq('id', id)
   if (error) throw error
