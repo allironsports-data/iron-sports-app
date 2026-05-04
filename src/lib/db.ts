@@ -301,6 +301,11 @@ export async function createNote(playerId: string, note: Omit<PerformanceNote, '
   return dbToNote(data)
 }
 
+export async function deleteNote(id: string): Promise<void> {
+  const { error } = await supabase.from('performance_notes').delete().eq('id', id)
+  if (error) throw error
+}
+
 // ── PROFILES ─────────────────────────────────────────────────
 
 export async function fetchProfiles() {

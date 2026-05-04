@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import logoImg from '../assets/logo.jpeg';
 import type {
   Player, Task,
@@ -7,7 +7,7 @@ import type {
 } from "../types";
 import { calcAge } from "../types";
 import type { Profile } from "../contexts/AuthContext";
-import { uploadContractPdf } from "../lib/db";
+import { uploadContractPdf, fetchNotes, createNote, deleteNote } from "../lib/db";
 import { TaskDetailPanel } from "../components/TaskDetailPanel";
 import {
   ArrowLeft, LogOut, ClipboardList, FileText,
@@ -61,7 +61,7 @@ export function PlayerDetail({
   const [showEditPlayer, setShowEditPlayer] = useState(false);
 
   const pendingCount   = tasks.filter((t) => t.status !== "completada").length;
-  const rendimCount    = player.performance.length + (player.videoSessions?.length ?? 0);
+  const rendimCount    = (player.videoSessions?.length ?? 0) || undefined;
   const distribCount   = playerNegotiations.length || undefined;
 
   const navGroups: NavGroup[] = [
@@ -942,16 +942,25 @@ function PerformanceTab({ player, profiles, onUpdate }: { player: Player; profil
   const [section, setSection] = useState<"informes" | "video">("informes");
   const [showAddNote, setShowAddNote] = useState(false);
   const [showAddVideo, setShowAddVideo] = useState(false);
+  const [dbNotes, setDbNotes] = useState<PerformanceNote[]>(player.performance);
+  const [notesLoading, setNotesLoading] = useState(true);
+
+  useEffect(() => {
+    setNotesLoading(true);
+    fetchNotes(player.id)
+      .then(loaded => { setDbNotes(loaded); setNotesLoading(false); })
+      .catch(() => setNotesLoading(false));
+  }, [player.id]);
 
   const videos = [...(player.videoSessions ?? [])].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  const notes = [...player.performance].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const notes = [...dbNotes].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   return (
     <div className="space-y-4">
       {/* Sub-nav */}
       <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
         {([
-          { id: "informes", label: "Informes", icon: <BookOpen className="w-3.5 h-3.5" />, count: notes.length },
+          { id: "informes", label: "Informes", icon: <BookOpen className="w-3.5 h-3.5" />, count: notesLoading ? undefined : notes.length },
           { id: "video", label: "Vídeoanalisis", icon: <Video className="w-3.5 h-3.5" />, count: videos.length },
         ] as const).map(s => (
           <button key={s.id} onClick={() => setSection(s.id)}
@@ -1000,7 +1009,10 @@ function PerformanceTab({ player, profiles, onUpdate }: { player: Player; profil
                       <span className="w-5 h-5 rounded-full bg-slate-100 text-[9px] font-semibold flex items-center justify-center">{author.avatar}</span>
                       <span className="text-xs text-slate-400">{author.name}</span>
                     </div>
-                    <button onClick={() => onUpdate({ ...player, performance: player.performance.filter(n => n.id !== note.id) })}
+                    <button onClick={async () => {
+                        await deleteNote(note.id);
+                        setDbNotes(prev => prev.filter(n => n.id !== note.id));
+                      }}
                       className="p-1 text-slate-300 hover:text-red-500">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -1060,7 +1072,11 @@ function PerformanceTab({ player, profiles, onUpdate }: { player: Player; profil
       {/* Modals */}
       {showAddNote && (
         <AddPerformanceModal profiles={profiles} onClose={() => setShowAddNote(false)}
-          onAdd={(note) => { onUpdate({ ...player, performance: [note, ...player.performance] }); setShowAddNote(false); }} />
+          onAdd={async (note) => {
+            const saved = await createNote(player.id, note);
+            setDbNotes(prev => [saved, ...prev]);
+            setShowAddNote(false);
+          }} />
       )}
       {showAddVideo && (
         <AddVideoSessionModal onClose={() => setShowAddVideo(false)}
@@ -1108,7 +1124,7 @@ function AddVideoSessionModal({ onClose, onSave }: {
 }
 
 function AddPerformanceModal({ profiles, onClose, onAdd }: {
-  profiles: Profile[]; onClose: () => void; onAdd: (n: PerformanceNote) => void;
+  profiles: Profile[]; onClose: () => void; onAdd: (n: Omit<PerformanceNote, 'id'>) => Promise<void>;
 }) {
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [author, setAuthor] = useState("");
@@ -1124,7 +1140,7 @@ function AddPerformanceModal({ profiles, onClose, onAdd }: {
           <h2 className="text-sm font-semibold text-slate-800">Nuevo informe</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
         </div>
-        <form onSubmit={(e) => { e.preventDefault(); onAdd({ id: "pn" + Date.now(), date, authorId: author, category, rating, content, title: title || undefined }); }}
+        <form onSubmit={(e) => { e.preventDefault(); onAdd({ date, authorId: author, category, rating, content, title: title || undefined }); }}
           className="p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <TF label="Fecha" value={date} onChange={setDate} type="date" />
