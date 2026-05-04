@@ -14,7 +14,7 @@ import {
   TrendingUp, User, Plus, X, Calendar, AlertCircle,
   Clock, CheckCircle2, Trash2, Edit3, Star, Users,
   Paperclip, Download, ExternalLink, Link2,
-  Video, BarChart2, BookOpen, Search, Filter,
+  Video, BarChart2, BookOpen, Search, Filter, Pencil,
 } from "lucide-react";
 
 const PRIMARY = "hsl(220,72%,26%)";
