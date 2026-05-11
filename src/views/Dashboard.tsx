@@ -1225,7 +1225,7 @@ export function Dashboard({
       )}
 
       {showAddGeneralTask && onAddGeneralTask && (
-        <AddGeneralTaskModal profiles={profiles} onClose={() => setShowAddGeneralTask(false)}
+        <AddGeneralTaskModal profiles={profiles} players={players} onClose={() => setShowAddGeneralTask(false)}
           onAdd={(t) => { onAddGeneralTask(t); setShowAddGeneralTask(false); }} />
       )}
 
@@ -1688,12 +1688,13 @@ function AddPlayerModal({ profiles, onClose, onAdd }: {
   );
 }
 
-function AddGeneralTaskModal({ profiles, onClose, onAdd }: {
-  profiles: Profile[]; onClose: () => void; onAdd: (task: Task) => void;
+function AddGeneralTaskModal({ profiles, players, onClose, onAdd }: {
+  profiles: Profile[]; players: Player[]; onClose: () => void; onAdd: (task: Task) => void;
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [assigneeId, setAssigneeId] = useState("");
+  const [selectedPlayerId, setSelectedPlayerId] = useState("");
   const [priority, setPriority] = useState<"alta" | "media" | "baja">("media");
   const [label, setLabel] = useState<TaskLabel | "">("");
   const [dueDate, setDueDate] = useState("");
@@ -1705,7 +1706,7 @@ function AddGeneralTaskModal({ profiles, onClose, onAdd }: {
       id: "t" + Date.now(),
       title,
       description,
-      playerId: "general",
+      playerId: selectedPlayerId || "general",
       assigneeId,
       priority,
       label: label || undefined,
@@ -1721,10 +1722,20 @@ function AddGeneralTaskModal({ profiles, onClose, onAdd }: {
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-0 sm:p-4">
       <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-sm">
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white">
-          <h2 className="text-sm font-semibold text-slate-800">Nueva tarea general</h2>
+          <h2 className="text-sm font-semibold text-slate-800">Nueva tarea</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
         </div>
         <form onSubmit={handleSubmit} className="p-4 space-y-3 pb-8">
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Jugador (opcional)</label>
+            <select value={selectedPlayerId} onChange={(e) => setSelectedPlayerId(e.target.value)}
+              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
+              <option value="">— Tarea general —</option>
+              {[...players].sort((a, b) => a.name.localeCompare(b.name)).map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
           <F label="Título" value={title} onChange={setTitle} required />
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Descripción</label>
