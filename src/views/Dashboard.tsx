@@ -1233,6 +1233,7 @@ export function Dashboard({
         <EditGeneralTaskModal
           task={editingGeneralTask}
           profiles={profiles}
+          players={players}
           onClose={() => setEditingGeneralTask(null)}
           onUpdate={(updated) => {
             if (onUpdateGeneralTask) onUpdateGeneralTask(updated);
@@ -1798,13 +1799,14 @@ function AddGeneralTaskModal({ profiles, players, onClose, onAdd }: {
   );
 }
 
-function EditGeneralTaskModal({ task, profiles, onClose, onUpdate, onDelete }: {
-  task: Task; profiles: Profile[]; onClose: () => void;
+function EditGeneralTaskModal({ task, profiles, players, onClose, onUpdate, onDelete }: {
+  task: Task; profiles: Profile[]; players: Player[]; onClose: () => void;
   onUpdate: (task: Task) => void; onDelete?: (id: string) => void;
 }) {
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description);
   const [assigneeId, setAssigneeId] = useState(task.assigneeId);
+  const [selectedPlayerId, setSelectedPlayerId] = useState(task.playerId === "general" ? "" : task.playerId);
   const [priority, setPriority] = useState<"alta" | "media" | "baja">(task.priority);
   const [label, setLabel] = useState<TaskLabel | "">(task.label ?? "");
   const [status, setStatus] = useState<"pendiente" | "en_progreso" | "completada">(task.status);
@@ -1816,6 +1818,7 @@ function EditGeneralTaskModal({ task, profiles, onClose, onUpdate, onDelete }: {
       ...task,
       title,
       description,
+      playerId: selectedPlayerId || "general",
       assigneeId,
       priority,
       label: label || undefined,
@@ -1828,10 +1831,20 @@ function EditGeneralTaskModal({ task, profiles, onClose, onUpdate, onDelete }: {
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-0 sm:p-4">
       <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-md max-h-[92vh] overflow-y-auto">
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white z-10">
-          <h2 className="text-sm font-semibold text-slate-800">Editar tarea general</h2>
+          <h2 className="text-sm font-semibold text-slate-800">Editar tarea</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
         </div>
         <form onSubmit={handleSave} className="p-4 space-y-3 pb-8">
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Jugador (opcional)</label>
+            <select value={selectedPlayerId} onChange={(e) => setSelectedPlayerId(e.target.value)}
+              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
+              <option value="">— Tarea general —</option>
+              {[...players].sort((a, b) => a.name.localeCompare(b.name)).map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
           <F label="Título" value={title} onChange={setTitle} required />
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Descripción</label>
