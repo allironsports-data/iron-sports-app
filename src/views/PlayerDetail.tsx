@@ -605,6 +605,7 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
         <TaskDetailPanel
           task={detailTask}
           player={player}
+          players={[player]}
           profiles={profiles}
           currentProfile={currentProfile}
           onClose={() => setDetailTask(null)}

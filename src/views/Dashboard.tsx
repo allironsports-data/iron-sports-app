@@ -1274,23 +1274,18 @@ export function Dashboard({
         <TaskDetailPanel
           task={detailTask}
           player={players.find((p) => p.id === detailTask.playerId)}
+          players={players}
           profiles={profiles}
           currentProfile={currentProfile}
           onGoToPlayer={onSelectPlayer}
           onClose={() => setDetailTask(null)}
           onUpdate={(updated) => {
-            if (detailTask.playerId === "general" || detailTask.playerId === "") {
-              if (onUpdateGeneralTask) onUpdateGeneralTask(updated);
-            } else {
-              if (onUpdateTask) onUpdateTask(updated);
-            }
+            if (onUpdateTask) onUpdateTask(updated);
+            if (onUpdateGeneralTask) onUpdateGeneralTask(updated);
           }}
           onSaveAndClose={(updated) => {
-            if (detailTask.playerId === "general" || detailTask.playerId === "") {
-              if (onUpdateGeneralTask) onUpdateGeneralTask(updated);
-            } else {
-              if (onUpdateTask) onUpdateTask(updated);
-            }
+            if (onUpdateTask) onUpdateTask(updated);
+            if (onUpdateGeneralTask) onUpdateGeneralTask(updated);
             setDetailTask(null);
           }}
           onDelete={(taskId) => {

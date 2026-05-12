@@ -9,6 +9,7 @@ const PRIMARY = "hsl(220,72%,26%)";
 interface Props {
   task: Task;
   player: Player | undefined;
+  players: Player[];
   profiles: Profile[];
   currentProfile: Profile;
   onClose: () => void;
@@ -19,15 +20,17 @@ interface Props {
 }
 
 export function TaskDetailPanel({
-  task, player, profiles, currentProfile,
+  task, player, players, profiles, currentProfile,
   onClose, onUpdate, onSaveAndClose, onDelete, onGoToPlayer,
 }: Props) {
-  const canEdit = currentProfile.is_admin || task.assigneeId === currentProfile.id;
+  const canEdit = currentProfile.is_admin || task.assigneeId === currentProfile.id
+    || (task.watchers ?? []).includes(currentProfile.id);
 
   const [title, setTitle]           = useState(task.title);
   const [description, setDescription] = useState(task.description);
   const [status, setStatus]         = useState<Task["status"]>(task.status);
   const [assigneeId, setAssigneeId] = useState(task.assigneeId);
+  const [playerId, setPlayerId]     = useState(task.playerId === "general" ? "" : task.playerId);
   const [label, setLabel]           = useState<TaskLabel | "">(task.label ?? "");
   const [watchers, setWatchers]     = useState<string[]>(task.watchers ?? []);
   const [commentText, setCommentText] = useState("");
@@ -53,13 +56,15 @@ export function TaskDetailPanel({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task.id, task.status]);
 
+  const effectivePlayerId = playerId || "general";
+
   const handleSave = () => {
-    onSaveAndClose({ ...task, title, description, status, assigneeId, label: label || undefined, watchers });
+    onSaveAndClose({ ...task, playerId: effectivePlayerId, title, description, status, assigneeId, label: label || undefined, watchers });
   };
 
   const handleStatusChange = (newStatus: Task["status"]) => {
     setStatus(newStatus);
-    onUpdate({ ...task, title, description, status: newStatus, assigneeId, label: label || undefined, watchers });
+    onUpdate({ ...task, playerId: effectivePlayerId, title, description, status: newStatus, assigneeId, label: label || undefined, watchers });
   };
 
   const toggleWatcher = (profileId: string) => {
@@ -319,6 +324,27 @@ export function TaskDetailPanel({
                       </span>
                     ) : (
                       <p className="text-xs text-slate-400">Sin tipo</p>
+                    )}
+                  </div>
+
+                  {/* Player */}
+                  <div className="bg-slate-50 rounded-xl p-3 col-span-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Jugador</p>
+                    {canEdit ? (
+                      <select
+                        value={playerId}
+                        onChange={e => setPlayerId(e.target.value)}
+                        className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+                      >
+                        <option value="">— Tarea general —</option>
+                        {[...players].sort((a, b) => a.name.localeCompare(b.name)).map(p => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                    ) : player ? (
+                      <p className="text-sm text-slate-700">{player.name}</p>
+                    ) : (
+                      <p className="text-xs text-slate-400">Tarea general</p>
                     )}
                   </div>
 
