@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from './contexts/AuthContext'
 import type { Player, Task, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer } from './types'
 import * as db from './lib/db'
@@ -38,6 +38,7 @@ export default function App() {
   const [players, setPlayers] = useState<Player[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [profiles, setProfiles] = useState<Profile[]>([])
+  const profilesRef = useRef<Profile[]>([])
   const [dataLoading, setDataLoading] = useState(false)
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
   const [selectedClubId, setSelectedClubId] = useState<string | null>(null)
@@ -92,6 +93,7 @@ export default function App() {
     ]).then(([p, t, pr, cl, de, ng, sp, sr, sm, mp]) => {
       setPlayers(p)
       setTasks(t)
+      profilesRef.current = pr as Profile[]
       setProfiles(pr as Profile[])
       setClubs(cl as Club[])
       setDistEntries(de as DistributionEntry[])
@@ -140,6 +142,33 @@ export default function App() {
             return prev
           })
         }
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'task_comments' }, (payload: { new: Record<string, unknown> }) => {
+        const row = payload.new as Record<string, unknown>
+        const authorId = row.author_id as string
+        // Don't notify if I wrote the comment
+        if (authorId === profile.id) return
+        const taskId = row.task_id as string
+        const content = row.content as string
+        const preview = content.length > 40 ? content.slice(0, 40) + '…' : content
+        setTasks((prev) => {
+          const task = prev.find((t) => t.id === taskId)
+          if (!task) return prev
+          // Notify if I'm the assignee or a watcher
+          const amInvolved =
+            task.assigneeId === profile.id ||
+            (task.watchers ?? []).includes(profile.id)
+          if (amInvolved) {
+            const authorProfile = profilesRef.current.find((p) => p.id === authorId)
+            const who = authorProfile?.name.split(' ')[0] ?? 'Alguien'
+            addNotification(
+              `${who} comentó en "${task.title}": ${preview}`,
+              'task_new',
+              task.playerId !== 'general' ? task.playerId : undefined
+            )
+          }
+          return prev
+        })
       })
       .subscribe()
 
