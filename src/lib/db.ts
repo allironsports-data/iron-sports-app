@@ -178,7 +178,9 @@ export async function createTask(t: Task): Promise<Task> {
 }
 
 export async function updateTask(t: Task): Promise<void> {
+  const isGeneral = !t.playerId || t.playerId === 'general'
   const { error } = await supabase.from('tasks').update({
+    player_id: isGeneral ? null : t.playerId,
     title: t.title,
     description: t.description,
     assignee_id: t.assigneeId || null,

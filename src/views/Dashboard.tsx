@@ -151,30 +151,34 @@ export function Dashboard({
   );
   const inProgressTasks = tasks.filter((t) => t.status === "en_progreso");
 
-  // myTasks: assigned to me (pending), excluding adminOnly tasks if not admin
+  // helper: is the current user involved in a task (assignee OR watcher)
+  const iAmInvolved = (t: Task) =>
+    t.assigneeId === currentProfile.id || (t.watchers ?? []).includes(currentProfile.id);
+
+  // myTasks: assigned to me OR watching (pending), excluding adminOnly if not admin
   const myTasks = pendingTasks.filter((t) => {
-    if (t.assigneeId !== currentProfile.id) return false;
+    if (!iAmInvolved(t)) return false;
     if (t.adminOnly && !currentProfile.is_admin) return false;
     return true;
   });
   // completed version for display
   const myTasksCompleted = tasks.filter((t) => {
     if (t.status !== "completada") return false;
-    if (t.assigneeId !== currentProfile.id) return false;
+    if (!iAmInvolved(t)) return false;
     if (t.adminOnly && !currentProfile.is_admin) return false;
     return true;
   });
 
-  // myPlayerTasks: tasks for my managed players (pending), excluding my own assigned tasks
+  // myPlayerTasks: tasks for players I manage where I'm not the assignee/watcher
   const myPlayerTasks = pendingTasks.filter((t) => {
-    if (t.assigneeId === currentProfile.id) return false;
+    if (iAmInvolved(t)) return false; // already shown in myTasks
     if (t.adminOnly && !currentProfile.is_admin) return false;
     const player = players.find((p) => p.id === t.playerId);
     return player && player.managedBy.includes(currentProfile.id);
   });
   const myPlayerTasksCompleted = tasks.filter((t) => {
     if (t.status !== "completada") return false;
-    if (t.assigneeId === currentProfile.id) return false;
+    if (iAmInvolved(t)) return false;
     if (t.adminOnly && !currentProfile.is_admin) return false;
     const player = players.find((p) => p.id === t.playerId);
     return player && player.managedBy.includes(currentProfile.id);
@@ -1972,8 +1976,8 @@ function QuickTaskModal({ player, profiles, onClose, onAdd }: {
               onKeyDown={(e) => {
                 if (e.key === "Enter" && title.trim()) {
                   onAdd({ id: "t"+Date.now(), playerId: player.id, title: title.trim(), description: "",
-                    assigneeId, priority, status: "pendiente", dueDate: dueDate || undefined,
-                    createdAt: new Date().toISOString(), comments: [] });
+                    assigneeId, watchers: player.managedBy ?? [], priority, status: "pendiente",
+                    dueDate: dueDate || undefined, createdAt: new Date().toISOString(), comments: [] });
                 }
               }}
             />
@@ -2006,8 +2010,8 @@ function QuickTaskModal({ player, profiles, onClose, onAdd }: {
             onClick={() => {
               if (!title.trim()) return;
               onAdd({ id: "t"+Date.now(), playerId: player.id, title: title.trim(), description: "",
-                assigneeId, priority, status: "pendiente", dueDate: dueDate || undefined,
-                createdAt: new Date().toISOString(), comments: [] });
+                assigneeId, watchers: player.managedBy ?? [], priority, status: "pendiente",
+                dueDate: dueDate || undefined, createdAt: new Date().toISOString(), comments: [] });
             }}
             disabled={!title.trim()}
             className="w-full rounded-md text-white text-sm font-medium py-2.5 disabled:opacity-40 transition-colors"
