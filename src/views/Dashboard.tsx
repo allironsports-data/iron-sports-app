@@ -169,17 +169,14 @@ export function Dashboard({
     return true;
   });
 
-  // myPlayerTasks: tasks for players I manage, excluding only tasks assigned to me
-  // (those already appear in myTasks). Watchers don't move tasks out of here.
+  // myPlayerTasks: ALL tasks for players I manage (no exclusions — overlap with myTasks is intentional)
   const myPlayerTasks = pendingTasks.filter((t) => {
-    if (t.assigneeId === currentProfile.id) return false; // already in myTasks
     if (t.adminOnly && !currentProfile.is_admin) return false;
     const player = players.find((p) => p.id === t.playerId);
     return player && player.managedBy.includes(currentProfile.id);
   });
   const myPlayerTasksCompleted = tasks.filter((t) => {
     if (t.status !== "completada") return false;
-    if (t.assigneeId === currentProfile.id) return false;
     if (t.adminOnly && !currentProfile.is_admin) return false;
     const player = players.find((p) => p.id === t.playerId);
     return player && player.managedBy.includes(currentProfile.id);
