@@ -3,7 +3,7 @@ import {
   Search, X, Plus, LogOut, Trash2, ChevronDown,
   FileText, Calendar, ChevronRight,
   TrendingUp, Eye, Maximize2, Minimize2, Pencil,
-  BarChart2, ClipboardList, Users,
+  BarChart2, ClipboardList, Users, Inbox, Send,
 } from 'lucide-react'
 import logoImg from '../assets/logo.jpeg'
 import type { ScoutingPlayer, ScoutingReport, ScoutingAssessment, ScoutingMatch, ScoutingMatchPlayer } from '../types'
@@ -12,7 +12,7 @@ import * as db from '../lib/db'
 
 // ── Constants ────────────────────────────────────────────────
 
-type CaptacionTab = 'jugadores' | 'informes' | 'estadisticas' | 'partidos'
+type CaptacionTab = 'jugadores' | 'informes' | 'estadisticas' | 'partidos' | 'boulema'
 
 const ASSESSMENT_CONFIG: Record<ScoutingAssessment, { label: string; bg: string; text: string; border: string }> = {
   Llamar:     { label: 'Llamar',     bg: 'bg-amber-100',   text: 'text-amber-700',   border: 'border-amber-200' },
@@ -44,6 +44,31 @@ const CONCLUSION_STYLE: Record<string, string> = {
 }
 
 const MONTHS_ES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+
+// ── Boulema ──────────────────────────────────────────────────
+
+interface BoulemaPeticion {
+  id: string
+  playerName: string
+  position?: string
+  birthYear?: string
+  team?: string
+  requestedFrom: string   // profile.avatar (initials) of who should write the informe
+  notes?: string
+  requestedBy: string     // profile.avatar of who made the request
+  createdAt: string       // ISO
+}
+
+const BOULEMA_KEY = 'iron_boulema_peticiones'
+
+function loadBoulemaPeticiones(): BoulemaPeticion[] {
+  try { return JSON.parse(localStorage.getItem(BOULEMA_KEY) ?? '[]') } catch { return [] }
+}
+function saveBoulemaPeticiones(ps: BoulemaPeticion[]) {
+  localStorage.setItem(BOULEMA_KEY, JSON.stringify(ps))
+}
+
+// ── Competition options ──────────────────────────────────────
 
 const COMPETITION_OPTIONS = [
   // Competiciones profesionales
@@ -610,6 +635,146 @@ function MatchFormPanel({ initial, profiles, onSave, onCancel }: {
   )
 }
 
+// ── AddBoulemaModal ───────────────────────────────────────────
+
+function AddBoulemaModal({
+  profiles,
+  currentProfile,
+  onClose,
+  onSave,
+}: {
+  profiles: Profile[]
+  currentProfile: Profile
+  onClose: () => void
+  onSave: (p: BoulemaPeticion) => void
+}) {
+  const [playerName, setPlayerName] = useState('')
+  const [position, setPosition] = useState('')
+  const [birthYear, setBirthYear] = useState('')
+  const [team, setTeam] = useState('')
+  const [requestedFrom, setRequestedFrom] = useState(currentProfile.avatar)
+  const [notes, setNotes] = useState('')
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!playerName.trim()) return
+    const peticion: BoulemaPeticion = {
+      id: crypto.randomUUID(),
+      playerName: playerName.trim(),
+      position: position.trim() || undefined,
+      birthYear: birthYear.trim() || undefined,
+      team: team.trim() || undefined,
+      requestedFrom,
+      notes: notes.trim() || undefined,
+      requestedBy: currentProfile.avatar,
+      createdAt: new Date().toISOString(),
+    }
+    onSave(peticion)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+          <h2 className="text-base font-semibold text-slate-800 flex items-center gap-2">
+            <Send className="w-4 h-4 text-slate-400" />
+            Añadir petición de informe
+          </h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-5 space-y-3">
+          <FormRow label="Jugador *">
+            <input
+              value={playerName}
+              onChange={e => setPlayerName(e.target.value)}
+              placeholder="Nombre del jugador"
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+              required
+              autoFocus
+            />
+          </FormRow>
+
+          <div className="grid grid-cols-2 gap-2">
+            <FormRow label="Posición">
+              <select
+                value={position}
+                onChange={e => setPosition(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              >
+                <option value="">—</option>
+                {POSITIONS_SCOUTING.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </FormRow>
+            <FormRow label="Año nac.">
+              <input
+                value={birthYear}
+                onChange={e => setBirthYear(e.target.value)}
+                placeholder="2007"
+                maxLength={4}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              />
+            </FormRow>
+          </div>
+
+          <FormRow label="Equipo">
+            <input
+              value={team}
+              onChange={e => setTeam(e.target.value)}
+              placeholder="Club actual"
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+            />
+          </FormRow>
+
+          <FormRow label="Pedir informe a">
+            <select
+              value={requestedFrom}
+              onChange={e => setRequestedFrom(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+            >
+              {profiles.map(p => (
+                <option key={p.id} value={p.avatar}>
+                  {p.name}{p.avatar ? ` (${p.avatar})` : ''}
+                </option>
+              ))}
+            </select>
+          </FormRow>
+
+          <FormRow label="Notas / contexto">
+            <textarea
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              placeholder="Información adicional sobre el jugador o contexto de la petición..."
+              rows={3}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-y"
+            />
+          </FormRow>
+
+          <div className="flex gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2 text-sm font-medium border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={!playerName.trim()}
+              className="flex-1 py-2 text-sm font-medium bg-[hsl(220,72%,26%)] text-white rounded-xl hover:bg-[hsl(220,72%,20%)] disabled:opacity-40 transition-colors"
+            >
+              Añadir petición
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 // ── Main component ───────────────────────────────────────────
 
 export function Captacion({
@@ -693,6 +858,11 @@ export function Captacion({
   // ── pagination ──
   const PAGE_SIZE = 50
   const [page, setPage] = useState(0)
+
+  // ── boulema ──
+  const [peticiones, setPeticiones] = useState<BoulemaPeticion[]>(() => loadBoulemaPeticiones())
+  const [showAddBoulema, setShowAddBoulema] = useState(false)
+  const [confirmDeletePeticion, setConfirmDeletePeticion] = useState<string | null>(null)
 
   const panelPlayer = panelPlayerId ? scoutingPlayers.find(p => p.id === panelPlayerId) ?? null : null
   const panelReports = useMemo(() => {
@@ -1110,6 +1280,7 @@ export function Captacion({
             { id: 'informes' as CaptacionTab, label: 'Informes recientes', labelMobile: 'Informes', icon: <FileText className="w-3.5 h-3.5" /> },
             { id: 'estadisticas' as CaptacionTab, label: 'Estadísticas', labelMobile: 'Stats', icon: <BarChart2 className="w-3.5 h-3.5" /> },
             { id: 'partidos' as CaptacionTab, label: 'Partidos', labelMobile: 'Partidos', icon: <ClipboardList className="w-3.5 h-3.5" /> },
+            { id: 'boulema' as CaptacionTab, label: 'Boulema', labelMobile: 'Boulema', icon: <Inbox className="w-3.5 h-3.5" /> },
           ]).map(t => (
             <button
               key={t.id}
@@ -2017,6 +2188,158 @@ export function Captacion({
             </>
           )}
         </div>
+      )}
+
+      {/* ── BOULEMA TAB ──────────────────────────────────────── */}
+      {captTab === 'boulema' && (
+        <div className="flex-1 max-w-3xl mx-auto w-full px-3 sm:px-6 py-4 space-y-4">
+          {/* Header */}
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Inbox className="w-5 h-5 text-slate-400" />
+              <h2 className="text-base font-semibold text-slate-800">Boulema</h2>
+              {peticiones.length > 0 && (
+                <span className="text-xs font-medium px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full">
+                  {peticiones.length}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => setShowAddBoulema(true)}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-[hsl(220,72%,26%)] text-white rounded-xl hover:bg-[hsl(220,72%,20%)] transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Crear informe / añadir petición</span>
+            </button>
+          </div>
+
+          {/* Peticiones list */}
+          <div className="space-y-2">
+            {peticiones.length === 0 ? (
+              <div className="bg-white border border-dashed border-slate-200 rounded-2xl py-12 text-center">
+                <Inbox className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <p className="text-sm text-slate-400 font-medium">Sin peticiones de informe</p>
+                <p className="text-xs text-slate-300 mt-1">Añade una petición para pedir un informe sobre un jugador</p>
+              </div>
+            ) : (
+              peticiones
+                .slice()
+                .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+                .map(p => {
+                  const requesterProfile = profiles.find(pr => pr.avatar === p.requestedBy)
+                  const assigneeProfile = profiles.find(pr => pr.avatar === p.requestedFrom)
+                  const rel = relativeDate(p.createdAt)
+                  const isConfirming = confirmDeletePeticion === p.id
+                  return (
+                    <div
+                      key={p.id}
+                      className="bg-white border border-slate-200 rounded-xl px-4 py-3 hover:border-slate-300 transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          {/* Player name + chips */}
+                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                            <span className="font-semibold text-slate-800 text-sm">{p.playerName}</span>
+                            {p.position && (
+                              <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{p.position}</span>
+                            )}
+                            {p.birthYear && (
+                              <span className="text-[10px] text-slate-400 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded">{p.birthYear}</span>
+                            )}
+                            {p.team && (
+                              <span className="text-[10px] text-slate-500 italic">{p.team}</span>
+                            )}
+                          </div>
+
+                          {/* Assignment */}
+                          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 mb-1">
+                            <span className="text-slate-400">De</span>
+                            <span className="font-mono font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
+                              {p.requestedBy}
+                              {requesterProfile && requesterProfile.avatar !== requesterProfile.name && (
+                                <span className="font-sans font-normal ml-1 text-slate-400">· {requesterProfile.name.split(' ')[0]}</span>
+                              )}
+                            </span>
+                            <span className="text-slate-400">→</span>
+                            <span className="font-mono font-semibold text-slate-600 bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-100">
+                              {p.requestedFrom}
+                              {assigneeProfile && (
+                                <span className="font-sans font-normal ml-1 text-blue-500">· {assigneeProfile.name.split(' ')[0]}</span>
+                              )}
+                            </span>
+                          </div>
+
+                          {/* Notes */}
+                          {p.notes && (
+                            <p className="text-xs text-slate-500 leading-relaxed whitespace-pre-wrap">{p.notes}</p>
+                          )}
+                        </div>
+
+                        {/* Right: date + delete */}
+                        <div className="flex-shrink-0 flex flex-col items-end gap-1">
+                          {rel && (
+                            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                              rel === 'hoy' ? 'bg-green-100 text-green-700' :
+                              rel === 'ayer' ? 'bg-blue-50 text-blue-600' :
+                              'bg-slate-100 text-slate-500'
+                            }`}>
+                              {rel}
+                            </span>
+                          )}
+                          <div className="text-[10px] text-slate-400">{fmtDate(p.createdAt)}</div>
+                          <div className="flex items-center gap-1 mt-1">
+                            {isConfirming ? (
+                              <>
+                                <button
+                                  onClick={() => setConfirmDeletePeticion(null)}
+                                  className="text-[10px] px-2 py-0.5 border border-slate-200 rounded text-slate-500 hover:bg-slate-50"
+                                >
+                                  Cancelar
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    const updated = peticiones.filter(x => x.id !== p.id)
+                                    setPeticiones(updated)
+                                    saveBoulemaPeticiones(updated)
+                                    setConfirmDeletePeticion(null)
+                                  }}
+                                  className="text-[10px] px-2 py-0.5 bg-red-500 text-white rounded hover:bg-red-600"
+                                >
+                                  Eliminar
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                onClick={() => setConfirmDeletePeticion(p.id)}
+                                className="p-1 rounded text-slate-300 hover:text-red-400 hover:bg-red-50 transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* AddBoulemaModal */}
+      {showAddBoulema && (
+        <AddBoulemaModal
+          profiles={profiles}
+          currentProfile={currentProfile}
+          onClose={() => setShowAddBoulema(false)}
+          onSave={(peticion) => {
+            const updated = [peticion, ...peticiones]
+            setPeticiones(updated)
+            saveBoulemaPeticiones(updated)
+            setShowAddBoulema(false)
+          }}
+        />
       )}
 
       {/* ── Side panel (persists across tabs) ─────────────────── */}
