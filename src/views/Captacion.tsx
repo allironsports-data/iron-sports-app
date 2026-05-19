@@ -45,29 +45,6 @@ const CONCLUSION_STYLE: Record<string, string> = {
 
 const MONTHS_ES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 
-// ── Boulema ──────────────────────────────────────────────────
-
-interface BoulemaPeticion {
-  id: string
-  playerName: string
-  position?: string
-  birthYear?: string
-  team?: string
-  requestedFrom: string   // profile.avatar (initials) of who should write the informe
-  notes?: string
-  requestedBy: string     // profile.avatar of who made the request
-  createdAt: string       // ISO
-}
-
-const BOULEMA_KEY = 'iron_boulema_peticiones'
-
-function loadBoulemaPeticiones(): BoulemaPeticion[] {
-  try { return JSON.parse(localStorage.getItem(BOULEMA_KEY) ?? '[]') } catch { return [] }
-}
-function saveBoulemaPeticiones(ps: BoulemaPeticion[]) {
-  localStorage.setItem(BOULEMA_KEY, JSON.stringify(ps))
-}
-
 // ── Competition options ──────────────────────────────────────
 
 const COMPETITION_OPTIONS = [
