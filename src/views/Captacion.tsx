@@ -6,7 +6,7 @@ import {
   BarChart2, ClipboardList, Users, Inbox, Send,
 } from 'lucide-react'
 import logoImg from '../assets/logo.jpeg'
-import type { ScoutingPlayer, ScoutingReport, ScoutingAssessment, ScoutingMatch, ScoutingMatchPlayer } from '../types'
+import type { ScoutingPlayer, ScoutingReport, ScoutingAssessment, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion } from '../types'
 import type { Profile } from '../contexts/AuthContext'
 import * as db from '../lib/db'
 
@@ -571,6 +571,9 @@ interface Props {
   matchPlayers: ScoutingMatchPlayer[]
   onAddMatchPlayer: (matchId: string, playerId: string) => Promise<void>
   onRemoveMatchPlayer: (matchId: string, playerId: string) => Promise<void>
+  boulemaPeticiones: BoulemaPeticion[]
+  onAddBoulemaPeticion: (p: Omit<BoulemaPeticion, 'id' | 'createdAt'>) => Promise<void>
+  onDeleteBoulemaPeticion: (id: string) => Promise<void>
 }
 
 // ── MatchFormPanel — isolated so keystrokes don't re-render the whole list ──
@@ -646,7 +649,7 @@ function AddBoulemaModal({
   profiles: Profile[]
   currentProfile: Profile
   onClose: () => void
-  onSave: (p: BoulemaPeticion) => void
+  onSave: (p: Omit<BoulemaPeticion, 'id' | 'createdAt'>) => Promise<void>
 }) {
   const [playerName, setPlayerName] = useState('')
   const [position, setPosition] = useState('')
@@ -655,21 +658,25 @@ function AddBoulemaModal({
   const [requestedFrom, setRequestedFrom] = useState(currentProfile.avatar)
   const [notes, setNotes] = useState('')
 
-  function handleSubmit(e: React.FormEvent) {
+  const [saving, setSaving] = useState(false)
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!playerName.trim()) return
-    const peticion: BoulemaPeticion = {
-      id: crypto.randomUUID(),
-      playerName: playerName.trim(),
-      position: position.trim() || undefined,
-      birthYear: birthYear.trim() || undefined,
-      team: team.trim() || undefined,
-      requestedFrom,
-      notes: notes.trim() || undefined,
-      requestedBy: currentProfile.avatar,
-      createdAt: new Date().toISOString(),
+    if (!playerName.trim() || saving) return
+    setSaving(true)
+    try {
+      await onSave({
+        playerName: playerName.trim(),
+        position: position.trim() || undefined,
+        birthYear: birthYear.trim() || undefined,
+        team: team.trim() || undefined,
+        requestedFrom,
+        notes: notes.trim() || undefined,
+        requestedBy: currentProfile.avatar,
+      })
+    } finally {
+      setSaving(false)
     }
-    onSave(peticion)
   }
 
   return (
@@ -763,10 +770,10 @@ function AddBoulemaModal({
             </button>
             <button
               type="submit"
-              disabled={!playerName.trim()}
+              disabled={!playerName.trim() || saving}
               className="flex-1 py-2 text-sm font-medium bg-[hsl(220,72%,26%)] text-white rounded-xl hover:bg-[hsl(220,72%,20%)] disabled:opacity-40 transition-colors"
             >
-              Añadir petición
+              {saving ? 'Guardando...' : 'Añadir petición'}
             </button>
           </div>
         </form>
@@ -798,6 +805,9 @@ export function Captacion({
   matchPlayers,
   onAddMatchPlayer,
   onRemoveMatchPlayer,
+  boulemaPeticiones,
+  onAddBoulemaPeticion,
+  onDeleteBoulemaPeticion,
 }: Props) {
   const isAdmin = currentProfile.is_admin
 
@@ -860,7 +870,6 @@ export function Captacion({
   const [page, setPage] = useState(0)
 
   // ── boulema ──
-  const [peticiones, setPeticiones] = useState<BoulemaPeticion[]>(() => loadBoulemaPeticiones())
   const [showAddBoulema, setShowAddBoulema] = useState(false)
   const [confirmDeletePeticion, setConfirmDeletePeticion] = useState<string | null>(null)
 
@@ -2198,9 +2207,9 @@ export function Captacion({
             <div className="flex items-center gap-2">
               <Inbox className="w-5 h-5 text-slate-400" />
               <h2 className="text-base font-semibold text-slate-800">Boulema</h2>
-              {peticiones.length > 0 && (
+              {boulemaPeticiones.length > 0 && (
                 <span className="text-xs font-medium px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full">
-                  {peticiones.length}
+                  {boulemaPeticiones.length}
                 </span>
               )}
             </div>
@@ -2215,14 +2224,14 @@ export function Captacion({
 
           {/* Peticiones list */}
           <div className="space-y-2">
-            {peticiones.length === 0 ? (
+            {boulemaPeticiones.length === 0 ? (
               <div className="bg-white border border-dashed border-slate-200 rounded-2xl py-12 text-center">
                 <Inbox className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                 <p className="text-sm text-slate-400 font-medium">Sin peticiones de informe</p>
                 <p className="text-xs text-slate-300 mt-1">Añade una petición para pedir un informe sobre un jugador</p>
               </div>
             ) : (
-              peticiones
+              boulemaPeticiones
                 .slice()
                 .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
                 .map(p => {
@@ -2297,10 +2306,8 @@ export function Captacion({
                                   Cancelar
                                 </button>
                                 <button
-                                  onClick={() => {
-                                    const updated = peticiones.filter(x => x.id !== p.id)
-                                    setPeticiones(updated)
-                                    saveBoulemaPeticiones(updated)
+                                  onClick={async () => {
+                                    await onDeleteBoulemaPeticion(p.id)
                                     setConfirmDeletePeticion(null)
                                   }}
                                   className="text-[10px] px-2 py-0.5 bg-red-500 text-white rounded hover:bg-red-600"
@@ -2333,10 +2340,8 @@ export function Captacion({
           profiles={profiles}
           currentProfile={currentProfile}
           onClose={() => setShowAddBoulema(false)}
-          onSave={(peticion) => {
-            const updated = [peticion, ...peticiones]
-            setPeticiones(updated)
-            saveBoulemaPeticiones(updated)
+          onSave={async (peticion) => {
+            await onAddBoulemaPeticion(peticion)
             setShowAddBoulema(false)
           }}
         />

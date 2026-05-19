@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from './contexts/AuthContext'
-import type { Player, Task, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer } from './types'
+import type { Player, Task, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion } from './types'
 import * as db from './lib/db'
 import { supabase } from './lib/supabase'
 import type { Profile } from './contexts/AuthContext'
@@ -62,6 +62,7 @@ export default function App() {
   const [scoutingReports, setScoutingReports] = useState<ScoutingReport[]>([])
   const [scoutingMatches, setScoutingMatches] = useState<ScoutingMatch[]>([])
   const [matchPlayers, setMatchPlayers] = useState<ScoutingMatchPlayer[]>([])
+  const [boulemaPeticiones, setBoulemaPeticiones] = useState<BoulemaPeticion[]>([])
 
   const addNotification = useCallback((msg: string, type: AppNotification['type'], playerId?: string) => {
     setNotifications((prev) => [
@@ -90,7 +91,8 @@ export default function App() {
       db.fetchScoutingReports(),
       db.fetchScoutingMatches(),
       db.fetchMatchPlayers(),
-    ]).then(([p, t, pr, cl, de, ng, sp, sr, sm, mp]) => {
+      db.fetchBoulemaPeticiones().catch(() => [] as BoulemaPeticion[]),
+    ]).then(([p, t, pr, cl, de, ng, sp, sr, sm, mp, bp]) => {
       setPlayers(p)
       setTasks(t)
       profilesRef.current = pr as Profile[]
@@ -102,6 +104,7 @@ export default function App() {
       setScoutingReports(sr as ScoutingReport[])
       setScoutingMatches(sm as ScoutingMatch[])
       setMatchPlayers(mp as ScoutingMatchPlayer[])
+      setBoulemaPeticiones(bp as BoulemaPeticion[])
     }).finally(() => setDataLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id])  // user.id — not the object — so token refreshes don't re-trigger this
@@ -329,6 +332,15 @@ export default function App() {
     setMatchPlayers(prev => prev.filter(x => !(x.matchId === matchId && x.playerId === playerId)))
   }
 
+  const handleAddBoulemaPeticion = async (p: Omit<BoulemaPeticion, 'id' | 'createdAt'>) => {
+    const saved = await db.createBoulemaPeticion(p)
+    setBoulemaPeticiones(prev => [saved, ...prev])
+  }
+  const handleDeleteBoulemaPeticion = async (id: string) => {
+    await db.deleteBoulemaPeticion(id)
+    setBoulemaPeticiones(prev => prev.filter(x => x.id !== id))
+  }
+
   // ── helpers ─────────────────────────────────────────────────
 
   function navigateToPlayer(id: string, fromClub = false) {
@@ -478,6 +490,9 @@ export default function App() {
         matchPlayers={matchPlayers}
         onAddMatchPlayer={handleAddMatchPlayer}
         onRemoveMatchPlayer={handleRemoveMatchPlayer}
+        boulemaPeticiones={boulemaPeticiones}
+        onAddBoulemaPeticion={handleAddBoulemaPeticion}
+        onDeleteBoulemaPeticion={handleDeleteBoulemaPeticion}
       />
     )
   }

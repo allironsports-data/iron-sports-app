@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer } from '../types'
+import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion } from '../types'
 
 // ── helpers ──────────────────────────────────────────────────
 
@@ -778,5 +778,49 @@ export async function updateScoutingMatch(m: ScoutingMatch): Promise<void> {
 
 export async function deleteScoutingMatch(id: string): Promise<void> {
   const { error } = await supabase.from('scouting_matches').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── Boulema peticiones ───────────────────────────────────────
+
+function dbToBoulemaPeticion(row: Record<string, unknown>): BoulemaPeticion {
+  return {
+    id: row.id as string,
+    playerName: row.player_name as string,
+    position: (row.position as string) ?? undefined,
+    birthYear: (row.birth_year as string) ?? undefined,
+    team: (row.team as string) ?? undefined,
+    requestedFrom: row.requested_from as string,
+    notes: (row.notes as string) ?? undefined,
+    requestedBy: row.requested_by as string,
+    createdAt: row.created_at as string,
+  }
+}
+
+export async function fetchBoulemaPeticiones(): Promise<BoulemaPeticion[]> {
+  const { data, error } = await supabase
+    .from('boulema_peticiones')
+    .select('*')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map(dbToBoulemaPeticion)
+}
+
+export async function createBoulemaPeticion(p: Omit<BoulemaPeticion, 'id' | 'createdAt'>): Promise<BoulemaPeticion> {
+  const { data, error } = await supabase.from('boulema_peticiones').insert({
+    player_name: p.playerName,
+    position: p.position ?? null,
+    birth_year: p.birthYear ?? null,
+    team: p.team ?? null,
+    requested_from: p.requestedFrom,
+    notes: p.notes ?? null,
+    requested_by: p.requestedBy,
+  }).select().single()
+  if (error) throw error
+  return dbToBoulemaPeticion(data)
+}
+
+export async function deleteBoulemaPeticion(id: string): Promise<void> {
+  const { error } = await supabase.from('boulema_peticiones').delete().eq('id', id)
   if (error) throw error
 }

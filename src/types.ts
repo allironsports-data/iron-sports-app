@@ -260,6 +260,18 @@ export interface ScoutingMatchPlayer {
   createdAt: string
 }
 
+export interface BoulemaPeticion {
+  id: string
+  playerName: string
+  position?: string
+  birthYear?: string
+  team?: string
+  requestedFrom: string   // profile.avatar of who should write the report
+  notes?: string
+  requestedBy: string     // profile.avatar of requester
+  createdAt: string
+}
+
 export interface ScoutingMatch {
   id: string
   date: string              // "YYYY-MM-DD"
