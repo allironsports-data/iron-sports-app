@@ -820,6 +820,19 @@ export async function createBoulemaPeticion(p: Omit<BoulemaPeticion, 'id' | 'cre
   return dbToBoulemaPeticion(data)
 }
 
+export async function updateBoulemaPeticion(p: BoulemaPeticion): Promise<void> {
+  const { error } = await supabase.from('boulema_peticiones').update({
+    player_name: p.playerName,
+    position: p.position ?? null,
+    birth_year: p.birthYear ?? null,
+    team: p.team ?? null,
+    requested_from: p.requestedFrom,
+    notes: p.notes ?? null,
+    requested_by: p.requestedBy,
+  }).eq('id', p.id)
+  if (error) throw error
+}
+
 export async function deleteBoulemaPeticion(id: string): Promise<void> {
   const { error } = await supabase.from('boulema_peticiones').delete().eq('id', id)
   if (error) throw error

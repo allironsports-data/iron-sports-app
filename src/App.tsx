@@ -336,6 +336,10 @@ export default function App() {
     const saved = await db.createBoulemaPeticion(p)
     setBoulemaPeticiones(prev => [saved, ...prev])
   }
+  const handleUpdateBoulemaPeticion = async (p: BoulemaPeticion) => {
+    await db.updateBoulemaPeticion(p)
+    setBoulemaPeticiones(prev => prev.map(x => x.id === p.id ? p : x))
+  }
   const handleDeleteBoulemaPeticion = async (id: string) => {
     await db.deleteBoulemaPeticion(id)
     setBoulemaPeticiones(prev => prev.filter(x => x.id !== id))
@@ -492,6 +496,7 @@ export default function App() {
         onRemoveMatchPlayer={handleRemoveMatchPlayer}
         boulemaPeticiones={boulemaPeticiones}
         onAddBoulemaPeticion={handleAddBoulemaPeticion}
+        onUpdateBoulemaPeticion={handleUpdateBoulemaPeticion}
         onDeleteBoulemaPeticion={handleDeleteBoulemaPeticion}
       />
     )

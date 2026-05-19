@@ -573,6 +573,7 @@ interface Props {
   onRemoveMatchPlayer: (matchId: string, playerId: string) => Promise<void>
   boulemaPeticiones: BoulemaPeticion[]
   onAddBoulemaPeticion: (p: Omit<BoulemaPeticion, 'id' | 'createdAt'>) => Promise<void>
+  onUpdateBoulemaPeticion: (p: BoulemaPeticion) => Promise<void>
   onDeleteBoulemaPeticion: (id: string) => Promise<void>
 }
 
@@ -643,20 +644,22 @@ function MatchFormPanel({ initial, profiles, onSave, onCancel }: {
 function AddBoulemaModal({
   profiles,
   currentProfile,
+  initial,
   onClose,
   onSave,
 }: {
   profiles: Profile[]
   currentProfile: Profile
+  initial?: BoulemaPeticion
   onClose: () => void
   onSave: (p: Omit<BoulemaPeticion, 'id' | 'createdAt'>) => Promise<void>
 }) {
-  const [playerName, setPlayerName] = useState('')
-  const [position, setPosition] = useState('')
-  const [birthYear, setBirthYear] = useState('')
-  const [team, setTeam] = useState('')
-  const [requestedFrom, setRequestedFrom] = useState(currentProfile.avatar)
-  const [notes, setNotes] = useState('')
+  const [playerName, setPlayerName] = useState(initial?.playerName ?? '')
+  const [position, setPosition] = useState(initial?.position ?? '')
+  const [birthYear, setBirthYear] = useState(initial?.birthYear ?? '')
+  const [team, setTeam] = useState(initial?.team ?? '')
+  const [requestedFrom, setRequestedFrom] = useState(initial?.requestedFrom ?? currentProfile.avatar)
+  const [notes, setNotes] = useState(initial?.notes ?? '')
 
   const [saving, setSaving] = useState(false)
 
@@ -686,7 +689,7 @@ function AddBoulemaModal({
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
           <h2 className="text-base font-semibold text-slate-800 flex items-center gap-2">
             <Send className="w-4 h-4 text-slate-400" />
-            Añadir petición de informe
+            {initial ? 'Editar petición' : 'Añadir petición de informe'}
           </h2>
           <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
             <X className="w-4 h-4" />
@@ -773,7 +776,166 @@ function AddBoulemaModal({
               disabled={!playerName.trim() || saving}
               className="flex-1 py-2 text-sm font-medium bg-[hsl(220,72%,26%)] text-white rounded-xl hover:bg-[hsl(220,72%,20%)] disabled:opacity-40 transition-colors"
             >
-              {saving ? 'Guardando...' : 'Añadir petición'}
+              {saving ? 'Guardando...' : initial ? 'Guardar cambios' : 'Añadir petición'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ── RespondWithInformeModal ───────────────────────────────────
+
+function RespondWithInformeModal({
+  peticion,
+  profiles,
+  currentProfile,
+  scoutingPlayers,
+  onClose,
+  onAddPlayer,
+  onAddReport,
+}: {
+  peticion: BoulemaPeticion
+  profiles: Profile[]
+  currentProfile: Profile
+  scoutingPlayers: ScoutingPlayer[]
+  onClose: () => void
+  onAddPlayer: (p: ScoutingPlayer) => void
+  onAddReport: (r: ScoutingReport) => void
+}) {
+  // Try to find existing player by name match
+  const existingPlayer = scoutingPlayers.find(
+    p => p.fullName.toLowerCase().trim() === peticion.playerName.toLowerCase().trim()
+  )
+
+  const [text, setText] = useState('')
+  const [title, setTitle] = useState('')
+  const [conclusion, setConclusion] = useState<ConclusionOption>('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!text.trim() || saving) return
+    setSaving(true)
+    setError('')
+    try {
+      let playerId = existingPlayer?.id ?? ''
+
+      if (!playerId) {
+        // Create a new ScoutingPlayer with the peticion data
+        const newPlayer = await db.createScoutingPlayer({
+          fullName: peticion.playerName,
+          position1: peticion.position ?? undefined,
+          birthdate: peticion.birthYear ? `${peticion.birthYear}-01-01` : undefined,
+          team: peticion.team ?? undefined,
+        })
+        playerId = newPlayer.id
+        onAddPlayer(newPlayer)
+      }
+
+      const report = await db.createScoutingReport({
+        playerId,
+        fecha: new Date().toISOString().slice(0, 10),
+        titulo: title.trim() || undefined,
+        texto: text.trim(),
+        conclusion: conclusion || undefined,
+        persona: currentProfile.avatar,
+      })
+      onAddReport(report)
+      onClose()
+    } catch {
+      setError('Error al guardar el informe. Inténtalo de nuevo.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const authorName = personaToName(peticion.requestedBy, profiles)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+          <h2 className="text-base font-semibold text-slate-800 flex items-center gap-2">
+            <FileText className="w-4 h-4 text-slate-400" />
+            Crear informe
+          </h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Context banner */}
+        <div className="mx-5 mt-4 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2.5 text-xs">
+          <div className="font-semibold text-blue-800 mb-0.5">
+            {peticion.playerName}
+            {peticion.position && <span className="font-normal text-blue-600 ml-1.5">· {peticion.position}</span>}
+            {peticion.birthYear && <span className="font-normal text-blue-500 ml-1.5">{peticion.birthYear}</span>}
+            {peticion.team && <span className="font-normal text-blue-500 ml-1.5 italic">{peticion.team}</span>}
+          </div>
+          <div className="text-blue-500">
+            Pedido por <span className="font-mono font-semibold">{peticion.requestedBy}</span>
+            {authorName && authorName !== peticion.requestedBy && ` · ${authorName.split(' ')[0]}`}
+          </div>
+          {existingPlayer ? (
+            <div className="mt-1 text-[10px] text-blue-400">✓ Jugador encontrado en la base de datos</div>
+          ) : (
+            <div className="mt-1 text-[10px] text-blue-400">Se creará un nuevo jugador en captación</div>
+          )}
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-5 space-y-3">
+          <FormRow label="Título (opcional)">
+            <input
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="Título del informe"
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+            />
+          </FormRow>
+
+          <FormRow label="Informe *">
+            <textarea
+              value={text}
+              onChange={e => setText(e.target.value)}
+              placeholder="Escribe aquí tu informe sobre el jugador..."
+              rows={6}
+              required
+              autoFocus
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 resize-y"
+            />
+          </FormRow>
+
+          <FormRow label="Conclusión">
+            <select
+              value={conclusion}
+              onChange={e => setConclusion(e.target.value as ConclusionOption)}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+            >
+              <option value="">Sin conclusión</option>
+              {CONCLUSION_OPTIONS.filter(Boolean).map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </FormRow>
+
+          {error && <p className="text-xs text-red-500">{error}</p>}
+
+          <div className="flex gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2 text-sm font-medium border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={!text.trim() || saving}
+              className="flex-1 py-2 text-sm font-medium bg-[hsl(220,72%,26%)] text-white rounded-xl hover:bg-[hsl(220,72%,20%)] disabled:opacity-40 transition-colors"
+            >
+              {saving ? 'Guardando...' : 'Guardar informe'}
             </button>
           </div>
         </form>
@@ -807,6 +969,7 @@ export function Captacion({
   onRemoveMatchPlayer,
   boulemaPeticiones,
   onAddBoulemaPeticion,
+  onUpdateBoulemaPeticion,
   onDeleteBoulemaPeticion,
 }: Props) {
   const isAdmin = currentProfile.is_admin
@@ -871,6 +1034,8 @@ export function Captacion({
 
   // ── boulema ──
   const [showAddBoulema, setShowAddBoulema] = useState(false)
+  const [editingPeticion, setEditingPeticion] = useState<BoulemaPeticion | null>(null)
+  const [respondingPeticion, setRespondingPeticion] = useState<BoulemaPeticion | null>(null)
   const [confirmDeletePeticion, setConfirmDeletePeticion] = useState<string | null>(null)
 
   const panelPlayer = panelPlayerId ? scoutingPlayers.find(p => p.id === panelPlayerId) ?? null : null
@@ -2282,9 +2447,20 @@ export function Captacion({
                           {p.notes && (
                             <p className="text-xs text-slate-500 leading-relaxed whitespace-pre-wrap">{p.notes}</p>
                           )}
+
+                          {/* Respond button */}
+                          <div className="mt-2">
+                            <button
+                              onClick={() => setRespondingPeticion(p)}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-[hsl(220,72%,26%)] text-white rounded-lg hover:bg-[hsl(220,72%,20%)] transition-colors"
+                            >
+                              <FileText className="w-3 h-3" />
+                              Crear informe
+                            </button>
+                          </div>
                         </div>
 
-                        {/* Right: date + delete */}
+                        {/* Right: date + actions */}
                         <div className="flex-shrink-0 flex flex-col items-end gap-1">
                           {rel && (
                             <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
@@ -2316,12 +2492,22 @@ export function Captacion({
                                 </button>
                               </>
                             ) : (
-                              <button
-                                onClick={() => setConfirmDeletePeticion(p.id)}
-                                className="p-1 rounded text-slate-300 hover:text-red-400 hover:bg-red-50 transition-colors"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => setEditingPeticion(p)}
+                                  className="p-1 rounded text-slate-300 hover:text-blue-500 hover:bg-blue-50 transition-colors"
+                                  title="Editar petición"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => setConfirmDeletePeticion(p.id)}
+                                  className="p-1 rounded text-slate-300 hover:text-red-400 hover:bg-red-50 transition-colors"
+                                  title="Eliminar petición"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </>
                             )}
                           </div>
                         </div>
@@ -2334,7 +2520,7 @@ export function Captacion({
         </div>
       )}
 
-      {/* AddBoulemaModal */}
+      {/* AddBoulemaModal — nueva petición */}
       {showAddBoulema && (
         <AddBoulemaModal
           profiles={profiles}
@@ -2344,6 +2530,33 @@ export function Captacion({
             await onAddBoulemaPeticion(peticion)
             setShowAddBoulema(false)
           }}
+        />
+      )}
+
+      {/* EditBoulemaModal — editar petición existente */}
+      {editingPeticion && (
+        <AddBoulemaModal
+          profiles={profiles}
+          currentProfile={currentProfile}
+          initial={editingPeticion}
+          onClose={() => setEditingPeticion(null)}
+          onSave={async (updated) => {
+            await onUpdateBoulemaPeticion({ ...editingPeticion, ...updated })
+            setEditingPeticion(null)
+          }}
+        />
+      )}
+
+      {/* RespondWithInformeModal — crear informe desde petición */}
+      {respondingPeticion && (
+        <RespondWithInformeModal
+          peticion={respondingPeticion}
+          profiles={profiles}
+          currentProfile={currentProfile}
+          scoutingPlayers={scoutingPlayers}
+          onClose={() => setRespondingPeticion(null)}
+          onAddPlayer={onAddPlayer}
+          onAddReport={onAddReport}
         />
       )}
 
