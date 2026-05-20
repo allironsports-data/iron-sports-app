@@ -828,6 +828,7 @@ function RespondWithInformeModal({
   onClose,
   onAddPlayer,
   onAddReport,
+  onLinkReport,
 }: {
   peticion: BoulemaPeticion
   profiles: Profile[]
