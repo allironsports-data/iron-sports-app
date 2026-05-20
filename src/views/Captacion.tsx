@@ -26,10 +26,32 @@ const ASSESSMENT_CONFIG: Record<ScoutingAssessment, { label: string; bg: string;
 const ALL_ASSESSMENTS: ScoutingAssessment[] = ['Llamar', 'Seguir', 'Decidir', 'Basque', 'Visto', 'Descartado']
 
 const POSITIONS_SCOUTING = [
-  'Portero', 'Central', 'Lateral derecho', 'Lateral izquierdo',
+  'Portero',
+  'Central', 'Central derecho', 'Central izquierdo',
+  'Lateral derecho', 'Lateral izquierdo',
   'Pivote', 'Mediocentro', 'Mediapunta',
   'Extremo derecho', 'Extremo izquierdo', 'Extremo', 'Delantero',
 ]
+
+const MONTHS_ES_FULL = [
+  { v: '1', l: 'Enero' }, { v: '2', l: 'Febrero' }, { v: '3', l: 'Marzo' },
+  { v: '4', l: 'Abril' }, { v: '5', l: 'Mayo' }, { v: '6', l: 'Junio' },
+  { v: '7', l: 'Julio' }, { v: '8', l: 'Agosto' }, { v: '9', l: 'Septiembre' },
+  { v: '10', l: 'Octubre' }, { v: '11', l: 'Noviembre' }, { v: '12', l: 'Diciembre' },
+]
+
+const BOULEMA_CONCLUSION_OPTIONS = [
+  '', 'Firmar', 'Seguir', 'Descartar', 'Más video, prioritario', 'Más video, no prioritario',
+] as const
+type BoulemaConclusionOption = typeof BOULEMA_CONCLUSION_OPTIONS[number]
+
+const BOULEMA_CONCLUSION_STYLE: Record<string, string> = {
+  'Firmar':                  'bg-green-100 text-green-700 border border-green-200',
+  'Seguir':                  'bg-blue-100 text-blue-700 border border-blue-200',
+  'Descartar':               'bg-red-100 text-red-600 border border-red-200',
+  'Más video, prioritario':  'bg-orange-100 text-orange-700 border border-orange-200',
+  'Más video, no prioritario': 'bg-slate-100 text-slate-600 border border-slate-200',
+}
 
 const CONCLUSION_OPTIONS = ['', 'Seguir', 'Firmar', 'Descartar'] as const
 type ConclusionOption = typeof CONCLUSION_OPTIONS[number]
@@ -621,12 +643,14 @@ function MatchFormPanel({ initial, profiles, onSave, onCancel }: {
 function AddBoulemaModal({
   profiles,
   currentProfile,
+  boulemaPeticiones,
   initial,
   onClose,
   onSave,
 }: {
   profiles: Profile[]
   currentProfile: Profile
+  boulemaPeticiones: BoulemaPeticion[]
   initial?: BoulemaPeticion
   onClose: () => void
   onSave: (p: Omit<BoulemaPeticion, 'id' | 'createdAt'>) => Promise<void>
@@ -634,7 +658,9 @@ function AddBoulemaModal({
   const [playerName, setPlayerName] = useState(initial?.playerName ?? '')
   const [position, setPosition] = useState(initial?.position ?? '')
   const [birthYear, setBirthYear] = useState(initial?.birthYear ?? '')
+  const [birthMonth, setBirthMonth] = useState(initial?.birthMonth ?? '')
   const [team, setTeam] = useState(initial?.team ?? '')
+  const [offeredBy, setOfferedBy] = useState(initial?.offeredBy ?? '')
   const [requestedFrom, setRequestedFrom] = useState(initial?.requestedFrom ?? currentProfile.avatar)
   const [notes, setNotes] = useState(initial?.notes ?? '')
 
@@ -649,7 +675,9 @@ function AddBoulemaModal({
         playerName: playerName.trim(),
         position: position.trim() || undefined,
         birthYear: birthYear.trim() || undefined,
+        birthMonth: birthMonth.trim() || undefined,
         team: team.trim() || undefined,
+        offeredBy: offeredBy.trim() || undefined,
         requestedFrom,
         notes: notes.trim() || undefined,
         requestedBy: currentProfile.avatar,
@@ -685,17 +713,18 @@ function AddBoulemaModal({
             />
           </FormRow>
 
+          <FormRow label="Posición">
+            <select
+              value={position}
+              onChange={e => setPosition(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+            >
+              <option value="">—</option>
+              {POSITIONS_SCOUTING.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </FormRow>
+
           <div className="grid grid-cols-2 gap-2">
-            <FormRow label="Posición">
-              <select
-                value={position}
-                onChange={e => setPosition(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-              >
-                <option value="">—</option>
-                {POSITIONS_SCOUTING.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
-            </FormRow>
             <FormRow label="Año nac.">
               <input
                 value={birthYear}
@@ -704,6 +733,16 @@ function AddBoulemaModal({
                 maxLength={4}
                 className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
               />
+            </FormRow>
+            <FormRow label="Mes nac.">
+              <select
+                value={birthMonth}
+                onChange={e => setBirthMonth(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              >
+                <option value="">—</option>
+                {MONTHS_ES_FULL.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
+              </select>
             </FormRow>
           </div>
 
@@ -714,6 +753,23 @@ function AddBoulemaModal({
               placeholder="Club actual"
               className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
             />
+          </FormRow>
+
+          <FormRow label="Ofrecido por">
+            <input
+              value={offeredBy}
+              onChange={e => setOfferedBy(e.target.value)}
+              placeholder="Agente, intermediario..."
+              list="offeredby-suggestions"
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+            />
+            <datalist id="offeredby-suggestions">
+              {boulemaPeticiones
+                .map(p => p.offeredBy)
+                .filter((v): v is string => !!v)
+                .filter((v, i, arr) => arr.indexOf(v) === i)
+                .map(v => <option key={v} value={v} />)}
+            </datalist>
           </FormRow>
 
           <FormRow label="Pedir informe a">
@@ -780,6 +836,7 @@ function RespondWithInformeModal({
   onClose: () => void
   onAddPlayer: (p: ScoutingPlayer) => void
   onAddReport: (r: ScoutingReport) => void
+  onLinkReport: (peticionId: string, reportId: string) => Promise<void>
 }) {
   // Try to find existing player by name match
   const existingPlayer = scoutingPlayers.find(
@@ -788,7 +845,7 @@ function RespondWithInformeModal({
 
   const [text, setText] = useState('')
   const [title, setTitle] = useState('')
-  const [conclusion, setConclusion] = useState<ConclusionOption>('')
+  const [conclusion, setConclusion] = useState<BoulemaConclusionOption>('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -802,10 +859,13 @@ function RespondWithInformeModal({
 
       if (!playerId) {
         // Create a new ScoutingPlayer with the peticion data
+        const birthdate = peticion.birthYear
+          ? `${peticion.birthYear}-${String(peticion.birthMonth ?? '01').padStart(2, '0')}-01`
+          : undefined
         const newPlayer = await db.createScoutingPlayer({
           fullName: peticion.playerName,
           position1: peticion.position ?? undefined,
-          birthdate: peticion.birthYear ? `${peticion.birthYear}-01-01` : undefined,
+          birthdate,
           team: peticion.team ?? undefined,
         })
         playerId = newPlayer.id
@@ -821,6 +881,8 @@ function RespondWithInformeModal({
         persona: currentProfile.avatar,
       })
       onAddReport(report)
+      // Link this report back to the petición
+      await onLinkReport(peticion.id, report.id)
       onClose()
     } catch {
       setError('Error al guardar el informe. Inténtalo de nuevo.')
@@ -889,11 +951,11 @@ function RespondWithInformeModal({
           <FormRow label="Conclusión">
             <select
               value={conclusion}
-              onChange={e => setConclusion(e.target.value as ConclusionOption)}
+              onChange={e => setConclusion(e.target.value as BoulemaConclusionOption)}
               className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
             >
               <option value="">Sin conclusión</option>
-              {CONCLUSION_OPTIONS.filter(Boolean).map(c => <option key={c} value={c}>{c}</option>)}
+              {BOULEMA_CONCLUSION_OPTIONS.filter(Boolean).map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </FormRow>
 
@@ -1014,6 +1076,10 @@ export function Captacion({
   const [editingPeticion, setEditingPeticion] = useState<BoulemaPeticion | null>(null)
   const [respondingPeticion, setRespondingPeticion] = useState<BoulemaPeticion | null>(null)
   const [confirmDeletePeticion, setConfirmDeletePeticion] = useState<string | null>(null)
+  const [bouSearch, setBouSearch] = useState('')
+  const [bouPosFilter, setBouPosFilter] = useState('all')
+  const [bouYearFilter, setBouYearFilter] = useState('all')
+  const [bouOfferedFilter, setBouOfferedFilter] = useState('all')
 
   const panelPlayer = panelPlayerId ? scoutingPlayers.find(p => p.id === panelPlayerId) ?? null : null
   const panelReports = useMemo(() => {
@@ -2342,77 +2408,177 @@ export function Captacion({
       )}
 
       {/* ── BOULEMA TAB ──────────────────────────────────────── */}
-      {captTab === 'boulema' && (
-        <div className="flex-1 max-w-3xl mx-auto w-full px-3 sm:px-6 py-4 space-y-4">
-          {/* Header */}
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Inbox className="w-5 h-5 text-slate-400" />
-              <h2 className="text-base font-semibold text-slate-800">Boulema</h2>
-              {boulemaPeticiones.length > 0 && (
+      {captTab === 'boulema' && (() => {
+        // Derived filter values
+        const bouAllYears = [...new Set(boulemaPeticiones.map(p => p.birthYear).filter(Boolean) as string[])].sort()
+        const bouAllPositions = [...new Set(boulemaPeticiones.map(p => p.position).filter(Boolean) as string[])].sort()
+        const bouAllOfferedBy = [...new Set(boulemaPeticiones.map(p => p.offeredBy).filter(Boolean) as string[])].sort()
+
+        const filteredPeticiones = boulemaPeticiones
+          .slice()
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+          .filter(p => {
+            if (bouPosFilter !== 'all' && p.position !== bouPosFilter) return false
+            if (bouYearFilter !== 'all' && p.birthYear !== bouYearFilter) return false
+            if (bouOfferedFilter !== 'all' && p.offeredBy !== bouOfferedFilter) return false
+            if (bouSearch.trim()) {
+              const q = bouSearch.toLowerCase()
+              if (
+                !p.playerName.toLowerCase().includes(q) &&
+                !(p.team?.toLowerCase().includes(q)) &&
+                !(p.offeredBy?.toLowerCase().includes(q)) &&
+                !(p.notes?.toLowerCase().includes(q))
+              ) return false
+            }
+            return true
+          })
+
+        return (
+          <div className="flex-1 max-w-3xl mx-auto w-full px-3 sm:px-6 py-4 space-y-3">
+            {/* Header */}
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Inbox className="w-5 h-5 text-slate-400" />
+                <h2 className="text-base font-semibold text-slate-800">Boulema</h2>
                 <span className="text-xs font-medium px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full">
-                  {boulemaPeticiones.length}
+                  {filteredPeticiones.length}{filteredPeticiones.length !== boulemaPeticiones.length ? `/${boulemaPeticiones.length}` : ''}
                 </span>
+              </div>
+              <button
+                onClick={() => setShowAddBoulema(true)}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-[hsl(220,72%,26%)] text-white rounded-xl hover:bg-[hsl(220,72%,20%)] transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Añadir petición</span>
+              </button>
+            </div>
+
+            {/* Search + Filters */}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Search */}
+              <div className="relative flex-1 min-w-[180px]">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                <input
+                  value={bouSearch}
+                  onChange={e => setBouSearch(e.target.value)}
+                  placeholder="Buscar jugador, club, ofrecido por..."
+                  className="w-full pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                />
+                {bouSearch && (
+                  <button onClick={() => setBouSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Position filter */}
+              {bouAllPositions.length > 0 && (
+                <select
+                  value={bouPosFilter}
+                  onChange={e => setBouPosFilter(e.target.value)}
+                  className="px-2.5 py-1.5 text-xs font-medium border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                >
+                  <option value="all">Posición</option>
+                  {bouAllPositions.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              )}
+
+              {/* Year filter */}
+              {bouAllYears.length > 0 && (
+                <select
+                  value={bouYearFilter}
+                  onChange={e => setBouYearFilter(e.target.value)}
+                  className="px-2.5 py-1.5 text-xs font-medium border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                >
+                  <option value="all">Año nac.</option>
+                  {bouAllYears.map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+              )}
+
+              {/* Offered by filter */}
+              {bouAllOfferedBy.length > 0 && (
+                <select
+                  value={bouOfferedFilter}
+                  onChange={e => setBouOfferedFilter(e.target.value)}
+                  className="px-2.5 py-1.5 text-xs font-medium border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                >
+                  <option value="all">Ofrecido por</option>
+                  {bouAllOfferedBy.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              )}
+
+              {/* Clear filters */}
+              {(bouPosFilter !== 'all' || bouYearFilter !== 'all' || bouOfferedFilter !== 'all') && (
+                <button
+                  onClick={() => { setBouPosFilter('all'); setBouYearFilter('all'); setBouOfferedFilter('all') }}
+                  className="text-xs text-slate-400 hover:text-slate-600 px-2 py-1.5"
+                >
+                  Limpiar
+                </button>
               )}
             </div>
-            <button
-              onClick={() => setShowAddBoulema(true)}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-[hsl(220,72%,26%)] text-white rounded-xl hover:bg-[hsl(220,72%,20%)] transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Crear informe / añadir petición</span>
-            </button>
-          </div>
 
-          {/* Peticiones list */}
-          <div className="space-y-2">
-            {boulemaPeticiones.length === 0 ? (
-              <div className="bg-white border border-dashed border-slate-200 rounded-2xl py-12 text-center">
-                <Inbox className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                <p className="text-sm text-slate-400 font-medium">Sin peticiones de informe</p>
-                <p className="text-xs text-slate-300 mt-1">Añade una petición para pedir un informe sobre un jugador</p>
-              </div>
-            ) : (
-              boulemaPeticiones
-                .slice()
-                .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-                .map(p => {
+            {/* Peticiones list */}
+            <div className="space-y-2">
+              {boulemaPeticiones.length === 0 ? (
+                <div className="bg-white border border-dashed border-slate-200 rounded-2xl py-12 text-center">
+                  <Inbox className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                  <p className="text-sm text-slate-400 font-medium">Sin peticiones de informe</p>
+                  <p className="text-xs text-slate-300 mt-1">Añade una petición para pedir un informe sobre un jugador</p>
+                </div>
+              ) : filteredPeticiones.length === 0 ? (
+                <p className="text-xs text-slate-400 text-center py-8">Sin resultados con los filtros actuales</p>
+              ) : (
+                filteredPeticiones.map(p => {
                   const requesterProfile = profiles.find(pr => pr.avatar === p.requestedBy)
                   const assigneeProfile = profiles.find(pr => pr.avatar === p.requestedFrom)
                   const rel = relativeDate(p.createdAt)
                   const isConfirming = confirmDeletePeticion === p.id
+                  const linkedReport = p.reportId ? scoutingReports.find(r => r.id === p.reportId) : undefined
+                  const monthLabel = p.birthMonth ? MONTHS_ES_FULL.find(m => m.v === p.birthMonth)?.l?.slice(0, 3) : undefined
+
                   return (
                     <div
                       key={p.id}
-                      className="bg-white border border-slate-200 rounded-xl px-4 py-3 hover:border-slate-300 transition-colors"
+                      className={`bg-white border rounded-xl px-4 py-3 transition-colors ${linkedReport ? 'border-green-200 bg-green-50/30' : 'border-slate-200 hover:border-slate-300'}`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
                           {/* Player name + chips */}
-                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                          <div className="flex flex-wrap items-center gap-1.5 mb-1">
                             <span className="font-semibold text-slate-800 text-sm">{p.playerName}</span>
                             {p.position && (
                               <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{p.position}</span>
                             )}
-                            {p.birthYear && (
-                              <span className="text-[10px] text-slate-400 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded">{p.birthYear}</span>
+                            {(p.birthYear || monthLabel) && (
+                              <span className="text-[10px] text-slate-400 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded font-mono">
+                                {[monthLabel, p.birthYear].filter(Boolean).join('/')}
+                              </span>
                             )}
                             {p.team && (
                               <span className="text-[10px] text-slate-500 italic">{p.team}</span>
                             )}
                           </div>
 
+                          {/* Offered by */}
+                          {p.offeredBy && (
+                            <div className="text-[11px] text-slate-500 mb-1">
+                              <span className="text-slate-400">Ofrecido por</span>{' '}
+                              <span className="font-medium text-slate-600">{p.offeredBy}</span>
+                            </div>
+                          )}
+
                           {/* Assignment */}
-                          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 mb-1">
-                            <span className="text-slate-400">De</span>
+                          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 mb-1">
+                            <span className="text-slate-400">Pedido por</span>
                             <span className="font-mono font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
                               {p.requestedBy}
-                              {requesterProfile && requesterProfile.avatar !== requesterProfile.name && (
+                              {requesterProfile && (
                                 <span className="font-sans font-normal ml-1 text-slate-400">· {requesterProfile.name.split(' ')[0]}</span>
                               )}
                             </span>
                             <span className="text-slate-400">→</span>
-                            <span className="font-mono font-semibold text-slate-600 bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-100">
+                            <span className="font-mono font-semibold bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-100">
                               {p.requestedFrom}
                               {assigneeProfile && (
                                 <span className="font-sans font-normal ml-1 text-blue-500">· {assigneeProfile.name.split(' ')[0]}</span>
@@ -2422,18 +2588,33 @@ export function Captacion({
 
                           {/* Notes */}
                           {p.notes && (
-                            <p className="text-xs text-slate-500 leading-relaxed whitespace-pre-wrap">{p.notes}</p>
+                            <p className="text-xs text-slate-500 leading-relaxed whitespace-pre-wrap mb-1.5">{p.notes}</p>
                           )}
 
-                          {/* Respond button */}
-                          <div className="mt-2">
-                            <button
-                              onClick={() => setRespondingPeticion(p)}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-[hsl(220,72%,26%)] text-white rounded-lg hover:bg-[hsl(220,72%,20%)] transition-colors"
-                            >
-                              <FileText className="w-3 h-3" />
-                              Crear informe
-                            </button>
+                          {/* Informe adjunto o botón crear */}
+                          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                            {linkedReport ? (
+                              <div
+                                onClick={() => { setCaptTab('jugadores'); const pl = scoutingPlayers.find(x => x.id === linkedReport.playerId); if (pl) setPanelPlayerId(pl.id) }}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-green-100 text-green-700 border border-green-200 rounded-lg cursor-pointer hover:bg-green-200 transition-colors"
+                              >
+                                <FileText className="w-3 h-3" />
+                                Ver informe
+                                {linkedReport.conclusion && (
+                                  <span className={`ml-1 px-1.5 py-0.5 rounded text-[10px] ${BOULEMA_CONCLUSION_STYLE[linkedReport.conclusion] ?? 'bg-slate-100 text-slate-600'}`}>
+                                    {linkedReport.conclusion}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setRespondingPeticion(p)}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-[hsl(220,72%,26%)] text-white rounded-lg hover:bg-[hsl(220,72%,20%)] transition-colors"
+                              >
+                                <FileText className="w-3 h-3" />
+                                Crear informe
+                              </button>
+                            )}
                           </div>
                         </div>
 
@@ -2492,16 +2673,18 @@ export function Captacion({
                     </div>
                   )
                 })
-            )}
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* AddBoulemaModal — nueva petición */}
       {showAddBoulema && (
         <AddBoulemaModal
           profiles={profiles}
           currentProfile={currentProfile}
+          boulemaPeticiones={boulemaPeticiones}
           onClose={() => setShowAddBoulema(false)}
           onSave={async (peticion) => {
             await onAddBoulemaPeticion(peticion)
@@ -2515,6 +2698,7 @@ export function Captacion({
         <AddBoulemaModal
           profiles={profiles}
           currentProfile={currentProfile}
+          boulemaPeticiones={boulemaPeticiones}
           initial={editingPeticion}
           onClose={() => setEditingPeticion(null)}
           onSave={async (updated) => {
@@ -2534,6 +2718,10 @@ export function Captacion({
           onClose={() => setRespondingPeticion(null)}
           onAddPlayer={onAddPlayer}
           onAddReport={onAddReport}
+          onLinkReport={async (peticionId, reportId) => {
+            const p = boulemaPeticiones.find(x => x.id === peticionId)
+            if (p) await onUpdateBoulemaPeticion({ ...p, reportId })
+          }}
         />
       )}
 

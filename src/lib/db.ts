@@ -789,10 +789,13 @@ function dbToBoulemaPeticion(row: Record<string, unknown>): BoulemaPeticion {
     playerName: row.player_name as string,
     position: (row.position as string) ?? undefined,
     birthYear: (row.birth_year as string) ?? undefined,
+    birthMonth: (row.birth_month as string) ?? undefined,
     team: (row.team as string) ?? undefined,
+    offeredBy: (row.offered_by as string) ?? undefined,
     requestedFrom: row.requested_from as string,
     notes: (row.notes as string) ?? undefined,
     requestedBy: row.requested_by as string,
+    reportId: (row.report_id as string) ?? undefined,
     createdAt: row.created_at as string,
   }
 }
@@ -811,10 +814,13 @@ export async function createBoulemaPeticion(p: Omit<BoulemaPeticion, 'id' | 'cre
     player_name: p.playerName,
     position: p.position ?? null,
     birth_year: p.birthYear ?? null,
+    birth_month: p.birthMonth ?? null,
     team: p.team ?? null,
+    offered_by: p.offeredBy ?? null,
     requested_from: p.requestedFrom,
     notes: p.notes ?? null,
     requested_by: p.requestedBy,
+    report_id: p.reportId ?? null,
   }).select().single()
   if (error) throw error
   return dbToBoulemaPeticion(data)
@@ -825,10 +831,13 @@ export async function updateBoulemaPeticion(p: BoulemaPeticion): Promise<void> {
     player_name: p.playerName,
     position: p.position ?? null,
     birth_year: p.birthYear ?? null,
+    birth_month: p.birthMonth ?? null,
     team: p.team ?? null,
+    offered_by: p.offeredBy ?? null,
     requested_from: p.requestedFrom,
     notes: p.notes ?? null,
     requested_by: p.requestedBy,
+    report_id: p.reportId ?? null,
   }).eq('id', p.id)
   if (error) throw error
 }
