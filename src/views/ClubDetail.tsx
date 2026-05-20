@@ -821,6 +821,25 @@ function NeedForm({ initial, onSave, onCancel }: {
   )
 }
 
+// ── LIGAS CONOCIDAS ───────────────────────────────────────────
+const KNOWN_LEAGUES = [
+  '1. Lig', '1B Pro League', '2. Bundesliga', '3. Liga',
+  'Allsvenskan', 'Arabian Gulf League', 'Austrian 2. Liga', 'Austrian Bundesliga',
+  'Baltic Leagues', 'Bundesliga', 'Challenge League', 'Championship',
+  'Czech First League', 'Eerste Divisie', 'EFL League One', 'EFL League Two',
+  'Ekstraklasa', 'Eliteserien', 'Eredivisie', 'Erovnuli Liga',
+  'First Division Cyprus', 'First Professional League',
+  'HNL', 'Indian Super League', 'Israeli Premier League',
+  'La Liga', 'La Liga 2', 'Liga 1', 'Liga Betplay', 'Liga MX', 'Liga Portugal 2',
+  'LigaPro', 'Ligue 1', 'Ligue 2', 'MLS', 'NB I',
+  'Premier League', 'Premier League Kazakhstan', 'Premier League Russia',
+  'Primera Division', 'Primera RFEF', 'Primeira Liga', 'Pro League',
+  'PrvaLiga', 'Qatar Stars League', 'Saudi Pro League', 'Scottish Premiership',
+  'Segunda RFEF', 'Serie A', 'Serie B', 'Slovak Super Liga',
+  'Super League Greece', 'Super liga', 'Superliga', 'Swiss Super League',
+  'Süper Lig', 'Ukrainian Premier League', 'Veikkausliiga',
+]
+
 // ── INFO EDIT FORM ────────────────────────────────────────────
 
 function InfoEditForm({ club, onSave, onCancel }: {
@@ -830,7 +849,10 @@ function InfoEditForm({ club, onSave, onCancel }: {
 }) {
   const [name, setName] = useState(club.name)
   const [country, setCountry] = useState(club.country ?? '')
+  const isCustomLeague = !!club.league && !KNOWN_LEAGUES.includes(club.league)
   const [league, setLeague] = useState(club.league ?? '')
+  const [showCustomLeague, setShowCustomLeague] = useState(isCustomLeague)
+  const [customLeague, setCustomLeague] = useState(isCustomLeague ? club.league ?? '' : '')
   const [contactPerson, setContactPerson] = useState(club.contactPerson ?? '')
   const [aisManager, setAisManager] = useState(club.aisManager ?? '')
   const [notes, setNotes] = useState(club.notes ?? '')
@@ -850,7 +872,33 @@ function InfoEditForm({ club, onSave, onCancel }: {
         </div>
         <div>
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Liga</label>
-          <input value={league} onChange={e => setLeague(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+          <select
+            value={showCustomLeague ? '__new__' : league}
+            onChange={e => {
+              if (e.target.value === '__new__') {
+                setShowCustomLeague(true)
+                setLeague(customLeague)
+              } else {
+                setShowCustomLeague(false)
+                setCustomLeague('')
+                setLeague(e.target.value)
+              }
+            }}
+            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
+          >
+            <option value="">— Sin liga —</option>
+            {KNOWN_LEAGUES.map(l => <option key={l} value={l}>{l}</option>)}
+            <option value="__new__">➕ Añadir nueva liga</option>
+          </select>
+          {showCustomLeague && (
+            <input
+              autoFocus
+              value={customLeague}
+              onChange={e => { setCustomLeague(e.target.value); setLeague(e.target.value) }}
+              placeholder="Nombre de la nueva liga…"
+              className="mt-2 w-full border border-blue-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+            />
+          )}
         </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
