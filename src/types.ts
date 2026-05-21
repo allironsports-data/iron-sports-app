@@ -267,11 +267,13 @@ export interface BoulemaPeticion {
   birthYear?: string
   birthMonth?: string     // "1"–"12", important for African players (18y rule)
   team?: string
+  country?: string        // country where player currently plays
+  nationality?: string    // player's nationality
   offeredBy?: string      // who brought/offered this player
-  requestedFrom: string   // profile.avatar of who should write the report
+  requestedFrom: string[] // profile.avatar[] of who should write the report
   notes?: string
   requestedBy: string     // profile.avatar of requester
-  reportId?: string       // ScoutingReport.id once the report is created
+  reportIds: string[]     // ScoutingReport.id[] — multiple reports can exist
   createdAt: string
 }
 

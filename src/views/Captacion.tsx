@@ -660,9 +660,19 @@ function AddBoulemaModal({
   const [birthYear, setBirthYear] = useState(initial?.birthYear ?? '')
   const [birthMonth, setBirthMonth] = useState(initial?.birthMonth ?? '')
   const [team, setTeam] = useState(initial?.team ?? '')
+  const [country, setCountry] = useState(initial?.country ?? '')
+  const [nationality, setNationality] = useState(initial?.nationality ?? '')
   const [offeredBy, setOfferedBy] = useState(initial?.offeredBy ?? '')
-  const [requestedFrom, setRequestedFrom] = useState(initial?.requestedFrom ?? currentProfile.avatar)
+  const [requestedFrom, setRequestedFrom] = useState<string[]>(
+    initial?.requestedFrom.length ? initial.requestedFrom : [currentProfile.avatar]
+  )
   const [notes, setNotes] = useState(initial?.notes ?? '')
+
+  function toggleAssignee(avatar: string) {
+    setRequestedFrom(prev =>
+      prev.includes(avatar) ? prev.filter(a => a !== avatar) : [...prev, avatar]
+    )
+  }
 
   const [saving, setSaving] = useState(false)
 
@@ -677,10 +687,13 @@ function AddBoulemaModal({
         birthYear: birthYear.trim() || undefined,
         birthMonth: birthMonth.trim() || undefined,
         team: team.trim() || undefined,
+        country: country.trim() || undefined,
+        nationality: nationality.trim() || undefined,
         offeredBy: offeredBy.trim() || undefined,
-        requestedFrom,
+        requestedFrom: requestedFrom.length ? requestedFrom : [currentProfile.avatar],
         notes: notes.trim() || undefined,
         requestedBy: currentProfile.avatar,
+        reportIds: initial?.reportIds ?? [],
       })
     } finally {
       setSaving(false)
@@ -755,6 +768,25 @@ function AddBoulemaModal({
             />
           </FormRow>
 
+          <div className="grid grid-cols-2 gap-2">
+            <FormRow label="País (donde juega)">
+              <input
+                value={country}
+                onChange={e => setCountry(e.target.value)}
+                placeholder="Senegal"
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              />
+            </FormRow>
+            <FormRow label="Nacionalidad">
+              <input
+                value={nationality}
+                onChange={e => setNationality(e.target.value)}
+                placeholder="Senegalesa"
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              />
+            </FormRow>
+          </div>
+
           <FormRow label="Ofrecido por">
             <input
               value={offeredBy}
@@ -773,17 +805,29 @@ function AddBoulemaModal({
           </FormRow>
 
           <FormRow label="Pedir informe a">
-            <select
-              value={requestedFrom}
-              onChange={e => setRequestedFrom(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-            >
-              {profiles.map(p => (
-                <option key={p.id} value={p.avatar}>
-                  {p.name}{p.avatar ? ` (${p.avatar})` : ''}
-                </option>
-              ))}
-            </select>
+            <div className="flex flex-wrap gap-2 pt-0.5">
+              {profiles.map(p => {
+                const selected = requestedFrom.includes(p.avatar)
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => toggleAssignee(p.avatar)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-sm transition-colors ${
+                      selected
+                        ? 'bg-[hsl(220,72%,26%)] text-white border-[hsl(220,72%,26%)]'
+                        : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <span className="font-mono font-bold text-xs">{p.avatar}</span>
+                    <span className="text-xs">{p.name.split(' ')[0]}</span>
+                  </button>
+                )
+              })}
+            </div>
+            {requestedFrom.length === 0 && (
+              <p className="text-xs text-red-500 mt-1">Selecciona al menos una persona</p>
+            )}
           </FormRow>
 
           <FormRow label="Notas / contexto">
@@ -1081,6 +1125,14 @@ export function Captacion({
   const [bouPosFilter, setBouPosFilter] = useState('all')
   const [bouYearFilter, setBouYearFilter] = useState('all')
   const [bouOfferedFilter, setBouOfferedFilter] = useState('all')
+  const [expandedNoteIds, setExpandedNoteIds] = useState<Set<string>>(new Set())
+  function toggleNotes(id: string) {
+    setExpandedNoteIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
 
   const panelPlayer = panelPlayerId ? scoutingPlayers.find(p => p.id === panelPlayerId) ?? null : null
   const panelReports = useMemo(() => {
@@ -2532,20 +2584,28 @@ export function Captacion({
               ) : (
                 filteredPeticiones.map(p => {
                   const requesterProfile = profiles.find(pr => pr.avatar === p.requestedBy)
-                  const assigneeProfile = profiles.find(pr => pr.avatar === p.requestedFrom)
                   const rel = relativeDate(p.createdAt)
                   const isConfirming = confirmDeletePeticion === p.id
-                  const linkedReport = p.reportId ? scoutingReports.find(r => r.id === p.reportId) : undefined
+                  const linkedReports = p.reportIds
+                    .map(id => scoutingReports.find(r => r.id === id))
+                    .filter((r): r is NonNullable<typeof r> => !!r)
+                  const allDone = linkedReports.length > 0 && p.requestedFrom.every(
+                    av => linkedReports.some(r => r.persona === av)
+                  )
                   const monthLabel = p.birthMonth ? MONTHS_ES_FULL.find(m => m.v === p.birthMonth)?.l?.slice(0, 3) : undefined
+                  const notesFirstLine = p.notes?.split('\n')[0] ?? ''
+                  const notesHasMore = (p.notes?.split('\n').length ?? 0) > 1 || (p.notes?.length ?? 0) > notesFirstLine.length
+                  const notesExpanded = expandedNoteIds.has(p.id)
+                  const currentUserDone = linkedReports.some(r => r.persona === currentProfile.avatar)
 
                   return (
                     <div
                       key={p.id}
-                      className={`bg-white border rounded-xl px-4 py-3 transition-colors ${linkedReport ? 'border-green-200 bg-green-50/30' : 'border-slate-200 hover:border-slate-300'}`}
+                      className={`bg-white border rounded-xl px-4 py-3 transition-colors ${allDone ? 'border-green-200 bg-green-50/30' : 'border-slate-200 hover:border-slate-300'}`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
-                          {/* Player name + chips */}
+                          {/* Player name + chips: NOMBRE / POSICIÓN / FECHA / CLUB / PAÍS / NACIONALIDAD */}
                           <div className="flex flex-wrap items-center gap-1.5 mb-1">
                             <span className="font-semibold text-slate-800 text-sm">{p.playerName}</span>
                             {p.position && (
@@ -2559,6 +2619,12 @@ export function Captacion({
                             {p.team && (
                               <span className="text-[10px] text-slate-500 italic">{p.team}</span>
                             )}
+                            {p.country && (
+                              <span className="text-[10px] text-slate-500 italic">{p.country}</span>
+                            )}
+                            {p.nationality && (
+                              <span className="text-[10px] text-violet-600 bg-violet-50 border border-violet-100 px-1.5 py-0.5 rounded">{p.nationality}</span>
+                            )}
                           </div>
 
                           {/* Offered by */}
@@ -2569,7 +2635,7 @@ export function Captacion({
                             </div>
                           )}
 
-                          {/* Assignment */}
+                          {/* Assignment — multi-destinatario */}
                           <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 mb-1">
                             <span className="text-slate-400">Pedido por</span>
                             <span className="font-mono font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
@@ -2579,35 +2645,64 @@ export function Captacion({
                               )}
                             </span>
                             <span className="text-slate-400">→</span>
-                            <span className="font-mono font-semibold bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-100">
-                              {p.requestedFrom}
-                              {assigneeProfile && (
-                                <span className="font-sans font-normal ml-1 text-blue-500">· {assigneeProfile.name.split(' ')[0]}</span>
-                              )}
-                            </span>
+                            {p.requestedFrom.map(av => {
+                              const pr = profiles.find(x => x.avatar === av)
+                              const done = linkedReports.some(r => r.persona === av)
+                              return (
+                                <span key={av} className={`font-mono font-semibold px-1.5 py-0.5 rounded border text-[11px] ${
+                                  done
+                                    ? 'bg-green-50 text-green-700 border-green-200'
+                                    : 'bg-blue-50 text-blue-700 border-blue-100'
+                                }`}>
+                                  {av}
+                                  {pr && <span className="font-sans font-normal ml-1 opacity-70">· {pr.name.split(' ')[0]}</span>}
+                                  {done && <span className="ml-1">✓</span>}
+                                </span>
+                              )
+                            })}
                           </div>
 
-                          {/* Notes */}
+                          {/* Notes — truncadas con "ver más" */}
                           {p.notes && (
-                            <p className="text-xs text-slate-500 leading-relaxed whitespace-pre-wrap mb-1.5">{p.notes}</p>
+                            <div className="mb-1.5">
+                              <p className="text-xs text-slate-500 leading-relaxed whitespace-pre-wrap">
+                                {notesExpanded ? p.notes : notesFirstLine}
+                              </p>
+                              {notesHasMore && (
+                                <button
+                                  onClick={() => toggleNotes(p.id)}
+                                  className="text-[10px] text-blue-500 hover:text-blue-700 mt-0.5"
+                                >
+                                  {notesExpanded ? 'ver menos ▲' : 'ver más ▼'}
+                                </button>
+                              )}
+                            </div>
                           )}
 
-                          {/* Informe adjunto o botón crear */}
+                          {/* Informes acumulados + botón crear */}
                           <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                            {linkedReport ? (
-                              <div
-                                onClick={() => { setCaptTab('jugadores'); const pl = scoutingPlayers.find(x => x.id === linkedReport.playerId); if (pl) setPanelPlayerId(pl.id) }}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-green-100 text-green-700 border border-green-200 rounded-lg cursor-pointer hover:bg-green-200 transition-colors"
-                              >
-                                <FileText className="w-3 h-3" />
-                                Ver informe
-                                {linkedReport.conclusion && (
-                                  <span className={`ml-1 px-1.5 py-0.5 rounded text-[10px] ${BOULEMA_CONCLUSION_STYLE[linkedReport.conclusion] ?? 'bg-slate-100 text-slate-600'}`}>
-                                    {linkedReport.conclusion}
-                                  </span>
-                                )}
-                              </div>
-                            ) : (
+                            {linkedReports.map(report => {
+                              const reportDate = report.createdAt
+                                ? new Date(report.createdAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
+                                : ''
+                              return (
+                                <div
+                                  key={report.id}
+                                  onClick={() => { setCaptTab('jugadores'); const pl = scoutingPlayers.find(x => x.id === report.playerId); if (pl) setPanelPlayerId(pl.id) }}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-green-100 text-green-700 border border-green-200 rounded-lg cursor-pointer hover:bg-green-200 transition-colors"
+                                >
+                                  <FileText className="w-3 h-3" />
+                                  <span className="font-mono font-bold">{report.persona ?? '?'}</span>
+                                  {reportDate && <span className="text-green-600 opacity-80">{reportDate}</span>}
+                                  {report.conclusion && (
+                                    <span className={`ml-0.5 px-1.5 py-0.5 rounded text-[10px] ${BOULEMA_CONCLUSION_STYLE[report.conclusion] ?? 'bg-slate-100 text-slate-600'}`}>
+                                      {report.conclusion}
+                                    </span>
+                                  )}
+                                </div>
+                              )
+                            })}
+                            {!currentUserDone && (
                               <button
                                 onClick={() => setRespondingPeticion(p)}
                                 className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-[hsl(220,72%,26%)] text-white rounded-lg hover:bg-[hsl(220,72%,20%)] transition-colors"
@@ -2720,8 +2815,11 @@ export function Captacion({
           onAddPlayer={onAddPlayer}
           onAddReport={onAddReport}
           onLinkReport={async (peticionId, reportId) => {
-            const p = boulemaPeticiones.find(x => x.id === peticionId)
-            if (p) await onUpdateBoulemaPeticion({ ...p, reportId })
+            const peticion = boulemaPeticiones.find(x => x.id === peticionId)
+            if (peticion) await onUpdateBoulemaPeticion({
+              ...peticion,
+              reportIds: [...peticion.reportIds.filter(id => id !== reportId), reportId],
+            })
           }}
         />
       )}
