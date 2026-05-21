@@ -402,7 +402,14 @@ export function Distribution({
         confederation: getClubConfederation(country),
       }))
       .sort((a, b) => {
-        // Sort by tier first, then by league name
+        // Spanish leagues always first (La Liga → La Liga 2 → Primera RFEF → Segunda RFEF)
+        const SPANISH_LEAGUES = ['La Liga', 'La Liga 2', 'Primera RFEF', 'Segunda RFEF']
+        const aSpain = SPANISH_LEAGUES.includes(a.league)
+        const bSpain = SPANISH_LEAGUES.includes(b.league)
+        if (aSpain && !bSpain) return -1
+        if (!aSpain && bSpain) return 1
+        if (aSpain && bSpain) return SPANISH_LEAGUES.indexOf(a.league) - SPANISH_LEAGUES.indexOf(b.league)
+        // Rest: sort by tier then name
         const tierOrder: Record<LeagueTier, number> = { A: 0, B: 1, C: 2, D: 3 }
         const td = tierOrder[a.tier] - tierOrder[b.tier]
         if (td !== 0) return td
