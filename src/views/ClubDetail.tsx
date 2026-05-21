@@ -1,10 +1,11 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import {
   ArrowLeft, Building2, Star, Plus, X, Pencil,
   ChevronRight, Trash2, Check, LogOut, AlertCircle, Phone,
 } from 'lucide-react'
 import type { Club, ClubNegotiation, DistributionEntry, Player, ClubNeed } from '../types'
 import type { Profile } from '../contexts/AuthContext'
+import { supabase } from '../lib/supabase'
 
 // ── constants ─────────────────────────────────────────────────
 
@@ -853,6 +854,16 @@ function InfoEditForm({ club, onSave, onCancel }: {
   const [league, setLeague] = useState(club.league ?? '')
   const [showCustomLeague, setShowCustomLeague] = useState(isCustomLeague)
   const [customLeague, setCustomLeague] = useState(isCustomLeague ? club.league ?? '' : '')
+  const [allLeagues, setAllLeagues] = useState<string[]>(KNOWN_LEAGUES)
+
+  useEffect(() => {
+    supabase.from('clubs').select('league').not('league', 'is', null).then(({ data }) => {
+      if (!data) return
+      const dbLeagues = data.map((r: { league: string }) => r.league).filter(Boolean) as string[]
+      const merged = Array.from(new Set([...KNOWN_LEAGUES, ...dbLeagues])).sort()
+      setAllLeagues(merged)
+    })
+  }, [])
   const [contactPerson, setContactPerson] = useState(club.contactPerson ?? '')
   const [aisManager, setAisManager] = useState(club.aisManager ?? '')
   const [notes, setNotes] = useState(club.notes ?? '')
@@ -887,7 +898,7 @@ function InfoEditForm({ club, onSave, onCancel }: {
             className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
           >
             <option value="">— Sin liga —</option>
-            {KNOWN_LEAGUES.map(l => <option key={l} value={l}>{l}</option>)}
+            {allLeagues.map(l => <option key={l} value={l}>{l}</option>)}
             <option value="__new__">➕ Añadir nueva liga</option>
           </select>
           {showCustomLeague && (

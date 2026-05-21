@@ -295,6 +295,8 @@ export function Distribution({
   const [pipelinePosFilter, setPipelinePosFilter] = useState<string>('')
   const [pipelineGestorFilter, setPipelineGestorFilter] = useState<string>('')
   const [showClosedDeals, setShowClosedDeals] = useState(false)
+  const [pipelineMyOnly, setPipelineMyOnly] = useState(false)
+  const [pipelineListView, setPipelineListView] = useState(false)
 
   // filters
   const [leagueFilter, setLeagueFilter] = useState<string[]>([])
@@ -457,6 +459,19 @@ export function Distribution({
   const selectedEntry = seasonEntries.find(e => e.id === selectedEntryId) ?? null
   const selectedClub = clubs.find(c => c.id === selectedClubId) ?? null
 
+  // ── helpers ───────────────────────────────────────────────────
+  function daysSince(iso: string | undefined): number {
+    if (!iso) return 999
+    return Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000)
+  }
+
+  const myActiveNegCount = useMemo(() =>
+    negotiations.filter(n =>
+      n.aisManager === currentProfile.avatar &&
+      ['pendiente', 'ofrecido', 'interesado', 'negociando'].includes(n.status)
+    ).length
+  , [negotiations, currentProfile.avatar])
+
   function closePanel() { setSelectedEntryId(null); setSelectedClubId(null); setSelectedNeed(null); setPlayerPanelGestorFilter('') }
   const hasPanel = !!selectedEntry || !!selectedClub || !!selectedNeed
 
@@ -558,7 +573,16 @@ export function Distribution({
                 <><span className="hidden sm:inline">Clubes </span>({clubs.length})</>
               ) : t === 'solicitudes' ? (
                 <><span className="hidden sm:inline">Solicitudes</span><span className="sm:hidden">Solic.</span>{clubNeeds.length > 0 ? ` (${clubNeeds.length})` : ''}</>
-              ) : 'Pipeline'}
+              ) : (
+                <span className="flex items-center gap-1.5">
+                  Pipeline
+                  {myActiveNegCount > 0 && (
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold leading-none ${
+                      tab === t ? 'bg-[hsl(220,72%,36%)] text-white' : 'bg-slate-200 text-slate-600'
+                    }`}>{myActiveNegCount}</span>
+                  )}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -1385,9 +1409,10 @@ export function Distribution({
               .filter(({ player, club, neg }) => {
                 if (!player || !club) return false
                 if (!distPlayerIds.has(player.id)) return false
+                if (pipelineMyOnly && neg.aisManager !== currentProfile.avatar) return false
                 if (pipelineSearch && !player.name.toLowerCase().includes(pipelineSearch.toLowerCase())) return false
                 if (pipelinePosFilter && !player.positions.some(p => p === pipelinePosFilter)) return false
-                if (pipelineGestorFilter && neg.aisManager !== pipelineGestorFilter) return false
+                if (!pipelineMyOnly && pipelineGestorFilter && neg.aisManager !== pipelineGestorFilter) return false
                 return true
               })
 
@@ -1402,6 +1427,20 @@ export function Distribution({
               <div className="-mx-4 -mb-4">
                 {/* Filter bar */}
                 <div className="flex items-center gap-2 flex-wrap px-4 py-3 bg-white border-b border-slate-100">
+                  {/* Mi Cola toggle */}
+                  <button
+                    onClick={() => { setPipelineMyOnly(v => !v); setPipelineGestorFilter('') }}
+                    className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors ${
+                      pipelineMyOnly
+                        ? 'bg-[hsl(220,72%,36%)] text-white border-[hsl(220,72%,36%)]'
+                        : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                    }`}
+                  >
+                    👤 {pipelineMyOnly ? `Mis negs (${deals.length})` : 'Mis negs'}
+                  </button>
+
+                  <div className="w-px h-5 bg-slate-200" />
+
                   <div className="relative">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
                     <input
@@ -1419,7 +1458,7 @@ export function Distribution({
                     <option value="">Todas las posiciones</option>
                     {allPositions.map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
-                  {allGestores.length > 0 && (
+                  {!pipelineMyOnly && allGestores.length > 0 && (
                     <select
                       value={pipelineGestorFilter}
                       onChange={e => setPipelineGestorFilter(e.target.value)}
@@ -1429,8 +1468,20 @@ export function Distribution({
                       {allGestores.map(g => <option key={g} value={g}>{g}</option>)}
                     </select>
                   )}
-                  <div className="ml-auto flex items-center gap-3">
+                  <div className="ml-auto flex items-center gap-2">
                     <span className="text-xs text-slate-400">{totalActive} activos · {totalClosed} cerrados</span>
+                    {/* Lista / Kanban toggle */}
+                    <button
+                      onClick={() => setPipelineListView(v => !v)}
+                      title={pipelineListView ? 'Ver kanban' : 'Ver lista'}
+                      className={`text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
+                        pipelineListView
+                          ? 'bg-slate-800 text-white border-slate-800'
+                          : 'border-slate-200 text-slate-500 hover:border-slate-400'
+                      }`}
+                    >
+                      {pipelineListView ? '⠿ Lista' : '⊞ Kanban'}
+                    </button>
                     <button
                       onClick={() => setShowClosedDeals(v => !v)}
                       className={`text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
@@ -1444,76 +1495,136 @@ export function Distribution({
                   </div>
                 </div>
 
-                {/* Kanban board */}
-                <div className="overflow-x-auto">
-                  <div className="flex gap-3 p-4 min-w-max">
+                {/* ── VISTA LISTA ── */}
+                {pipelineListView ? (
+                  <div className="max-w-5xl mx-auto p-4">
                     {visibleStatuses.map(status => {
                       const col = deals.filter(d => d.neg.status === status)
+                      if (col.length === 0) return null
                       const cfg = STATUS_CONFIG[status]
                       return (
-                        <div key={status} className="w-60 flex-shrink-0">
-                          {/* Column header */}
-                          <div className={`flex items-center gap-2 px-3 py-2 rounded-lg mb-2 ${cfg.color}`}>
+                        <div key={status} className="mb-6">
+                          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg mb-2 w-fit ${cfg.color}`}>
                             <div className={`w-2 h-2 rounded-full ${cfg.dot}`} />
                             <span className="text-xs font-semibold">{cfg.label}</span>
-                            <span className="ml-auto text-xs opacity-60 font-mono">{col.length}</span>
+                            <span className="text-xs opacity-60 font-mono">{col.length}</span>
                           </div>
-                          {/* Cards */}
-                          <div className="space-y-2">
-                            {col.map(({ neg, player, club, entry }) => {
+                          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                            {col.map(({ neg, player, club, entry }, i) => {
                               if (!player || !club) return null
                               const pcfg = entry ? PRIORITY_CONFIG[entry.priority] : null
+                              const stale = activeStatuses.includes(neg.status) && daysSince(neg.updatedAt) > 7
+                              const daysAgo = daysSince(neg.updatedAt)
                               return (
                                 <div
                                   key={neg.id}
                                   onClick={() => setEditingNeg(neg)}
-                                  className="bg-white rounded-xl border border-slate-200 p-3 cursor-pointer hover:shadow-md hover:border-slate-300 transition-all"
+                                  className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-slate-50 transition-colors ${i > 0 ? 'border-t border-slate-100' : ''} ${stale ? 'border-l-4 border-l-orange-400' : ''}`}
                                 >
-                                  {/* Player row */}
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <Avatar name={player.name} photo={player.photo} size="xs" />
-                                    <div className="flex-1 min-w-0">
-                                      <div className="text-xs font-semibold text-slate-800 truncate">{player.name}</div>
-                                      <div className="text-[10px] text-slate-400">{player.positions[0]}</div>
-                                    </div>
-                                    {pcfg && (
-                                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold flex-shrink-0 ${pcfg.bg} ${pcfg.text}`}>
-                                        {entry?.priority}
-                                      </span>
-                                    )}
+                                  <Avatar name={player.name} photo={player.photo} size="xs" />
+                                  <div className="flex-1 min-w-0">
+                                    <span className="text-sm font-medium text-slate-800">{player.name}</span>
+                                    <span className="text-xs text-slate-400 ml-2">{player.positions[0]}</span>
                                   </div>
-                                  {/* Club row */}
-                                  <div className="border-t border-slate-100 pt-2">
-                                    <div className="text-sm font-medium text-slate-700 truncate">{club.name}</div>
-                                    {club.league && <div className="text-xs text-slate-400">{club.league}</div>}
-                                  </div>
-                                  {/* Meta */}
-                                  {(neg.aisManager || neg.notes) && (
-                                    <div className="mt-2 space-y-0.5">
-                                      {neg.aisManager && (
-                                        <span className="text-[10px] font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded inline-block">
-                                          {neg.aisManager}
-                                        </span>
-                                      )}
-                                      {neg.notes && (
-                                        <p className="text-[10px] text-slate-400 line-clamp-2">{neg.notes}</p>
-                                      )}
-                                    </div>
+                                  <div className="text-sm text-slate-600 truncate w-36 flex-shrink-0">{club.name}</div>
+                                  {neg.aisManager && (
+                                    <span className="text-[10px] font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded flex-shrink-0">{neg.aisManager}</span>
                                   )}
+                                  {pcfg && (
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold flex-shrink-0 ${pcfg.bg} ${pcfg.text}`}>{entry?.priority}</span>
+                                  )}
+                                  <div className="text-right flex-shrink-0 w-20">
+                                    <span className={`text-[10px] ${stale ? 'text-orange-500 font-semibold' : 'text-slate-400'}`}>
+                                      {stale ? `⏰ ${daysAgo}d` : daysAgo < 999 ? `${daysAgo}d` : '—'}
+                                    </span>
+                                  </div>
                                 </div>
                               )
                             })}
-                            {col.length === 0 && (
-                              <div className="h-16 flex items-center justify-center text-xs text-slate-300 border-2 border-dashed border-slate-100 rounded-xl">
-                                Vacío
-                              </div>
-                            )}
                           </div>
                         </div>
                       )
                     })}
+                    {deals.filter(d => visibleStatuses.includes(d.neg.status)).length === 0 && (
+                      <div className="text-center text-sm text-slate-400 py-16">No hay negociaciones</div>
+                    )}
                   </div>
-                </div>
+                ) : (
+                  /* ── VISTA KANBAN ── */
+                  <div className="overflow-x-auto">
+                    <div className="flex gap-3 p-4 min-w-max">
+                      {visibleStatuses.map(status => {
+                        const col = deals.filter(d => d.neg.status === status)
+                        const cfg = STATUS_CONFIG[status]
+                        return (
+                          <div key={status} className="w-60 flex-shrink-0">
+                            {/* Column header */}
+                            <div className={`flex items-center gap-2 px-3 py-2 rounded-lg mb-2 ${cfg.color}`}>
+                              <div className={`w-2 h-2 rounded-full ${cfg.dot}`} />
+                              <span className="text-xs font-semibold">{cfg.label}</span>
+                              <span className="ml-auto text-xs opacity-60 font-mono">{col.length}</span>
+                            </div>
+                            {/* Cards */}
+                            <div className="space-y-2">
+                              {col.map(({ neg, player, club, entry }) => {
+                                if (!player || !club) return null
+                                const pcfg = entry ? PRIORITY_CONFIG[entry.priority] : null
+                                const stale = activeStatuses.includes(neg.status) && daysSince(neg.updatedAt) > 7
+                                return (
+                                  <div
+                                    key={neg.id}
+                                    onClick={() => setEditingNeg(neg)}
+                                    className={`bg-white rounded-xl border p-3 cursor-pointer hover:shadow-md transition-all ${
+                                      stale ? 'border-orange-300 border-l-4 border-l-orange-400' : 'border-slate-200 hover:border-slate-300'
+                                    }`}
+                                  >
+                                    {/* Player row */}
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <Avatar name={player.name} photo={player.photo} size="xs" />
+                                      <div className="flex-1 min-w-0">
+                                        <div className="text-xs font-semibold text-slate-800 truncate">{player.name}</div>
+                                        <div className="text-[10px] text-slate-400">{player.positions[0]}</div>
+                                      </div>
+                                      {pcfg && (
+                                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold flex-shrink-0 ${pcfg.bg} ${pcfg.text}`}>
+                                          {entry?.priority}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {/* Club row */}
+                                    <div className="border-t border-slate-100 pt-2">
+                                      <div className="text-sm font-medium text-slate-700 truncate">{club.name}</div>
+                                      {club.league && <div className="text-xs text-slate-400">{club.league}</div>}
+                                    </div>
+                                    {/* Meta */}
+                                    <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                                      {neg.aisManager && (
+                                        <span className="text-[10px] font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">
+                                          {neg.aisManager}
+                                        </span>
+                                      )}
+                                      {stale && (
+                                        <span className="text-[10px] text-orange-500 font-semibold">⏰ {daysSince(neg.updatedAt)}d sin cambios</span>
+                                      )}
+                                      {neg.notes && !stale && (
+                                        <p className="text-[10px] text-slate-400 line-clamp-2 w-full">{neg.notes}</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                              {col.length === 0 && (
+                                <div className="h-16 flex items-center justify-center text-xs text-slate-300 border-2 border-dashed border-slate-100 rounded-xl">
+                                  Vacío
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )
           })()}
@@ -2130,15 +2241,34 @@ function ClubCard({ club, negotiations, isSelected, onClick, onOffer, onTogglePr
   onOffer?: () => void
   onTogglePriority?: () => void
 }) {
+  const activeStatuses: ClubNegotiation['status'][] = ['pendiente', 'ofrecido', 'interesado', 'negociando']
   const activeNegs = negotiations.filter(n => n.clubId === club.id && n.status !== 'descartado')
+  const activeOnlyNegs = negotiations.filter(n => n.clubId === club.id && activeStatuses.includes(n.status))
   const tier = getClubTier(club.league, club.country)
   const tierCfg = TIER_CONFIG[tier]
+
+  // Last activity
+  const lastUpdated = activeNegs.reduce<string | undefined>((latest, n) => {
+    if (!latest) return n.updatedAt
+    return n.updatedAt > latest ? n.updatedAt : latest
+  }, undefined)
+  const daysAgo = lastUpdated ? Math.floor((Date.now() - new Date(lastUpdated).getTime()) / 86_400_000) : null
+  const isStale = activeOnlyNegs.length > 0 && daysAgo !== null && daysAgo > 7
+
+  function fmtDays(d: number) {
+    if (d === 0) return 'hoy'
+    if (d === 1) return 'ayer'
+    if (d < 7) return `${d}d`
+    if (d < 30) return `${Math.floor(d / 7)}sem`
+    return `${Math.floor(d / 30)}m`
+  }
+
   return (
     <div
       onClick={onClick}
       className={`bg-white rounded-lg border cursor-pointer hover:shadow-sm transition-all group flex items-center gap-2.5 px-3 py-2 ${
-        isSelected ? 'border-blue-300 ring-1 ring-blue-200' : 'border-slate-200'
-      } ${club.isPriority ? 'border-l-4 border-l-green-400' : ''}`}
+        isSelected ? 'border-blue-300 ring-1 ring-blue-200' : isStale ? 'border-orange-300' : 'border-slate-200'
+      } ${club.isPriority ? 'border-l-4 border-l-green-400' : isStale ? 'border-l-4 border-l-orange-400' : ''}`}
     >
       <div className={`w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0 text-[10px] font-bold ${tierCfg.bg} ${tierCfg.text}`}>
         {tier}
@@ -2156,6 +2286,11 @@ function ClubCard({ club, negotiations, isSelected, onClick, onOffer, onTogglePr
           {club.contactPerson && <span className="truncate">{club.contactPerson}</span>}
           {activeNegs.length > 0 && (
             <span className="text-blue-600 flex-shrink-0">{activeNegs.length} ofrecido{activeNegs.length !== 1 ? 's' : ''}</span>
+          )}
+          {daysAgo !== null && (
+            <span className={`flex-shrink-0 ml-auto ${isStale ? 'text-orange-500 font-semibold' : 'text-slate-400'}`}>
+              {isStale ? `⏰ ${fmtDays(daysAgo)}` : fmtDays(daysAgo)}
+            </span>
           )}
         </div>
       </div>
