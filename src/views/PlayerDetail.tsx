@@ -4,10 +4,14 @@ import type {
   Player, Task,
   PerformanceNote, PlayerLink, VideoSession,
   DistributionEntry, ClubNegotiation, Club,
+  ClubLog, PlayerMeeting,
 } from "../types";
 import { calcAge } from "../types";
 import type { Profile } from "../contexts/AuthContext";
-import { uploadContractPdf, fetchNotes, createNote, updateNote, deleteNote } from "../lib/db";
+import { uploadContractPdf, fetchNotes, createNote, updateNote, deleteNote,
+  fetchClubLogs, createClubLog, updateClubLog, deleteClubLog,
+  fetchMeetings, createMeeting, updateMeeting, deleteMeeting,
+} from "../lib/db";
 import { TaskDetailPanel } from "../components/TaskDetailPanel";
 import {
   ArrowLeft, LogOut, ClipboardList, FileText,
@@ -15,6 +19,7 @@ import {
   Clock, CheckCircle2, Trash2, Edit3, Star, Users,
   Paperclip, Download, ExternalLink, Link2,
   Video, BarChart2, BookOpen, Search, Filter, Pencil,
+  MessageSquare, CalendarDays,
 } from "lucide-react";
 
 const PRIMARY = "hsl(220,72%,26%)";
@@ -44,7 +49,7 @@ interface Props {
   onSelectClub?: (id: string) => void;
 }
 
-type TabId = "tareas" | "contrato" | "rendimiento" | "info" | "actividad" | "distribucion";
+type TabId = "tareas" | "contrato" | "rendimiento" | "info" | "actividad" | "distribucion" | "comunicaciones" | "citas";
 
 type NavGroup = { label: string; items: { id: TabId; label: string; icon: React.ReactNode; count?: number }[] };
 
@@ -68,9 +73,11 @@ export function PlayerDetail({
     {
       label: "Gestión",
       items: [
-        { id: "tareas",      label: "Tareas",      icon: <ClipboardList className="w-3.5 h-3.5" />, count: pendingCount || undefined },
-        { id: "contrato",    label: "Contrato",    icon: <FileText className="w-3.5 h-3.5" /> },
-        { id: "distribucion",label: "Distribución",icon: <BarChart2 className="w-3.5 h-3.5" />, count: distribCount },
+        { id: "tareas",         label: "Tareas",         icon: <ClipboardList className="w-3.5 h-3.5" />, count: pendingCount || undefined },
+        { id: "contrato",       label: "Contrato",       icon: <FileText className="w-3.5 h-3.5" /> },
+        { id: "distribucion",   label: "Distribución",   icon: <BarChart2 className="w-3.5 h-3.5" />, count: distribCount },
+        { id: "comunicaciones", label: "Comunicaciones", icon: <MessageSquare className="w-3.5 h-3.5" /> },
+        { id: "citas",          label: "Citas",          icon: <CalendarDays className="w-3.5 h-3.5" /> },
       ],
     },
     {
@@ -261,6 +268,12 @@ export function PlayerDetail({
                 onDeleteNegotiation={onDeleteNegotiation}
                 onSelectClub={onSelectClub}
               />
+            )}
+            {activeTab === "comunicaciones" && (
+              <ClubLogTab player={player} currentProfile={currentProfile} />
+            )}
+            {activeTab === "citas" && (
+              <CitasTab player={player} currentProfile={currentProfile} />
             )}
           </div>
         </div>
@@ -2241,4 +2254,300 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
       })()}
     </div>
   )
+}
+
+// ── CLUB LOG TAB ─────────────────────────────────────────────────────────────
+
+function ClubLogTab({ player, currentProfile }: { player: Player; currentProfile: Profile }) {
+  const [logs, setLogs] = useState<ClubLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState<ClubLog | null>(null);
+
+  // form state
+  const [fDate, setFDate]     = useState('');
+  const [fClub, setFClub]     = useState('');
+  const [fNotes, setFNotes]   = useState('');
+  const [saving, setSaving]   = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchClubLogs(player.id)
+      .then(data => { setLogs(data); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [player.id]);
+
+  function openNew() {
+    setEditing(null);
+    setFDate(new Date().toISOString().slice(0, 10));
+    setFClub('');
+    setFNotes('');
+    setShowForm(true);
+  }
+
+  function openEdit(log: ClubLog) {
+    setEditing(log);
+    setFDate(log.date);
+    setFClub(log.clubName);
+    setFNotes(log.notes);
+    setShowForm(true);
+  }
+
+  async function handleSave() {
+    if (!fDate || !fClub.trim() || !fNotes.trim()) return;
+    setSaving(true);
+    try {
+      if (editing) {
+        const updated: ClubLog = { ...editing, date: fDate, clubName: fClub.trim(), notes: fNotes.trim() };
+        await updateClubLog(updated);
+        setLogs(prev => prev.map(l => l.id === updated.id ? updated : l));
+      } else {
+        const created = await createClubLog(player.id, {
+          date: fDate,
+          clubName: fClub.trim(),
+          notes: fNotes.trim(),
+          authorId: currentProfile.id,
+        });
+        setLogs(prev => [created, ...prev]);
+      }
+      setShowForm(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    await deleteClubLog(id);
+    setLogs(prev => prev.filter(l => l.id !== id));
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-slate-800">Comunicaciones con clubs</h3>
+        <button
+          onClick={openNew}
+          className="inline-flex items-center gap-1 rounded-md text-white text-xs font-medium px-2.5 py-1.5"
+          style={{ background: PRIMARY }}
+        >
+          <Plus className="w-3.5 h-3.5" />Añadir
+        </button>
+      </div>
+
+      {loading && <div className="text-xs text-slate-400 py-6 text-center">Cargando…</div>}
+      {!loading && logs.length === 0 && (
+        <div className="text-center py-10 text-sm text-slate-400 bg-white border border-slate-200 rounded-lg">
+          Sin comunicaciones registradas
+        </div>
+      )}
+
+      {!loading && logs.map(log => (
+        <div key={log.id} className="bg-white border border-slate-200 rounded-lg p-4">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
+                  {log.clubName}
+                </span>
+                <span className="text-xs text-slate-400">
+                  {new Date(log.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </span>
+              </div>
+              <p className="text-sm text-slate-700 whitespace-pre-wrap">{log.notes}</p>
+            </div>
+            <div className="flex gap-1 shrink-0">
+              <button onClick={() => openEdit(log)} className="p-1 text-slate-400 hover:text-blue-600 rounded transition-colors">
+                <Edit3 className="w-3.5 h-3.5" />
+              </button>
+              <button onClick={() => handleDelete(log.id)} className="p-1 text-slate-400 hover:text-red-600 rounded transition-colors">
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      ))}
+
+      {showForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
+            <h4 className="text-sm font-semibold text-slate-800">
+              {editing ? 'Editar comunicación' : 'Nueva comunicación'}
+            </h4>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Fecha</label>
+                <input type="date" value={fDate} onChange={e => setFDate(e.target.value)}
+                  className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Club</label>
+                <input type="text" value={fClub} onChange={e => setFClub(e.target.value)}
+                  placeholder="Nombre del club"
+                  className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200" />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Qué dijo el club</label>
+              <textarea value={fNotes} onChange={e => setFNotes(e.target.value)}
+                placeholder="Notas sobre la conversación…"
+                rows={4}
+                className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-blue-200" />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setShowForm(false)}
+                className="flex-1 py-2 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
+                Cancelar
+              </button>
+              <button onClick={handleSave} disabled={saving || !fDate || !fClub.trim() || !fNotes.trim()}
+                className="flex-1 py-2 text-xs rounded-lg text-white disabled:opacity-50 transition-colors"
+                style={{ background: PRIMARY }}>
+                {saving ? 'Guardando…' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── CITAS TAB ────────────────────────────────────────────────────────────────
+
+function CitasTab({ player, currentProfile }: { player: Player; currentProfile: Profile }) {
+  const [meetings, setMeetings] = useState<PlayerMeeting[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState<PlayerMeeting | null>(null);
+
+  // form state
+  const [fDate, setFDate]   = useState('');
+  const [fNotes, setFNotes] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchMeetings(player.id)
+      .then(data => { setMeetings(data); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [player.id]);
+
+  function openNew() {
+    setEditing(null);
+    setFDate(new Date().toISOString().slice(0, 10));
+    setFNotes('');
+    setShowForm(true);
+  }
+
+  function openEdit(m: PlayerMeeting) {
+    setEditing(m);
+    setFDate(m.date);
+    setFNotes(m.notes ?? '');
+    setShowForm(true);
+  }
+
+  async function handleSave() {
+    if (!fDate) return;
+    setSaving(true);
+    try {
+      if (editing) {
+        const updated: PlayerMeeting = { ...editing, date: fDate, notes: fNotes.trim() || undefined };
+        await updateMeeting(updated);
+        setMeetings(prev => prev.map(m => m.id === updated.id ? updated : m));
+      } else {
+        const created = await createMeeting(player.id, {
+          date: fDate,
+          notes: fNotes.trim() || undefined,
+          authorId: currentProfile.id,
+        });
+        setMeetings(prev => [created, ...prev]);
+      }
+      setShowForm(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    await deleteMeeting(id);
+    setMeetings(prev => prev.filter(m => m.id !== id));
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-slate-800">Citas con el jugador</h3>
+        <button
+          onClick={openNew}
+          className="inline-flex items-center gap-1 rounded-md text-white text-xs font-medium px-2.5 py-1.5"
+          style={{ background: PRIMARY }}
+        >
+          <Plus className="w-3.5 h-3.5" />Añadir
+        </button>
+      </div>
+
+      {loading && <div className="text-xs text-slate-400 py-6 text-center">Cargando…</div>}
+      {!loading && meetings.length === 0 && (
+        <div className="text-center py-10 text-sm text-slate-400 bg-white border border-slate-200 rounded-lg">
+          Sin citas registradas
+        </div>
+      )}
+
+      {!loading && meetings.map(m => (
+        <div key={m.id} className="bg-white border border-slate-200 rounded-lg p-4">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                <span className="text-xs font-medium text-slate-700">
+                  {new Date(m.date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                </span>
+              </div>
+              {m.notes && <p className="text-sm text-slate-600 whitespace-pre-wrap">{m.notes}</p>}
+            </div>
+            <div className="flex gap-1 shrink-0">
+              <button onClick={() => openEdit(m)} className="p-1 text-slate-400 hover:text-blue-600 rounded transition-colors">
+                <Edit3 className="w-3.5 h-3.5" />
+              </button>
+              <button onClick={() => handleDelete(m.id)} className="p-1 text-slate-400 hover:text-red-600 rounded transition-colors">
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      ))}
+
+      {showForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 space-y-4">
+            <h4 className="text-sm font-semibold text-slate-800">
+              {editing ? 'Editar cita' : 'Nueva cita'}
+            </h4>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Fecha</label>
+              <input type="date" value={fDate} onChange={e => setFDate(e.target.value)}
+                className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Nota (opcional)</label>
+              <textarea value={fNotes} onChange={e => setFNotes(e.target.value)}
+                placeholder="Breve nota sobre la cita…"
+                rows={3}
+                className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-blue-200" />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setShowForm(false)}
+                className="flex-1 py-2 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
+                Cancelar
+              </button>
+              <button onClick={handleSave} disabled={saving || !fDate}
+                className="flex-1 py-2 text-xs rounded-lg text-white disabled:opacity-50 transition-colors"
+                style={{ background: PRIMARY }}>
+                {saving ? 'Guardando…' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }

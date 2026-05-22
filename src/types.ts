@@ -83,6 +83,27 @@ export interface PerformanceNote {
   title?: string;
 }
 
+// ---- Club communication log ----
+export interface ClubLog {
+  id: string
+  playerId: string
+  date: string        // "YYYY-MM-DD"
+  clubName: string    // club que habló
+  notes: string       // qué dijo el club
+  authorId?: string
+  createdAt: string
+}
+
+// ---- Player meeting ----
+export interface PlayerMeeting {
+  id: string
+  playerId: string
+  date: string        // "YYYY-MM-DD"
+  notes?: string
+  authorId?: string
+  createdAt: string
+}
+
 // ---- Match report ----
 export interface MatchReport {
   id: string;

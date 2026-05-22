@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion } from '../types'
+import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion, ClubLog, PlayerMeeting } from '../types'
 
 // ── helpers ──────────────────────────────────────────────────
 
@@ -852,5 +852,104 @@ export async function updateBoulemaPeticion(p: BoulemaPeticion): Promise<void> {
 
 export async function deleteBoulemaPeticion(id: string): Promise<void> {
   const { error } = await supabase.from('boulema_peticiones').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── CLUB LOGS ─────────────────────────────────────────────────
+
+function dbToClubLog(row: Record<string, unknown>): ClubLog {
+  return {
+    id:        row.id as string,
+    playerId:  row.player_id as string,
+    date:      row.date as string,
+    clubName:  row.club_name as string,
+    notes:     row.notes as string,
+    authorId:  (row.author_id as string) ?? undefined,
+    createdAt: row.created_at as string,
+  }
+}
+
+export async function fetchClubLogs(playerId: string): Promise<ClubLog[]> {
+  const { data, error } = await supabase
+    .from('club_logs')
+    .select('*')
+    .eq('player_id', playerId)
+    .order('date', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map(dbToClubLog)
+}
+
+export async function createClubLog(playerId: string, log: Omit<ClubLog, 'id' | 'playerId' | 'createdAt'>): Promise<ClubLog> {
+  const { data, error } = await supabase.from('club_logs').insert({
+    player_id:  playerId,
+    date:       log.date,
+    club_name:  log.clubName,
+    notes:      log.notes,
+    author_id:  log.authorId ?? null,
+  }).select().single()
+  if (error) throw error
+  return dbToClubLog(data)
+}
+
+export async function updateClubLog(log: ClubLog): Promise<void> {
+  const { error } = await supabase.from('club_logs').update({
+    date:      log.date,
+    club_name: log.clubName,
+    notes:     log.notes,
+    author_id: log.authorId ?? null,
+  }).eq('id', log.id)
+  if (error) throw error
+}
+
+export async function deleteClubLog(id: string): Promise<void> {
+  const { error } = await supabase.from('club_logs').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── PLAYER MEETINGS ───────────────────────────────────────────
+
+function dbToMeeting(row: Record<string, unknown>): PlayerMeeting {
+  return {
+    id:        row.id as string,
+    playerId:  row.player_id as string,
+    date:      row.date as string,
+    notes:     (row.notes as string) ?? undefined,
+    authorId:  (row.author_id as string) ?? undefined,
+    createdAt: row.created_at as string,
+  }
+}
+
+export async function fetchMeetings(playerId: string): Promise<PlayerMeeting[]> {
+  const { data, error } = await supabase
+    .from('player_meetings')
+    .select('*')
+    .eq('player_id', playerId)
+    .order('date', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map(dbToMeeting)
+}
+
+export async function createMeeting(playerId: string, meeting: Omit<PlayerMeeting, 'id' | 'playerId' | 'createdAt'>): Promise<PlayerMeeting> {
+  const { data, error } = await supabase.from('player_meetings').insert({
+    player_id: playerId,
+    date:      meeting.date,
+    notes:     meeting.notes ?? null,
+    author_id: meeting.authorId ?? null,
+  }).select().single()
+  if (error) throw error
+  return dbToMeeting(data)
+}
+
+export async function updateMeeting(meeting: PlayerMeeting): Promise<void> {
+  const { error } = await supabase.from('player_meetings').update({
+    date:      meeting.date,
+    notes:     meeting.notes ?? null,
+    author_id: meeting.authorId ?? null,
+  }).eq('id', meeting.id)
+  if (error) throw error
+}
+
+export async function deleteMeeting(id: string): Promise<void> {
+  const { error } = await supabase.from('player_meetings').delete().eq('id', id)
   if (error) throw error
 }
