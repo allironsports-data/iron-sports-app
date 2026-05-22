@@ -2662,19 +2662,20 @@ export function Captacion({
                             })}
                           </div>
 
-                          {/* Notes — truncadas con "ver más" */}
+                          {/* Notes — truncadas con "ver más" inline */}
                           {p.notes && (
-                            <div className="mb-1.5">
-                              <p className="text-xs text-slate-500 leading-relaxed whitespace-pre-wrap">
-                                {notesExpanded ? p.notes : notesFirstLine}
-                              </p>
-                              {notesHasMore && (
-                                <button
-                                  onClick={() => toggleNotes(p.id)}
-                                  className="text-[10px] text-blue-500 hover:text-blue-700 mt-0.5"
-                                >
-                                  {notesExpanded ? 'ver menos ▲' : 'ver más ▼'}
-                                </button>
+                            <div className="mb-1.5 text-xs text-slate-500 leading-relaxed">
+                              {notesExpanded ? (
+                                <span className="whitespace-pre-wrap">{p.notes}{' '}
+                                  <button onClick={() => toggleNotes(p.id)} className="text-blue-500 hover:text-blue-700 whitespace-nowrap">ver menos ▲</button>
+                                </span>
+                              ) : (
+                                <span>
+                                  {notesFirstLine}
+                                  {notesHasMore && (
+                                    <>{' '}<button onClick={() => toggleNotes(p.id)} className="text-blue-500 hover:text-blue-700 whitespace-nowrap">ver más ▼</button></>
+                                  )}
+                                </span>
                               )}
                             </div>
                           )}
