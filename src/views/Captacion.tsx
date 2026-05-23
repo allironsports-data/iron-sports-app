@@ -2586,9 +2586,22 @@ export function Captacion({
                   const requesterProfile = profiles.find(pr => pr.avatar === p.requestedBy)
                   const rel = relativeDate(p.createdAt)
                   const isConfirming = confirmDeletePeticion === p.id
-                  const linkedReports = p.reportIds
+                  // Reports explicitly linked via reportIds
+                  const explicitLinkedReports = p.reportIds
                     .map(id => scoutingReports.find(r => r.id === id))
                     .filter((r): r is NonNullable<typeof r> => !!r)
+                  // Auto-detect: find any report for the same player (by name) written by someone in requestedFrom
+                  const matchingScoutPlayer = scoutingPlayers.find(
+                    sp => sp.fullName.trim().toLowerCase() === p.playerName.trim().toLowerCase()
+                  )
+                  const autoDetectedReports = matchingScoutPlayer
+                    ? scoutingReports.filter(r =>
+                        r.playerId === matchingScoutPlayer.id &&
+                        r.persona != null && p.requestedFrom.includes(r.persona) &&
+                        !explicitLinkedReports.some(lr => lr.id === r.id)
+                      )
+                    : []
+                  const linkedReports = [...explicitLinkedReports, ...autoDetectedReports]
                   const allDone = linkedReports.length > 0 && p.requestedFrom.every(
                     av => linkedReports.some(r => r.persona === av)
                   )
