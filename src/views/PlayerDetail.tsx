@@ -4,13 +4,12 @@ import type {
   Player, Task,
   PerformanceNote, PlayerLink, VideoSession,
   DistributionEntry, ClubNegotiation, Club,
-  ClubLog, PlayerMeeting,
+  PlayerActivity,
 } from "../types";
 import { calcAge } from "../types";
 import type { Profile } from "../contexts/AuthContext";
 import { uploadContractPdf, fetchNotes, createNote, updateNote, deleteNote,
-  fetchClubLogs, createClubLog, updateClubLog, deleteClubLog,
-  fetchMeetings, createMeeting, updateMeeting, deleteMeeting,
+  fetchPlayerActivities, createPlayerActivity, updatePlayerActivity, deletePlayerActivity,
 } from "../lib/db";
 import { TaskDetailPanel } from "../components/TaskDetailPanel";
 import {
@@ -19,7 +18,7 @@ import {
   Clock, CheckCircle2, Trash2, Edit3, Star, Users,
   Paperclip, Download, ExternalLink, Link2,
   Video, BarChart2, BookOpen, Search, Filter, Pencil,
-  MessageSquare, CalendarDays,
+  Activity,
 } from "lucide-react";
 
 const PRIMARY = "hsl(220,72%,26%)";
@@ -49,7 +48,7 @@ interface Props {
   onSelectClub?: (id: string) => void;
 }
 
-type TabId = "tareas" | "contrato" | "rendimiento" | "info" | "actividad" | "distribucion" | "comunicaciones" | "citas";
+type TabId = "resumen" | "tareas" | "contrato" | "rendimiento" | "info" | "actividad" | "distribucion";
 
 type NavGroup = { label: string; items: { id: TabId; label: string; icon: React.ReactNode; count?: number }[] };
 
@@ -61,7 +60,7 @@ export function PlayerDetail({
   onUpdateEntry, onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation,
   onSelectClub,
 }: Props) {
-  const [activeTab, setActiveTab] = useState<TabId>("tareas");
+  const [activeTab, setActiveTab] = useState<TabId>("resumen");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEditPlayer, setShowEditPlayer] = useState(false);
 
@@ -73,11 +72,10 @@ export function PlayerDetail({
     {
       label: "Gestión",
       items: [
-        { id: "tareas",         label: "Tareas",         icon: <ClipboardList className="w-3.5 h-3.5" />, count: pendingCount || undefined },
-        { id: "contrato",       label: "Contrato",       icon: <FileText className="w-3.5 h-3.5" /> },
-        { id: "distribucion",   label: "Distribución",   icon: <BarChart2 className="w-3.5 h-3.5" />, count: distribCount },
-        { id: "comunicaciones", label: "Comunicaciones", icon: <MessageSquare className="w-3.5 h-3.5" /> },
-        { id: "citas",          label: "Citas",          icon: <CalendarDays className="w-3.5 h-3.5" /> },
+        { id: "resumen",      label: "Resumen",      icon: <Activity className="w-3.5 h-3.5" /> },
+        { id: "tareas",       label: "Tareas",       icon: <ClipboardList className="w-3.5 h-3.5" />, count: pendingCount || undefined },
+        { id: "contrato",     label: "Contrato",     icon: <FileText className="w-3.5 h-3.5" /> },
+        { id: "distribucion", label: "Distribución", icon: <BarChart2 className="w-3.5 h-3.5" />, count: distribCount },
       ],
     },
     {
@@ -236,6 +234,10 @@ export function PlayerDetail({
 
           {/* ── Content area ─────────────────────────────── */}
           <div className="flex-1 min-w-0">
+            {activeTab === "resumen" && (
+              <ResumenTab player={player} tasks={tasks} profiles={profiles}
+                currentProfile={currentProfile} onNavigate={setActiveTab} />
+            )}
             {activeTab === "tareas" && (
               <TasksTab tasks={tasks} allTasks={allTasks} profiles={profiles} player={player}
                 currentProfile={currentProfile} onAddTask={onAddTask} onUpdateTask={onUpdateTask} onDeleteTask={onDeleteTask} />
@@ -253,7 +255,7 @@ export function PlayerDetail({
               </div>
             )}
             {activeTab === "actividad" && (
-              <ActivityTimeline player={player} tasks={tasks} profiles={profiles} />
+              <ActivityTab player={player} tasks={tasks} profiles={profiles} currentProfile={currentProfile} />
             )}
             {activeTab === "distribucion" && (
               <DistributionTab
@@ -268,12 +270,6 @@ export function PlayerDetail({
                 onDeleteNegotiation={onDeleteNegotiation}
                 onSelectClub={onSelectClub}
               />
-            )}
-            {activeTab === "comunicaciones" && (
-              <ClubLogTab player={player} currentProfile={currentProfile} />
-            )}
-            {activeTab === "citas" && (
-              <CitasTab player={player} currentProfile={currentProfile} />
             )}
           </div>
         </div>
@@ -1634,138 +1630,515 @@ function EditPlayerModal({ player, profiles, onClose, onSave }: {
   );
 }
 
-// ── ACTIVITY TIMELINE ─────────────────────────────────────────
+// ── ACTIVITY HELPERS ──────────────────────────────────────────
+
+const ACTIVITY_TYPES = [
+  'Comunicación con club',
+  'Reunión con jugador',
+  'Llamada',
+  'Email',
+  'Visita presencial',
+  'Nota general',
+] as const;
+
+const ACTIVITY_ICONS: Record<string, string> = {
+  'Comunicación con club': '🏟️',
+  'Reunión con jugador':   '🤝',
+  'Llamada':               '📞',
+  'Email':                 '📧',
+  'Visita presencial':     '🏢',
+  'Nota general':          '📝',
+};
+
+function getActivityIcon(type: string): string {
+  return ACTIVITY_ICONS[type] ?? '📌';
+}
+
+type TimelineEventType = 'task_created' | 'task_done' | 'match' | 'note' | 'video' | 'activity';
+
 type TimelineEvent = {
   id: string;
   date: string;
-  type: "task_created" | "task_done" | "match" | "note" | "video";
+  type: TimelineEventType;
   title: string;
   subtitle?: string;
   extra?: string;
+  activityRef?: PlayerActivity;
 };
 
-function ActivityTimeline({ player, tasks, profiles }: {
-  player: Player; tasks: Task[]; profiles: Profile[];
-}) {
-  // Build events from existing data
+const AUTO_ICONS: Record<TimelineEventType, string> = {
+  task_created: '📋',
+  task_done:    '✅',
+  match:        '⚽',
+  note:         '📝',
+  video:        '🎥',
+  activity:     '📌',
+};
+
+function buildMergedEvents(
+  activities: PlayerActivity[],
+  tasks: Task[],
+  player: Player,
+  profiles: Profile[],
+): TimelineEvent[] {
   const events: TimelineEvent[] = [];
 
-  // Tasks
-  tasks.forEach(t => {
+  activities.forEach(a => {
     events.push({
-      id: "tc-" + t.id,
-      date: t.createdAt,
-      type: t.status === "completada" ? "task_done" : "task_created",
-      title: t.title,
-      subtitle: t.assigneeId ? profiles.find(p => p.id === t.assigneeId)?.name.split(" ")[0] : undefined,
-      extra: t.status === "completada" ? "Completada" : t.priority === "alta" ? "⚡ Alta prioridad" : undefined,
+      id: 'act-' + a.id,
+      date: a.date,
+      type: 'activity',
+      title: a.type,
+      extra: a.notes,
+      activityRef: a,
     });
   });
 
-  // Match reports
+  tasks.forEach(t => {
+    events.push({
+      id: 'tc-' + t.id,
+      date: t.createdAt,
+      type: t.status === 'completada' ? 'task_done' : 'task_created',
+      title: t.title,
+      subtitle: t.assigneeId ? profiles.find(p => p.id === t.assigneeId)?.name.split(' ')[0] : undefined,
+      extra: t.status === 'completada' ? 'Completada' : t.priority === 'alta' ? '⚡ Alta prioridad' : undefined,
+    });
+  });
+
   (player.matchReports ?? []).forEach(m => {
     events.push({
-      id: "mr-" + m.id,
+      id: 'mr-' + m.id,
       date: m.date,
-      type: "match",
-      title: `${m.role === "titular" ? "Titular" : m.role === "suplente" ? "Suplente" : "No convocado"} vs ${m.opponent}`,
+      type: 'match',
+      title: `${m.role === 'titular' ? 'Titular' : m.role === 'suplente' ? 'Suplente' : 'No convocado'} vs ${m.opponent}`,
       subtitle: m.competition,
       extra: m.minutesPlayed > 0
-        ? `${m.minutesPlayed}' ${m.goals > 0 ? `⚽${m.goals}` : ""} ${m.assists > 0 ? `🅰️${m.assists}` : ""}`.trim()
+        ? `${m.minutesPlayed}' ${m.goals > 0 ? `⚽${m.goals}` : ''} ${m.assists > 0 ? `🅰️${m.assists}` : ''}`.trim()
         : undefined,
     });
   });
 
-  // Performance notes
   player.performance.forEach(n => {
     events.push({
-      id: "pn-" + n.id,
+      id: 'pn-' + n.id,
       date: n.date,
-      type: "note",
-      title: n.category || "Nota de rendimiento",
-      subtitle: n.authorId ? profiles.find(p => p.id === n.authorId)?.name.split(" ")[0] : undefined,
+      type: 'note',
+      title: n.category || 'Nota de rendimiento',
+      subtitle: n.authorId ? profiles.find(p => p.id === n.authorId)?.name.split(' ')[0] : undefined,
       extra: n.rating ? `★ ${n.rating}/10` : undefined,
     });
   });
 
-  // Video sessions
   (player.videoSessions ?? []).forEach(v => {
     events.push({
-      id: "vs-" + v.id,
+      id: 'vs-' + v.id,
       date: v.date,
-      type: "video",
-      title: v.description || "Sesión de vídeoanalisis",
+      type: 'video',
+      title: v.description || 'Sesión de vídeoanalisis',
       extra: v.duration ? `${v.duration} min` : undefined,
     });
   });
 
-  // Sort newest first
   events.sort((a, b) => b.date.localeCompare(a.date));
+  return events;
+}
 
-  const typeConfig: Record<TimelineEvent["type"], { icon: string; dot: string }> = {
-    task_created: { icon: "📋", dot: "bg-blue-400" },
-    task_done:    { icon: "✅", dot: "bg-emerald-400" },
-    match:        { icon: "⚽", dot: "bg-amber-400" },
-    note:         { icon: "📝", dot: "bg-violet-400" },
-    video:        { icon: "🎥", dot: "bg-pink-400" },
-  };
+// ── ACTIVITY TAB ──────────────────────────────────────────────
 
-  if (events.length === 0) {
-    return (
-      <div className="text-center py-16 text-sm text-slate-400">
-        <Clock className="w-8 h-8 mx-auto mb-3 opacity-30" />
-        Sin actividad registrada aún
-      </div>
-    );
-  }
+function ActivityTab({ player, tasks, profiles, currentProfile }: {
+  player: Player; tasks: Task[]; profiles: Profile[]; currentProfile: Profile;
+}) {
+  const [activities, setActivities] = useState<PlayerActivity[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [showForm, setShowForm]     = useState(false);
+  const [editing, setEditing]       = useState<PlayerActivity | null>(null);
+
+  const [fDate, setFDate]             = useState('');
+  const [fType, setFType]             = useState<string>(ACTIVITY_TYPES[0]);
+  const [fCustomType, setFCustomType] = useState('');
+  const [fNotes, setFNotes]           = useState('');
+  const [saving, setSaving]           = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchPlayerActivities(player.id)
+      .then(data => { setActivities(data); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [player.id]);
+
+  const events = buildMergedEvents(activities, tasks, player, profiles);
 
   // Group by month
   const grouped: Record<string, TimelineEvent[]> = {};
   events.forEach(e => {
-    const key = new Date(e.date).toLocaleDateString("es-ES", { month: "long", year: "numeric" });
+    const key = new Date(e.date).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
     if (!grouped[key]) grouped[key] = [];
     grouped[key].push(e);
   });
 
+  function openNew() {
+    setEditing(null);
+    setFDate(new Date().toISOString().slice(0, 10));
+    setFType(ACTIVITY_TYPES[0]);
+    setFCustomType('');
+    setFNotes('');
+    setShowForm(true);
+  }
+
+  function openEdit(a: PlayerActivity) {
+    setEditing(a);
+    setFDate(a.date);
+    const isPreset = (ACTIVITY_TYPES as readonly string[]).includes(a.type);
+    setFType(isPreset ? a.type : 'custom');
+    setFCustomType(isPreset ? '' : a.type);
+    setFNotes(a.notes ?? '');
+    setShowForm(true);
+  }
+
+  async function handleSave() {
+    const resolvedType = fType === 'custom' ? fCustomType.trim() : fType;
+    if (!fDate || !resolvedType) return;
+    setSaving(true);
+    try {
+      if (editing) {
+        const updated: PlayerActivity = { ...editing, date: fDate, type: resolvedType, notes: fNotes.trim() || undefined };
+        await updatePlayerActivity(updated);
+        setActivities(prev => prev.map(a => a.id === updated.id ? updated : a));
+      } else {
+        const created = await createPlayerActivity(player.id, {
+          date: fDate, type: resolvedType, notes: fNotes.trim() || undefined, authorId: currentProfile.id,
+        });
+        setActivities(prev => [created, ...prev]);
+      }
+      setShowForm(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    await deletePlayerActivity(id);
+    setActivities(prev => prev.filter(a => a.id !== id));
+  }
+
   return (
-    <div className="space-y-6">
-      {Object.entries(grouped).map(([month, evts]) => (
-        <div key={month}>
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3 px-1">{month}</p>
-          <div className="relative">
-            {/* Vertical line */}
-            <div className="absolute left-3.5 top-0 bottom-0 w-px bg-slate-200" />
-            <div className="space-y-1">
-              {evts.map(evt => {
-                const cfg = typeConfig[evt.type];
-                return (
-                  <div key={evt.id} className="flex gap-3 pl-0.5">
-                    {/* Dot */}
-                    <div className={`w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-sm z-10 bg-white border-2 border-slate-200 mt-1.5`}>
-                      <span className="text-xs leading-none">{cfg.icon}</span>
-                    </div>
-                    {/* Content */}
-                    <div className="flex-1 bg-white border border-slate-100 rounded-lg px-3 py-2 mb-1 hover:border-slate-200 transition-colors">
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="text-sm font-medium text-slate-700 leading-snug">{evt.title}</p>
-                        <span className="text-[10px] text-slate-400 flex-shrink-0 mt-0.5">
-                          {new Date(evt.date).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
-                        </span>
-                      </div>
-                      {(evt.subtitle || evt.extra) && (
-                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                          {evt.subtitle && <span className="text-xs text-slate-400">{evt.subtitle}</span>}
-                          {evt.extra && <span className="text-xs text-slate-500 font-medium">{evt.extra}</span>}
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-slate-800">Actividad</h3>
+        <button
+          onClick={openNew}
+          className="inline-flex items-center gap-1 rounded-md text-white text-xs font-medium px-2.5 py-1.5"
+          style={{ background: PRIMARY }}
+        >
+          <Plus className="w-3.5 h-3.5" />Añadir evento
+        </button>
+      </div>
+
+      {loading && <div className="text-xs text-slate-400 py-6 text-center">Cargando…</div>}
+
+      {!loading && events.length === 0 && (
+        <div className="text-center py-16 text-sm text-slate-400">
+          <Clock className="w-8 h-8 mx-auto mb-3 opacity-30" />
+          Sin actividad registrada aún
+        </div>
+      )}
+
+      {!loading && Object.keys(grouped).length > 0 && (
+        <div className="space-y-6">
+          {Object.entries(grouped).map(([month, evts]) => (
+            <div key={month}>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3 px-1">{month}</p>
+              <div className="relative">
+                <div className="absolute left-3.5 top-0 bottom-0 w-px bg-slate-200" />
+                <div className="space-y-1">
+                  {evts.map(evt => {
+                    const icon = evt.type === 'activity' ? getActivityIcon(evt.title) : AUTO_ICONS[evt.type];
+                    return (
+                      <div key={evt.id} className="flex gap-3 pl-0.5">
+                        <div className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center z-10 bg-white border-2 border-slate-200 mt-1.5">
+                          <span className="text-xs leading-none">{icon}</span>
                         </div>
-                      )}
+                        <div className="flex-1 bg-white border border-slate-100 rounded-lg px-3 py-2 mb-1 hover:border-slate-200 transition-colors">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-sm font-medium text-slate-700 leading-snug">{evt.title}</p>
+                            <div className="flex items-center gap-1 flex-shrink-0 mt-0.5">
+                              <span className="text-[10px] text-slate-400">
+                                {new Date(evt.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                              </span>
+                              {evt.type === 'activity' && evt.activityRef && (
+                                <>
+                                  <button onClick={() => openEdit(evt.activityRef!)} className="p-0.5 text-slate-300 hover:text-blue-500 rounded transition-colors">
+                                    <Edit3 className="w-3 h-3" />
+                                  </button>
+                                  <button onClick={() => handleDelete(evt.activityRef!.id)} className="p-0.5 text-slate-300 hover:text-red-500 rounded transition-colors">
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          {(evt.subtitle || evt.extra) && (
+                            <div className="flex items-start gap-2 mt-0.5 flex-wrap">
+                              {evt.subtitle && <span className="text-xs text-slate-400">{evt.subtitle}</span>}
+                              {evt.extra && <p className="text-xs text-slate-500 leading-snug whitespace-pre-wrap">{evt.extra}</p>}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
+            <h4 className="text-sm font-semibold text-slate-800">
+              {editing ? 'Editar evento' : 'Nuevo evento de actividad'}
+            </h4>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Fecha</label>
+                <input type="date" value={fDate} onChange={e => setFDate(e.target.value)}
+                  className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Tipo</label>
+                <select value={fType} onChange={e => setFType(e.target.value)}
+                  className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200">
+                  {ACTIVITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  <option value="custom">Personalizado…</option>
+                </select>
+              </div>
+            </div>
+            {fType === 'custom' && (
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Tipo personalizado</label>
+                <input type="text" value={fCustomType} onChange={e => setFCustomType(e.target.value)}
+                  placeholder="Ej: Reunión con padre, Contrato preliminar…"
+                  className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200" />
+              </div>
+            )}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Notas <span className="text-slate-400">(opcional)</span></label>
+              <textarea value={fNotes} onChange={e => setFNotes(e.target.value)}
+                placeholder="Detalles del evento…"
+                rows={4}
+                className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-blue-200" />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setShowForm(false)}
+                className="flex-1 py-2 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
+                Cancelar
+              </button>
+              <button onClick={handleSave}
+                disabled={saving || !fDate || (fType === 'custom' && !fCustomType.trim())}
+                className="flex-1 py-2 text-xs rounded-lg text-white disabled:opacity-50 transition-colors"
+                style={{ background: PRIMARY }}>
+                {saving ? 'Guardando…' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── RESUMEN TAB ───────────────────────────────────────────────
+
+function ResumenTab({ player, tasks, profiles, currentProfile, onNavigate }: {
+  player: Player; tasks: Task[]; profiles: Profile[]; currentProfile: Profile; onNavigate: (tab: TabId) => void;
+}) {
+  const [activities, setActivities] = useState<PlayerActivity[]>([]);
+  const [showForm, setShowForm]     = useState(false);
+
+  const [fDate, setFDate]             = useState('');
+  const [fType, setFType]             = useState<string>(ACTIVITY_TYPES[0]);
+  const [fCustomType, setFCustomType] = useState('');
+  const [fNotes, setFNotes]           = useState('');
+  const [saving, setSaving]           = useState(false);
+
+  useEffect(() => {
+    fetchPlayerActivities(player.id).then(setActivities).catch(() => {});
+  }, [player.id]);
+
+  const pendingTasks = [...tasks.filter(t => t.status !== 'completada')]
+    .sort((a, b) => {
+      const ord = { alta: 0, media: 1, baja: 2 };
+      return ord[a.priority] - ord[b.priority];
+    });
+
+  const recentEvents = buildMergedEvents(activities, tasks, player, profiles).slice(0, 8);
+
+  function openNew() {
+    setFDate(new Date().toISOString().slice(0, 10));
+    setFType(ACTIVITY_TYPES[0]);
+    setFCustomType('');
+    setFNotes('');
+    setShowForm(true);
+  }
+
+  async function handleSave() {
+    const resolvedType = fType === 'custom' ? fCustomType.trim() : fType;
+    if (!fDate || !resolvedType) return;
+    setSaving(true);
+    try {
+      const created = await createPlayerActivity(player.id, {
+        date: fDate, type: resolvedType, notes: fNotes.trim() || undefined, authorId: currentProfile.id,
+      });
+      setActivities(prev => [created, ...prev]);
+      setShowForm(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-slate-800">Resumen</h3>
+        <button
+          onClick={openNew}
+          className="inline-flex items-center gap-1 rounded-md text-white text-xs font-medium px-2.5 py-1.5"
+          style={{ background: PRIMARY }}
+        >
+          <Plus className="w-3.5 h-3.5" />Añadir evento
+        </button>
+      </div>
+
+      {/* Two-column summary */}
+      <div className="grid grid-cols-2 gap-4">
+
+        {/* Pending tasks */}
+        <div className="bg-white border border-slate-200 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+              <ClipboardList className="w-3.5 h-3.5 text-slate-400" />
+              Tareas pendientes
+              {pendingTasks.length > 0 && (
+                <span className="bg-blue-100 text-blue-600 text-[10px] font-semibold px-1.5 py-0.5 rounded-full">{pendingTasks.length}</span>
+              )}
+            </h4>
+            <button onClick={() => onNavigate('tareas')} className="text-[10px] text-blue-600 hover:underline">Ver todas →</button>
+          </div>
+
+          {pendingTasks.length === 0 ? (
+            <p className="text-xs text-slate-400 text-center py-4">Sin tareas pendientes</p>
+          ) : (
+            <div className="space-y-2.5">
+              {pendingTasks.slice(0, 5).map(t => {
+                const assignee = profiles.find(p => p.id === t.assigneeId);
+                return (
+                  <div key={t.id} className="flex items-start gap-2">
+                    <div className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${
+                      t.priority === 'alta' ? 'bg-red-400' : t.priority === 'media' ? 'bg-amber-400' : 'bg-slate-300'
+                    }`} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs text-slate-700 leading-snug truncate">{t.title}</p>
+                      {assignee && <p className="text-[10px] text-slate-400">{assignee.name.split(' ')[0]}</p>}
+                    </div>
+                  </div>
+                );
+              })}
+              {pendingTasks.length > 5 && (
+                <button onClick={() => onNavigate('tareas')} className="text-[10px] text-slate-400 hover:text-blue-500 transition-colors">
+                  +{pendingTasks.length - 5} más…
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Recent activity */}
+        <div className="bg-white border border-slate-200 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-slate-400" />
+              Actividad reciente
+            </h4>
+            <button onClick={() => onNavigate('actividad')} className="text-[10px] text-blue-600 hover:underline">Ver toda →</button>
+          </div>
+
+          {recentEvents.length === 0 ? (
+            <p className="text-xs text-slate-400 text-center py-4">Sin actividad aún</p>
+          ) : (
+            <div className="space-y-2.5">
+              {recentEvents.map(evt => {
+                const icon = evt.type === 'activity' ? getActivityIcon(evt.title) : AUTO_ICONS[evt.type];
+                return (
+                  <div key={evt.id} className="flex items-start gap-2">
+                    <span className="text-sm leading-none mt-0.5 flex-shrink-0">{icon}</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs text-slate-700 leading-snug truncate">{evt.title}</p>
+                      <p className="text-[10px] text-slate-400">
+                        {new Date(evt.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                        {evt.extra && ` · ${evt.extra.slice(0, 40)}${evt.extra.length > 40 ? '…' : ''}`}
+                      </p>
                     </div>
                   </div>
                 );
               })}
             </div>
+          )}
+        </div>
+      </div>
+
+      {/* Add event modal */}
+      {showForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
+            <h4 className="text-sm font-semibold text-slate-800">Nuevo evento de actividad</h4>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Fecha</label>
+                <input type="date" value={fDate} onChange={e => setFDate(e.target.value)}
+                  className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Tipo</label>
+                <select value={fType} onChange={e => setFType(e.target.value)}
+                  className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200">
+                  {ACTIVITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  <option value="custom">Personalizado…</option>
+                </select>
+              </div>
+            </div>
+            {fType === 'custom' && (
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Tipo personalizado</label>
+                <input type="text" value={fCustomType} onChange={e => setFCustomType(e.target.value)}
+                  placeholder="Ej: Reunión con padre…"
+                  className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200" />
+              </div>
+            )}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Notas <span className="text-slate-400">(opcional)</span></label>
+              <textarea value={fNotes} onChange={e => setFNotes(e.target.value)}
+                placeholder="Detalles del evento…"
+                rows={3}
+                className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-blue-200" />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setShowForm(false)}
+                className="flex-1 py-2 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
+                Cancelar
+              </button>
+              <button onClick={handleSave}
+                disabled={saving || !fDate || (fType === 'custom' && !fCustomType.trim())}
+                className="flex-1 py-2 text-xs rounded-lg text-white disabled:opacity-50 transition-colors"
+                style={{ background: PRIMARY }}>
+                {saving ? 'Guardando…' : 'Guardar'}
+              </button>
+            </div>
           </div>
         </div>
-      ))}
+      )}
     </div>
   );
 }
@@ -2256,298 +2629,3 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
   )
 }
 
-// ── CLUB LOG TAB ─────────────────────────────────────────────────────────────
-
-function ClubLogTab({ player, currentProfile }: { player: Player; currentProfile: Profile }) {
-  const [logs, setLogs] = useState<ClubLog[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [editing, setEditing] = useState<ClubLog | null>(null);
-
-  // form state
-  const [fDate, setFDate]     = useState('');
-  const [fClub, setFClub]     = useState('');
-  const [fNotes, setFNotes]   = useState('');
-  const [saving, setSaving]   = useState(false);
-
-  useEffect(() => {
-    setLoading(true);
-    fetchClubLogs(player.id)
-      .then(data => { setLogs(data); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, [player.id]);
-
-  function openNew() {
-    setEditing(null);
-    setFDate(new Date().toISOString().slice(0, 10));
-    setFClub('');
-    setFNotes('');
-    setShowForm(true);
-  }
-
-  function openEdit(log: ClubLog) {
-    setEditing(log);
-    setFDate(log.date);
-    setFClub(log.clubName);
-    setFNotes(log.notes);
-    setShowForm(true);
-  }
-
-  async function handleSave() {
-    if (!fDate || !fClub.trim() || !fNotes.trim()) return;
-    setSaving(true);
-    try {
-      if (editing) {
-        const updated: ClubLog = { ...editing, date: fDate, clubName: fClub.trim(), notes: fNotes.trim() };
-        await updateClubLog(updated);
-        setLogs(prev => prev.map(l => l.id === updated.id ? updated : l));
-      } else {
-        const created = await createClubLog(player.id, {
-          date: fDate,
-          clubName: fClub.trim(),
-          notes: fNotes.trim(),
-          authorId: currentProfile.id,
-        });
-        setLogs(prev => [created, ...prev]);
-      }
-      setShowForm(false);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleDelete(id: string) {
-    await deleteClubLog(id);
-    setLogs(prev => prev.filter(l => l.id !== id));
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-slate-800">Comunicaciones con clubs</h3>
-        <button
-          onClick={openNew}
-          className="inline-flex items-center gap-1 rounded-md text-white text-xs font-medium px-2.5 py-1.5"
-          style={{ background: PRIMARY }}
-        >
-          <Plus className="w-3.5 h-3.5" />Añadir
-        </button>
-      </div>
-
-      {loading && <div className="text-xs text-slate-400 py-6 text-center">Cargando…</div>}
-      {!loading && logs.length === 0 && (
-        <div className="text-center py-10 text-sm text-slate-400 bg-white border border-slate-200 rounded-lg">
-          Sin comunicaciones registradas
-        </div>
-      )}
-
-      {!loading && logs.map(log => (
-        <div key={log.id} className="bg-white border border-slate-200 rounded-lg p-4">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
-                  {log.clubName}
-                </span>
-                <span className="text-xs text-slate-400">
-                  {new Date(log.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
-                </span>
-              </div>
-              <p className="text-sm text-slate-700 whitespace-pre-wrap">{log.notes}</p>
-            </div>
-            <div className="flex gap-1 shrink-0">
-              <button onClick={() => openEdit(log)} className="p-1 text-slate-400 hover:text-blue-600 rounded transition-colors">
-                <Edit3 className="w-3.5 h-3.5" />
-              </button>
-              <button onClick={() => handleDelete(log.id)} className="p-1 text-slate-400 hover:text-red-600 rounded transition-colors">
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        </div>
-      ))}
-
-      {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
-            <h4 className="text-sm font-semibold text-slate-800">
-              {editing ? 'Editar comunicación' : 'Nueva comunicación'}
-            </h4>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-600">Fecha</label>
-                <input type="date" value={fDate} onChange={e => setFDate(e.target.value)}
-                  className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-600">Club</label>
-                <input type="text" value={fClub} onChange={e => setFClub(e.target.value)}
-                  placeholder="Nombre del club"
-                  className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200" />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Qué dijo el club</label>
-              <textarea value={fNotes} onChange={e => setFNotes(e.target.value)}
-                placeholder="Notas sobre la conversación…"
-                rows={4}
-                className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-blue-200" />
-            </div>
-            <div className="flex gap-2 pt-1">
-              <button onClick={() => setShowForm(false)}
-                className="flex-1 py-2 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
-                Cancelar
-              </button>
-              <button onClick={handleSave} disabled={saving || !fDate || !fClub.trim() || !fNotes.trim()}
-                className="flex-1 py-2 text-xs rounded-lg text-white disabled:opacity-50 transition-colors"
-                style={{ background: PRIMARY }}>
-                {saving ? 'Guardando…' : 'Guardar'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── CITAS TAB ────────────────────────────────────────────────────────────────
-
-function CitasTab({ player, currentProfile }: { player: Player; currentProfile: Profile }) {
-  const [meetings, setMeetings] = useState<PlayerMeeting[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [editing, setEditing] = useState<PlayerMeeting | null>(null);
-
-  // form state
-  const [fDate, setFDate]   = useState('');
-  const [fNotes, setFNotes] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    setLoading(true);
-    fetchMeetings(player.id)
-      .then(data => { setMeetings(data); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, [player.id]);
-
-  function openNew() {
-    setEditing(null);
-    setFDate(new Date().toISOString().slice(0, 10));
-    setFNotes('');
-    setShowForm(true);
-  }
-
-  function openEdit(m: PlayerMeeting) {
-    setEditing(m);
-    setFDate(m.date);
-    setFNotes(m.notes ?? '');
-    setShowForm(true);
-  }
-
-  async function handleSave() {
-    if (!fDate) return;
-    setSaving(true);
-    try {
-      if (editing) {
-        const updated: PlayerMeeting = { ...editing, date: fDate, notes: fNotes.trim() || undefined };
-        await updateMeeting(updated);
-        setMeetings(prev => prev.map(m => m.id === updated.id ? updated : m));
-      } else {
-        const created = await createMeeting(player.id, {
-          date: fDate,
-          notes: fNotes.trim() || undefined,
-          authorId: currentProfile.id,
-        });
-        setMeetings(prev => [created, ...prev]);
-      }
-      setShowForm(false);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleDelete(id: string) {
-    await deleteMeeting(id);
-    setMeetings(prev => prev.filter(m => m.id !== id));
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-slate-800">Citas con el jugador</h3>
-        <button
-          onClick={openNew}
-          className="inline-flex items-center gap-1 rounded-md text-white text-xs font-medium px-2.5 py-1.5"
-          style={{ background: PRIMARY }}
-        >
-          <Plus className="w-3.5 h-3.5" />Añadir
-        </button>
-      </div>
-
-      {loading && <div className="text-xs text-slate-400 py-6 text-center">Cargando…</div>}
-      {!loading && meetings.length === 0 && (
-        <div className="text-center py-10 text-sm text-slate-400 bg-white border border-slate-200 rounded-lg">
-          Sin citas registradas
-        </div>
-      )}
-
-      {!loading && meetings.map(m => (
-        <div key={m.id} className="bg-white border border-slate-200 rounded-lg p-4">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                <span className="text-xs font-medium text-slate-700">
-                  {new Date(m.date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                </span>
-              </div>
-              {m.notes && <p className="text-sm text-slate-600 whitespace-pre-wrap">{m.notes}</p>}
-            </div>
-            <div className="flex gap-1 shrink-0">
-              <button onClick={() => openEdit(m)} className="p-1 text-slate-400 hover:text-blue-600 rounded transition-colors">
-                <Edit3 className="w-3.5 h-3.5" />
-              </button>
-              <button onClick={() => handleDelete(m.id)} className="p-1 text-slate-400 hover:text-red-600 rounded transition-colors">
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        </div>
-      ))}
-
-      {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 space-y-4">
-            <h4 className="text-sm font-semibold text-slate-800">
-              {editing ? 'Editar cita' : 'Nueva cita'}
-            </h4>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Fecha</label>
-              <input type="date" value={fDate} onChange={e => setFDate(e.target.value)}
-                className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Nota (opcional)</label>
-              <textarea value={fNotes} onChange={e => setFNotes(e.target.value)}
-                placeholder="Breve nota sobre la cita…"
-                rows={3}
-                className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-blue-200" />
-            </div>
-            <div className="flex gap-2 pt-1">
-              <button onClick={() => setShowForm(false)}
-                className="flex-1 py-2 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
-                Cancelar
-              </button>
-              <button onClick={handleSave} disabled={saving || !fDate}
-                className="flex-1 py-2 text-xs rounded-lg text-white disabled:opacity-50 transition-colors"
-                style={{ background: PRIMARY }}>
-                {saving ? 'Guardando…' : 'Guardar'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}

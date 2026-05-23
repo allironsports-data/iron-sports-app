@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion, ClubLog, PlayerMeeting } from '../types'
+import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion, ClubLog, PlayerMeeting, PlayerActivity } from '../types'
 
 // ── helpers ──────────────────────────────────────────────────
 
@@ -951,5 +951,61 @@ export async function updateMeeting(meeting: PlayerMeeting): Promise<void> {
 
 export async function deleteMeeting(id: string): Promise<void> {
   const { error } = await supabase.from('player_meetings').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── PLAYER ACTIVITIES ─────────────────────────────────────────
+
+function dbToPlayerActivity(row: Record<string, unknown>): PlayerActivity {
+  return {
+    id:        row.id as string,
+    playerId:  row.player_id as string,
+    date:      row.date as string,
+    type:      row.type as string,
+    notes:     row.notes as string | undefined,
+    authorId:  row.author_id as string | undefined,
+    createdAt: row.created_at as string,
+  }
+}
+
+export async function fetchPlayerActivities(playerId: string): Promise<PlayerActivity[]> {
+  const { data, error } = await supabase
+    .from('player_activities')
+    .select('*')
+    .eq('player_id', playerId)
+    .order('date', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map(row => dbToPlayerActivity(row as Record<string, unknown>))
+}
+
+export async function createPlayerActivity(
+  playerId: string,
+  input: Pick<PlayerActivity, 'date' | 'type' | 'notes' | 'authorId'>
+): Promise<PlayerActivity> {
+  const { data, error } = await supabase
+    .from('player_activities')
+    .insert({
+      player_id: playerId,
+      date:      input.date,
+      type:      input.type,
+      notes:     input.notes ?? null,
+      author_id: input.authorId ?? null,
+    })
+    .select()
+    .single()
+  if (error) throw error
+  return dbToPlayerActivity(data as Record<string, unknown>)
+}
+
+export async function updatePlayerActivity(act: PlayerActivity): Promise<void> {
+  const { error } = await supabase
+    .from('player_activities')
+    .update({ date: act.date, type: act.type, notes: act.notes ?? null })
+    .eq('id', act.id)
+  if (error) throw error
+}
+
+export async function deletePlayerActivity(id: string): Promise<void> {
+  const { error } = await supabase.from('player_activities').delete().eq('id', id)
   if (error) throw error
 }

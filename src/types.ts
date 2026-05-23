@@ -83,22 +83,33 @@ export interface PerformanceNote {
   title?: string;
 }
 
-// ---- Club communication log ----
-export interface ClubLog {
+// ---- Player activity event (unified chronological log) ----
+export interface PlayerActivity {
   id: string
   playerId: string
   date: string        // "YYYY-MM-DD"
-  clubName: string    // club que habló
-  notes: string       // qué dijo el club
+  type: string        // predefined or custom: "Comunicación con club", "Reunión con jugador", etc.
+  notes?: string
   authorId?: string
   createdAt: string
 }
 
-// ---- Player meeting ----
+// ---- Club communication log (legacy — kept for DB compatibility) ----
+export interface ClubLog {
+  id: string
+  playerId: string
+  date: string
+  clubName: string
+  notes: string
+  authorId?: string
+  createdAt: string
+}
+
+// ---- Player meeting (legacy — kept for DB compatibility) ----
 export interface PlayerMeeting {
   id: string
   playerId: string
-  date: string        // "YYYY-MM-DD"
+  date: string
   notes?: string
   authorId?: string
   createdAt: string
