@@ -236,7 +236,9 @@ export function PlayerDetail({
           <div className="flex-1 min-w-0">
             {activeTab === "resumen" && (
               <ResumenTab player={player} tasks={tasks} profiles={profiles}
-                currentProfile={currentProfile} onNavigate={setActiveTab} />
+                currentProfile={currentProfile} onNavigate={setActiveTab}
+                distributionEntry={distributionEntry}
+                playerNegotiations={playerNegotiations} />
             )}
             {activeTab === "tareas" && (
               <TasksTab tasks={tasks} allTasks={allTasks} profiles={profiles} player={player}
@@ -1638,6 +1640,8 @@ const ACTIVITY_TYPES = [
   'Llamada',
   'Email',
   'Visita presencial',
+  'Partido',
+  'Transferencia',
   'Nota general',
 ] as const;
 
@@ -1647,6 +1651,8 @@ const ACTIVITY_ICONS: Record<string, string> = {
   'Llamada':               '📞',
   'Email':                 '📧',
   'Visita presencial':     '🏢',
+  'Partido':               '⚽',
+  'Transferencia':         '💼',
   'Nota general':          '📝',
 };
 
@@ -1951,8 +1957,9 @@ function ActivityTab({ player, tasks, profiles, currentProfile }: {
 
 // ── RESUMEN TAB ───────────────────────────────────────────────
 
-function ResumenTab({ player, tasks, profiles, currentProfile, onNavigate }: {
+function ResumenTab({ player, tasks, profiles, currentProfile, onNavigate, distributionEntry, playerNegotiations = [] }: {
   player: Player; tasks: Task[]; profiles: Profile[]; currentProfile: Profile; onNavigate: (tab: TabId) => void;
+  distributionEntry?: DistributionEntry; playerNegotiations?: ClubNegotiation[];
 }) {
   const [activities, setActivities] = useState<PlayerActivity[]>([]);
   const [showForm, setShowForm]     = useState(false);
@@ -1998,6 +2005,38 @@ function ResumenTab({ player, tasks, profiles, currentProfile, onNavigate }: {
     }
   }
 
+  // ── Contract calculations ──
+  const clubEnd   = player.clubContract?.endDate;
+  const reprEnd   = player.representationContract?.end;
+  const clubDays  = clubEnd ? Math.ceil((new Date(clubEnd).getTime() - Date.now()) / 86400000) : null;
+  const reprDays  = reprEnd ? Math.ceil((new Date(reprEnd).getTime() - Date.now()) / 86400000) : null;
+
+  const clubBadge =
+    clubDays !== null && clubDays <= 90  ? 'bg-red-100 text-red-700 border-red-200' :
+    clubDays !== null && clubDays <= 180 ? 'bg-amber-100 text-amber-700 border-amber-200' :
+    'bg-slate-100 text-slate-500 border-slate-200';
+
+  const reprBadge =
+    reprDays !== null && reprDays <= 90  ? 'bg-red-100 text-red-700 border-red-200' :
+    reprDays !== null && reprDays <= 180 ? 'bg-amber-100 text-amber-700 border-amber-200' :
+    'bg-slate-100 text-slate-500 border-slate-200';
+
+  const fmtDate = (d: string) => new Date(d).toLocaleDateString('es-ES', { month: 'short', year: '2-digit' });
+
+  // ── Distribution calculations ──
+  const activeNegs = playerNegotiations.filter(n => !['cerrado', 'descartado'].includes(n.status));
+  const negStatusCount: Record<string, number> = {};
+  activeNegs.forEach(n => { negStatusCount[n.status] = (negStatusCount[n.status] ?? 0) + 1; });
+  const negSummary = Object.entries(negStatusCount)
+    .map(([s, c]) => `${c} ${s}`).join(', ');
+
+  const PRIORITY_COLORS: Record<string, string> = {
+    A: 'bg-red-100 text-red-700 border-red-200',
+    B: 'bg-amber-100 text-amber-700 border-amber-200',
+    C: 'bg-slate-100 text-slate-500 border-slate-200',
+    D: 'bg-orange-100 text-orange-700 border-orange-200',
+  };
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -2010,6 +2049,79 @@ function ResumenTab({ player, tasks, profiles, currentProfile, onNavigate }: {
         >
           <Plus className="w-3.5 h-3.5" />Añadir evento
         </button>
+      </div>
+
+      {/* ── Compact info strip ── */}
+      <div className="bg-white border border-slate-200 rounded-xl px-4 py-3">
+        <div className="flex flex-wrap gap-x-6 gap-y-2 items-center">
+
+          {/* Club contract */}
+          {clubEnd && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Cto. club</span>
+              <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${clubBadge}`}>
+                {fmtDate(clubEnd)}{clubDays !== null && clubDays <= 180 ? ` · ${clubDays}d` : ''}
+              </span>
+            </div>
+          )}
+
+          {/* Representation contract */}
+          {reprEnd && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Cto. repr.</span>
+              <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${reprBadge}`}>
+                {fmtDate(reprEnd)}{reprDays !== null && reprDays <= 180 ? ` · ${reprDays}d` : ''}
+              </span>
+            </div>
+          )}
+
+          {/* Release clause */}
+          {player.clubContract?.releaseClause && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Cláusula</span>
+              <span className="text-[11px] font-semibold text-slate-600">{player.clubContract.releaseClause}</span>
+            </div>
+          )}
+
+          {/* Divider */}
+          {distributionEntry && (clubEnd || reprEnd) && (
+            <div className="h-4 w-px bg-slate-200 hidden sm:block" />
+          )}
+
+          {/* Distribution priority */}
+          {distributionEntry?.priority && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Prioridad dist.</span>
+              <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${PRIORITY_COLORS[distributionEntry.priority] ?? 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                {distributionEntry.priority}
+              </span>
+            </div>
+          )}
+
+          {/* Distribution condition */}
+          {distributionEntry?.condition && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Condición</span>
+              <span className="text-[11px] font-semibold text-slate-600">{distributionEntry.condition}</span>
+            </div>
+          )}
+
+          {/* Active negotiations */}
+          {activeNegs.length > 0 && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Negociaciones</span>
+              <button onClick={() => onNavigate('distribucion')}
+                className="text-[11px] font-semibold text-blue-600 hover:underline">
+                {activeNegs.length} activa{activeNegs.length > 1 ? 's' : ''}{negSummary ? ` (${negSummary})` : ''}
+              </button>
+            </div>
+          )}
+
+          {/* No contract/distrib info at all */}
+          {!clubEnd && !reprEnd && !distributionEntry && (
+            <span className="text-xs text-slate-400">Sin datos de contrato ni distribución</span>
+          )}
+        </div>
       </div>
 
       {/* Two-column summary */}
