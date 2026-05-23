@@ -238,7 +238,8 @@ export function PlayerDetail({
               <ResumenTab player={player} tasks={tasks} profiles={profiles}
                 currentProfile={currentProfile} onNavigate={setActiveTab}
                 distributionEntry={distributionEntry}
-                playerNegotiations={playerNegotiations} />
+                playerNegotiations={playerNegotiations}
+                clubs={clubs} />
             )}
             {activeTab === "tareas" && (
               <TasksTab tasks={tasks} allTasks={allTasks} profiles={profiles} player={player}
@@ -1957,9 +1958,9 @@ function ActivityTab({ player, tasks, profiles, currentProfile }: {
 
 // ── RESUMEN TAB ───────────────────────────────────────────────
 
-function ResumenTab({ player, tasks, profiles, currentProfile, onNavigate, distributionEntry, playerNegotiations = [] }: {
+function ResumenTab({ player, tasks, profiles, currentProfile, onNavigate, distributionEntry, playerNegotiations = [], clubs = [] }: {
   player: Player; tasks: Task[]; profiles: Profile[]; currentProfile: Profile; onNavigate: (tab: TabId) => void;
-  distributionEntry?: DistributionEntry; playerNegotiations?: ClubNegotiation[];
+  distributionEntry?: DistributionEntry; playerNegotiations?: ClubNegotiation[]; clubs?: Club[];
 }) {
   const [activities, setActivities] = useState<PlayerActivity[]>([]);
   const [showForm, setShowForm]     = useState(false);
@@ -2200,6 +2201,97 @@ function ResumenTab({ player, tasks, profiles, currentProfile, onNavigate, distr
           )}
         </div>
       </div>
+
+      {/* ── Distribution summary ── */}
+      {(distributionEntry || playerNegotiations.length > 0) && (
+        <div className="bg-white border border-slate-200 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+              <BarChart2 className="w-3.5 h-3.5 text-slate-400" />
+              Distribución
+            </h4>
+            <button onClick={() => onNavigate('distribucion')} className="text-[10px] text-blue-600 hover:underline">Ver detalle →</button>
+          </div>
+
+          {/* Entry summary */}
+          {distributionEntry ? (
+            <div className="flex flex-wrap gap-3 mb-3 pb-3 border-b border-slate-100">
+              {distributionEntry.priority && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-slate-400">Prioridad</span>
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${PRIORITY_COLORS[distributionEntry.priority] ?? 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                    {distributionEntry.priority}
+                  </span>
+                </div>
+              )}
+              {distributionEntry.condition && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-slate-400">Condición</span>
+                  <span className="text-[11px] font-semibold text-slate-600">{distributionEntry.condition}</span>
+                </div>
+              )}
+              {distributionEntry.season && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-slate-400">Temporada</span>
+                  <span className="text-[11px] font-semibold text-slate-600">{distributionEntry.season}</span>
+                </div>
+              )}
+              {distributionEntry.transferFee && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-slate-400">Traspaso</span>
+                  <span className="text-[11px] font-semibold text-slate-600">{distributionEntry.transferFee}</span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs text-slate-400 mb-3 pb-3 border-b border-slate-100">Sin ficha de distribución activa</p>
+          )}
+
+          {/* Negotiations list */}
+          {playerNegotiations.length === 0 ? (
+            <p className="text-xs text-slate-400">Sin negociaciones</p>
+          ) : (
+            <div className="space-y-2">
+              {playerNegotiations
+                .slice()
+                .sort((a, b) => {
+                  const order = ['negociando', 'interesado', 'ofrecido', 'pendiente', 'cerrado', 'descartado'];
+                  return order.indexOf(a.status) - order.indexOf(b.status);
+                })
+                .map(neg => {
+                  const NEG_COLORS: Record<string, string> = {
+                    pendiente:  'bg-purple-100 text-purple-700',
+                    ofrecido:   'bg-slate-100 text-slate-600',
+                    interesado: 'bg-blue-100 text-blue-700',
+                    negociando: 'bg-amber-100 text-amber-700',
+                    cerrado:    'bg-green-100 text-green-700',
+                    descartado: 'bg-red-100 text-red-600',
+                  };
+                  const NEG_LABELS: Record<string, string> = {
+                    pendiente: 'Pendiente', ofrecido: 'Ofrecido', interesado: 'Interesado',
+                    negociando: 'Negociando', cerrado: 'Cerrado', descartado: 'Descartado',
+                  };
+                  // Find club name
+                  return (
+                    <div key={neg.id} className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded flex-shrink-0 ${NEG_COLORS[neg.status] ?? 'bg-slate-100 text-slate-500'}`}>
+                          {NEG_LABELS[neg.status] ?? neg.status}
+                        </span>
+                        <span className="text-xs text-slate-700 truncate">
+                          {clubs.find(c => c.id === neg.clubId)?.name ?? '—'}
+                        </span>
+                      </div>
+                      {neg.aisManager && (
+                        <span className="text-[10px] text-slate-400 flex-shrink-0">{neg.aisManager}</span>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Add event modal */}
       {showForm && (
