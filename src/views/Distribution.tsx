@@ -490,7 +490,7 @@ export function Distribution({
   , [negotiations, currentProfile.avatar])
 
   function closePanel() { setSelectedEntryId(null); setSelectedClubId(null); setSelectedNeed(null); setPlayerPanelGestorFilter('') }
-  const hasPanel = !!selectedEntry || !!selectedClub || !!selectedNeed
+  const hasPanel = tab !== 'encargados' && (!!selectedEntry || !!selectedClub || !!selectedNeed)
 
   function switchTab(t: typeof tab) {
     setTab(t)
@@ -1702,7 +1702,6 @@ export function Distribution({
               </div>
             )
           })()}
-        </div>
 
           {/* ── ENCARGADOS TAB ── */}
           {tab === 'encargados' && (() => {
@@ -1834,6 +1833,7 @@ export function Distribution({
               </div>
             )
           })()}
+        </div>
 
         {/* ── SIDE PANEL ── */}
         {hasPanel && (
