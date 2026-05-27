@@ -1819,20 +1819,22 @@ export function Distribution({
             )
 
             return (
-              <div className="max-w-2xl mx-auto space-y-3">
+              <div className="max-w-5xl mx-auto">
                 {managerProfiles.length === 0 && !grouped['__sin__'] && (
                   <div className="text-center py-12 text-slate-400 text-sm">
                     No hay jugadores con encargado asignado
                   </div>
                 )}
 
-                {managerProfiles.map(p =>
-                  renderSection(p.avatar, p.name, grouped[p.avatar] ?? [])
-                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
+                  {managerProfiles.map(p =>
+                    renderSection(p.avatar, p.name, grouped[p.avatar] ?? [])
+                  )}
 
-                {grouped['__sin__'] &&
-                  renderSection('__sin__', 'Sin encargado', grouped['__sin__'], true)
-                }
+                  {grouped['__sin__'] &&
+                    renderSection('__sin__', 'Sin encargado', grouped['__sin__'], true)
+                  }
+                </div>
               </div>
             )
           })()}
