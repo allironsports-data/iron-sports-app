@@ -271,7 +271,7 @@ export function Distribution({
   onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation,
   onCreatePlayer,
 }: Props) {
-  const [tab, setTab] = useState<'jugadores' | 'clubes' | 'solicitudes' | 'pipeline'>('jugadores')
+  const [tab, setTab] = useState<'jugadores' | 'clubes' | 'solicitudes' | 'pipeline' | 'encargados'>('jugadores')
   const season = CURRENT_SEASON
   const [search, setSearch] = useState('')
 
@@ -574,7 +574,7 @@ export function Distribution({
 
         {/* Sub-tabs — inside header so they stay sticky */}
         <div className="max-w-6xl mx-auto px-3 sm:px-6 flex gap-1 border-t border-slate-100 overflow-x-auto scrollbar-none">
-          {(['jugadores', 'clubes', 'solicitudes', 'pipeline'] as const).map(t => (
+          {(['jugadores', 'clubes', 'solicitudes', 'pipeline', 'encargados'] as const).map(t => (
             <button
               key={t}
               onClick={() => switchTab(t)}
@@ -590,6 +590,8 @@ export function Distribution({
                 <><span className="hidden sm:inline">Clubes </span>({clubs.length})</>
               ) : t === 'solicitudes' ? (
                 <><span className="hidden sm:inline">Solicitudes</span><span className="sm:hidden">Solic.</span>{clubNeeds.length > 0 ? ` (${clubNeeds.length})` : ''}</>
+              ) : t === 'encargados' ? (
+                <>Encargados</>
               ) : (
                 <span className="flex items-center gap-1.5">
                   Pipeline
@@ -1701,6 +1703,139 @@ export function Distribution({
             )
           })()}
         </div>
+
+          {/* ── ENCARGADOS TAB ── */}
+          {tab === 'encargados' && (() => {
+            const PRIORITY_ORDER: Record<string, number> = { A: 0, B: 1, C: 2, D: 3 }
+
+            // Group entries by aisManager (undefined → 'sin_encargado')
+            const grouped: Record<string, DistributionEntry[]> = {}
+            for (const entry of seasonEntries) {
+              const key = entry.aisManager ?? '__sin__'
+              if (!grouped[key]) grouped[key] = []
+              grouped[key].push(entry)
+            }
+
+            // Sort each group by priority
+            Object.values(grouped).forEach(g =>
+              g.sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 9) - (PRIORITY_ORDER[b.priority] ?? 9))
+            )
+
+            // Build ordered list: profiles that have players first, then sin encargado
+            const managerAvatars = profiles
+              .filter(p => grouped[p.avatar])
+              .sort((a, b) => a.name.localeCompare(b.name))
+
+            const STATUS_COLORS_E: Record<string, string> = {
+              negociando: 'bg-amber-100 text-amber-700',
+              interesado: 'bg-blue-100 text-blue-700',
+              ofrecido:   'bg-slate-100 text-slate-600',
+              cerrado:    'bg-green-100 text-green-700',
+            }
+            const PRIORITY_BADGE: Record<string, string> = {
+              A: 'bg-red-100 text-red-700',
+              B: 'bg-amber-100 text-amber-700',
+              C: 'bg-slate-100 text-slate-500',
+              D: 'bg-orange-100 text-orange-700',
+            }
+
+            const renderCard = (entry: DistributionEntry) => {
+              const player = players.find(p => p.id === entry.playerId)
+              if (!player) return null
+              const activeNegs = negotiations.filter(n =>
+                n.playerId === entry.playerId && !['descartado'].includes(n.status)
+              )
+              const topStatus = activeNegs.find(n => n.status === 'negociando')?.status
+                ?? activeNegs.find(n => n.status === 'interesado')?.status
+                ?? activeNegs.find(n => n.status === 'ofrecido')?.status
+                ?? activeNegs.find(n => n.status === 'cerrado')?.status
+
+              const badge = contractBadge(player.clubContract?.endDate)
+
+              return (
+                <div
+                  key={entry.id}
+                  onClick={() => { setSelectedEntryId(entry.id); setSelectedClubId(null); switchTab('jugadores') }}
+                  className="bg-white rounded-lg border border-slate-200 cursor-pointer hover:shadow-sm transition-all flex items-center gap-2.5 px-3 py-2"
+                >
+                  <Avatar name={player.name} photo={player.photo} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-medium text-slate-800 text-sm truncate">{player.name}</span>
+                      <span className="text-xs text-slate-400 flex-shrink-0">{player.positions[0]}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${PRIORITY_BADGE[entry.priority]}`}>
+                        {entry.priority}
+                      </span>
+                      {entry.condition && (
+                        <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full">{entry.condition}</span>
+                      )}
+                      {badge && (
+                        <span className={`text-xs px-1.5 py-0.5 rounded-full border ${badge.cls}`}>{badge.label}</span>
+                      )}
+                      {topStatus && (
+                        <span className={`text-xs px-1.5 py-0.5 rounded-full ${STATUS_COLORS_E[topStatus] ?? 'bg-slate-100 text-slate-500'}`}>
+                          {topStatus.charAt(0).toUpperCase() + topStatus.slice(1)}
+                        </span>
+                      )}
+                      {activeNegs.length > 0 && (
+                        <span className="text-xs text-slate-400">{activeNegs.length} club{activeNegs.length !== 1 ? 's' : ''}</span>
+                      )}
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
+                </div>
+              )
+            }
+
+            return (
+              <div className="max-w-5xl mx-auto space-y-6">
+                {managerAvatars.length === 0 && !grouped['__sin__'] && (
+                  <div className="text-center py-12 text-slate-400 text-sm">
+                    No hay jugadores en distribución para esta temporada
+                  </div>
+                )}
+
+                {managerAvatars.map(profile => {
+                  const entries = grouped[profile.avatar] ?? []
+                  return (
+                    <div key={profile.id}>
+                      <div className="flex items-center gap-2.5 mb-2">
+                        <div className="w-8 h-8 rounded-full bg-[hsl(220,72%,26%)] text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
+                          {profile.avatar}
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-slate-800">{profile.name}</p>
+                          <p className="text-[10px] text-slate-400">{entries.length} jugador{entries.length !== 1 ? 'es' : ''}</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-1.5">
+                        {entries.map(renderCard)}
+                      </div>
+                    </div>
+                  )
+                })}
+
+                {grouped['__sin__'] && (
+                  <div>
+                    <div className="flex items-center gap-2.5 mb-2">
+                      <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-500 text-xs font-bold flex items-center justify-center flex-shrink-0">
+                        ?
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-500">Sin encargado</p>
+                        <p className="text-[10px] text-slate-400">{grouped['__sin__'].length} jugador{grouped['__sin__'].length !== 1 ? 'es' : ''}</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-1.5">
+                      {grouped['__sin__'].map(renderCard)}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
         {/* ── SIDE PANEL ── */}
         {hasPanel && (
