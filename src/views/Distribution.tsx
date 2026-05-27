@@ -241,6 +241,7 @@ interface Props {
   entries: DistributionEntry[]
   negotiations: ClubNegotiation[]
   currentProfile: Profile
+  profiles: Profile[]
   onBack: () => void          // go to Tareas
   onGoToJugadores?: () => void
   onGoToCaptacion?: () => void
@@ -263,7 +264,7 @@ interface Props {
 // ── main component ────────────────────────────────────────────
 
 export function Distribution({
-  players, clubs, entries, negotiations, currentProfile,
+  players, clubs, entries, negotiations, currentProfile, profiles,
   onBack, onGoToJugadores, onGoToCaptacion, onLogout, onAdmin, onSelectPlayer, onSelectClub,
   onCreateClub, onUpdateClub, onDeleteClub,
   onCreateEntry, onUpdateEntry, onDeleteEntry,
@@ -277,6 +278,15 @@ export function Distribution({
   // panel state
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null)
   const [selectedClubId, setSelectedClubId] = useState<string | null>(null)
+  const [openManagerDropId, setOpenManagerDropId] = useState<string | null>(null)
+
+  // Close manager dropdown on outside click
+  useEffect(() => {
+    if (!openManagerDropId) return
+    const handler = () => setOpenManagerDropId(null)
+    document.addEventListener('click', handler)
+    return () => document.removeEventListener('click', handler)
+  }, [openManagerDropId])
 
   // modals
   const [showAddPlayer, setShowAddPlayer] = useState(false)
@@ -722,6 +732,61 @@ export function Distribution({
                                   )}
                                 </div>
                               </div>
+
+                              {/* Manager badge — inline dropdown */}
+                              <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
+                                <button
+                                  title={entry.aisManager
+                                    ? (profiles.find(p => p.avatar === entry.aisManager)?.name ?? entry.aisManager)
+                                    : 'Sin encargado'}
+                                  onClick={() => setOpenManagerDropId(openManagerDropId === entry.id ? null : entry.id)}
+                                  className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold border-2 transition-colors ${
+                                    entry.aisManager
+                                      ? 'bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-200'
+                                      : 'bg-slate-100 text-slate-400 border-dashed border-slate-300 hover:bg-slate-200'
+                                  }`}
+                                >
+                                  {entry.aisManager ?? '+'}
+                                </button>
+                                {openManagerDropId === entry.id && (
+                                  <div className="absolute right-0 top-8 z-30 bg-white border border-slate-200 rounded-xl shadow-lg py-1 min-w-[160px]">
+                                    {profiles.map(p => (
+                                      <button
+                                        key={p.id}
+                                        onClick={async () => {
+                                          const updated = { ...entry, aisManager: p.avatar }
+                                          await onUpdateEntry(updated)
+                                          setOpenManagerDropId(null)
+                                        }}
+                                        className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-slate-50 transition-colors ${
+                                          entry.aisManager === p.avatar ? 'font-semibold text-blue-700' : 'text-slate-700'
+                                        }`}
+                                      >
+                                        <span className="w-5 h-5 rounded-full bg-slate-100 text-[9px] font-bold flex items-center justify-center flex-shrink-0">
+                                          {p.avatar}
+                                        </span>
+                                        {p.name.split(' ')[0]}
+                                      </button>
+                                    ))}
+                                    {entry.aisManager && (
+                                      <>
+                                        <div className="border-t border-slate-100 my-1" />
+                                        <button
+                                          onClick={async () => {
+                                            const updated = { ...entry, aisManager: undefined }
+                                            await onUpdateEntry(updated)
+                                            setOpenManagerDropId(null)
+                                          }}
+                                          className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-500 hover:bg-red-50 transition-colors"
+                                        >
+                                          Quitar encargado
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+
                               <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
                             </div>
                           )

@@ -224,6 +224,7 @@ export interface DistributionEntry {
   condition?: string        // "Libre", "Traspaso", "Cesión", "Cesión/Traspaso"
   transferFee?: string
   notes?: string
+  aisManager?: string       // profile.avatar of the person responsible for distributing this player
   active: boolean
   createdAt: string
 }

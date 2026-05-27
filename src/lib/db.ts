@@ -419,6 +419,7 @@ function dbToDistEntry(row: Record<string, unknown>): DistributionEntry {
     condition: (row.condition as string) ?? undefined,
     transferFee: (row.transfer_fee as string) ?? undefined,
     notes: (row.notes as string) ?? undefined,
+    aisManager: (row.ais_manager as string) ?? undefined,
     active: (row.active as boolean) ?? true,
     createdAt: row.created_at as string,
   }
@@ -440,6 +441,7 @@ export async function createDistributionEntry(e: Omit<DistributionEntry, 'id' | 
     condition: e.condition ?? null,
     transfer_fee: e.transferFee ?? null,
     notes: e.notes ?? null,
+    ais_manager: e.aisManager ?? null,
     active: e.active,
   }).select().single()
   if (error) throw error
@@ -452,6 +454,7 @@ export async function updateDistributionEntry(e: DistributionEntry): Promise<voi
     condition: e.condition ?? null,
     transfer_fee: e.transferFee ?? null,
     notes: e.notes ?? null,
+    ais_manager: e.aisManager ?? null,
     active: e.active,
   }).eq('id', e.id)
   if (error) throw error

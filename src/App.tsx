@@ -510,6 +510,7 @@ export default function App() {
         entries={distEntries}
         negotiations={negotiations}
         currentProfile={profile}
+        profiles={profiles}
         onBack={() => setMainSection('tareas')}
         onGoToJugadores={() => setMainSection('jugadores')}
         onGoToCaptacion={() => setMainSection('captacion')}
