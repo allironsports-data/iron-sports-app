@@ -1709,8 +1709,8 @@ export function Distribution({
 
             const grouped: Record<string, DistributionEntry[]> = {}
             for (const entry of seasonEntries) {
-              // Priority D without a manager doesn't need one — skip from "sin encargado"
-              if (!entry.aisManager && entry.priority === 'D') continue
+              // Priority D never shown in encargados view
+              if (entry.priority === 'D') continue
               const key = entry.aisManager ?? '__sin__'
               if (!grouped[key]) grouped[key] = []
               grouped[key].push(entry)
