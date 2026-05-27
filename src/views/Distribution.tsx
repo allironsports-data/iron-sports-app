@@ -608,7 +608,7 @@ export function Distribution({
       </header>
 
       {/* Search bar */}
-      {tab !== 'pipeline' && (
+      {tab !== 'pipeline' && tab !== 'encargados' && (
         <div className="px-4 py-2 bg-white border-b border-slate-100">
           <div className="relative max-w-sm">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
@@ -1708,23 +1708,21 @@ export function Distribution({
           {tab === 'encargados' && (() => {
             const PRIORITY_ORDER: Record<string, number> = { A: 0, B: 1, C: 2, D: 3 }
 
-            // Group entries by aisManager (undefined → 'sin_encargado')
             const grouped: Record<string, DistributionEntry[]> = {}
             for (const entry of seasonEntries) {
+              // Priority D without a manager doesn't need one — skip from "sin encargado"
+              if (!entry.aisManager && entry.priority === 'D') continue
               const key = entry.aisManager ?? '__sin__'
               if (!grouped[key]) grouped[key] = []
               grouped[key].push(entry)
             }
-
-            // Sort each group by priority
             Object.values(grouped).forEach(g =>
               g.sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 9) - (PRIORITY_ORDER[b.priority] ?? 9))
             )
 
-            // Build ordered list: profiles that have players first, then sin encargado
-            const managerAvatars = profiles
+            const managerProfiles = profiles
               .filter(p => grouped[p.avatar])
-              .sort((a, b) => a.name.localeCompare(b.name))
+              .sort((a, b) => (grouped[b.avatar]?.length ?? 0) - (grouped[a.avatar]?.length ?? 0))
 
             const STATUS_COLORS_E: Record<string, string> = {
               negociando: 'bg-amber-100 text-amber-700',
@@ -1739,7 +1737,7 @@ export function Distribution({
               D: 'bg-orange-100 text-orange-700',
             }
 
-            const renderCard = (entry: DistributionEntry) => {
+            const renderRow = (entry: DistributionEntry) => {
               const player = players.find(p => p.id === entry.playerId)
               if (!player) return null
               const activeNegs = negotiations.filter(n =>
@@ -1749,22 +1747,21 @@ export function Distribution({
                 ?? activeNegs.find(n => n.status === 'interesado')?.status
                 ?? activeNegs.find(n => n.status === 'ofrecido')?.status
                 ?? activeNegs.find(n => n.status === 'cerrado')?.status
-
               const badge = contractBadge(player.clubContract?.endDate)
 
               return (
                 <div
                   key={entry.id}
                   onClick={() => { setSelectedEntryId(entry.id); setSelectedClubId(null); switchTab('jugadores') }}
-                  className="bg-white rounded-lg border border-slate-200 cursor-pointer hover:shadow-sm transition-all flex items-center gap-2.5 px-3 py-2"
+                  className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0"
                 >
                   <Avatar name={player.name} photo={player.photo} />
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="font-medium text-slate-800 text-sm truncate">{player.name}</span>
-                      <span className="text-xs text-slate-400 flex-shrink-0">{player.positions[0]}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-slate-800 text-sm">{player.name}</span>
+                      <span className="text-xs text-slate-400">{player.positions[0]}</span>
                     </div>
-                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                       <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${PRIORITY_BADGE[entry.priority]}`}>
                         {entry.priority}
                       </span>
@@ -1775,7 +1772,7 @@ export function Distribution({
                         <span className={`text-xs px-1.5 py-0.5 rounded-full border ${badge.cls}`}>{badge.label}</span>
                       )}
                       {topStatus && (
-                        <span className={`text-xs px-1.5 py-0.5 rounded-full ${STATUS_COLORS_E[topStatus] ?? 'bg-slate-100 text-slate-500'}`}>
+                        <span className={`text-xs px-1.5 py-0.5 rounded-full ${STATUS_COLORS_E[topStatus] ?? ''}`}>
                           {topStatus.charAt(0).toUpperCase() + topStatus.slice(1)}
                         </span>
                       )}
@@ -1789,50 +1786,51 @@ export function Distribution({
               )
             }
 
+            const renderSection = (
+              avatar: string,
+              name: string,
+              entries: DistributionEntry[],
+              muted = false
+            ) => (
+              <div key={avatar} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                {/* Section header */}
+                <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 bg-slate-50">
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                    muted
+                      ? 'bg-slate-200 text-slate-400'
+                      : 'bg-[hsl(220,72%,26%)] text-white'
+                  }`}>
+                    {avatar === '__sin__' ? '?' : avatar}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-semibold ${muted ? 'text-slate-400' : 'text-slate-800'}`}>{name}</p>
+                  </div>
+                  <span className="text-xs text-slate-400 flex-shrink-0">
+                    {entries.length} jugador{entries.length !== 1 ? 'es' : ''}
+                  </span>
+                </div>
+                {/* Player rows */}
+                <div>
+                  {entries.map(renderRow)}
+                </div>
+              </div>
+            )
+
             return (
-              <div className="max-w-5xl mx-auto space-y-6">
-                {managerAvatars.length === 0 && !grouped['__sin__'] && (
+              <div className="max-w-2xl mx-auto space-y-3">
+                {managerProfiles.length === 0 && !grouped['__sin__'] && (
                   <div className="text-center py-12 text-slate-400 text-sm">
-                    No hay jugadores en distribución para esta temporada
+                    No hay jugadores con encargado asignado
                   </div>
                 )}
 
-                {managerAvatars.map(profile => {
-                  const entries = grouped[profile.avatar] ?? []
-                  return (
-                    <div key={profile.id}>
-                      <div className="flex items-center gap-2.5 mb-2">
-                        <div className="w-8 h-8 rounded-full bg-[hsl(220,72%,26%)] text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
-                          {profile.avatar}
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-slate-800">{profile.name}</p>
-                          <p className="text-[10px] text-slate-400">{entries.length} jugador{entries.length !== 1 ? 'es' : ''}</p>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-1.5">
-                        {entries.map(renderCard)}
-                      </div>
-                    </div>
-                  )
-                })}
-
-                {grouped['__sin__'] && (
-                  <div>
-                    <div className="flex items-center gap-2.5 mb-2">
-                      <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-500 text-xs font-bold flex items-center justify-center flex-shrink-0">
-                        ?
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-slate-500">Sin encargado</p>
-                        <p className="text-[10px] text-slate-400">{grouped['__sin__'].length} jugador{grouped['__sin__'].length !== 1 ? 'es' : ''}</p>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-1.5">
-                      {grouped['__sin__'].map(renderCard)}
-                    </div>
-                  </div>
+                {managerProfiles.map(p =>
+                  renderSection(p.avatar, p.name, grouped[p.avatar] ?? [])
                 )}
+
+                {grouped['__sin__'] &&
+                  renderSection('__sin__', 'Sin encargado', grouped['__sin__'], true)
+                }
               </div>
             )
           })()}
