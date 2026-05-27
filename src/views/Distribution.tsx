@@ -1711,6 +1711,9 @@ export function Distribution({
             for (const entry of seasonEntries) {
               // Priority D never shown in encargados view
               if (entry.priority === 'D') continue
+              // Intermediar (hiddenFromManagement) players not shown
+              const entryPlayer = players.find(p => p.id === entry.playerId)
+              if (entryPlayer?.hiddenFromManagement) continue
               const key = entry.aisManager ?? '__sin__'
               if (!grouped[key]) grouped[key] = []
               grouped[key].push(entry)
