@@ -3,7 +3,7 @@ import {
   Plus, Search, Star, Building2, Users,
   ChevronRight, X, Check, Pencil, Trash2, LogOut,
   TrendingUp, AlertCircle, CircleDot, Flag, ChevronDown,
-  Eye,
+  Eye, List, LayoutGrid, SlidersHorizontal,
 } from 'lucide-react'
 import logoImg from '../assets/logo.jpeg'
 import type { Player, Club, ClubNeed, DistributionEntry, ClubNegotiation, ClubNegotiationUpdate } from '../types'
@@ -657,14 +657,19 @@ export function Distribution({
                   >
                     Con actividad
                   </button>
-                  {(posFilters.length > 0 || yearFilters.length > 0 || activityFilter) && (
-                    <button
-                      onClick={() => { setPosFilters([]); setYearFilters([]); setActivityFilter(false) }}
-                      className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 px-2 py-1.5"
-                    >
-                      <X className="w-3 h-3" /> Limpiar
-                    </button>
-                  )}
+                  {(posFilters.length > 0 || yearFilters.length > 0 || activityFilter) && (() => {
+                    const count = posFilters.length + yearFilters.length + (activityFilter ? 1 : 0)
+                    return (
+                      <button
+                        onClick={() => { setPosFilters([]); setYearFilters([]); setActivityFilter(false) }}
+                        className="flex items-center gap-1.5 text-xs bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg font-medium transition-colors"
+                      >
+                        <SlidersHorizontal className="w-3 h-3" />
+                        {count} filtro{count !== 1 ? 's' : ''} activo{count !== 1 ? 's' : ''}
+                        <X className="w-3 h-3 ml-0.5 opacity-60" />
+                      </button>
+                    )
+                  })()}
                 </div>
                 <button
                   onClick={() => setShowAddPlayer(true)}
@@ -800,8 +805,20 @@ export function Distribution({
               </div>
 
               {filteredEntries.length === 0 && (
-                <div className="text-center py-12 text-slate-400 text-sm">
-                  {search ? 'Sin resultados' : 'No hay jugadores en distribución para esta temporada'}
+                <div className="text-center py-12 text-slate-400 text-sm space-y-1">
+                  <p className="font-medium text-slate-500">Sin resultados</p>
+                  {(search || posFilters.length > 0 || yearFilters.length > 0 || activityFilter) ? (
+                    <p className="text-xs text-slate-400">
+                      {[
+                        search && `búsqueda "${search}"`,
+                        posFilters.length > 0 && `posición: ${posFilters.join(', ')}`,
+                        yearFilters.length > 0 && `año: ${yearFilters.join(', ')}`,
+                        activityFilter && 'con actividad',
+                      ].filter(Boolean).join(' · ')}
+                    </p>
+                  ) : (
+                    <p className="text-xs">No hay jugadores en distribución para esta temporada</p>
+                  )}
                 </div>
               )}
             </div>
@@ -1024,14 +1041,19 @@ export function Distribution({
                 </button>
 
                 {/* Clear all */}
-                {(leagueFilter.length > 0 || countryFilter.length > 0 || tierFilter.length > 0 || confederationFilter.length > 0 || priorityOnly || hasNeedsOnly || hasContactOnly) && (
-                  <button
-                    onClick={() => { setLeagueFilter([]); setCountryFilter([]); setTierFilter([]); setConfederationFilter([]); setPriorityOnly(false); setHasNeedsOnly(false); setHasContactOnly(false) }}
-                    className="text-xs text-slate-400 hover:text-slate-600 underline ml-1"
-                  >
-                    Limpiar todo
-                  </button>
-                )}
+                {(leagueFilter.length > 0 || countryFilter.length > 0 || tierFilter.length > 0 || confederationFilter.length > 0 || priorityOnly || hasNeedsOnly || hasContactOnly) && (() => {
+                  const count = leagueFilter.length + countryFilter.length + tierFilter.length + confederationFilter.length + (priorityOnly ? 1 : 0) + (hasNeedsOnly ? 1 : 0) + (hasContactOnly ? 1 : 0)
+                  return (
+                    <button
+                      onClick={() => { setLeagueFilter([]); setCountryFilter([]); setTierFilter([]); setConfederationFilter([]); setPriorityOnly(false); setHasNeedsOnly(false); setHasContactOnly(false) }}
+                      className="flex items-center gap-1.5 text-xs bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg font-medium transition-colors ml-1"
+                    >
+                      <SlidersHorizontal className="w-3 h-3" />
+                      {count} filtro{count !== 1 ? 's' : ''}
+                      <X className="w-3 h-3 ml-0.5 opacity-60" />
+                    </button>
+                  )
+                })()}
 
                 <span className="ml-auto text-xs text-slate-400">{filteredClubs.length} club{filteredClubs.length !== 1 ? 's' : ''}</span>
               </div>
@@ -1218,14 +1240,19 @@ export function Distribution({
                   </select>
 
                   {/* Clear filters */}
-                  {hasNeedsFilters && (
-                    <button
-                      onClick={() => { setNeedsTierFilter([]); setNeedsLeagueFilter(''); setNeedsAgeFilter(''); setPositionFilter('') }}
-                      className="text-xs text-slate-400 hover:text-slate-600 underline"
-                    >
-                      Limpiar filtros
-                    </button>
-                  )}
+                  {hasNeedsFilters && (() => {
+                    const count = needsTierFilter.length + (needsLeagueFilter ? 1 : 0) + (needsAgeFilter ? 1 : 0) + (positionFilter ? 1 : 0)
+                    return (
+                      <button
+                        onClick={() => { setNeedsTierFilter([]); setNeedsLeagueFilter(''); setNeedsAgeFilter(''); setPositionFilter('') }}
+                        className="flex items-center gap-1.5 text-xs bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg font-medium transition-colors"
+                      >
+                        <SlidersHorizontal className="w-3 h-3" />
+                        {count} filtro{count !== 1 ? 's' : ''}
+                        <X className="w-3 h-3 ml-0.5 opacity-60" />
+                      </button>
+                    )
+                  })()}
                 </div>
 
                 {/* Row 2: Position chips */}
@@ -1548,13 +1575,15 @@ export function Distribution({
                     <button
                       onClick={() => setPipelineListView(v => !v)}
                       title={pipelineListView ? 'Ver kanban' : 'Ver lista'}
-                      className={`text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
+                      className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
                         pipelineListView
                           ? 'bg-slate-800 text-white border-slate-800'
                           : 'border-slate-200 text-slate-500 hover:border-slate-400'
                       }`}
                     >
-                      {pipelineListView ? '⠿ Lista' : '⊞ Kanban'}
+                      {pipelineListView
+                        ? <><LayoutGrid className="w-3.5 h-3.5" /> Kanban</>
+                        : <><List className="w-3.5 h-3.5" /> Lista</>}
                     </button>
                     <button
                       onClick={() => setShowClosedDeals(v => !v)}
