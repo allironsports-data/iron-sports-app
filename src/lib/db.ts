@@ -1063,12 +1063,12 @@ export async function deleteGroupActivity(groupId: string): Promise<void> {
   if (error) throw error
 }
 
-/** Fetch all activities logged by a specific author (for team member timeline). */
+/** Fetch all activities where a profile was the author OR a tagged participant. */
 export async function fetchActivitiesByAuthor(authorId: string): Promise<PlayerActivity[]> {
   const { data, error } = await supabase
     .from('player_activities')
     .select('*')
-    .eq('author_id', authorId)
+    .or(`author_id.eq.${authorId},participant_profile_ids.cs.{${authorId}}`)
     .order('date', { ascending: false })
   if (error) throw error
   return (data ?? []).map(row => dbToPlayerActivity(row as Record<string, unknown>))
