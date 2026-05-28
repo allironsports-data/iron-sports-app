@@ -2512,7 +2512,7 @@ function ClubCard({ club, negotiations, isSelected, onClick, onOffer, onTogglePr
             className={`p-1 rounded transition-all ${
               club.isPriority
                 ? 'text-green-500 hover:text-green-600'
-                : 'text-slate-300 opacity-0 group-hover:opacity-100 hover:text-amber-400'
+                : 'text-slate-300 sm:opacity-0 sm:group-hover:opacity-100 hover:text-amber-400'
             }`}
           >
             <Star className={`w-4 h-4 ${club.isPriority ? 'fill-green-500' : ''}`} />
@@ -2521,7 +2521,7 @@ function ClubCard({ club, negotiations, isSelected, onClick, onOffer, onTogglePr
         {onOffer ? (
           <button
             onClick={e => { e.stopPropagation(); onOffer() }}
-            className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium px-1.5 py-1 rounded hover:bg-blue-50"
+            className="sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium px-1.5 py-1 rounded hover:bg-blue-50"
           >
             <Plus className="w-3 h-3" /> Ofrecer
           </button>

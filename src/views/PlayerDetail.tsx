@@ -109,10 +109,13 @@ export function PlayerDetail({
     ? new Date(clubEndDate).toLocaleDateString("es-ES", { month: "short", year: "2-digit" })
     : null;
 
+  // Flat list of all tabs for the mobile tab bar
+  const allTabItems = navGroups.flatMap(g => g.items);
+
   return (
     <div className="min-h-screen bg-slate-50">
       {/* ── Compact header ──────────────────────────────── */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-20">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-12 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button onClick={onBack} className="text-slate-400 hover:text-slate-600 transition-colors">
@@ -121,8 +124,8 @@ export function PlayerDetail({
             <div className="w-6 h-6 rounded overflow-hidden bg-white flex-shrink-0">
               <img src={logoImg} className="w-full h-full object-contain" alt="AIS" />
             </div>
-            <span className="text-xs text-slate-400">Jugadores</span>
-            <span className="text-xs text-slate-300">/</span>
+            <span className="text-xs text-slate-400 hidden sm:inline">Jugadores</span>
+            <span className="text-xs text-slate-300 hidden sm:inline">/</span>
             <span className="text-sm font-semibold text-slate-800">{player.name}</span>
           </div>
           <div className="flex items-center gap-2">
@@ -138,11 +141,63 @@ export function PlayerDetail({
         </div>
       </header>
 
+      {/* ── Mobile: player info strip ───────────────────── */}
+      <div className="sm:hidden bg-white border-b border-slate-100 px-4 py-3 flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-sm font-bold text-slate-400 flex-shrink-0">
+          {avatarText}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-slate-900 truncate">{player.name}</p>
+          <p className="text-xs text-slate-500">{player.positions.join(" / ")} · {calcAge(player.birthDate)} años</p>
+        </div>
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          {contractBadgeLabel && (
+            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${contractBadgeCls}`}>
+              {contractBadgeLabel}
+            </span>
+          )}
+          <button
+            onClick={() => setShowEditPlayer(true)}
+            className="p-1.5 text-slate-400 hover:text-slate-600 border border-slate-200 rounded-lg"
+          >
+            <Edit3 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* ── Mobile: horizontal tab bar ──────────────────── */}
+      <div className="sm:hidden sticky top-12 z-10 bg-white border-b border-slate-200 shadow-sm">
+        <div className="flex overflow-x-auto scrollbar-none">
+          {allTabItems.map((item) => {
+            const active = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`flex-shrink-0 flex flex-col items-center gap-0.5 px-4 py-2.5 text-[11px] font-medium border-b-2 transition-colors relative ${
+                  active
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-slate-500'
+                }`}
+              >
+                <span className={active ? 'text-blue-500' : 'text-slate-400'}>{item.icon}</span>
+                <span>{item.label}</span>
+                {item.count !== undefined && (
+                  <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                    {item.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-5">
         <div className="flex gap-5 items-start">
 
-          {/* ── Sidebar ─────────────────────────────────── */}
-          <aside className="w-52 flex-shrink-0 sticky top-16">
+          {/* ── Sidebar — desktop only ───────────────────── */}
+          <aside className="hidden sm:block w-52 flex-shrink-0 sticky top-16">
             <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
 
               {/* Player card inside sidebar */}
