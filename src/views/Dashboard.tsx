@@ -3,7 +3,7 @@ import { TaskDetailPanel } from "../components/TaskDetailPanel";
 import logoImg from '../assets/logo.jpeg';
 import type { Player, Task, TaskLabel } from "../types";
 import { calcAge, clubsLabel } from "../types";
-import { createPlayerActivity, createGroupActivity } from "../lib/db";
+import { createPlayerActivity } from "../lib/db";
 import type { Profile } from "../contexts/AuthContext";
 import type { AppNotification } from "../App";
 import {
