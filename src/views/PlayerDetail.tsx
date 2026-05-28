@@ -17,7 +17,7 @@ import {
   TrendingUp, User, Plus, X, Calendar, AlertCircle,
   Clock, CheckCircle2, Trash2, Edit3, Star, Users,
   Paperclip, Download, ExternalLink, Link2,
-  Video, BarChart2, BookOpen, Search, Filter, Pencil,
+  Video, BarChart2, BookOpen, Pencil, ChevronDown,
   Activity,
 } from "lucide-react";
 
@@ -409,7 +409,6 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
   onUpdateTask: (task: Task) => void; onDeleteTask: (taskId: string) => void;
 }) {
   const [showAdd, setShowAdd] = useState(false);
-  const [filter, setFilter] = useState<"todas" | "pendiente" | "en_progreso" | "completada">("todas");
   const [detailTask, setDetailTask] = useState<Task | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
 
@@ -432,16 +431,8 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
       return prio[a.priority] - prio[b.priority];
     });
 
-  // For "todas" or active-only filters: show active grouped by status, then collapsible completed
-  const inProgressFiltered = filter === "todas" || filter === "en_progreso"
-    ? sortByPrio(activeTasks.filter((t) => t.status === "en_progreso"))
-    : [];
-  const pendingFiltered = filter === "todas" || filter === "pendiente"
-    ? sortByPrio(activeTasks.filter((t) => t.status === "pendiente"))
-    : [];
-  const completedFiltered = filter === "todas" || filter === "completada"
-    ? completedTasks
-    : [];
+  const inProgressFiltered = sortByPrio(activeTasks.filter((t) => t.status === "en_progreso"));
+  const pendingFiltered    = sortByPrio(activeTasks.filter((t) => t.status === "pendiente"));
 
   const statusIcon = (s: Task["status"]) => {
     if (s === "completada") return <CheckCircle2 className="w-4 h-4 text-emerald-500" />;
@@ -2374,13 +2365,13 @@ function ResumenTab({ player, tasks, profiles, currentProfile, onNavigate, distr
 // ── DISTRIBUTION TAB ──────────────────────────────────────────
 
 const NEG_STATUSES_D: ClubNegotiation['status'][] = ['pendiente', 'ofrecido', 'interesado', 'negociando', 'cerrado', 'descartado']
-const STATUS_CONFIG_D: Record<ClubNegotiation['status'], { label: string; color: string }> = {
-  pendiente:  { label: 'Pendiente',  color: 'bg-purple-100 text-purple-700' },
-  ofrecido:   { label: 'Ofrecido',   color: 'bg-slate-100 text-slate-600' },
-  interesado: { label: 'Interesado', color: 'bg-blue-100 text-blue-700' },
-  negociando: { label: 'Negociando', color: 'bg-amber-100 text-amber-700' },
-  cerrado:    { label: 'Cerrado',    color: 'bg-green-100 text-green-700' },
-  descartado: { label: 'Descartado', color: 'bg-red-100 text-red-600' },
+const STATUS_CONFIG_D: Record<ClubNegotiation['status'], { label: string; color: string; dot: string }> = {
+  pendiente:  { label: 'Pendiente',  color: 'bg-purple-100 text-purple-700', dot: 'bg-purple-400' },
+  ofrecido:   { label: 'Ofrecido',   color: 'bg-slate-100 text-slate-600',   dot: 'bg-slate-400' },
+  interesado: { label: 'Interesado', color: 'bg-blue-100 text-blue-700',     dot: 'bg-blue-500' },
+  negociando: { label: 'Negociando', color: 'bg-amber-100 text-amber-700',   dot: 'bg-amber-500' },
+  cerrado:    { label: 'Cerrado',    color: 'bg-green-100 text-green-700',   dot: 'bg-green-500' },
+  descartado: { label: 'Descartado', color: 'bg-red-100 text-red-600',       dot: 'bg-red-400' },
 }
 const PRIORITY_CONFIG_D = {
   A: { bg: 'bg-red-100',   text: 'text-red-700' },
@@ -2424,33 +2415,6 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
   const panelNeg = negotiations.find(n => n.id === panelNegId) ?? null
   const panelClub = panelNeg ? clubs.find(c => c.id === panelNeg.clubId) ?? null : null
 
-  // filter state
-  const [negSearch, setNegSearch]           = useState('')
-  const [negStatusFilter, setNegStatusFilter] = useState<ClubNegotiation['status'][]>([])
-  const [negLeagueFilter, setNegLeagueFilter] = useState('')
-  const [negGestorFilter, setNegGestorFilter] = useState('')
-  const [hideDescartado, setHideDescartado]   = useState(false)
-
-  // derived: unique leagues / gestores present in this player's negotiations
-  const availableLeagues = Array.from(new Set(
-    negotiations.map(n => clubs.find(c => c.id === n.clubId)?.league).filter(Boolean) as string[]
-  )).sort()
-  const availableGestores = Array.from(new Set(
-    negotiations.map(n => n.aisManager).filter(Boolean) as string[]
-  )).sort()
-
-  const hasFilters = !!negSearch || negStatusFilter.length > 0 || !!negLeagueFilter || !!negGestorFilter || hideDescartado
-
-  const filteredNegs = negotiations.filter(neg => {
-    const club = clubs.find(c => c.id === neg.clubId)
-    if (!club) return false
-    if (hideDescartado && neg.status === 'descartado') return false
-    if (negStatusFilter.length > 0 && !negStatusFilter.includes(neg.status)) return false
-    if (negLeagueFilter && club.league !== negLeagueFilter) return false
-    if (negGestorFilter && neg.aisManager !== negGestorFilter) return false
-    if (negSearch && !club.name.toLowerCase().includes(negSearch.toLowerCase()) && !club.league?.toLowerCase().includes(negSearch.toLowerCase())) return false
-    return true
-  })
 
   async function saveEntry() {
     if (!entry) return
