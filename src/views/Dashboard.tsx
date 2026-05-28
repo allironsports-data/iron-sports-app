@@ -254,7 +254,6 @@ export function Dashboard({
 
   // "Yo" tab computed
   const overdueMyTasks = myTasks.filter(t => t.dueDate && new Date(t.dueDate) < new Date());
-  const activeMyTasks  = myTasks.filter(t => !(t.dueDate && new Date(t.dueDate) < new Date()));
   const urgentMyCount  = myTasks.filter(t => t.priority === "alta").length;
   const inProgressMyCount = myTasks.filter(t => t.status === "en_progreso").length;
 
