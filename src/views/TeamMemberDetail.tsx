@@ -89,19 +89,33 @@ export function TeamMemberDetail({ profile, tasks, players, onBack }: Props) {
     t.status !== 'completada' && t.dueDate && new Date(t.dueDate) < new Date()
   );
 
-  // ── Event stats ────────────────────────────────────────────
-  const eventsPeriod = activities.filter(a => inPeriod(a.date));
+  // ── Event stats — deduplicate group events for count ──────
+  const seenForStats = new Set<string>();
+  const eventsPeriod = activities.filter(a => {
+    if (!inPeriod(a.date)) return false;
+    if (a.groupId) {
+      if (seenForStats.has(a.groupId)) return false;
+      seenForStats.add(a.groupId);
+    }
+    return true;
+  });
 
   // ── Build mixed timeline ───────────────────────────────────
   const timelineItems: TimelineItem[] = [];
 
-  // Events
+  // Events — deduplicate group events (same group_id → keep only first row seen)
+  const seenGroupIds = new Set<string>();
   activities
     .filter(a => inPeriod(a.date))
     .forEach(a => {
+      if (a.groupId) {
+        if (seenGroupIds.has(a.groupId)) return;
+        seenGroupIds.add(a.groupId);
+      }
       const player = players.find(p => p.id === a.playerId);
-      const linkedPeers = (a.linkedPlayerIds ?? [])
-        .filter(id => id !== a.playerId)
+      // For group events show ALL linked players as peers, not just the one on this row
+      const allLinkedIds = a.linkedPlayerIds ?? [a.playerId];
+      const linkedPeers = allLinkedIds
         .map(id => players.find(p => p.id === id))
         .filter(Boolean) as Player[];
       timelineItems.push({
