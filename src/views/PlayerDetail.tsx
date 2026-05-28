@@ -537,128 +537,86 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
   };
 
   return (
-    <div className="space-y-4">
-      {/* Mini-stats row */}
-      <div className="grid grid-cols-3 gap-2.5">
-        <div
-          className="bg-white border border-slate-200 rounded-xl p-3 text-center cursor-pointer hover:border-red-200 transition-colors"
-          onClick={() => setFilter(overdueTasks.length > 0 ? "todas" : "todas")}
-        >
-          <p className={`text-xl font-semibold ${overdueTasks.length > 0 ? "text-red-500" : "text-slate-400"}`}>
-            {overdueTasks.length}
-          </p>
-          <p className="text-[10px] text-slate-500 mt-0.5">Vencidas</p>
-        </div>
-        <div
-          className="bg-white border border-slate-200 rounded-xl p-3 text-center cursor-pointer hover:border-slate-300 transition-colors"
-          onClick={() => setFilter("pendiente")}
-        >
-          <p className="text-xl font-semibold text-slate-700">{pendingCount + inProgressCount}</p>
-          <p className="text-[10px] text-slate-500 mt-0.5">Activas</p>
-        </div>
-        <div
-          className="bg-white border border-slate-200 rounded-xl p-3 text-center cursor-pointer hover:border-emerald-200 transition-colors"
-          onClick={() => setFilter("completada")}
-        >
-          <p className="text-xl font-semibold text-emerald-600">{completedCount}</p>
-          <p className="text-[10px] text-slate-500 mt-0.5">Completadas</p>
-        </div>
-      </div>
-
-      {/* Overdue banner */}
-      {overdueTasks.length > 0 && filter !== "completada" && (
-        <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5">
-          <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
-          <p className="text-xs text-red-700 font-medium">
-            {overdueTasks.length === 1
-              ? `1 tarea vencida: ${overdueTasks[0].title}`
-              : `${overdueTasks.length} tareas vencidas · revisa antes de continuar`}
-          </p>
-        </div>
-      )}
-
-      {/* Toolbar */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex gap-1">
-          {(["todas", "pendiente", "en_progreso", "completada"] as const).map((f) => (
-            <button key={f} onClick={() => setFilter(f)}
-              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
-                filter === f ? "text-white" : "bg-white border border-slate-200 text-slate-500 hover:text-slate-700"
-              }`}
-              style={filter === f ? { background: PRIMARY } : {}}
-            >
-              {f === "todas" ? "Todas" : f === "pendiente" ? "Pendientes" : f === "en_progreso" ? "En progreso" : "Completadas"}
-            </button>
-          ))}
+    <div className="space-y-3">
+      {/* ── Header bar ── */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {overdueTasks.length > 0 && (
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-full px-2.5 py-1">
+              <AlertCircle className="w-3 h-3" /> {overdueTasks.length} vencida{overdueTasks.length !== 1 ? 's' : ''}
+            </span>
+          )}
+          <span className="text-xs text-slate-400">{pendingCount + inProgressCount} activa{pendingCount + inProgressCount !== 1 ? 's' : ''} · {completedCount} completada{completedCount !== 1 ? 's' : ''}</span>
         </div>
         <button
           onClick={() => setShowAdd(true)}
           className="inline-flex items-center gap-1 rounded-lg text-white text-xs font-medium px-2.5 py-1.5 transition-colors flex-shrink-0"
           style={{ background: PRIMARY }}
         >
-          <Plus className="w-3.5 h-3.5" />
-          Nueva
+          <Plus className="w-3.5 h-3.5" /> Nueva tarea
         </button>
       </div>
 
-      {/* Task groups */}
-      {filter === "completada" ? (
-        <div className="space-y-2">
-          {completedFiltered.length === 0
-            ? <div className="text-center py-8 text-sm text-slate-400">No hay tareas completadas</div>
-            : completedFiltered.map((t) => <TaskCard key={t.id} task={t} />)
-          }
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {/* En progreso */}
-          {inProgressFiltered.length > 0 && (
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-1.5">
-                <Clock className="w-3 h-3 text-blue-400" /> En progreso · {inProgressFiltered.length}
-              </p>
-              <div className="space-y-2">
-                {inProgressFiltered.map((t) => <TaskCard key={t.id} task={t} />)}
+      {/* ── Kanban 3 columnas ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-start">
+
+        {/* Columna: Pendiente */}
+        <div>
+          <div className="flex items-center gap-2 px-2.5 py-1.5 bg-slate-100 rounded-lg mb-2">
+            <AlertCircle className="w-3.5 h-3.5 text-slate-400" />
+            <span className="text-xs font-semibold text-slate-600 flex-1">Pendiente</span>
+            <span className="text-[10px] font-mono text-slate-400">{pendingFiltered.length}</span>
+          </div>
+          <div className="space-y-2">
+            {sortByPrio(activeTasks.filter(t => t.status === "pendiente")).map(t => <TaskCard key={t.id} task={t} />)}
+            {activeTasks.filter(t => t.status === "pendiente").length === 0 && (
+              <div className="h-14 border-2 border-dashed border-slate-100 rounded-xl flex items-center justify-center">
+                <span className="text-xs text-slate-300">Sin tareas</span>
               </div>
-            </div>
-          )}
+            )}
+          </div>
+        </div>
 
-          {/* Pendientes */}
-          {pendingFiltered.length > 0 && (
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-1.5">
-                <AlertCircle className="w-3 h-3 text-slate-400" /> Pendientes · {pendingFiltered.length}
-              </p>
-              <div className="space-y-2">
-                {pendingFiltered.map((t) => <TaskCard key={t.id} task={t} />)}
+        {/* Columna: En progreso */}
+        <div>
+          <div className="flex items-center gap-2 px-2.5 py-1.5 bg-blue-50 rounded-lg mb-2">
+            <Clock className="w-3.5 h-3.5 text-blue-400" />
+            <span className="text-xs font-semibold text-blue-700 flex-1">En progreso</span>
+            <span className="text-[10px] font-mono text-blue-400">{inProgressFiltered.length}</span>
+          </div>
+          <div className="space-y-2">
+            {sortByPrio(activeTasks.filter(t => t.status === "en_progreso")).map(t => <TaskCard key={t.id} task={t} />)}
+            {activeTasks.filter(t => t.status === "en_progreso").length === 0 && (
+              <div className="h-14 border-2 border-dashed border-blue-50 rounded-xl flex items-center justify-center">
+                <span className="text-xs text-slate-300">Sin tareas</span>
               </div>
+            )}
+          </div>
+        </div>
+
+        {/* Columna: Completadas (colapsable) */}
+        <div>
+          <button
+            onClick={() => setShowCompleted(v => !v)}
+            className="w-full flex items-center gap-2 px-2.5 py-1.5 bg-emerald-50 rounded-lg mb-2 hover:bg-emerald-100 transition-colors"
+          >
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+            <span className="text-xs font-semibold text-emerald-700 flex-1">Completadas</span>
+            <span className="text-[10px] font-mono text-emerald-500">{completedCount}</span>
+            <ChevronDown className={`w-3.5 h-3.5 text-emerald-400 transition-transform ${showCompleted ? 'rotate-180' : ''}`} />
+          </button>
+          {showCompleted && (
+            <div className="space-y-2">
+              {completedTasks.map(t => <TaskCard key={t.id} task={t} />)}
             </div>
           )}
-
-          {/* No active tasks */}
-          {inProgressFiltered.length === 0 && pendingFiltered.length === 0 && (
-            <div className="text-center py-8 text-sm text-slate-400">No hay tareas activas</div>
-          )}
-
-          {/* Collapsible completed */}
-          {filter === "todas" && completedTasks.length > 0 && (
-            <div>
-              <button
-                onClick={() => setShowCompleted(v => !v)}
-                className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 transition-colors py-1"
-              >
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                {showCompleted ? "Ocultar" : "Ver"} {completedTasks.length} tarea{completedTasks.length !== 1 ? "s" : ""} completada{completedTasks.length !== 1 ? "s" : ""}
-              </button>
-              {showCompleted && (
-                <div className="space-y-2 mt-2">
-                  {completedTasks.map((t) => <TaskCard key={t.id} task={t} />)}
-                </div>
-              )}
+          {!showCompleted && completedCount > 0 && (
+            <div className="h-10 border-2 border-dashed border-emerald-100 rounded-xl flex items-center justify-center cursor-pointer" onClick={() => setShowCompleted(true)}>
+              <span className="text-xs text-emerald-300">Ver {completedCount} tarea{completedCount !== 1 ? 's' : ''}</span>
             </div>
           )}
         </div>
-      )}
+      </div>
 
       {showAdd && (
         <AddTaskModal profiles={profiles} tasks={tasks} playerId={player.id} player={player}
@@ -2610,156 +2568,123 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
           </div>
         )}
 
-        {/* ── FILTER BAR (only shown when there are negotiations) ── */}
-        {negotiations.length > 0 && (
-          <div className="space-y-2 mb-3">
-            {/* Row 1: Search + Solo activos toggle */}
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
-                <input
-                  value={negSearch}
-                  onChange={e => setNegSearch(e.target.value)}
-                  placeholder="Buscar club…"
-                  className="w-full pl-7 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-200"
-                />
-              </div>
-              <button
-                onClick={() => setHideDescartado(v => !v)}
-                title="Ocultar descartados y cerrados"
-                className={`flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
-                  hideDescartado
-                    ? 'bg-slate-800 text-white border-slate-800'
-                    : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
-                }`}
-              >
-                <Filter className="w-3 h-3" /> Solo activos
-              </button>
-            </div>
-
-            {/* Row 2: Status chips */}
-            <div className="flex gap-1 flex-wrap">
-              {NEG_STATUSES_D.map(s => {
-                const cfg = STATUS_CONFIG_D[s]
-                const active = negStatusFilter.includes(s)
-                const count = negotiations.filter(n => n.status === s).length
-                if (count === 0) return null
+        {/* ── KANBAN: one column per status ── */}
+        {negotiations.length === 0 && !showAddNeg ? (
+          <p className="text-center text-slate-400 text-xs py-6">Sin clubes contactados aún</p>
+        ) : (
+          <div className="overflow-x-auto -mx-4 px-4">
+            <div className="flex gap-3 pb-2" style={{ minWidth: 'max-content' }}>
+              {NEG_STATUSES_D.filter(s => s !== 'descartado').map(status => {
+                const cfg = STATUS_CONFIG_D[status]
+                const col = negotiations.filter(n => n.status === status)
                 return (
-                  <button
-                    key={s}
-                    onClick={() => setNegStatusFilter(prev => active ? prev.filter(x => x !== s) : [...prev, s])}
-                    className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-colors ${
-                      active ? cfg.color + ' ring-1 ring-current' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                    }`}
-                  >
-                    {cfg.label} <span className="opacity-60 text-[10px]">{count}</span>
-                  </button>
+                  <div key={status} className="w-52 flex-shrink-0">
+                    {/* Column header */}
+                    <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg mb-2 ${cfg.color}`}>
+                      <div className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+                      <span className="text-xs font-semibold flex-1">{cfg.label}</span>
+                      <span className="text-[10px] font-mono opacity-60">{col.length}</span>
+                    </div>
+                    {/* Cards */}
+                    <div className="space-y-1.5">
+                      {col.map(neg => {
+                        const club = clubs.find(c => c.id === neg.clubId)
+                        if (!club) return null
+                        const isEditing = editingNeg?.id === neg.id
+                        if (isEditing) {
+                          return (
+                            <div key={neg.id} className="bg-white border border-slate-200 rounded-xl p-3 space-y-2 shadow-sm">
+                              <div className="flex flex-wrap gap-1">
+                                {NEG_STATUSES_D.map(s => {
+                                  const c2 = STATUS_CONFIG_D[s]
+                                  return <button key={s} onClick={() => setEditingNeg({ ...editingNeg!, status: s })} className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${editingNeg!.status === s ? c2.color + ' ring-1 ring-current' : 'bg-slate-100 text-slate-500'}`}>{c2.label}</button>
+                                })}
+                              </div>
+                              <input value={editingNeg!.aisManager ?? ''} onChange={e => setEditingNeg({ ...editingNeg!, aisManager: e.target.value })} placeholder="Gestor AIS" className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs" />
+                              <input value={editingNeg!.notes ?? ''} onChange={e => setEditingNeg({ ...editingNeg!, notes: e.target.value })} placeholder="Notas" className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs" />
+                              <div className="flex gap-1.5">
+                                <button onClick={async () => { await onDeleteNegotiation?.(neg.id); setEditingNeg(null) }} className="px-2 py-1 text-[10px] border border-red-200 text-red-500 rounded-lg">Eliminar</button>
+                                <button onClick={() => setEditingNeg(null)} className="flex-1 py-1 text-[10px] border border-slate-200 rounded-lg text-slate-500">Cancelar</button>
+                                <button onClick={saveEditNeg} className="flex-1 py-1 text-[10px] bg-[hsl(220,72%,36%)] text-white rounded-lg">Guardar</button>
+                              </div>
+                            </div>
+                          )
+                        }
+                        return (
+                          <div
+                            key={neg.id}
+                            onClick={() => setPanelNegId(neg.id)}
+                            className={`bg-white border rounded-xl p-3 cursor-pointer hover:shadow-sm transition-all group ${panelNegId === neg.id ? 'border-blue-300 ring-1 ring-blue-200' : 'border-slate-200 hover:border-slate-300'}`}
+                          >
+                            <div className="flex items-start justify-between gap-1">
+                              <span className="font-medium text-slate-800 text-xs leading-tight">{club.name}</span>
+                              <button
+                                onClick={e => { e.stopPropagation(); setEditingNeg(neg) }}
+                                className="p-0.5 text-slate-200 hover:text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                              >
+                                <Edit3 className="w-3 h-3" />
+                              </button>
+                            </div>
+                            {club.league && <p className="text-[10px] text-slate-400 mt-0.5 truncate">{club.league}</p>}
+                            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                              {neg.aisManager && <span className="text-[10px] font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{neg.aisManager}</span>}
+                              {neg.updates && neg.updates.length > 0 && (
+                                <span className="text-[10px] text-slate-400">📝 {neg.updates.length}</span>
+                              )}
+                              {onSelectClub && (
+                                <button
+                                  onClick={e => { e.stopPropagation(); onSelectClub(club.id) }}
+                                  className="text-slate-200 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity ml-auto"
+                                  title="Ver ficha del club"
+                                >
+                                  <ExternalLink className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                            {neg.notes && <p className="text-[10px] text-slate-500 mt-1 line-clamp-2">{neg.notes}</p>}
+                          </div>
+                        )
+                      })}
+                      {col.length === 0 && (
+                        <div className="h-12 rounded-xl border-2 border-dashed border-slate-100 flex items-center justify-center">
+                          <span className="text-[10px] text-slate-300">Vacío</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 )
               })}
+
+              {/* Descartados — collapsed column */}
+              {(() => {
+                const descartados = negotiations.filter(n => n.status === 'descartado')
+                if (descartados.length === 0) return null
+                const cfg = STATUS_CONFIG_D['descartado']
+                return (
+                  <div key="descartado" className="w-52 flex-shrink-0 opacity-50 hover:opacity-80 transition-opacity">
+                    <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg mb-2 ${cfg.color}`}>
+                      <div className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+                      <span className="text-xs font-semibold flex-1">{cfg.label}</span>
+                      <span className="text-[10px] font-mono opacity-60">{descartados.length}</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {descartados.map(neg => {
+                        const club = clubs.find(c => c.id === neg.clubId)
+                        if (!club) return null
+                        return (
+                          <div key={neg.id} onClick={() => setPanelNegId(neg.id)} className="bg-white border border-slate-100 rounded-xl p-3 cursor-pointer hover:border-slate-200 transition-colors">
+                            <span className="text-xs text-slate-500 line-through">{club.name}</span>
+                            {club.league && <p className="text-[10px] text-slate-300 truncate">{club.league}</p>}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })()}
             </div>
-
-            {/* Row 3: Liga + Gestor selects */}
-            {(availableLeagues.length > 1 || availableGestores.length > 1) && (
-              <div className="flex gap-2">
-                {availableLeagues.length > 1 && (
-                  <select
-                    value={negLeagueFilter}
-                    onChange={e => setNegLeagueFilter(e.target.value)}
-                    className="flex-1 min-w-0 text-xs rounded-lg border border-slate-200 px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-200 text-slate-600 bg-white"
-                  >
-                    <option value="">Todas las ligas</option>
-                    {availableLeagues.map(l => <option key={l} value={l}>{l}</option>)}
-                  </select>
-                )}
-                {availableGestores.length > 1 && (
-                  <select
-                    value={negGestorFilter}
-                    onChange={e => setNegGestorFilter(e.target.value)}
-                    className="flex-1 min-w-0 text-xs rounded-lg border border-slate-200 px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-200 text-slate-600 bg-white"
-                  >
-                    <option value="">Todos los gestores</option>
-                    {availableGestores.map(g => <option key={g} value={g}>{g}</option>)}
-                  </select>
-                )}
-              </div>
-            )}
-
-            {/* Clear filters */}
-            {hasFilters && (
-              <button
-                onClick={() => { setNegSearch(''); setNegStatusFilter([]); setNegLeagueFilter(''); setNegGestorFilter(''); setHideDescartado(false) }}
-                className="text-xs text-slate-400 hover:text-slate-600 underline"
-              >
-                Limpiar filtros
-              </button>
-            )}
           </div>
         )}
-
-        {/* Negotiations list */}
-        <div className="space-y-1">
-          {filteredNegs.map(neg => {
-            const club = clubs.find(c => c.id === neg.clubId)
-            if (!club) return null
-            const scfg = STATUS_CONFIG_D[neg.status]
-            const isEditing = editingNeg?.id === neg.id
-            if (isEditing) {
-              return (
-                <div key={neg.id} className="bg-slate-50 rounded-lg p-3 space-y-2">
-                  <div className="flex flex-wrap gap-1.5">
-                    {NEG_STATUSES_D.map(s => {
-                      const cfg = STATUS_CONFIG_D[s]
-                      return <button key={s} onClick={() => setEditingNeg({ ...editingNeg!, status: s })} className={`px-2.5 py-1 rounded-full text-xs font-medium ${editingNeg!.status === s ? cfg.color + ' ring-1 ring-current' : 'bg-white border border-slate-200 text-slate-500'}`}>{cfg.label}</button>
-                    })}
-                  </div>
-                  <input value={editingNeg!.aisManager ?? ''} onChange={e => setEditingNeg({ ...editingNeg!, aisManager: e.target.value })} placeholder="Gestor AIS" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
-                  <input value={editingNeg!.notes ?? ''} onChange={e => setEditingNeg({ ...editingNeg!, notes: e.target.value })} placeholder="Notas" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
-                  <div className="flex gap-2">
-                    <button onClick={async () => { await onDeleteNegotiation?.(neg.id); setEditingNeg(null) }} className="px-2 py-1.5 text-xs border border-red-200 text-red-500 rounded-lg">Eliminar</button>
-                    <button onClick={() => setEditingNeg(null)} className="flex-1 py-1.5 text-xs border border-slate-200 rounded-lg text-slate-500">Cancelar</button>
-                    <button onClick={saveEditNeg} className="flex-1 py-1.5 text-xs bg-[hsl(220,72%,36%)] text-white rounded-lg">Guardar</button>
-                  </div>
-                </div>
-              )
-            }
-            return (
-              <div
-                key={neg.id}
-                onClick={() => setPanelNegId(neg.id)}
-                className={`flex items-start gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer group ${neg.status === 'descartado' ? 'opacity-50' : ''} ${panelNegId === neg.id ? 'bg-blue-50 ring-1 ring-blue-200' : ''}`}
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-slate-700 text-sm">{club.name}</span>
-                    {club.league && <span className="text-xs text-slate-400">{club.league}</span>}
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${scfg.color}`}>{scfg.label}</span>
-                    {neg.aisManager && <span className="text-xs font-mono bg-slate-100 text-slate-500 px-1.5 rounded">{neg.aisManager}</span>}
-                    {neg.updates && neg.updates.length > 0 && (
-                      <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">{neg.updates.length} nota{neg.updates.length !== 1 ? 's' : ''}</span>
-                    )}
-                  </div>
-                  {neg.notes && <p className="text-xs text-slate-500 mt-0.5 truncate">{neg.notes}</p>}
-                </div>
-                <div className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                  {onSelectClub && (
-                    <button onClick={e => { e.stopPropagation(); onSelectClub(club.id) }} className="p-1 text-slate-300 hover:text-blue-500" title="Ver ficha del club">
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                  <button onClick={e => { e.stopPropagation(); setEditingNeg(neg) }} className="p-1 text-slate-300 hover:text-slate-500">
-                    <Edit3 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            )
-          })}
-          {negotiations.length === 0 && !showAddNeg && (
-            <p className="text-center text-slate-400 text-xs py-4">Sin clubes contactados aún</p>
-          )}
-          {negotiations.length > 0 && filteredNegs.length === 0 && (
-            <p className="text-center text-slate-400 text-xs py-4">Sin resultados con estos filtros</p>
-          )}
-        </div>
       </div>
 
       {/* ── SIDE PANEL (slide-over) ── */}

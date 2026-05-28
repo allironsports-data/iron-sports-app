@@ -1783,7 +1783,7 @@ export function Distribution({
               return (
                 <div
                   key={entry.id}
-                  onClick={() => { setSelectedEntryId(entry.id); setSelectedClubId(null); switchTab('jugadores') }}
+                  onClick={() => onSelectPlayer?.(player.id)}
                   className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0"
                 >
                   <Avatar name={player.name} photo={player.photo} />
