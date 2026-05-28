@@ -198,8 +198,8 @@ export function TaskDetailPanel({
           <div className="flex flex-1 min-h-0">
 
             {/* LEFT — fields */}
-            <div className="flex-1 min-w-0 flex flex-col border-r border-slate-100 overflow-y-auto">
-              <div className="p-5 space-y-5">
+            <div className="flex-1 min-w-0 flex flex-col border-r border-slate-100">
+              <div className="flex-1 overflow-y-auto p-5 space-y-5">
 
                 {/* Read-only notice */}
                 {!canEdit && (
@@ -387,9 +387,9 @@ export function TaskDetailPanel({
                 </div>
               </div>
 
-              {/* Footer buttons */}
+              {/* Footer buttons — always visible, outside scroll area */}
               {canEdit && (
-                <div className="px-5 pb-5 pt-2 flex gap-2 mt-auto">
+                <div className="flex-shrink-0 px-5 pb-5 pt-3 flex gap-2 border-t border-slate-100 bg-white">
                   <button
                     onClick={handleSave}
                     className="flex-1 rounded-xl text-white text-sm font-medium py-2.5 transition-colors hover:opacity-90"

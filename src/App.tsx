@@ -14,6 +14,7 @@ import { Distribution } from './views/Distribution'
 import { ClubDetail } from './views/ClubDetail'
 import { Captacion } from './views/Captacion'
 import { Contactos } from './views/Contactos'
+import { TeamMemberDetail } from './views/TeamMemberDetail'
 import type { Club, DistributionEntry, ClubNegotiation } from './types'
 
 export interface AppNotification {
@@ -42,6 +43,7 @@ export default function App() {
   const [dataLoading, setDataLoading] = useState(false)
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
   const [selectedClubId, setSelectedClubId] = useState<string | null>(null)
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null)
   // four main sections
   const [mainSection, setMainSection] = useState<'tareas' | 'jugadores' | 'distribucion' | 'captacion'>('tareas')
   // where to return after closing PlayerDetail
@@ -419,11 +421,27 @@ export default function App() {
     )
   }
 
+  if (selectedProfileId) {
+    const selectedProfileData = profiles.find(p => p.id === selectedProfileId)
+    if (selectedProfileData) {
+      return (
+        <TeamMemberDetail
+          profile={selectedProfileData}
+          allProfiles={profiles}
+          tasks={tasks}
+          players={players}
+          onBack={() => setSelectedProfileId(null)}
+        />
+      )
+    }
+  }
+
   if (selectedPlayer) {
     const playerTasks = tasks.filter((t) => t.playerId === selectedPlayer.id)
     return (
       <PlayerDetail
         player={selectedPlayer}
+        players={players}
         tasks={playerTasks}
         allTasks={tasks}
         profiles={profiles}
@@ -554,6 +572,7 @@ export default function App() {
       onUpdateGeneralTask={handleUpdateTask}
       onUpdateTask={handleUpdateTask}
       onDeleteGeneralTask={handleDeleteTask}
+      onSelectProfile={(id) => setSelectedProfileId(id)}
     />
   )
 }

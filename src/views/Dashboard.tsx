@@ -3,6 +3,7 @@ import { TaskDetailPanel } from "../components/TaskDetailPanel";
 import logoImg from '../assets/logo.jpeg';
 import type { Player, Task, TaskLabel } from "../types";
 import { calcAge, clubsLabel } from "../types";
+import { createPlayerActivity, createGroupActivity } from "../lib/db";
 import type { Profile } from "../contexts/AuthContext";
 import type { AppNotification } from "../App";
 import {
@@ -28,6 +29,7 @@ import {
   Zap,
   TrendingUp,
   Eye,
+  Activity,
 } from "lucide-react";
 
 const PRIMARY = "hsl(220,72%,26%)";
@@ -52,6 +54,7 @@ interface Props {
   onUpdateTask?: (task: Task) => void;
   onDeleteGeneralTask?: (taskId: string) => void;
   onOverview?: () => void;
+  onSelectProfile?: (profileId: string) => void;
 }
 
 // Birthday helpers
@@ -70,6 +73,11 @@ function isBirthdaySoon(birthDate: string, days: number): boolean {
   const diff = (thisYear.getTime() - today.getTime()) / (1000*60*60*24);
   return diff > 0 && diff <= days;
 }
+
+const ACTIVITY_TYPES_DASH = [
+  'Comunicación con club', 'Reunión con jugador', 'Llamada',
+  'Email', 'Visita presencial', 'Partido', 'Transferencia', 'Nota general',
+] as const;
 
 export function Dashboard({
   view = 'tareas',
@@ -91,10 +99,58 @@ export function Dashboard({
   onUpdateTask,
   onDeleteGeneralTask,
   onOverview,
+  onSelectProfile,
 }: Props) {
   const [search, setSearch] = useState("");
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [showAddGeneralTask, setShowAddGeneralTask] = useState(false);
+
+  // Add event modal state
+  const [showAddEvent, setShowAddEvent] = useState(false);
+  const [evtPlayer, setEvtPlayer]         = useState("");
+  const [evtDate, setEvtDate]             = useState("");
+  const [evtType, setEvtType]             = useState<string>(ACTIVITY_TYPES_DASH[0]);
+  const [evtCustomType, setEvtCustomType] = useState("");
+  const [evtNotes, setEvtNotes]           = useState("");
+  const [evtLinked, setEvtLinked]         = useState<string[]>([]);
+  const [evtSaving, setEvtSaving]         = useState(false);
+
+  function openAddEvent() {
+    setEvtPlayer("");
+    setEvtDate(new Date().toISOString().slice(0, 10));
+    setEvtType(ACTIVITY_TYPES_DASH[0]);
+    setEvtCustomType("");
+    setEvtNotes("");
+    setEvtLinked([]);
+    setShowAddEvent(true);
+  }
+
+  function toggleEvtLinked(id: string) {
+    setEvtLinked(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  }
+
+  async function handleSaveEvent() {
+    const resolvedType = evtType === 'custom' ? evtCustomType.trim() : evtType;
+    if (!evtPlayer || !evtDate || !resolvedType) return;
+    setEvtSaving(true);
+    try {
+      const allIds = [evtPlayer, ...evtLinked.filter(id => id !== evtPlayer)];
+      if (allIds.length > 1) {
+        await createGroupActivity(allIds, {
+          date: evtDate, type: resolvedType,
+          notes: evtNotes.trim() || undefined, authorId: currentProfile.id,
+        });
+      } else {
+        await createPlayerActivity(evtPlayer, {
+          date: evtDate, type: resolvedType,
+          notes: evtNotes.trim() || undefined, authorId: currentProfile.id,
+        });
+      }
+      setShowAddEvent(false);
+    } finally {
+      setEvtSaving(false);
+    }
+  }
   const [editingGeneralTask, setEditingGeneralTask] = useState<Task | null>(null);
   const [managerFilter, setManagerFilter] = useState<string>("all");
   // quick filter from stat cards: overlays on top of tab filter
@@ -568,14 +624,23 @@ export function Dashboard({
                 </button>
               ))}
             </div>
-            {onAddGeneralTask && (
+            <div className="flex items-center gap-1.5 flex-shrink-0">
               <button
-                onClick={() => setShowAddGeneralTask(true)}
-                className="flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
+                onClick={openAddEvent}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
+                title="Nuevo evento de actividad"
               >
-                <Plus className="w-3 h-3" /> Nueva
+                <Activity className="w-3 h-3" /> Evento
               </button>
-            )}
+              {onAddGeneralTask && (
+                <button
+                  onClick={() => setShowAddGeneralTask(true)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
+                >
+                  <Plus className="w-3 h-3" /> Nueva
+                </button>
+              )}
+            </div>
           </div>
 
           {/* ── TAB: YO ───────────────────────────────────── */}
@@ -713,22 +778,32 @@ export function Dashboard({
                   Todos
                 </button>
                 {profiles.map(p => (
-                  <button
-                    key={p.id}
-                    onClick={() => setAssigneeFilter(assigneeFilter === p.id ? "all" : p.id)}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
-                      assigneeFilter === p.id ? "text-white border-transparent" : "bg-white border-slate-200 text-slate-500 hover:text-slate-700"
-                    }`}
-                    style={assigneeFilter === p.id ? { background: PRIMARY } : {}}
-                  >
-                    <span
-                      className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0"
-                      style={{ background: assigneeFilter === p.id ? "rgba(255,255,255,0.3)" : PRIMARY }}
+                  <div key={p.id} className="flex items-center gap-1">
+                    <button
+                      onClick={() => setAssigneeFilter(assigneeFilter === p.id ? "all" : p.id)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                        assigneeFilter === p.id ? "text-white border-transparent" : "bg-white border-slate-200 text-slate-500 hover:text-slate-700"
+                      }`}
+                      style={assigneeFilter === p.id ? { background: PRIMARY } : {}}
                     >
-                      {p.avatar}
-                    </span>
-                    {p.name.split(" ")[0]}
-                  </button>
+                      <span
+                        className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0"
+                        style={{ background: assigneeFilter === p.id ? "rgba(255,255,255,0.3)" : PRIMARY }}
+                      >
+                        {p.avatar}
+                      </span>
+                      {p.name.split(" ")[0]}
+                    </button>
+                    {onSelectProfile && (
+                      <button
+                        onClick={() => onSelectProfile(p.id)}
+                        className="p-1 text-slate-300 hover:text-slate-600 transition-colors rounded"
+                        title={`Ver actividad de ${p.name.split(" ")[0]}`}
+                      >
+                        <Activity className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
                 ))}
               </div>
 
@@ -1278,6 +1353,112 @@ export function Dashboard({
           onSelectTask={(t) => { setDetailTask(t); setShowSearch(false); }}
           onClose={() => setShowSearch(false)}
         />
+      )}
+
+      {/* ── Add Event Modal ──────────────────────────────────── */}
+      {showAddEvent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
+            <h4 className="text-sm font-semibold text-slate-800">Nuevo evento de actividad</h4>
+
+            {/* Player selector */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Jugador <span className="text-red-400">*</span></label>
+              <select
+                value={evtPlayer}
+                onChange={e => setEvtPlayer(e.target.value)}
+                className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200 bg-white"
+              >
+                <option value="">— Selecciona un jugador —</option>
+                {[...players].sort((a, b) => a.name.localeCompare(b.name)).map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Fecha</label>
+                <input type="date" value={evtDate} onChange={e => setEvtDate(e.target.value)}
+                  className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Tipo</label>
+                <select value={evtType} onChange={e => setEvtType(e.target.value)}
+                  className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200">
+                  {ACTIVITY_TYPES_DASH.map(t => <option key={t} value={t}>{t}</option>)}
+                  <option value="custom">Personalizado…</option>
+                </select>
+              </div>
+            </div>
+
+            {evtType === 'custom' && (
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Tipo personalizado</label>
+                <input type="text" value={evtCustomType} onChange={e => setEvtCustomType(e.target.value)}
+                  placeholder="Ej: Reunión con padre, Contrato preliminar…"
+                  className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200" />
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Notas <span className="text-slate-400">(opcional)</span></label>
+              <textarea value={evtNotes} onChange={e => setEvtNotes(e.target.value)}
+                placeholder="Detalles del evento…" rows={3}
+                className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-blue-200" />
+            </div>
+
+            {/* Additional players */}
+            {players.filter(p => p.id !== evtPlayer).length > 0 && evtPlayer && (
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-slate-600 flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-slate-400" />
+                  También con… <span className="text-slate-400 font-normal">(opcional)</span>
+                </label>
+                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                  {players
+                    .filter(p => p.id !== evtPlayer)
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map(p => {
+                      const active = evtLinked.includes(p.id);
+                      return (
+                        <button key={p.id} type="button" onClick={() => toggleEvtLinked(p.id)}
+                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border transition-colors
+                            ${active ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}
+                        >
+                          <span className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0"
+                            style={{ background: active ? '#185FA5' : '#94a3b8' }}>
+                            {p.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                          </span>
+                          {p.name.split(' ')[0]}
+                        </button>
+                      );
+                    })}
+                </div>
+                {evtLinked.length > 0 && (
+                  <p className="text-[10px] text-blue-600">
+                    Aparecerá en el timeline de {evtLinked.length + 1} jugadores.
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setShowAddEvent(false)}
+                className="flex-1 py-2 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveEvent}
+                disabled={evtSaving || !evtPlayer || !evtDate || (evtType === 'custom' && !evtCustomType.trim())}
+                className="flex-1 py-2 text-xs rounded-lg text-white disabled:opacity-50 transition-colors"
+                style={{ background: PRIMARY }}
+              >
+                {evtSaving ? 'Guardando…' : 'Guardar evento'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {detailTask && (

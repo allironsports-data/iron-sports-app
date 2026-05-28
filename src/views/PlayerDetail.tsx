@@ -9,7 +9,8 @@ import type {
 import { calcAge } from "../types";
 import type { Profile } from "../contexts/AuthContext";
 import { uploadContractPdf, fetchNotes, createNote, updateNote, deleteNote,
-  fetchPlayerActivities, createPlayerActivity, updatePlayerActivity, deletePlayerActivity,
+  fetchPlayerActivities, createPlayerActivity, createGroupActivity,
+  updatePlayerActivity, updateGroupActivity, deletePlayerActivity, deleteGroupActivity,
 } from "../lib/db";
 import { TaskDetailPanel } from "../components/TaskDetailPanel";
 import {
@@ -25,6 +26,7 @@ const PRIMARY = "hsl(220,72%,26%)";
 
 interface Props {
   player: Player;
+  players?: Player[];
   tasks: Task[];
   allTasks: Task[];
   profiles: Profile[];
@@ -53,7 +55,7 @@ type TabId = "resumen" | "tareas" | "contrato" | "rendimiento" | "info" | "activ
 type NavGroup = { label: string; items: { id: TabId; label: string; icon: React.ReactNode; count?: number }[] };
 
 export function PlayerDetail({
-  player, tasks, allTasks, profiles, currentProfile,
+  player, players = [], tasks, allTasks, profiles, currentProfile,
   onBack, onAddTask, onUpdateTask, onDeleteTask, onUpdatePlayer, onLogout,
   onDeletePlayer, onAdmin,
   distributionEntry, playerNegotiations = [], clubs = [],
@@ -314,7 +316,7 @@ export function PlayerDetail({
               </div>
             )}
             {activeTab === "actividad" && (
-              <ActivityTab player={player} tasks={tasks} profiles={profiles} currentProfile={currentProfile} />
+              <ActivityTab player={player} players={players} tasks={tasks} profiles={profiles} currentProfile={currentProfile} />
             )}
             {activeTab === "distribucion" && (
               <DistributionTab
@@ -1774,19 +1776,24 @@ function buildMergedEvents(
 
 // ── ACTIVITY TAB ──────────────────────────────────────────────
 
-function ActivityTab({ player, tasks, profiles, currentProfile }: {
-  player: Player; tasks: Task[]; profiles: Profile[]; currentProfile: Profile;
+function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: {
+  player: Player; players?: Player[]; tasks: Task[]; profiles: Profile[]; currentProfile: Profile;
 }) {
   const [activities, setActivities] = useState<PlayerActivity[]>([]);
   const [loading, setLoading]       = useState(true);
   const [showForm, setShowForm]     = useState(false);
   const [editing, setEditing]       = useState<PlayerActivity | null>(null);
 
-  const [fDate, setFDate]             = useState('');
-  const [fType, setFType]             = useState<string>(ACTIVITY_TYPES[0]);
-  const [fCustomType, setFCustomType] = useState('');
-  const [fNotes, setFNotes]           = useState('');
-  const [saving, setSaving]           = useState(false);
+  const [fDate, setFDate]                   = useState('');
+  const [fType, setFType]                   = useState<string>(ACTIVITY_TYPES[0]);
+  const [fCustomType, setFCustomType]       = useState('');
+  const [fNotes, setFNotes]                 = useState('');
+  const [fLinkedPlayers, setFLinkedPlayers] = useState<string[]>([]);
+  const [saving, setSaving]                 = useState(false);
+
+  // Group edit/delete confirmation dialogs
+  const [groupEditPending, setGroupEditPending]     = useState<PlayerActivity | null>(null);
+  const [groupDeletePending, setGroupDeletePending] = useState<PlayerActivity | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -1811,6 +1818,7 @@ function ActivityTab({ player, tasks, profiles, currentProfile }: {
     setFType(ACTIVITY_TYPES[0]);
     setFCustomType('');
     setFNotes('');
+    setFLinkedPlayers([]);
     setShowForm(true);
   }
 
@@ -1821,6 +1829,8 @@ function ActivityTab({ player, tasks, profiles, currentProfile }: {
     setFType(isPreset ? a.type : 'custom');
     setFCustomType(isPreset ? '' : a.type);
     setFNotes(a.notes ?? '');
+    // In edit mode linked players are read-only (can't add/remove players from existing group)
+    setFLinkedPlayers([]);
     setShowForm(true);
   }
 
@@ -1830,14 +1840,31 @@ function ActivityTab({ player, tasks, profiles, currentProfile }: {
     setSaving(true);
     try {
       if (editing) {
+        // If group event: ask user whether to update all or just this one
+        if (editing.groupId && (editing.linkedPlayerIds?.length ?? 0) > 1) {
+          setGroupEditPending({ ...editing, date: fDate, type: resolvedType, notes: fNotes.trim() || undefined });
+          setShowForm(false);
+          setSaving(false);
+          return;
+        }
         const updated: PlayerActivity = { ...editing, date: fDate, type: resolvedType, notes: fNotes.trim() || undefined };
         await updatePlayerActivity(updated);
         setActivities(prev => prev.map(a => a.id === updated.id ? updated : a));
       } else {
-        const created = await createPlayerActivity(player.id, {
-          date: fDate, type: resolvedType, notes: fNotes.trim() || undefined, authorId: currentProfile.id,
-        });
-        setActivities(prev => [created, ...prev]);
+        const allIds = [player.id, ...fLinkedPlayers.filter(id => id !== player.id)];
+        if (allIds.length > 1) {
+          // Multi-player: create group rows, only keep the one for current player in local state
+          const created = await createGroupActivity(allIds, {
+            date: fDate, type: resolvedType, notes: fNotes.trim() || undefined, authorId: currentProfile.id,
+          });
+          const mine = created.find(r => r.playerId === player.id);
+          if (mine) setActivities(prev => [mine, ...prev]);
+        } else {
+          const created = await createPlayerActivity(player.id, {
+            date: fDate, type: resolvedType, notes: fNotes.trim() || undefined, authorId: currentProfile.id,
+          });
+          setActivities(prev => [created, ...prev]);
+        }
       }
       setShowForm(false);
     } finally {
@@ -1845,9 +1872,48 @@ function ActivityTab({ player, tasks, profiles, currentProfile }: {
     }
   }
 
-  async function handleDelete(id: string) {
-    await deletePlayerActivity(id);
-    setActivities(prev => prev.filter(a => a.id !== id));
+  async function confirmGroupEdit(all: boolean) {
+    if (!groupEditPending) return;
+    if (all) {
+      await updateGroupActivity(groupEditPending);
+      // Update all activities in current player's list that share the group_id
+      setActivities(prev => prev.map(a =>
+        a.groupId === groupEditPending.groupId
+          ? { ...a, date: groupEditPending.date, type: groupEditPending.type, notes: groupEditPending.notes }
+          : a
+      ));
+    } else {
+      await updatePlayerActivity(groupEditPending);
+      setActivities(prev => prev.map(a => a.id === groupEditPending.id ? groupEditPending : a));
+    }
+    setGroupEditPending(null);
+  }
+
+  async function handleDelete(act: PlayerActivity) {
+    if (act.groupId && (act.linkedPlayerIds?.length ?? 0) > 1) {
+      setGroupDeletePending(act);
+      return;
+    }
+    await deletePlayerActivity(act.id);
+    setActivities(prev => prev.filter(a => a.id !== act.id));
+  }
+
+  async function confirmGroupDelete(all: boolean) {
+    if (!groupDeletePending) return;
+    if (all && groupDeletePending.groupId) {
+      await deleteGroupActivity(groupDeletePending.groupId);
+      setActivities(prev => prev.filter(a => a.groupId !== groupDeletePending.groupId));
+    } else {
+      await deletePlayerActivity(groupDeletePending.id);
+      setActivities(prev => prev.filter(a => a.id !== groupDeletePending.id));
+    }
+    setGroupDeletePending(null);
+  }
+
+  function toggleLinkedPlayer(id: string) {
+    setFLinkedPlayers(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
   }
 
   return (
@@ -1885,6 +1951,13 @@ function ActivityTab({ player, tasks, profiles, currentProfile }: {
                     const author = evt.activityRef?.authorId
                       ? profiles.find(p => p.id === evt.activityRef!.authorId)
                       : undefined;
+                    // Other players in group event (excluding current player)
+                    const groupPeers = evt.activityRef?.linkedPlayerIds
+                      ? evt.activityRef.linkedPlayerIds
+                          .filter(id => id !== player.id)
+                          .map(id => players.find(p => p.id === id))
+                          .filter(Boolean) as Player[]
+                      : [];
                     return (
                       <div key={evt.id} className="flex gap-3 pl-0.5">
                         <div className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center z-10 bg-white border-2 border-slate-200 mt-1.5">
@@ -1902,7 +1975,7 @@ function ActivityTab({ player, tasks, profiles, currentProfile }: {
                                   <button onClick={() => openEdit(evt.activityRef!)} className="p-0.5 text-slate-300 hover:text-blue-500 rounded transition-colors">
                                     <Edit3 className="w-3 h-3" />
                                   </button>
-                                  <button onClick={() => handleDelete(evt.activityRef!.id)} className="p-0.5 text-slate-300 hover:text-red-500 rounded transition-colors">
+                                  <button onClick={() => handleDelete(evt.activityRef!)} className="p-0.5 text-slate-300 hover:text-red-500 rounded transition-colors">
                                     <Trash2 className="w-3 h-3" />
                                   </button>
                                 </>
@@ -1915,8 +1988,27 @@ function ActivityTab({ player, tasks, profiles, currentProfile }: {
                               {evt.extra && <p className="text-xs text-slate-500 leading-snug whitespace-pre-wrap">{evt.extra}</p>}
                             </div>
                           )}
-                          {author && (
+                          {/* Group peers badge */}
+                          {groupPeers.length > 0 && (
+                            <div className="flex items-center gap-1 mt-1.5 pt-1.5 border-t border-slate-50 flex-wrap">
+                              <Users className="w-3 h-3 text-slate-300 flex-shrink-0" />
+                              {groupPeers.map(p => (
+                                <span key={p.id} className="text-[10px] bg-blue-50 text-blue-600 border border-blue-100 px-1.5 py-0.5 rounded-full font-medium">
+                                  {p.name.split(' ')[0]}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          {author && groupPeers.length === 0 && (
                             <div className="flex items-center gap-1 mt-1.5 pt-1.5 border-t border-slate-50">
+                              <span className="w-4 h-4 rounded-full bg-slate-100 text-[9px] font-semibold flex items-center justify-center text-slate-500 flex-shrink-0">
+                                {author.avatar}
+                              </span>
+                              <span className="text-[10px] text-slate-400">{author.name.split(' ')[0]}</span>
+                            </div>
+                          )}
+                          {author && groupPeers.length > 0 && (
+                            <div className="flex items-center gap-1 mt-0.5">
                               <span className="w-4 h-4 rounded-full bg-slate-100 text-[9px] font-semibold flex items-center justify-center text-slate-500 flex-shrink-0">
                                 {author.avatar}
                               </span>
@@ -1967,9 +2059,61 @@ function ActivityTab({ player, tasks, profiles, currentProfile }: {
               <label className="text-xs font-medium text-slate-600">Notas <span className="text-slate-400">(opcional)</span></label>
               <textarea value={fNotes} onChange={e => setFNotes(e.target.value)}
                 placeholder="Detalles del evento…"
-                rows={4}
+                rows={3}
                 className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-blue-200" />
             </div>
+
+            {/* Other players — only shown when creating new events */}
+            {!editing && players.filter(p => p.id !== player.id).length > 0 && (
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-slate-600 flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-slate-400" />
+                  También con… <span className="text-slate-400 font-normal">(opcional)</span>
+                </label>
+                <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
+                  {players
+                    .filter(p => p.id !== player.id)
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map(p => {
+                      const active = fLinkedPlayers.includes(p.id);
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => toggleLinkedPlayer(p.id)}
+                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border transition-colors
+                            ${active
+                              ? 'bg-blue-50 border-blue-300 text-blue-700'
+                              : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                            }`}
+                        >
+                          <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0 ${active ? '' : ''}`}
+                            style={{ background: active ? '#185FA5' : '#94a3b8' }}>
+                            {p.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                          </span>
+                          {p.name.split(' ')[0]}
+                        </button>
+                      );
+                    })}
+                </div>
+                {fLinkedPlayers.length > 0 && (
+                  <p className="text-[10px] text-blue-600">
+                    Este evento aparecerá en el timeline de {fLinkedPlayers.length + 1} jugador{fLinkedPlayers.length > 0 ? 'es' : ''}.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Edit mode: show existing group info read-only */}
+            {editing && editing.groupId && (editing.linkedPlayerIds?.length ?? 0) > 1 && (
+              <div className="flex items-center gap-1.5 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+                <Users className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+                <p className="text-xs text-blue-700">
+                  Evento compartido con {(editing.linkedPlayerIds!.length - 1)} jugador{editing.linkedPlayerIds!.length > 2 ? 'es' : ''} más
+                </p>
+              </div>
+            )}
+
             <div className="flex gap-2 pt-1">
               <button onClick={() => setShowForm(false)}
                 className="flex-1 py-2 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
@@ -1980,6 +2124,73 @@ function ActivityTab({ player, tasks, profiles, currentProfile }: {
                 className="flex-1 py-2 text-xs rounded-lg text-white disabled:opacity-50 transition-colors"
                 style={{ background: PRIMARY }}>
                 {saving ? 'Guardando…' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Group edit confirmation */}
+      {groupEditPending && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Users className="w-4 h-4 text-blue-600" />
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-slate-800">¿Editar solo este jugador o todos?</h4>
+                <p className="text-xs text-slate-500 mt-1">
+                  Este evento es compartido con {(groupEditPending.linkedPlayerIds?.length ?? 1) - 1} jugador{((groupEditPending.linkedPlayerIds?.length ?? 1) - 1) > 1 ? 'es' : ''} más.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <button onClick={() => confirmGroupEdit(false)}
+                className="w-full py-2.5 text-xs border border-slate-200 rounded-xl text-slate-700 hover:bg-slate-50 transition-colors font-medium">
+                Solo este jugador
+              </button>
+              <button onClick={() => confirmGroupEdit(true)}
+                className="w-full py-2.5 text-xs rounded-xl text-white transition-colors font-medium"
+                style={{ background: PRIMARY }}>
+                Todos los jugadores del evento
+              </button>
+              <button onClick={() => setGroupEditPending(null)}
+                className="w-full py-2 text-xs text-slate-400 hover:text-slate-600 transition-colors">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Group delete confirmation */}
+      {groupDeletePending && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Trash2 className="w-4 h-4 text-red-500" />
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-slate-800">¿Eliminar solo de este jugador o de todos?</h4>
+                <p className="text-xs text-slate-500 mt-1">
+                  Este evento es compartido con {(groupDeletePending.linkedPlayerIds?.length ?? 1) - 1} jugador{((groupDeletePending.linkedPlayerIds?.length ?? 1) - 1) > 1 ? 'es' : ''} más.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <button onClick={() => confirmGroupDelete(false)}
+                className="w-full py-2.5 text-xs border border-slate-200 rounded-xl text-slate-700 hover:bg-slate-50 transition-colors font-medium">
+                Solo de este jugador
+              </button>
+              <button onClick={() => confirmGroupDelete(true)}
+                className="w-full py-2.5 text-xs border border-red-200 text-red-600 rounded-xl hover:bg-red-50 transition-colors font-medium">
+                De todos los jugadores del evento
+              </button>
+              <button onClick={() => setGroupDeletePending(null)}
+                className="w-full py-2 text-xs text-slate-400 hover:text-slate-600 transition-colors">
+                Cancelar
               </button>
             </div>
           </div>

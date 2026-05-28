@@ -92,6 +92,8 @@ export interface PlayerActivity {
   notes?: string
   authorId?: string
   createdAt: string
+  groupId?: string          // shared UUID linking rows of the same multi-player event
+  linkedPlayerIds?: string[] // all player IDs in the group (including self), for display
 }
 
 // ---- Club communication log (legacy — kept for DB compatibility) ----

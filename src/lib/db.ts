@@ -961,13 +961,15 @@ export async function deleteMeeting(id: string): Promise<void> {
 
 function dbToPlayerActivity(row: Record<string, unknown>): PlayerActivity {
   return {
-    id:        row.id as string,
-    playerId:  row.player_id as string,
-    date:      row.date as string,
-    type:      row.type as string,
-    notes:     row.notes as string | undefined,
-    authorId:  row.author_id as string | undefined,
-    createdAt: row.created_at as string,
+    id:              row.id as string,
+    playerId:        row.player_id as string,
+    date:            row.date as string,
+    type:            row.type as string,
+    notes:           row.notes as string | undefined,
+    authorId:        row.author_id as string | undefined,
+    createdAt:       row.created_at as string,
+    groupId:         row.group_id as string | undefined,
+    linkedPlayerIds: (row.linked_player_ids as string[] | undefined) ?? [],
   }
 }
 
@@ -981,6 +983,7 @@ export async function fetchPlayerActivities(playerId: string): Promise<PlayerAct
   return (data ?? []).map(row => dbToPlayerActivity(row as Record<string, unknown>))
 }
 
+/** Create a single-player activity (no group). */
 export async function createPlayerActivity(
   playerId: string,
   input: Pick<PlayerActivity, 'date' | 'type' | 'notes' | 'authorId'>
@@ -988,16 +991,44 @@ export async function createPlayerActivity(
   const { data, error } = await supabase
     .from('player_activities')
     .insert({
-      player_id: playerId,
-      date:      input.date,
-      type:      input.type,
-      notes:     input.notes ?? null,
-      author_id: input.authorId ?? null,
+      player_id:         playerId,
+      date:              input.date,
+      type:              input.type,
+      notes:             input.notes ?? null,
+      author_id:         input.authorId ?? null,
+      group_id:          null,
+      linked_player_ids: [],
     })
     .select()
     .single()
   if (error) throw error
   return dbToPlayerActivity(data as Record<string, unknown>)
+}
+
+/**
+ * Create one activity row per player, all sharing the same group_id.
+ * Returns all created rows.
+ */
+export async function createGroupActivity(
+  playerIds: string[],
+  input: Pick<PlayerActivity, 'date' | 'type' | 'notes' | 'authorId'>
+): Promise<PlayerActivity[]> {
+  const groupId = crypto.randomUUID()
+  const rows = playerIds.map(pid => ({
+    player_id:         pid,
+    date:              input.date,
+    type:              input.type,
+    notes:             input.notes ?? null,
+    author_id:         input.authorId ?? null,
+    group_id:          groupId,
+    linked_player_ids: playerIds,
+  }))
+  const { data, error } = await supabase
+    .from('player_activities')
+    .insert(rows)
+    .select()
+  if (error) throw error
+  return (data ?? []).map(row => dbToPlayerActivity(row as Record<string, unknown>))
 }
 
 export async function updatePlayerActivity(act: PlayerActivity): Promise<void> {
@@ -1008,7 +1039,34 @@ export async function updatePlayerActivity(act: PlayerActivity): Promise<void> {
   if (error) throw error
 }
 
+/** Update all rows belonging to the same group. */
+export async function updateGroupActivity(act: PlayerActivity): Promise<void> {
+  if (!act.groupId) return updatePlayerActivity(act)
+  const { error } = await supabase
+    .from('player_activities')
+    .update({ date: act.date, type: act.type, notes: act.notes ?? null })
+    .eq('group_id', act.groupId)
+  if (error) throw error
+}
+
 export async function deletePlayerActivity(id: string): Promise<void> {
   const { error } = await supabase.from('player_activities').delete().eq('id', id)
   if (error) throw error
+}
+
+/** Delete all rows belonging to the same group. */
+export async function deleteGroupActivity(groupId: string): Promise<void> {
+  const { error } = await supabase.from('player_activities').delete().eq('group_id', groupId)
+  if (error) throw error
+}
+
+/** Fetch all activities logged by a specific author (for team member timeline). */
+export async function fetchActivitiesByAuthor(authorId: string): Promise<PlayerActivity[]> {
+  const { data, error } = await supabase
+    .from('player_activities')
+    .select('*')
+    .eq('author_id', authorId)
+    .order('date', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map(row => dbToPlayerActivity(row as Record<string, unknown>))
 }
