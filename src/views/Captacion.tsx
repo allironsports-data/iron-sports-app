@@ -1080,6 +1080,7 @@ export function Captacion({
   const [posFilter, setPosFilter] = useState<string>('all')
   const [showCatMenu, setShowCatMenu] = useState(false)
   const [showPosMenu, setShowPosMenu] = useState(false)
+  const [quickAssessId, setQuickAssessId] = useState<string | null>(null)
 
   // ── panel state ──
   const [panelPlayerId, setPanelPlayerId] = useState<string | null>(null)
@@ -1747,8 +1748,43 @@ export function Captacion({
                           <td className="px-2 py-2.5 text-xs text-slate-500 hidden lg:table-cell">
                             {p.categoria ?? '—'}
                           </td>
-                          <td className="px-2 py-2.5">
-                            <AssessmentChip a={p.assessment} />
+                          <td className="px-2 py-2.5" onClick={e => e.stopPropagation()}>
+                            <div className="relative inline-block">
+                              <button
+                                onClick={() => setQuickAssessId(quickAssessId === p.id ? null : p.id)}
+                                className="group flex items-center gap-1"
+                                title="Cambiar assessment"
+                              >
+                                <AssessmentChip a={p.assessment} />
+                                <ChevronDown className="w-3 h-3 text-slate-300 group-hover:text-slate-500 transition-colors" />
+                              </button>
+                              {quickAssessId === p.id && (
+                                <>
+                                  <div className="fixed inset-0 z-40" onClick={() => setQuickAssessId(null)} />
+                                  <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-slate-200 rounded-xl shadow-xl py-1 min-w-[130px]">
+                                    <button
+                                      onClick={async () => { await handleQuickAssessment(p, undefined); setQuickAssessId(null) }}
+                                      className={`w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 transition-colors ${!p.assessment ? 'font-semibold text-slate-700' : 'text-slate-500'}`}
+                                    >
+                                      Sin valorar
+                                    </button>
+                                    {ALL_ASSESSMENTS.map(a => {
+                                      const cfg = ASSESSMENT_CONFIG[a]
+                                      return (
+                                        <button
+                                          key={a}
+                                          onClick={async () => { await handleQuickAssessment(p, a); setQuickAssessId(null) }}
+                                          className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 hover:bg-slate-50 transition-colors ${p.assessment === a ? `font-semibold ${cfg.text}` : 'text-slate-600'}`}
+                                        >
+                                          {p.assessment === a && <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${cfg.bg} border ${cfg.border}`} />}
+                                          {a}
+                                        </button>
+                                      )
+                                    })}
+                                  </div>
+                                </>
+                              )}
+                            </div>
                           </td>
                           <td className="px-2 py-2.5 hidden sm:table-cell">
                             {reportCount > 0 ? (

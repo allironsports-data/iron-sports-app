@@ -695,10 +695,14 @@ export function Distribution({
                             <div
                               key={entry.id}
                               onClick={() => { setSelectedEntryId(entry.id); setSelectedClubId(null) }}
-                              className={`bg-white rounded-lg border cursor-pointer hover:shadow-sm transition-all flex items-center gap-2.5 px-3 py-2 ${
+                              className={`bg-white rounded-lg border cursor-pointer hover:shadow-sm transition-all flex items-center gap-2.5 px-3 py-2 overflow-hidden relative ${
                                 selectedEntryId === entry.id ? 'border-blue-300 ring-1 ring-blue-200' : 'border-slate-200'
                               }`}
                             >
+                              {/* Negotiation status bar */}
+                              {topStatus && (
+                                <div className={`absolute left-0 top-0 bottom-0 w-0.5 rounded-l ${STATUS_CONFIG[topStatus].dot}`} />
+                              )}
                               <Avatar name={player.name} photo={player.photo} />
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-1.5 flex-wrap">
