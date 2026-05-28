@@ -1506,7 +1506,7 @@ export function Dashboard({
                               {prof.avatar}
                             </span>
                             {prof.name.split(' ')[0]}
-                            <button onClick={() => removeEvtParticipant(pid)} className="ml-0.5 text-blue-400 hover:text-blue-700 leading-none">×</button>
+                            <button onClick={() => setEvtParticipants(prev => prev.filter(id => id !== pid))} className="ml-0.5 text-blue-400 hover:text-blue-700 leading-none">×</button>
                           </span>
                         );
                       })}
@@ -1528,7 +1528,7 @@ export function Dashboard({
                           <button
                             key={p.id}
                             type="button"
-                            onMouseDown={e => { e.preventDefault(); addEvtParticipant(p.id); }}
+                            onMouseDown={e => { e.preventDefault(); setEvtParticipants(prev => [...prev, p.id]); setEvtParticipantQ(''); }}
                             className="w-full text-left flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 transition-colors"
                           >
                             <span className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0"
