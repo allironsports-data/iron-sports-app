@@ -1789,6 +1789,7 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
   const [fCustomType, setFCustomType]       = useState('');
   const [fNotes, setFNotes]                 = useState('');
   const [fLinkedPlayers, setFLinkedPlayers] = useState<string[]>([]);
+  const [fLinkedQ, setFLinkedQ]             = useState('');
   const [saving, setSaving]                 = useState(false);
 
   // Group edit/delete confirmation dialogs
@@ -1819,6 +1820,7 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
     setFCustomType('');
     setFNotes('');
     setFLinkedPlayers([]);
+    setFLinkedQ('');
     setShowForm(true);
   }
 
@@ -2073,42 +2075,79 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
                 className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-blue-200" />
             </div>
 
-            {/* Other players — only shown when creating new events */}
+            {/* Other players — combobox, only when creating */}
             {!editing && players.filter(p => p.id !== player.id).length > 0 && (
               <div className="space-y-2">
                 <label className="text-xs font-medium text-slate-600 flex items-center gap-1.5">
                   <Users className="w-3.5 h-3.5 text-slate-400" />
                   También con… <span className="text-slate-400 font-normal">(opcional)</span>
                 </label>
-                <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
-                  {players
-                    .filter(p => p.id !== player.id)
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .map(p => {
-                      const active = fLinkedPlayers.includes(p.id);
+
+                {/* Selected tags */}
+                {fLinkedPlayers.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {fLinkedPlayers.map(id => {
+                      const p = players.find(x => x.id === id);
+                      if (!p) return null;
                       return (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={() => toggleLinkedPlayer(p.id)}
-                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border transition-colors
-                            ${active
-                              ? 'bg-blue-50 border-blue-300 text-blue-700'
-                              : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
-                            }`}
-                        >
-                          <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0 ${active ? '' : ''}`}
-                            style={{ background: active ? '#185FA5' : '#94a3b8' }}>
+                        <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 border border-blue-200 text-blue-700">
+                          <span className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[7px] font-bold text-white flex-shrink-0"
+                            style={{ background: '#185FA5' }}>
                             {p.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                           </span>
                           {p.name.split(' ')[0]}
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => setFLinkedPlayers(prev => prev.filter(x => x !== id))}
+                            className="ml-0.5 text-blue-400 hover:text-blue-700 leading-none"
+                          >×</button>
+                        </span>
                       );
                     })}
-                </div>
+                  </div>
+                )}
+
+                {/* Search combobox */}
+                {(() => {
+                  const suggestions = players
+                    .filter(p => p.id !== player.id && !fLinkedPlayers.includes(p.id))
+                    .filter(p => p.name.toLowerCase().includes(fLinkedQ.toLowerCase()))
+                    .sort((a, b) => a.name.localeCompare(b.name));
+                  const showDrop = fLinkedQ.length > 0 && suggestions.length > 0;
+                  return (
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={fLinkedQ}
+                        onChange={e => setFLinkedQ(e.target.value)}
+                        placeholder="Buscar jugador…"
+                        className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200"
+                      />
+                      {showDrop && (
+                        <div className="absolute left-0 top-full mt-1 z-10 w-full bg-white border border-slate-200 rounded-xl shadow-lg py-1 max-h-40 overflow-y-auto">
+                          {suggestions.map(p => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onMouseDown={e => { e.preventDefault(); toggleLinkedPlayer(p.id); setFLinkedQ(''); }}
+                              className="w-full text-left flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 transition-colors"
+                            >
+                              <span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0"
+                                style={{ background: '#94a3b8' }}>
+                                {p.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                              </span>
+                              {p.name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 {fLinkedPlayers.length > 0 && (
                   <p className="text-[10px] text-blue-600">
-                    Este evento aparecerá en el timeline de {fLinkedPlayers.length + 1} jugador{fLinkedPlayers.length > 0 ? 'es' : ''}.
+                    Este evento aparecerá en el timeline de {fLinkedPlayers.length + 1} jugadores.
                   </p>
                 )}
               </div>
