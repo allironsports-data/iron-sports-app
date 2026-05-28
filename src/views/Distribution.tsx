@@ -607,24 +607,6 @@ export function Distribution({
         </div>
       </header>
 
-      {/* Search bar */}
-      {tab !== 'pipeline' && tab !== 'encargados' && (
-        <div className="px-4 py-2 bg-white border-b border-slate-100">
-          <div className="relative max-w-sm">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder={
-                tab === 'jugadores' ? 'Buscar jugador…' :
-                tab === 'clubes' ? 'Buscar club…' :
-                'Buscar solicitud…'
-              }
-              className="w-full pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200"
-            />
-          </div>
-        </div>
-      )}
 
       {/* Content */}
       <div className="flex flex-1 overflow-hidden">
@@ -635,6 +617,15 @@ export function Distribution({
             <div className="max-w-5xl mx-auto">
               <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
                 <div className="flex items-center gap-2 flex-wrap">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                    <input
+                      value={search}
+                      onChange={e => setSearch(e.target.value)}
+                      placeholder="Buscar jugador…"
+                      className="w-36 sm:w-48 pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                    />
+                  </div>
                   <MultiSelect
                     label="Posición"
                     options={distributionPositions}
@@ -827,18 +818,29 @@ export function Distribution({
           {/* ── CLUBES TAB ── */}
           {tab === 'clubes' && (
             <div className="max-w-5xl mx-auto">
-              <div className="flex items-center justify-between mb-2">
-                <button
-                  onClick={() => setGroupByTier(v => !v)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
-                    groupByTier
-                      ? 'bg-slate-800 text-white border-slate-800'
-                      : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-                  }`}
-                >
-                  <CircleDot className="w-3.5 h-3.5" />
-                  {groupByTier ? 'Por nivel' : 'Por liga'}
-                </button>
+              <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                    <input
+                      value={search}
+                      onChange={e => setSearch(e.target.value)}
+                      placeholder="Buscar club…"
+                      className="w-36 sm:w-48 pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                    />
+                  </div>
+                  <button
+                    onClick={() => setGroupByTier(v => !v)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
+                      groupByTier
+                        ? 'bg-slate-800 text-white border-slate-800'
+                        : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                    }`}
+                  >
+                    <CircleDot className="w-3.5 h-3.5" />
+                    {groupByTier ? 'Por nivel' : 'Por liga'}
+                  </button>
+                </div>
                 <button
                   onClick={() => setShowAddClub(true)}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-[hsl(220,72%,36%)] text-white text-sm rounded-lg hover:bg-[hsl(220,72%,30%)] transition-colors"
@@ -1160,9 +1162,18 @@ export function Distribution({
             const hasNeedsFilters = needsTierFilter.length > 0 || !!needsLeagueFilter || !!needsAgeFilter || !!positionFilter
             return (
             <div className="max-w-5xl mx-auto">
-              {/* Top row: sort + add button */}
+              {/* Top row: search + sort + add button */}
               <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                    <input
+                      value={search}
+                      onChange={e => setSearch(e.target.value)}
+                      placeholder="Buscar solicitud…"
+                      className="w-36 sm:w-48 pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                    />
+                  </div>
                   <button
                     onClick={() => setNeedsSort(s => s === 'recent' ? 'club' : 'recent')}
                     title={needsSort === 'recent' ? 'Ordenado por más reciente' : 'Ordenado por club'}

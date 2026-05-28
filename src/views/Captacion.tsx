@@ -2852,10 +2852,10 @@ export function Captacion({
           <div
             className={
               fullscreen
-                ? 'fixed inset-0 z-40 flex flex-col bg-white overflow-hidden'
+                ? 'fixed inset-x-0 z-40 flex flex-col bg-white overflow-hidden'
                 : 'fixed right-0 w-full sm:w-[480px] bg-white shadow-2xl z-40 flex flex-col border-l border-slate-200'
             }
-            style={fullscreen ? undefined : {
+            style={{
               top: headerHeight,
               height: `calc(100vh - ${headerHeight}px)`,
             }}
