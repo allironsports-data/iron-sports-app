@@ -106,15 +106,17 @@ export function Dashboard({
   const [showAddGeneralTask, setShowAddGeneralTask] = useState(false);
 
   // Add event modal state
-  const [showAddEvent, setShowAddEvent]       = useState(false);
-  const [evtPlayer, setEvtPlayer]             = useState("");
-  const [evtDate, setEvtDate]                 = useState("");
-  const [evtType, setEvtType]                 = useState<string>(ACTIVITY_TYPES_DASH[0]);
-  const [evtCustomType, setEvtCustomType]     = useState("");
-  const [evtNotes, setEvtNotes]               = useState("");
-  const [evtParticipants, setEvtParticipants] = useState<string[]>([]); // profile IDs
-  const [evtParticipantQ, setEvtParticipantQ] = useState("");            // search query
-  const [evtSaving, setEvtSaving]             = useState(false);
+  const [showAddEvent, setShowAddEvent]           = useState(false);
+  const [evtPlayer, setEvtPlayer]                 = useState("");
+  const [evtDate, setEvtDate]                     = useState("");
+  const [evtType, setEvtType]                     = useState<string>(ACTIVITY_TYPES_DASH[0]);
+  const [evtCustomType, setEvtCustomType]         = useState("");
+  const [evtNotes, setEvtNotes]                   = useState("");
+  const [evtExtraPlayers, setEvtExtraPlayers]     = useState<string[]>([]); // additional player IDs
+  const [evtExtraPlayerQ, setEvtExtraPlayerQ]     = useState("");
+  const [evtParticipants, setEvtParticipants]     = useState<string[]>([]); // staff profile IDs
+  const [evtParticipantQ, setEvtParticipantQ]     = useState("");
+  const [evtSaving, setEvtSaving]                 = useState(false);
 
   function openAddEvent() {
     setEvtPlayer("");
@@ -122,18 +124,11 @@ export function Dashboard({
     setEvtType(ACTIVITY_TYPES_DASH[0]);
     setEvtCustomType("");
     setEvtNotes("");
+    setEvtExtraPlayers([]);
+    setEvtExtraPlayerQ("");
     setEvtParticipants([]);
     setEvtParticipantQ("");
     setShowAddEvent(true);
-  }
-
-  function addEvtParticipant(id: string) {
-    setEvtParticipants(prev => prev.includes(id) ? prev : [...prev, id]);
-    setEvtParticipantQ("");
-  }
-
-  function removeEvtParticipant(id: string) {
-    setEvtParticipants(prev => prev.filter(x => x !== id));
   }
 
   async function handleSaveEvent() {
@@ -141,12 +136,19 @@ export function Dashboard({
     if (!evtPlayer || !evtDate || !resolvedType) return;
     setEvtSaving(true);
     try {
-      await createPlayerActivity(evtPlayer, {
+      const input = {
         date: evtDate, type: resolvedType,
         notes: evtNotes.trim() || undefined,
         authorId: currentProfile.id,
         participantProfileIds: evtParticipants.length > 0 ? evtParticipants : undefined,
-      });
+      };
+      const allPlayerIds = [evtPlayer, ...evtExtraPlayers.filter(id => id !== evtPlayer)];
+      if (allPlayerIds.length > 1) {
+        const { createGroupActivity } = await import("../lib/db");
+        await createGroupActivity(allPlayerIds, input);
+      } else {
+        await createPlayerActivity(evtPlayer, input);
+      }
       setShowAddEvent(false);
     } finally {
       setEvtSaving(false);
@@ -1408,6 +1410,73 @@ export function Dashboard({
                 placeholder="Detalles del evento…" rows={3}
                 className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-blue-200" />
             </div>
+
+            {/* Additional players — combobox */}
+            {(() => {
+              const availablePlayers = [...players]
+                .filter(p => p.id !== evtPlayer && !evtExtraPlayers.includes(p.id))
+                .filter(p => p.name.toLowerCase().includes(evtExtraPlayerQ.toLowerCase()))
+                .sort((a, b) => a.name.localeCompare(b.name));
+              const showDrop = evtExtraPlayerQ.length > 0 && availablePlayers.length > 0;
+              return (
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-slate-600 flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-slate-400" />
+                    Jugadores adicionales <span className="text-slate-400 font-normal">(opcional)</span>
+                  </label>
+
+                  {/* Selected player tags */}
+                  {evtExtraPlayers.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {evtExtraPlayers.map(pid => {
+                        const pl = players.find(p => p.id === pid);
+                        if (!pl) return null;
+                        return (
+                          <span key={pid} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 border border-green-200 text-green-800">
+                            {pl.name}
+                            <button
+                              type="button"
+                              onClick={() => setEvtExtraPlayers(prev => prev.filter(id => id !== pid))}
+                              className="ml-0.5 text-green-500 hover:text-green-800 leading-none"
+                            >×</button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Search input */}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={evtExtraPlayerQ}
+                      onChange={e => setEvtExtraPlayerQ(e.target.value)}
+                      placeholder="Buscar jugador…"
+                      className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200"
+                    />
+                    {showDrop && (
+                      <div className="absolute left-0 top-full mt-1 z-10 w-full bg-white border border-slate-200 rounded-xl shadow-lg py-1 max-h-40 overflow-y-auto">
+                        {availablePlayers.map(p => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onMouseDown={e => {
+                              e.preventDefault();
+                              setEvtExtraPlayers(prev => [...prev, p.id]);
+                              setEvtExtraPlayerQ('');
+                            }}
+                            className="w-full text-left flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 transition-colors"
+                          >
+                            {p.name}
+                            <span className="ml-auto text-slate-400">{calcAge(p.birthDate)} años</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Participant profiles — combobox */}
             {(() => {

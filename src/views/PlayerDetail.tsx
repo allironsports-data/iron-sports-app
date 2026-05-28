@@ -1790,6 +1790,8 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
   const [fNotes, setFNotes]                 = useState('');
   const [fLinkedPlayers, setFLinkedPlayers] = useState<string[]>([]);
   const [fLinkedQ, setFLinkedQ]             = useState('');
+  const [fParticipants, setFParticipants]   = useState<string[]>([]);
+  const [fParticipantQ, setFParticipantQ]   = useState('');
   const [saving, setSaving]                 = useState(false);
 
   // Group edit/delete confirmation dialogs
@@ -1821,6 +1823,8 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
     setFNotes('');
     setFLinkedPlayers([]);
     setFLinkedQ('');
+    setFParticipants([]);
+    setFParticipantQ('');
     setShowForm(true);
   }
 
@@ -1833,6 +1837,8 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
     setFNotes(a.notes ?? '');
     // In edit mode linked players are read-only (can't add/remove players from existing group)
     setFLinkedPlayers([]);
+    setFParticipants(a.participantProfileIds ?? []);
+    setFParticipantQ('');
     setShowForm(true);
   }
 
@@ -1844,26 +1850,29 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
       if (editing) {
         // If group event: ask user whether to update all or just this one
         if (editing.groupId && (editing.linkedPlayerIds?.length ?? 0) > 1) {
-          setGroupEditPending({ ...editing, date: fDate, type: resolvedType, notes: fNotes.trim() || undefined });
+          setGroupEditPending({ ...editing, date: fDate, type: resolvedType, notes: fNotes.trim() || undefined, participantProfileIds: fParticipants.length > 0 ? fParticipants : undefined });
           setShowForm(false);
           setSaving(false);
           return;
         }
-        const updated: PlayerActivity = { ...editing, date: fDate, type: resolvedType, notes: fNotes.trim() || undefined };
+        const updated: PlayerActivity = { ...editing, date: fDate, type: resolvedType, notes: fNotes.trim() || undefined, participantProfileIds: fParticipants.length > 0 ? fParticipants : undefined };
         await updatePlayerActivity(updated);
         setActivities(prev => prev.map(a => a.id === updated.id ? updated : a));
       } else {
+        const participantIds = fParticipants.length > 0 ? fParticipants : undefined;
         const allIds = [player.id, ...fLinkedPlayers.filter(id => id !== player.id)];
         if (allIds.length > 1) {
           // Multi-player: create group rows, only keep the one for current player in local state
           const created = await createGroupActivity(allIds, {
             date: fDate, type: resolvedType, notes: fNotes.trim() || undefined, authorId: currentProfile.id,
+            participantProfileIds: participantIds,
           });
           const mine = created.find(r => r.playerId === player.id);
           if (mine) setActivities(prev => [mine, ...prev]);
         } else {
           const created = await createPlayerActivity(player.id, {
             date: fDate, type: resolvedType, notes: fNotes.trim() || undefined, authorId: currentProfile.id,
+            participantProfileIds: participantIds,
           });
           setActivities(prev => [created, ...prev]);
         }
@@ -2152,6 +2161,81 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
                 )}
               </div>
             )}
+
+            {/* Staff participants — combobox */}
+            {(() => {
+              const otherProfiles = profiles.filter(p => p.id !== currentProfile.id);
+              const filteredProfs = otherProfiles.filter(p =>
+                !fParticipants.includes(p.id) &&
+                p.name.toLowerCase().includes(fParticipantQ.toLowerCase())
+              );
+              const showDrop = fParticipantQ.length > 0 && filteredProfs.length > 0;
+              return (
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-slate-600 flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-slate-400" />
+                    También estaba… <span className="text-slate-400 font-normal">(opcional)</span>
+                  </label>
+
+                  {/* Selected tags */}
+                  {fParticipants.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {fParticipants.map(pid => {
+                        const prof = profiles.find(p => p.id === pid);
+                        if (!prof) return null;
+                        return (
+                          <span key={pid} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 border border-slate-200 text-slate-700">
+                            <span className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0"
+                              style={{ background: PRIMARY }}>
+                              {prof.avatar}
+                            </span>
+                            {prof.name.split(' ')[0]}
+                            <button
+                              type="button"
+                              onClick={() => setFParticipants(prev => prev.filter(id => id !== pid))}
+                              className="ml-0.5 text-slate-400 hover:text-slate-700 leading-none"
+                            >×</button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Search input */}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={fParticipantQ}
+                      onChange={e => setFParticipantQ(e.target.value)}
+                      placeholder="Buscar compañero…"
+                      className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200"
+                    />
+                    {showDrop && (
+                      <div className="absolute left-0 top-full mt-1 z-10 w-full bg-white border border-slate-200 rounded-xl shadow-lg py-1 max-h-40 overflow-y-auto">
+                        {filteredProfs.map(p => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onMouseDown={e => {
+                              e.preventDefault();
+                              setFParticipants(prev => [...prev, p.id]);
+                              setFParticipantQ('');
+                            }}
+                            className="w-full text-left flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 transition-colors"
+                          >
+                            <span className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0"
+                              style={{ background: PRIMARY }}>
+                              {p.avatar}
+                            </span>
+                            {p.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Edit mode: show existing group info read-only */}
             {editing && editing.groupId && (editing.linkedPlayerIds?.length ?? 0) > 1 && (
