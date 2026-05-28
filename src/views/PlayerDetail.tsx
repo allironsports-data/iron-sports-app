@@ -1958,6 +1958,12 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
                           .map(id => players.find(p => p.id === id))
                           .filter(Boolean) as Player[]
                       : [];
+                    // Staff participants tagged on the event
+                    const participantProfiles = evt.activityRef?.participantProfileIds
+                      ? evt.activityRef.participantProfileIds
+                          .map(id => profiles.find(p => p.id === id))
+                          .filter(Boolean) as Profile[]
+                      : [];
                     return (
                       <div key={evt.id} className="flex gap-3 pl-0.5">
                         <div className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center z-10 bg-white border-2 border-slate-200 mt-1.5">
@@ -1988,31 +1994,35 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
                               {evt.extra && <p className="text-xs text-slate-500 leading-snug whitespace-pre-wrap">{evt.extra}</p>}
                             </div>
                           )}
-                          {/* Group peers badge */}
-                          {groupPeers.length > 0 && (
-                            <div className="flex items-center gap-1 mt-1.5 pt-1.5 border-t border-slate-50 flex-wrap">
-                              <Users className="w-3 h-3 text-slate-300 flex-shrink-0" />
+                          {/* Footer: group peers + participant profiles + author */}
+                          {(groupPeers.length > 0 || participantProfiles.length > 0 || author) && (
+                            <div className="flex items-center gap-1.5 mt-1.5 pt-1.5 border-t border-slate-50 flex-wrap">
+                              {/* Group peers (linked players) */}
                               {groupPeers.map(p => (
-                                <span key={p.id} className="text-[10px] bg-blue-50 text-blue-600 border border-blue-100 px-1.5 py-0.5 rounded-full font-medium">
+                                <span key={p.id} className="inline-flex items-center gap-1 text-[10px] bg-blue-50 text-blue-600 border border-blue-100 px-1.5 py-0.5 rounded-full font-medium">
+                                  <Users className="w-2.5 h-2.5" />
                                   {p.name.split(' ')[0]}
                                 </span>
                               ))}
-                            </div>
-                          )}
-                          {author && groupPeers.length === 0 && (
-                            <div className="flex items-center gap-1 mt-1.5 pt-1.5 border-t border-slate-50">
-                              <span className="w-4 h-4 rounded-full bg-slate-100 text-[9px] font-semibold flex items-center justify-center text-slate-500 flex-shrink-0">
-                                {author.avatar}
-                              </span>
-                              <span className="text-[10px] text-slate-400">{author.name.split(' ')[0]}</span>
-                            </div>
-                          )}
-                          {author && groupPeers.length > 0 && (
-                            <div className="flex items-center gap-1 mt-0.5">
-                              <span className="w-4 h-4 rounded-full bg-slate-100 text-[9px] font-semibold flex items-center justify-center text-slate-500 flex-shrink-0">
-                                {author.avatar}
-                              </span>
-                              <span className="text-[10px] text-slate-400">{author.name.split(' ')[0]}</span>
+                              {/* Staff participants */}
+                              {participantProfiles.map(p => (
+                                <span key={p.id} className="inline-flex items-center gap-1 text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full font-medium">
+                                  <span className="w-3 h-3 rounded-full flex items-center justify-center text-[7px] font-bold text-white flex-shrink-0"
+                                    style={{ background: PRIMARY }}>
+                                    {p.avatar}
+                                  </span>
+                                  {p.name.split(' ')[0]}
+                                </span>
+                              ))}
+                              {/* Author */}
+                              {author && (
+                                <span className="inline-flex items-center gap-1 text-[10px] text-slate-400 ml-auto">
+                                  <span className="w-4 h-4 rounded-full bg-slate-100 text-[9px] font-semibold flex items-center justify-center text-slate-500 flex-shrink-0">
+                                    {author.avatar}
+                                  </span>
+                                  {author.name.split(' ')[0]}
+                                </span>
+                              )}
                             </div>
                           )}
                         </div>

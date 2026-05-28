@@ -106,14 +106,15 @@ export function Dashboard({
   const [showAddGeneralTask, setShowAddGeneralTask] = useState(false);
 
   // Add event modal state
-  const [showAddEvent, setShowAddEvent] = useState(false);
-  const [evtPlayer, setEvtPlayer]         = useState("");
-  const [evtDate, setEvtDate]             = useState("");
-  const [evtType, setEvtType]             = useState<string>(ACTIVITY_TYPES_DASH[0]);
-  const [evtCustomType, setEvtCustomType] = useState("");
-  const [evtNotes, setEvtNotes]           = useState("");
-  const [evtLinked, setEvtLinked]         = useState<string[]>([]);
-  const [evtSaving, setEvtSaving]         = useState(false);
+  const [showAddEvent, setShowAddEvent]       = useState(false);
+  const [evtPlayer, setEvtPlayer]             = useState("");
+  const [evtDate, setEvtDate]                 = useState("");
+  const [evtType, setEvtType]                 = useState<string>(ACTIVITY_TYPES_DASH[0]);
+  const [evtCustomType, setEvtCustomType]     = useState("");
+  const [evtNotes, setEvtNotes]               = useState("");
+  const [evtParticipants, setEvtParticipants] = useState<string[]>([]); // profile IDs
+  const [evtParticipantQ, setEvtParticipantQ] = useState("");            // search query
+  const [evtSaving, setEvtSaving]             = useState(false);
 
   function openAddEvent() {
     setEvtPlayer("");
@@ -121,12 +122,18 @@ export function Dashboard({
     setEvtType(ACTIVITY_TYPES_DASH[0]);
     setEvtCustomType("");
     setEvtNotes("");
-    setEvtLinked([]);
+    setEvtParticipants([]);
+    setEvtParticipantQ("");
     setShowAddEvent(true);
   }
 
-  function toggleEvtLinked(id: string) {
-    setEvtLinked(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  function addEvtParticipant(id: string) {
+    setEvtParticipants(prev => prev.includes(id) ? prev : [...prev, id]);
+    setEvtParticipantQ("");
+  }
+
+  function removeEvtParticipant(id: string) {
+    setEvtParticipants(prev => prev.filter(x => x !== id));
   }
 
   async function handleSaveEvent() {
@@ -134,18 +141,12 @@ export function Dashboard({
     if (!evtPlayer || !evtDate || !resolvedType) return;
     setEvtSaving(true);
     try {
-      const allIds = [evtPlayer, ...evtLinked.filter(id => id !== evtPlayer)];
-      if (allIds.length > 1) {
-        await createGroupActivity(allIds, {
-          date: evtDate, type: resolvedType,
-          notes: evtNotes.trim() || undefined, authorId: currentProfile.id,
-        });
-      } else {
-        await createPlayerActivity(evtPlayer, {
-          date: evtDate, type: resolvedType,
-          notes: evtNotes.trim() || undefined, authorId: currentProfile.id,
-        });
-      }
+      await createPlayerActivity(evtPlayer, {
+        date: evtDate, type: resolvedType,
+        notes: evtNotes.trim() || undefined,
+        authorId: currentProfile.id,
+        participantProfileIds: evtParticipants.length > 0 ? evtParticipants : undefined,
+      });
       setShowAddEvent(false);
     } finally {
       setEvtSaving(false);
@@ -1408,40 +1409,72 @@ export function Dashboard({
                 className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-blue-200" />
             </div>
 
-            {/* Additional players */}
-            {players.filter(p => p.id !== evtPlayer).length > 0 && evtPlayer && (
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-slate-600 flex items-center gap-1.5">
-                  <Users className="w-3.5 h-3.5 text-slate-400" />
-                  También con… <span className="text-slate-400 font-normal">(opcional)</span>
-                </label>
-                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
-                  {players
-                    .filter(p => p.id !== evtPlayer)
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .map(p => {
-                      const active = evtLinked.includes(p.id);
-                      return (
-                        <button key={p.id} type="button" onClick={() => toggleEvtLinked(p.id)}
-                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border transition-colors
-                            ${active ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}
-                        >
-                          <span className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0"
-                            style={{ background: active ? '#185FA5' : '#94a3b8' }}>
-                            {p.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+            {/* Participant profiles — combobox */}
+            {(() => {
+              const otherProfiles = profiles.filter(p => p.id !== currentProfile.id);
+              const filteredProfiles = otherProfiles.filter(p =>
+                !evtParticipants.includes(p.id) &&
+                p.name.toLowerCase().includes(evtParticipantQ.toLowerCase())
+              );
+              const showDropdown = evtParticipantQ.length > 0 && filteredProfiles.length > 0;
+              return (
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-slate-600 flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-slate-400" />
+                    También estaba… <span className="text-slate-400 font-normal">(opcional)</span>
+                  </label>
+
+                  {/* Selected tags */}
+                  {evtParticipants.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {evtParticipants.map(pid => {
+                        const prof = profiles.find(p => p.id === pid);
+                        if (!prof) return null;
+                        return (
+                          <span key={pid} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 border border-blue-200 text-blue-700">
+                            <span className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0"
+                              style={{ background: PRIMARY }}>
+                              {prof.avatar}
+                            </span>
+                            {prof.name.split(' ')[0]}
+                            <button onClick={() => removeEvtParticipant(pid)} className="ml-0.5 text-blue-400 hover:text-blue-700 leading-none">×</button>
                           </span>
-                          {p.name.split(' ')[0]}
-                        </button>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Search input */}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={evtParticipantQ}
+                      onChange={e => setEvtParticipantQ(e.target.value)}
+                      placeholder="Buscar compañero…"
+                      className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200"
+                    />
+                    {showDropdown && (
+                      <div className="absolute left-0 top-full mt-1 z-10 w-full bg-white border border-slate-200 rounded-xl shadow-lg py-1 max-h-40 overflow-y-auto">
+                        {filteredProfiles.map(p => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onMouseDown={e => { e.preventDefault(); addEvtParticipant(p.id); }}
+                            className="w-full text-left flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 transition-colors"
+                          >
+                            <span className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0"
+                              style={{ background: PRIMARY }}>
+                              {p.avatar}
+                            </span>
+                            {p.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                {evtLinked.length > 0 && (
-                  <p className="text-[10px] text-blue-600">
-                    Aparecerá en el timeline de {evtLinked.length + 1} jugadores.
-                  </p>
-                )}
-              </div>
-            )}
+              );
+            })()}
 
             <div className="flex gap-2 pt-1">
               <button onClick={() => setShowAddEvent(false)}

@@ -961,15 +961,16 @@ export async function deleteMeeting(id: string): Promise<void> {
 
 function dbToPlayerActivity(row: Record<string, unknown>): PlayerActivity {
   return {
-    id:              row.id as string,
-    playerId:        row.player_id as string,
-    date:            row.date as string,
-    type:            row.type as string,
-    notes:           row.notes as string | undefined,
-    authorId:        row.author_id as string | undefined,
-    createdAt:       row.created_at as string,
-    groupId:         row.group_id as string | undefined,
-    linkedPlayerIds: (row.linked_player_ids as string[] | undefined) ?? [],
+    id:                   row.id as string,
+    playerId:             row.player_id as string,
+    date:                 row.date as string,
+    type:                 row.type as string,
+    notes:                row.notes as string | undefined,
+    authorId:             row.author_id as string | undefined,
+    createdAt:            row.created_at as string,
+    groupId:              row.group_id as string | undefined,
+    linkedPlayerIds:      (row.linked_player_ids as string[] | undefined) ?? [],
+    participantProfileIds:(row.participant_profile_ids as string[] | undefined) ?? [],
   }
 }
 
@@ -986,18 +987,19 @@ export async function fetchPlayerActivities(playerId: string): Promise<PlayerAct
 /** Create a single-player activity (no group). */
 export async function createPlayerActivity(
   playerId: string,
-  input: Pick<PlayerActivity, 'date' | 'type' | 'notes' | 'authorId'>
+  input: Pick<PlayerActivity, 'date' | 'type' | 'notes' | 'authorId' | 'participantProfileIds'>
 ): Promise<PlayerActivity> {
   const { data, error } = await supabase
     .from('player_activities')
     .insert({
-      player_id:         playerId,
-      date:              input.date,
-      type:              input.type,
-      notes:             input.notes ?? null,
-      author_id:         input.authorId ?? null,
-      group_id:          null,
-      linked_player_ids: [],
+      player_id:              playerId,
+      date:                   input.date,
+      type:                   input.type,
+      notes:                  input.notes ?? null,
+      author_id:              input.authorId ?? null,
+      group_id:               null,
+      linked_player_ids:      [],
+      participant_profile_ids: input.participantProfileIds ?? [],
     })
     .select()
     .single()
@@ -1011,17 +1013,18 @@ export async function createPlayerActivity(
  */
 export async function createGroupActivity(
   playerIds: string[],
-  input: Pick<PlayerActivity, 'date' | 'type' | 'notes' | 'authorId'>
+  input: Pick<PlayerActivity, 'date' | 'type' | 'notes' | 'authorId' | 'participantProfileIds'>
 ): Promise<PlayerActivity[]> {
   const groupId = crypto.randomUUID()
   const rows = playerIds.map(pid => ({
-    player_id:         pid,
-    date:              input.date,
-    type:              input.type,
-    notes:             input.notes ?? null,
-    author_id:         input.authorId ?? null,
-    group_id:          groupId,
-    linked_player_ids: playerIds,
+    player_id:               pid,
+    date:                    input.date,
+    type:                    input.type,
+    notes:                   input.notes ?? null,
+    author_id:               input.authorId ?? null,
+    group_id:                groupId,
+    linked_player_ids:       playerIds,
+    participant_profile_ids: input.participantProfileIds ?? [],
   }))
   const { data, error } = await supabase
     .from('player_activities')
