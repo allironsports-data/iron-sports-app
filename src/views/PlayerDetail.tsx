@@ -15,7 +15,7 @@ import { TaskDetailPanel } from "../components/TaskDetailPanel";
 import {
   ArrowLeft, LogOut, ClipboardList, FileText,
   TrendingUp, User, Plus, X, Calendar, AlertCircle,
-  Clock, CheckCircle2, Trash2, Edit3, Star, Users,
+  Clock, CheckCircle2, Trash2, Edit3, ChevronRight, Users,
   Paperclip, Download, ExternalLink, Link2,
   Video, BarChart2, BookOpen, Pencil, ChevronDown,
   Activity,
