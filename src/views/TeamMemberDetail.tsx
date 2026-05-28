@@ -50,7 +50,7 @@ interface Props {
   onBack: () => void;
 }
 
-export function TeamMemberDetail({ profile, allProfiles, tasks, players, onBack }: Props) {
+export function TeamMemberDetail({ profile, tasks, players, onBack }: Props) {
   const [activities, setActivities] = useState<PlayerActivity[]>([]);
   const [loading, setLoading]       = useState(true);
   const [period, setPeriod]         = useState<Period>('30d');
