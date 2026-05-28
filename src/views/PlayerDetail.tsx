@@ -2497,11 +2497,7 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
         {/* Header */}
         <div className="flex items-center justify-between mb-3">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Clubes contactados{' '}
-            {hasFilters
-              ? <span className="text-blue-600">({filteredNegs.length}/{negotiations.length})</span>
-              : <span>({negotiations.length})</span>
-            }
+            Clubes contactados <span>({negotiations.length})</span>
           </span>
           {onCreateNegotiation && (
             <button onClick={() => setShowAddNeg(true)} className="flex items-center gap-1 text-xs text-blue-600 font-medium">
