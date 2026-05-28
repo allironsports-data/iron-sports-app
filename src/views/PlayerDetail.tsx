@@ -294,7 +294,8 @@ export function PlayerDetail({
                 currentProfile={currentProfile} onNavigate={setActiveTab}
                 distributionEntry={distributionEntry}
                 playerNegotiations={playerNegotiations}
-                clubs={clubs} />
+                clubs={clubs}
+                onAddTask={onAddTask} allTasks={allTasks} />
             )}
             {activeTab === "tareas" && (
               <TasksTab tasks={tasks} allTasks={allTasks} profiles={profiles} player={player}
@@ -548,12 +549,12 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
         </button>
       </div>
 
-      {/* ── Kanban 3 columnas ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-start">
+      {/* ── Kanban: 2 columnas principales ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
 
         {/* Columna: Pendiente */}
-        <div>
-          <div className="flex items-center gap-2 px-2.5 py-1.5 bg-slate-100 rounded-lg mb-2">
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2 px-2.5 py-1.5 bg-slate-100 rounded-lg">
             <AlertCircle className="w-3.5 h-3.5 text-slate-400" />
             <span className="text-xs font-semibold text-slate-600 flex-1">Pendiente</span>
             <span className="text-[10px] font-mono text-slate-400">{pendingFiltered.length}</span>
@@ -561,16 +562,23 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
           <div className="space-y-2">
             {sortByPrio(activeTasks.filter(t => t.status === "pendiente")).map(t => <TaskCard key={t.id} task={t} />)}
             {activeTasks.filter(t => t.status === "pendiente").length === 0 && (
-              <div className="h-14 border-2 border-dashed border-slate-100 rounded-xl flex items-center justify-center">
-                <span className="text-xs text-slate-300">Sin tareas</span>
+              <div className="h-12 border-2 border-dashed border-slate-100 rounded-xl flex items-center justify-center">
+                <span className="text-xs text-slate-300">Sin tareas pendientes</span>
               </div>
             )}
           </div>
+          {/* Quick-add */}
+          <button
+            onClick={() => setShowAdd(true)}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg border border-dashed border-slate-200 transition-colors w-full"
+          >
+            <Plus className="w-3 h-3" /> Añadir tarea
+          </button>
         </div>
 
         {/* Columna: En progreso */}
-        <div>
-          <div className="flex items-center gap-2 px-2.5 py-1.5 bg-blue-50 rounded-lg mb-2">
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2 px-2.5 py-1.5 bg-blue-50 rounded-lg">
             <Clock className="w-3.5 h-3.5 text-blue-400" />
             <span className="text-xs font-semibold text-blue-700 flex-1">En progreso</span>
             <span className="text-[10px] font-mono text-blue-400">{inProgressFiltered.length}</span>
@@ -578,35 +586,37 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
           <div className="space-y-2">
             {sortByPrio(activeTasks.filter(t => t.status === "en_progreso")).map(t => <TaskCard key={t.id} task={t} />)}
             {activeTasks.filter(t => t.status === "en_progreso").length === 0 && (
-              <div className="h-14 border-2 border-dashed border-blue-50 rounded-xl flex items-center justify-center">
-                <span className="text-xs text-slate-300">Sin tareas</span>
+              <div className="h-12 border-2 border-dashed border-blue-50 rounded-xl flex items-center justify-center">
+                <span className="text-xs text-slate-300">Sin tareas en curso</span>
               </div>
             )}
           </div>
-        </div>
-
-        {/* Columna: Completadas (colapsable) */}
-        <div>
+          {/* Quick-add */}
           <button
-            onClick={() => setShowCompleted(v => !v)}
-            className="w-full flex items-center gap-2 px-2.5 py-1.5 bg-emerald-50 rounded-lg mb-2 hover:bg-emerald-100 transition-colors"
+            onClick={() => setShowAdd(true)}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg border border-dashed border-slate-200 transition-colors w-full"
           >
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-            <span className="text-xs font-semibold text-emerald-700 flex-1">Completadas</span>
-            <span className="text-[10px] font-mono text-emerald-500">{completedCount}</span>
-            <ChevronDown className={`w-3.5 h-3.5 text-emerald-400 transition-transform ${showCompleted ? 'rotate-180' : ''}`} />
+            <Plus className="w-3 h-3" /> Añadir tarea
           </button>
-          {showCompleted && (
-            <div className="space-y-2">
-              {completedTasks.map(t => <TaskCard key={t.id} task={t} />)}
-            </div>
-          )}
-          {!showCompleted && completedCount > 0 && (
-            <div className="h-10 border-2 border-dashed border-emerald-100 rounded-xl flex items-center justify-center cursor-pointer" onClick={() => setShowCompleted(true)}>
-              <span className="text-xs text-emerald-300">Ver {completedCount} tarea{completedCount !== 1 ? 's' : ''}</span>
-            </div>
-          )}
         </div>
+      </div>
+
+      {/* ── Completadas (fila completa, colapsable) ── */}
+      <div className="border border-slate-100 rounded-xl overflow-hidden">
+        <button
+          onClick={() => setShowCompleted(v => !v)}
+          className="w-full flex items-center gap-2 px-3 py-2.5 bg-emerald-50 hover:bg-emerald-100 transition-colors"
+        >
+          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+          <span className="text-xs font-semibold text-emerald-700 flex-1">Completadas</span>
+          <span className="text-[10px] font-mono text-emerald-500 mr-1">{completedCount}</span>
+          <ChevronDown className={`w-3.5 h-3.5 text-emerald-400 transition-transform ${showCompleted ? 'rotate-180' : ''}`} />
+        </button>
+        {showCompleted && (
+          <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {completedTasks.map(t => <TaskCard key={t.id} task={t} />)}
+          </div>
+        )}
       </div>
 
       {showAdd && (
@@ -1973,12 +1983,14 @@ function ActivityTab({ player, tasks, profiles, currentProfile }: {
 
 // ── RESUMEN TAB ───────────────────────────────────────────────
 
-function ResumenTab({ player, tasks, profiles, currentProfile, onNavigate, distributionEntry, playerNegotiations = [], clubs = [] }: {
-  player: Player; tasks: Task[]; profiles: Profile[]; currentProfile: Profile; onNavigate: (tab: TabId) => void;
+function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, onNavigate, distributionEntry, playerNegotiations = [], clubs = [], onAddTask }: {
+  player: Player; tasks: Task[]; allTasks?: Task[]; profiles: Profile[]; currentProfile: Profile; onNavigate: (tab: TabId) => void;
   distributionEntry?: DistributionEntry; playerNegotiations?: ClubNegotiation[]; clubs?: Club[];
+  onAddTask?: (task: Task) => void;
 }) {
   const [activities, setActivities] = useState<PlayerActivity[]>([]);
   const [showForm, setShowForm]     = useState(false);
+  const [showAddTask, setShowAddTask] = useState(false);
 
   const [fDate, setFDate]             = useState('');
   const [fType, setFType]             = useState<string>(ACTIVITY_TYPES[0]);
@@ -2056,15 +2068,25 @@ function ResumenTab({ player, tasks, profiles, currentProfile, onNavigate, distr
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-slate-800">Resumen</h3>
-        <button
-          onClick={openNew}
-          className="inline-flex items-center gap-1 rounded-md text-white text-xs font-medium px-2.5 py-1.5"
-          style={{ background: PRIMARY }}
-        >
-          <Plus className="w-3.5 h-3.5" />Añadir evento
-        </button>
+        <div className="flex items-center gap-2">
+          {onAddTask && (
+            <button
+              onClick={() => setShowAddTask(true)}
+              className="inline-flex items-center gap-1 rounded-md text-xs font-medium px-2.5 py-1.5 border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />Añadir tarea
+            </button>
+          )}
+          <button
+            onClick={openNew}
+            className="inline-flex items-center gap-1 rounded-md text-white text-xs font-medium px-2.5 py-1.5"
+            style={{ background: PRIMARY }}
+          >
+            <Plus className="w-3.5 h-3.5" />Añadir evento
+          </button>
+        </div>
       </div>
 
       {/* ── Compact info strip ── */}
@@ -2357,6 +2379,19 @@ function ResumenTab({ player, tasks, profiles, currentProfile, onNavigate, distr
             </div>
           </div>
         </div>
+      )}
+
+      {/* Add task modal */}
+      {showAddTask && onAddTask && (
+        <AddTaskModal
+          profiles={profiles}
+          tasks={[...tasks, ...allTasks].filter((t, i, arr) => arr.findIndex(x => x.id === t.id) === i)}
+          playerId={player.id}
+          player={player}
+          isAdmin={currentProfile.is_admin}
+          onClose={() => setShowAddTask(false)}
+          onAdd={(t) => { onAddTask(t); setShowAddTask(false); }}
+        />
       )}
     </div>
   );

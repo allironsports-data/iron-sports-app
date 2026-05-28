@@ -581,78 +581,91 @@ export function Dashboard({
 
           {/* ── TAB: YO ───────────────────────────────────── */}
           {tasksTab === "yo" && (
-            <div className="p-4 space-y-4">
-              {/* Stat chips */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${overdueMyTasks.length > 0 ? "bg-red-50 border-red-200 text-red-700" : "bg-slate-50 border-slate-200 text-slate-400"}`}>
+            <>
+              {/* Filter chips */}
+              <div className="px-4 pt-3 pb-3 border-b border-slate-100 flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => setQuickFilter(q => q === "overdue" ? null : "overdue")}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                    quickFilter === "overdue"
+                      ? "bg-red-500 border-red-500 text-white"
+                      : overdueMyTasks.length > 0
+                        ? "bg-red-50 border-red-200 text-red-700 hover:bg-red-100 cursor-pointer"
+                        : "bg-slate-50 border-slate-200 text-slate-400 cursor-default"
+                  }`}
+                >
                   <AlertTriangle className="w-3 h-3" /> {overdueMyTasks.length} vencida{overdueMyTasks.length !== 1 ? "s" : ""}
-                </span>
-                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${urgentMyCount > 0 ? "bg-amber-50 border-amber-200 text-amber-700" : "bg-slate-50 border-slate-200 text-slate-400"}`}>
+                </button>
+                <button
+                  onClick={() => setQuickFilter(q => q === "urgent" ? null : "urgent")}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                    quickFilter === "urgent"
+                      ? "bg-amber-500 border-amber-500 text-white"
+                      : urgentMyCount > 0
+                        ? "bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100 cursor-pointer"
+                        : "bg-slate-50 border-slate-200 text-slate-400 cursor-default"
+                  }`}
+                >
                   <Zap className="w-3 h-3" /> {urgentMyCount} urgente{urgentMyCount !== 1 ? "s" : ""}
-                </span>
-                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${inProgressMyCount > 0 ? "bg-blue-50 border-blue-200 text-blue-700" : "bg-slate-50 border-slate-200 text-slate-400"}`}>
+                </button>
+                <button
+                  onClick={() => setQuickFilter(q => q === "inprogress" ? null : "inprogress")}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                    quickFilter === "inprogress"
+                      ? "bg-blue-500 border-blue-500 text-white"
+                      : inProgressMyCount > 0
+                        ? "bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100 cursor-pointer"
+                        : "bg-slate-50 border-slate-200 text-slate-400 cursor-default"
+                  }`}
+                >
                   {inProgressMyCount} en progreso
-                </span>
+                </button>
+                {quickFilter && (
+                  <button onClick={() => setQuickFilter(null)} className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1 ml-1">
+                    <X className="w-3 h-3" /> Limpiar
+                  </button>
+                )}
               </div>
 
-              {/* Vencidas section */}
-              {overdueMyTasks.length > 0 && (
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-red-500 mb-2 flex items-center gap-1.5">
-                    <AlertTriangle className="w-3 h-3" /> Vencidas
-                  </p>
-                  <div className="space-y-2">
-                    {overdueMyTasks.map(t => (
-                      <TaskListRow key={t.id} task={t} players={players} profiles={profiles}
-                        onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask}
-                        detailTaskId={detailTask?.id} overdue />
-                    ))}
-                  </div>
-                </div>
-              )}
+              {/* Desktop: 3-column kanban */}
+              <div className="hidden sm:grid grid-cols-3 gap-0 divide-x divide-slate-100 p-4 pt-3">
+                <KanbanCol
+                  label="Pendiente" dotColor="#94a3b8"
+                  tasks={activeDashboardTasks("pendiente")}
+                  players={players} profiles={profiles}
+                  onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
+                />
+                <KanbanCol
+                  label="En progreso" dotColor="#378ADD"
+                  tasks={activeDashboardTasks("en_progreso")}
+                  players={players} profiles={profiles}
+                  onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
+                />
+                <KanbanCol
+                  label="Completada" dotColor="#1D9E75"
+                  tasks={[]}
+                  players={players} profiles={profiles}
+                  onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
+                  showCompleted={showCompletedMine} onToggleCompleted={() => setShowCompletedMine(v => !v)}
+                  completedCount={myTasksCompleted.length} completedTasks={myTasksCompleted}
+                  isCompletedCol
+                />
+              </div>
 
-              {/* Activas section */}
-              {activeMyTasks.length > 0 && (
-                <div>
-                  {overdueMyTasks.length > 0 && (
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Activas</p>
-                  )}
-                  <div className="space-y-2">
-                    {activeMyTasks.map(t => (
-                      <TaskListRow key={t.id} task={t} players={players} profiles={profiles}
-                        onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask}
-                        detailTaskId={detailTask?.id} />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {myTasks.length === 0 && (
-                <div className="text-center py-8 text-sm text-slate-400">✓ Sin tareas pendientes</div>
-              )}
-
-              {/* Completadas expandibles */}
-              {myTasksCompleted.length > 0 && (
-                <div className="border-t border-slate-100 pt-3">
-                  <button
-                    onClick={() => setShowCompletedMine(v => !v)}
-                    className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 transition-colors"
-                  >
-                    <ChevronRight className={`w-3 h-3 transition-transform ${showCompletedMine ? "rotate-90" : ""}`} />
-                    {showCompletedMine ? "Ocultar completadas" : `Ver completadas (${myTasksCompleted.length})`}
-                  </button>
-                  {showCompletedMine && (
-                    <div className="space-y-2 mt-2">
-                      {myTasksCompleted.slice(0, 5).map(t => (
-                        <TaskListRow key={t.id} task={t} players={players} profiles={profiles}
-                          onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask}
-                          detailTaskId={detailTask?.id} dimmed />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+              {/* Mobile: flat list */}
+              <div className="sm:hidden p-4 space-y-2">
+                {[...activeDashboardTasks("pendiente"), ...activeDashboardTasks("en_progreso")].length === 0 ? (
+                  <p className="text-center py-6 text-sm text-slate-400">✓ Sin tareas pendientes</p>
+                ) : (
+                  [...activeDashboardTasks("pendiente"), ...activeDashboardTasks("en_progreso")].map(t => (
+                    <TaskListRow key={t.id} task={t} players={players} profiles={profiles}
+                      onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask}
+                      detailTaskId={detailTask?.id}
+                      overdue={!!(t.dueDate && new Date(t.dueDate) < new Date())} />
+                  ))
+                )}
+              </div>
+            </>
           )}
 
           {/* ── TAB: MIS JUGADORES ────────────────────────── */}
