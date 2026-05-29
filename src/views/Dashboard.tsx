@@ -199,13 +199,13 @@ export function Dashboard({
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  // Toast auto-dismiss
-  const [toasts, setToasts] = useState<AppNotification[]>([]);
+  // App-level notification toasts (birthday / task alerts from the server)
+  const [notifToasts, setNotifToasts] = useState<AppNotification[]>([]);
   useEffect(() => {
     if (notifications.length > 0 && notifications[0].ts > Date.now() - 1000) {
       const latest = notifications[0];
-      setToasts((prev) => [latest, ...prev].slice(0, 3));
-      const timer = setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== latest.id)), 5000);
+      setNotifToasts((prev) => [latest, ...prev].slice(0, 3));
+      const timer = setTimeout(() => setNotifToasts((prev) => prev.filter((t) => t.id !== latest.id)), 5000);
       return () => clearTimeout(timer);
     }
   }, [notifications]);
@@ -403,16 +403,16 @@ export function Dashboard({
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Toast notifications */}
-      {toasts.length > 0 && (
+      {/* App-level notification toasts (birthday / task alerts) */}
+      {notifToasts.length > 0 && (
         <div className="fixed top-14 right-2 sm:right-4 z-50 flex flex-col gap-2 w-72 sm:w-80">
-          {toasts.map((t) => (
+          {notifToasts.map((t) => (
             <div key={t.id} className={`rounded-lg shadow-lg border p-3 text-sm flex items-start gap-2 animate-[slideIn_0.3s_ease] ${
               t.type === 'task_done' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-blue-50 border-blue-200 text-blue-800'
             }`}>
               <Bell className="w-4 h-4 mt-0.5 flex-shrink-0" />
               <span className="flex-1">{t.message}</span>
-              <button onClick={() => setToasts((p) => p.filter((x) => x.id !== t.id))} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setNotifToasts((p) => p.filter((x) => x.id !== t.id))} className="text-slate-400 hover:text-slate-600">
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
