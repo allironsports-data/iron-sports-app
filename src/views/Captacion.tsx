@@ -1518,30 +1518,25 @@ export function Captacion({
           </button>
         </div>
 
-        {/* Main nav tabs */}
+        {/* Level 1: main sections */}
         <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center border-t border-slate-100 overflow-x-auto scrollbar-none">
-          {([
-            { id: 'tareas' as const, label: 'Tareas' },
-            { id: 'jugadores' as const, label: 'Jugadores' },
-            { id: 'distribucion' as const, label: 'Distribución', icon: <TrendingUp className="w-3.5 h-3.5" /> },
-            { id: 'captacion' as const, label: 'Captación', icon: <Eye className="w-3.5 h-3.5" /> },
-          ]).map(tab => {
-            const isActive = tab.id === 'captacion'
-            return (
-              <button
-                key={tab.id}
-                onClick={() => tab.id === 'captacion' ? undefined : onGoToSection(tab.id as 'tareas' | 'jugadores' | 'distribucion')}
-                className={`flex items-center gap-1.5 px-3 sm:px-4 py-3 text-sm font-medium border-b-2 transition-colors flex-shrink-0 ${
-                  isActive
-                    ? 'border-[hsl(220,72%,26%)] text-[hsl(220,72%,26%)]'
-                    : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
-                }`}
-              >
-                {tab.icon}
-                {tab.label}
-              </button>
-            )
-          })}
+          <button
+            onClick={() => onGoToSection('tareas')}
+            className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
+          >
+            Mantenimiento
+          </button>
+          <button
+            onClick={() => onGoToSection('distribucion')}
+            className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
+          >
+            <TrendingUp className="w-3.5 h-3.5" />
+            Distribución
+          </button>
+          <button className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 border-[hsl(220,72%,26%)] text-[hsl(220,72%,26%)] transition-colors">
+            <Eye className="w-3.5 h-3.5" />
+            Captación
+          </button>
         </div>
 
         {/* Captación sub-tabs */}

@@ -554,27 +554,25 @@ export function Distribution({
           </div>
         </div>
 
-        {/* Tab nav matching Dashboard */}
-        <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center border-t border-slate-100">
-          {([
-            { id: 'tareas',       label: 'Tareas',       icon: null,                                    onClick: onBack },
-            { id: 'jugadores',    label: 'Jugadores',    icon: null,                                    onClick: onGoToJugadores ?? onBack },
-            { id: 'distribucion', label: 'Distribución', icon: <TrendingUp className="w-3.5 h-3.5" />, onClick: undefined },
-            { id: 'captacion',    label: 'Captación',    icon: <Eye className="w-3.5 h-3.5" />,        onClick: onGoToCaptacion },
-          ] as { id: string; label: string; icon: React.ReactNode; onClick: (() => void) | undefined }[]).map(tab => (
-            <button
-              key={tab.id}
-              onClick={tab.onClick}
-              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-                tab.id === 'distribucion'
-                  ? 'border-[hsl(220,72%,26%)] text-[hsl(220,72%,26%)]'
-                  : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
-              } ${!tab.onClick ? 'cursor-default' : ''}`}
-            >
-              {tab.icon}
-              {tab.label}
-            </button>
-          ))}
+        {/* Level 1: main sections */}
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center border-t border-slate-100 overflow-x-auto scrollbar-none">
+          <button
+            onClick={onBack}
+            className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
+          >
+            Mantenimiento
+          </button>
+          <button className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 border-[hsl(220,72%,26%)] text-[hsl(220,72%,26%)] transition-colors">
+            <TrendingUp className="w-3.5 h-3.5" />
+            Distribución
+          </button>
+          <button
+            onClick={onGoToCaptacion}
+            className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
+          >
+            <Eye className="w-3.5 h-3.5" />
+            Captación
+          </button>
         </div>
 
         {/* Sub-tabs — inside header so they stay sticky */}
