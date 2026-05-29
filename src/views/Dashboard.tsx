@@ -104,6 +104,9 @@ export function Dashboard({
   onSelectProfile,
 }: Props) {
   const { toasts, showToast, dismissToast } = useToast();
+  // Internal tab: 'equipo' is handled locally; 'tareas'/'jugadores' are driven by `view` prop
+  const [internalTab, setInternalTab] = useState<'equipo' | null>(null);
+  const activeTab = internalTab ?? view;   // 'tareas' | 'jugadores' | 'equipo'
   const [search, setSearch] = useState("");
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [showAddGeneralTask, setShowAddGeneralTask] = useState(false);
@@ -477,21 +480,29 @@ export function Dashboard({
           </div>
         </div>
 
-        {/* Tab nav: Tareas | Jugadores | Distribución */}
+        {/* Tab nav: Tareas | Jugadores | Equipo | Distribución | Captación */}
         {onViewChange && (
-          <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center border-t border-slate-100">
+          <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center border-t border-slate-100 overflow-x-auto scrollbar-none">
             {([
-              { id: 'tareas'       as const, label: 'Tareas' },
-              { id: 'jugadores'    as const, label: 'Jugadores' },
-              { id: 'distribucion' as const, label: 'Distribución', icon: <TrendingUp className="w-3.5 h-3.5" /> },
-              { id: 'captacion'    as const, label: 'Captación',    icon: <Eye className="w-3.5 h-3.5" /> },
+              { id: 'tareas'       as const, label: 'Tareas',       internal: false },
+              { id: 'jugadores'    as const, label: 'Jugadores',    internal: false },
+              { id: 'equipo'       as const, label: 'Equipo',       internal: true  },
+              { id: 'distribucion' as const, label: 'Distribución', internal: false, icon: <TrendingUp className="w-3.5 h-3.5" /> },
+              { id: 'captacion'    as const, label: 'Captación',    internal: false, icon: <Eye className="w-3.5 h-3.5" /> },
             ]).map(tab => {
-              const isActive = (tab.id === 'distribucion' || tab.id === 'captacion') ? false : view === tab.id;
+              const isActive = activeTab === tab.id;
               return (
                 <button
                   key={tab.id}
-                  onClick={() => onViewChange(tab.id)}
-                  className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                  onClick={() => {
+                    if (tab.id === 'equipo') {
+                      setInternalTab('equipo');
+                    } else {
+                      setInternalTab(null);
+                      onViewChange(tab.id as 'tareas' | 'jugadores' | 'distribucion' | 'captacion');
+                    }
+                  }}
+                  className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
                     isActive
                       ? 'border-[hsl(220,72%,26%)] text-[hsl(220,72%,26%)]'
                       : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
@@ -1301,6 +1312,86 @@ export function Dashboard({
           <div className="text-center py-12 text-sm text-slate-400">No se encontraron jugadores</div>
         )}
 
+        </>)}
+
+        {/* ── Equipo section ───────────────────────────────── */}
+        {activeTab === 'equipo' && onSelectProfile && (<>
+          <div className="mb-4">
+            <h2 className="text-base font-semibold text-slate-800">Equipo</h2>
+            <p className="text-xs text-slate-400 mt-0.5">Haz clic en un miembro para ver su actividad y eventos</p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+            {profiles.map(p => {
+              const managedCount   = players.filter(pl => pl.managedBy.includes(p.id)).length;
+              const assignedTasks  = tasks.filter(t => t.assigneeId === p.id && t.status !== "completada");
+              const overdueTasks   = assignedTasks.filter(t => t.dueDate && new Date(t.dueDate) < new Date());
+              const inProgressCount = assignedTasks.filter(t => t.status === "en_progreso").length;
+              const isMe = p.id === currentProfile.id;
+
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => onSelectProfile(p.id)}
+                  className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 text-left cursor-pointer transition-all hover:shadow-md hover:border-slate-300 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 relative"
+                >
+                  {isMe && (
+                    <span className="absolute top-3 right-3 text-[10px] font-semibold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">Tú</span>
+                  )}
+
+                  {/* Avatar + name */}
+                  <div className="flex items-center gap-3 mb-4">
+                    <div
+                      className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-sm font-bold text-white"
+                      style={{ background: PRIMARY }}
+                    >
+                      {p.avatar}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-900 truncate">{p.name}</p>
+                      {p.is_admin && (
+                        <p className="text-[11px] text-slate-400">Admin</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Stats grid */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="bg-slate-50 rounded-lg px-2.5 py-2 text-center">
+                      <p className="text-base font-semibold text-slate-800">{managedCount}</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5 leading-tight">Jugadores</p>
+                    </div>
+                    <div className={`rounded-lg px-2.5 py-2 text-center ${overdueTasks.length > 0 ? 'bg-red-50' : 'bg-slate-50'}`}>
+                      <p className={`text-base font-semibold ${overdueTasks.length > 0 ? 'text-red-600' : 'text-slate-800'}`}>
+                        {assignedTasks.length}
+                      </p>
+                      <p className={`text-[10px] mt-0.5 leading-tight ${overdueTasks.length > 0 ? 'text-red-400' : 'text-slate-400'}`}>
+                        {overdueTasks.length > 0 ? `${overdueTasks.length} venc.` : 'Tareas'}
+                      </p>
+                    </div>
+                    <div className={`rounded-lg px-2.5 py-2 text-center ${inProgressCount > 0 ? 'bg-blue-50' : 'bg-slate-50'}`}>
+                      <p className={`text-base font-semibold ${inProgressCount > 0 ? 'text-blue-600' : 'text-slate-800'}`}>{inProgressCount}</p>
+                      <p className={`text-[10px] mt-0.5 leading-tight ${inProgressCount > 0 ? 'text-blue-400' : 'text-slate-400'}`}>En progreso</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between">
+                    <span className="text-[11px] text-slate-400">Ver actividad →</span>
+                    {overdueTasks.length > 0 && (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">
+                        <AlertTriangle className="w-3 h-3" />
+                        {overdueTasks.length} vencida{overdueTasks.length > 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {profiles.length === 0 && (
+            <div className="text-center py-12 text-sm text-slate-400">No hay miembros del equipo</div>
+          )}
         </>)}
       </main>
 
