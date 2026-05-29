@@ -1371,9 +1371,6 @@ export function Dashboard({
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-slate-900 truncate">{p.name}</p>
-                      {p.is_admin && (
-                        <p className="text-[11px] text-slate-400">Admin</p>
-                      )}
                     </div>
                   </div>
 
