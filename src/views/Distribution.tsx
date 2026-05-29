@@ -265,7 +265,7 @@ interface Props {
 
 export function Distribution({
   players, clubs, entries, negotiations, currentProfile, profiles,
-  onBack, onGoToJugadores, onGoToCaptacion, onLogout, onAdmin, onSelectPlayer, onSelectClub,
+  onBack, onGoToCaptacion, onLogout, onAdmin, onSelectPlayer, onSelectClub,
   onCreateClub, onUpdateClub, onDeleteClub,
   onCreateEntry, onUpdateEntry, onDeleteEntry,
   onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation,
