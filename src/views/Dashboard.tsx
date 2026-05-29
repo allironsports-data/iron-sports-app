@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { TaskDetailPanel } from "../components/TaskDetailPanel";
+import { ToastStack } from "../components/ToastStack";
+import { useToast } from "../hooks/useToast";
 import logoImg from '../assets/logo.jpeg';
 import type { Player, Task, TaskLabel } from "../types";
 import { calcAge, clubsLabel } from "../types";
@@ -101,6 +103,7 @@ export function Dashboard({
   onOverview,
   onSelectProfile,
 }: Props) {
+  const { toasts, showToast, dismissToast } = useToast();
   const [search, setSearch] = useState("");
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [showAddGeneralTask, setShowAddGeneralTask] = useState(false);
@@ -108,6 +111,7 @@ export function Dashboard({
   // Add event modal state
   const [showAddEvent, setShowAddEvent]           = useState(false);
   const [evtPlayer, setEvtPlayer]                 = useState("");
+  const [evtPlayerQ, setEvtPlayerQ]               = useState("");
   const [evtDate, setEvtDate]                     = useState("");
   const [evtType, setEvtType]                     = useState<string>(ACTIVITY_TYPES_DASH[0]);
   const [evtCustomType, setEvtCustomType]         = useState("");
@@ -120,6 +124,7 @@ export function Dashboard({
 
   function openAddEvent() {
     setEvtPlayer("");
+    setEvtPlayerQ("");
     setEvtDate(new Date().toISOString().slice(0, 10));
     setEvtType(ACTIVITY_TYPES_DASH[0]);
     setEvtCustomType("");
@@ -150,6 +155,10 @@ export function Dashboard({
         await createPlayerActivity(evtPlayer, input);
       }
       setShowAddEvent(false);
+      const playerName = players.find(p => p.id === evtPlayer)?.name ?? 'jugador';
+      showToast(`Evento registrado para ${playerName}`, "success");
+    } catch {
+      showToast("No se pudo guardar el evento", "error");
     } finally {
       setEvtSaving(false);
     }
@@ -449,7 +458,7 @@ export function Dashboard({
               <p className="text-sm font-medium text-slate-700">{currentProfile.name}</p>
             </div>
             <div
-              className="w-7 h-7 sm:w-8 sm:h-8 rounded-full text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0"
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-full text-white text-[11px] font-bold flex items-center justify-center flex-shrink-0"
               style={{ background: PRIMARY }}
             >{currentProfile.avatar}</div>
             {currentProfile.is_admin && onOverview && (
@@ -516,7 +525,7 @@ export function Dashboard({
                 <span className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${n.type === 'task_done' ? 'bg-emerald-500' : n.type === 'birthday' ? 'bg-amber-400' : 'bg-blue-500'}`} />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-slate-700">{n.message}</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">{new Date(n.ts).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">{new Date(n.ts).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}</p>
                 </div>
                 {onDismissNotification && (
                   <button onClick={(e) => { e.stopPropagation(); onDismissNotification(n.id); }} className="text-slate-300 hover:text-slate-500 p-0.5">
@@ -561,41 +570,54 @@ export function Dashboard({
 
         {/* ── Stat cards ──────────────────────────────────── */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-5">
+          {/* Jugadores — informativo, no es filtro */}
           <div className="bg-white border border-slate-200 rounded-xl p-3 text-center">
             <p className="text-2xl font-semibold text-slate-800">{visiblePlayers.length}</p>
             <p className="text-xs text-slate-500 mt-0.5">Jugadores</p>
           </div>
-          <div
-            className={`border rounded-xl p-3 text-center cursor-pointer transition-colors ${
-              quickFilter === "overdue"
-                ? "bg-red-50 border-red-300"
-                : overdueDashboardTasks.length > 0 ? "bg-white border-red-200 hover:border-red-300" : "bg-white border-slate-200 hover:border-slate-300"
-            }`}
+          {/* Vencidas */}
+          <button
             onClick={() => setQuickFilter(q => q === "overdue" ? null : "overdue")}
+            className={`border rounded-xl p-3 text-center cursor-pointer transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 ${
+              quickFilter === "overdue"
+                ? "bg-red-50 border-red-400 shadow-sm"
+                : overdueDashboardTasks.length > 0
+                  ? "bg-white border-red-200 hover:border-red-400 hover:shadow-sm"
+                  : "bg-white border-slate-200 hover:border-slate-300 hover:shadow-sm"
+            }`}
           >
             <p className={`text-2xl font-semibold ${overdueDashboardTasks.length > 0 ? "text-red-500" : "text-slate-800"}`}>
               {overdueDashboardTasks.length}
             </p>
             <p className="text-xs text-slate-500 mt-0.5">Vencidas</p>
-          </div>
-          <div
-            className={`border rounded-xl p-3 text-center cursor-pointer transition-colors ${
-              quickFilter === "urgent" ? "bg-amber-50 border-amber-300" : "bg-white border-slate-200 hover:border-amber-300"
-            }`}
+            {quickFilter === "overdue" && <p className="text-[11px] text-red-400 mt-0.5 font-medium">Filtrando ×</p>}
+          </button>
+          {/* Urgentes */}
+          <button
             onClick={() => setQuickFilter(q => q === "urgent" ? null : "urgent")}
+            className={`border rounded-xl p-3 text-center cursor-pointer transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${
+              quickFilter === "urgent"
+                ? "bg-amber-50 border-amber-400 shadow-sm"
+                : "bg-white border-slate-200 hover:border-amber-300 hover:shadow-sm"
+            }`}
           >
             <p className={`text-2xl font-semibold ${urgentTasks.length > 0 ? "text-amber-600" : "text-slate-800"}`}>{urgentTasks.length}</p>
             <p className="text-xs text-slate-500 mt-0.5">Urgentes</p>
-          </div>
-          <div
-            className={`border rounded-xl p-3 text-center cursor-pointer transition-colors ${
-              quickFilter === "inprogress" ? "bg-blue-50 border-blue-300" : "bg-white border-slate-200 hover:border-slate-300"
-            }`}
+            {quickFilter === "urgent" && <p className="text-[11px] text-amber-500 mt-0.5 font-medium">Filtrando ×</p>}
+          </button>
+          {/* En progreso */}
+          <button
             onClick={() => setQuickFilter(q => q === "inprogress" ? null : "inprogress")}
+            className={`border rounded-xl p-3 text-center cursor-pointer transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
+              quickFilter === "inprogress"
+                ? "bg-blue-50 border-blue-400 shadow-sm"
+                : "bg-white border-slate-200 hover:border-blue-300 hover:shadow-sm"
+            }`}
           >
             <p className="text-2xl font-semibold text-slate-800">{inProgressTasks.length}</p>
             <p className="text-xs text-slate-500 mt-0.5">En progreso</p>
-          </div>
+            {quickFilter === "inprogress" && <p className="text-[11px] text-blue-500 mt-0.5 font-medium">Filtrando ×</p>}
+          </button>
         </div>
 
         {/* ── Tareas (nueva arquitectura) ──────────────────── */}
@@ -751,7 +773,7 @@ export function Dashboard({
                       {player.name.split(" ").map(n => n[0]).join("").slice(0, 2)}
                     </div>
                     <p className="text-xs font-semibold text-slate-700">{player.name}</p>
-                    <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded-full font-medium">{ptasks.length}</span>
+                    <span className="text-[11px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded-full font-medium">{ptasks.length}</span>
                   </div>
                   <div className="space-y-2 ml-8">
                     {ptasks.map(t => (
@@ -1042,12 +1064,12 @@ export function Dashboard({
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     {currentProfile.is_admin && (
                       <div className={`rounded-lg px-2.5 py-1.5 ${repDaysLeft > 0 && repDaysLeft < 183 ? 'bg-red-50 border border-red-100' : repDaysLeft >= 183 && repDaysLeft < 365 ? 'bg-amber-50 border border-amber-100' : 'bg-slate-50'}`}>
-                        <p className="text-[10px] text-slate-400 uppercase tracking-wide">Repr.</p>
+                        <p className="text-[11px] text-slate-400 uppercase tracking-wide">Repr.</p>
                         <p className={`text-xs font-semibold ${repDaysLeft > 0 && repDaysLeft < 183 ? 'text-red-600' : repDaysLeft >= 183 && repDaysLeft < 365 ? 'text-amber-600' : 'text-slate-700'}`}>{repEndStr}</p>
                       </div>
                     )}
                     <div className={`rounded-lg px-2.5 py-1.5 ${clubDaysLeft > 0 && clubDaysLeft < 183 ? 'bg-red-50 border border-red-100' : clubDaysLeft >= 183 && clubDaysLeft < 365 ? 'bg-amber-50 border border-amber-100' : 'bg-slate-50'}`}>
-                      <p className="text-[10px] text-slate-400 uppercase tracking-wide">Club</p>
+                      <p className="text-[11px] text-slate-400 uppercase tracking-wide">Club</p>
                       <p className={`text-xs font-semibold ${clubDaysLeft > 0 && clubDaysLeft < 183 ? 'text-red-600' : clubDaysLeft >= 183 && clubDaysLeft < 365 ? 'text-amber-600' : 'text-slate-700'}`}>{clubEndStr}</p>
                     </div>
                   </div>
@@ -1118,11 +1140,11 @@ export function Dashboard({
                   {/* Contracts (hidden on xs) */}
                   <div className="hidden sm:flex items-center gap-2">
                     {currentProfile.is_admin && (
-                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                      <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded ${
                         repDaysLeft < 183 ? "bg-red-50 text-red-600" : repDaysLeft < 365 ? "bg-amber-50 text-amber-600" : "bg-slate-50 text-slate-500"
                       }`}>R {player.representationContract.end ? new Date(player.representationContract.end).toLocaleDateString("es-ES", { month: "short", year: "2-digit" }) : "—"}</span>
                     )}
-                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                    <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded ${
                       clubDaysLeft < 183 ? "bg-red-50 text-red-600" : clubDaysLeft < 365 ? "bg-amber-50 text-amber-600" : "bg-slate-50 text-slate-500"
                     }`}>C {player.clubContract.endDate ? new Date(player.clubContract.endDate).toLocaleDateString("es-ES", { month: "short", year: "2-digit" }) : "—"}</span>
                   </div>
@@ -1137,10 +1159,10 @@ export function Dashboard({
                   {/* Task badges + quick task */}
                   <div className="flex items-center gap-1.5 flex-shrink-0">
                     {urgent.length > 0 && (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200">{urgent.length}⚡</span>
+                      <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200">{urgent.length}⚡</span>
                     )}
                     {playerTasks.length > 0 && (
-                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">{playerTasks.length}</span>
+                      <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">{playerTasks.length}</span>
                     )}
                     {!selectMode && onAddGeneralTask && (
                       <button
@@ -1166,7 +1188,7 @@ export function Dashboard({
           <div className="bg-white border border-slate-200 rounded-xl overflow-x-auto">
             <table className="w-full min-w-[700px] text-sm">
               <thead>
-                <tr className="border-b border-slate-100 bg-slate-50 text-[10px] text-slate-500 uppercase tracking-wider">
+                <tr className="border-b border-slate-100 bg-slate-50 text-[11px] text-slate-500 uppercase tracking-wider">
                   <th className="text-left px-4 py-2.5 font-semibold">Jugador</th>
                   <th className="text-left px-3 py-2.5 font-semibold">Posición</th>
                   <th className="text-left px-3 py-2.5 font-semibold">Edad</th>
@@ -1227,14 +1249,14 @@ export function Dashboard({
                       {/* Repr contract */}
                       {currentProfile.is_admin && (
                         <td className="px-3 py-2.5">
-                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded whitespace-nowrap ${
+                          <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded whitespace-nowrap ${
                             repDaysLeft < 183 ? 'bg-red-50 text-red-600' : repDaysLeft < 365 ? 'bg-amber-50 text-amber-600' : 'bg-slate-50 text-slate-500'
                           }`}>{repEndStr}</span>
                         </td>
                       )}
                       {/* Club contract */}
                       <td className="px-3 py-2.5">
-                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded whitespace-nowrap ${
+                        <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded whitespace-nowrap ${
                           clubDaysLeft < 183 ? 'bg-red-50 text-red-600' : clubDaysLeft < 365 ? 'bg-amber-50 text-amber-600' : 'bg-slate-50 text-slate-500'
                         }`}>{clubEndStr}</span>
                       </td>
@@ -1251,10 +1273,10 @@ export function Dashboard({
                       <td className="px-3 py-2.5">
                         <div className="flex items-center gap-1">
                           {urgent.length > 0 && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200 whitespace-nowrap">{urgent.length}⚡</span>
+                            <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200 whitespace-nowrap">{urgent.length}⚡</span>
                           )}
                           {playerTasks.length > 0 && (
-                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">{playerTasks.length}</span>
+                            <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">{playerTasks.length}</span>
                           )}
                         </div>
                       </td>
@@ -1364,20 +1386,58 @@ export function Dashboard({
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
             <h4 className="text-sm font-semibold text-slate-800">Nuevo evento de actividad</h4>
 
-            {/* Player selector */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Jugador <span className="text-red-400">*</span></label>
-              <select
-                value={evtPlayer}
-                onChange={e => setEvtPlayer(e.target.value)}
-                className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200 bg-white"
-              >
-                <option value="">— Selecciona un jugador —</option>
-                {[...players].sort((a, b) => a.name.localeCompare(b.name)).map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            </div>
+            {/* Player selector — combobox */}
+            {(() => {
+              const selectedPlayer = players.find(p => p.id === evtPlayer);
+              const filteredEvtPlayers = [...players]
+                .filter(p => p.name.toLowerCase().includes(evtPlayerQ.toLowerCase()))
+                .sort((a, b) => a.name.localeCompare(b.name));
+              const showEvtDrop = evtPlayerQ.length > 0 && filteredEvtPlayers.length > 0 && !selectedPlayer;
+              return (
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-600">Jugador <span className="text-red-400">*</span></label>
+                  {selectedPlayer ? (
+                    <div className="flex items-center gap-2 px-3 py-2 border border-blue-300 rounded-lg bg-blue-50">
+                      <span className="flex-1 text-xs font-medium text-slate-800">{selectedPlayer.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => { setEvtPlayer(""); setEvtPlayerQ(""); }}
+                        className="text-slate-400 hover:text-slate-700 leading-none text-sm"
+                      >×</button>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={evtPlayerQ}
+                        onChange={e => setEvtPlayerQ(e.target.value)}
+                        placeholder="Buscar jugador…"
+                        className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200"
+                      />
+                      {showEvtDrop && (
+                        <div className="absolute left-0 top-full mt-1 z-20 w-full bg-white border border-slate-200 rounded-xl shadow-lg py-1 max-h-48 overflow-y-auto">
+                          {filteredEvtPlayers.map(p => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onMouseDown={e => {
+                                e.preventDefault();
+                                setEvtPlayer(p.id);
+                                setEvtPlayerQ("");
+                              }}
+                              className="w-full text-left flex items-center justify-between px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 transition-colors"
+                            >
+                              <span>{p.name}</span>
+                              <span className="text-slate-400">{calcAge(p.birthDate)} años</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
@@ -1580,13 +1640,17 @@ export function Dashboard({
             if (onUpdateTask) onUpdateTask(updated);
             if (onUpdateGeneralTask) onUpdateGeneralTask(updated);
             setDetailTask(null);
+            showToast("Tarea actualizada", "success");
           }}
           onDelete={(taskId) => {
             if (onDeleteGeneralTask) onDeleteGeneralTask(taskId);
             setDetailTask(null);
+            showToast("Tarea eliminada", "info");
           }}
         />
       )}
+
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
@@ -1681,7 +1745,7 @@ function TaskListRow({
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
           {player && <span className="text-xs text-slate-400 truncate">{player.name}</span>}
           {task.label && (
-            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
+            <span className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
               {task.label}
             </span>
           )}
@@ -1768,11 +1832,11 @@ function KanbanCol({
                 {task.title}
               </p>
               {player && (
-                <p className="text-[10px] text-slate-400 mt-0.5 truncate">{player.name}</p>
+                <p className="text-[11px] text-slate-400 mt-0.5 truncate">{player.name}</p>
               )}
               <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                 {assignee && (
-                  <span className="inline-flex items-center gap-1 text-[10px] text-slate-400">
+                  <span className="inline-flex items-center gap-1 text-[11px] text-slate-400">
                     <span
                       className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[7px] font-bold text-white flex-shrink-0"
                       style={{ background: PRIMARY }}
@@ -1781,7 +1845,7 @@ function KanbanCol({
                   </span>
                 )}
                 {task.dueDate && (
-                  <span className={`text-[10px] ${isOverdue ? "text-red-500 font-medium" : "text-slate-400"}`}>
+                  <span className={`text-[11px] ${isOverdue ? "text-red-500 font-medium" : "text-slate-400"}`}>
                     {new Date(task.dueDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
                     {isOverdue ? " ⚠" : ""}
                   </span>
@@ -1798,12 +1862,12 @@ function KanbanCol({
     <div className="px-3 first:pl-0 last:pr-0">
       <div className="flex items-center gap-1.5 mb-2.5">
         <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: dotColor }} />
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{label}</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">{label}</p>
         {!isCompletedCol && (
-          <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded-full font-medium">{tasks.length}</span>
+          <span className="text-[11px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded-full font-medium">{tasks.length}</span>
         )}
         {isCompletedCol && (
-          <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded-full font-medium">{completedCount}</span>
+          <span className="text-[11px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded-full font-medium">{completedCount}</span>
         )}
       </div>
 
@@ -1816,21 +1880,21 @@ function KanbanCol({
           {completedCount > 2 && onToggleCompleted && (
             <button
               onClick={onToggleCompleted}
-              className="text-[10px] text-slate-400 hover:text-slate-600 transition-colors py-1 flex items-center gap-1"
+              className="text-[11px] text-slate-400 hover:text-slate-600 transition-colors py-1 flex items-center gap-1"
             >
               <ChevronRight className={`w-3 h-3 transition-transform ${showCompleted ? "rotate-90" : ""}`} />
               {showCompleted ? "Ocultar" : `Ver todas (${completedCount})`}
             </button>
           )}
           {completedCount === 0 && (
-            <p className="text-[10px] text-slate-400 italic py-2">Sin completadas</p>
+            <p className="text-[11px] text-slate-400 italic py-2">Sin completadas</p>
           )}
         </div>
       ) : (
         <div>
           {tasks.map(t => renderTask(t))}
           {tasks.length === 0 && (
-            <p className="text-[10px] text-slate-400 italic py-2">Sin tareas</p>
+            <p className="text-[11px] text-slate-400 italic py-2">Sin tareas</p>
           )}
         </div>
       )}
@@ -2073,7 +2137,7 @@ function AddGeneralTaskModal({ profiles, players, onClose, onAdd }: {
             />
             <span className="text-sm text-slate-700 font-medium">Solo para admins</span>
             {adminOnly && (
-              <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 border border-amber-200 rounded px-1.5 py-0.5">
+              <span className="ml-auto text-[11px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 border border-amber-200 rounded px-1.5 py-0.5">
                 Admin
               </span>
             )}
@@ -2198,7 +2262,7 @@ function EditGeneralTaskModal({ task, profiles, players, onClose, onUpdate, onDe
         </form>
         {/* Task info */}
         <div className="px-4 pb-4 border-t border-slate-100 pt-3">
-          <p className="text-[10px] text-slate-400">
+          <p className="text-[11px] text-slate-400">
             Creada: {new Date(task.createdAt).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}
           </p>
         </div>
@@ -2369,7 +2433,7 @@ function GlobalSearch({ players, tasks, profiles, onSelectPlayer, onSelectTask, 
 
           {matchedPlayers.length > 0 && (
             <div>
-              <p className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400 bg-slate-50 border-b border-slate-100">Jugadores</p>
+              <p className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400 bg-slate-50 border-b border-slate-100">Jugadores</p>
               {matchedPlayers.map(player => {
                 const pendingCount = tasks.filter(t => t.playerId === player.id && t.status !== "completada").length;
                 return (
@@ -2384,7 +2448,7 @@ function GlobalSearch({ players, tasks, profiles, onSelectPlayer, onSelectTask, 
                       <p className="text-xs text-slate-400 truncate">{player.positions[0]} · {clubsLabel(player.clubs)}</p>
                     </div>
                     {pendingCount > 0 && (
-                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100 flex-shrink-0">
+                      <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100 flex-shrink-0">
                         {pendingCount} tareas
                       </span>
                     )}
@@ -2396,7 +2460,7 @@ function GlobalSearch({ players, tasks, profiles, onSelectPlayer, onSelectTask, 
 
           {matchedTasks.length > 0 && (
             <div>
-              <p className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400 bg-slate-50 border-b border-slate-100">Tareas</p>
+              <p className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400 bg-slate-50 border-b border-slate-100">Tareas</p>
               {matchedTasks.map(task => {
                 const taskPlayer = players.find(p => p.id === task.playerId);
                 const assignee = profiles.find(p => p.id === task.assigneeId);
@@ -2412,7 +2476,7 @@ function GlobalSearch({ players, tasks, profiles, onSelectPlayer, onSelectTask, 
                         {taskPlayer ? taskPlayer.name : "General"}{assignee ? ` · ${assignee.name.split(" ")[0]}` : ""}
                       </p>
                     </div>
-                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded border flex-shrink-0 ${
+                    <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded border flex-shrink-0 ${
                       task.status === "completada" ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                       : task.status === "en_progreso" ? "bg-blue-50 text-blue-700 border-blue-200"
                       : "bg-slate-50 text-slate-500 border-slate-200"

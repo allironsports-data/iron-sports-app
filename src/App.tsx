@@ -41,11 +41,20 @@ export default function App() {
   const [profiles, setProfiles] = useState<Profile[]>([])
   const profilesRef = useRef<Profile[]>([])
   const [dataLoading, setDataLoading] = useState(false)
-  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
-  const [selectedClubId, setSelectedClubId] = useState<string | null>(null)
-  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null)
+  // ── Nav state — persisted in sessionStorage so refresh restores position ──
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(
+    () => sessionStorage.getItem('nav_playerId')
+  )
+  const [selectedClubId, setSelectedClubId] = useState<string | null>(
+    () => sessionStorage.getItem('nav_clubId')
+  )
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(
+    () => sessionStorage.getItem('nav_profileId')
+  )
   // four main sections
-  const [mainSection, setMainSection] = useState<'tareas' | 'jugadores' | 'distribucion' | 'captacion'>('tareas')
+  const [mainSection, setMainSection] = useState<'tareas' | 'jugadores' | 'distribucion' | 'captacion'>(
+    () => (sessionStorage.getItem('nav_section') as 'tareas' | 'jugadores' | 'distribucion' | 'captacion') ?? 'tareas'
+  )
   // where to return after closing PlayerDetail
   const [playerReturnToClub, setPlayerReturnToClub] = useState(false)
   const [showAdmin, setShowAdmin] = useState(false)
@@ -65,6 +74,23 @@ export default function App() {
   const [scoutingMatches, setScoutingMatches] = useState<ScoutingMatch[]>([])
   const [matchPlayers, setMatchPlayers] = useState<ScoutingMatchPlayer[]>([])
   const [boulemaPeticiones, setBoulemaPeticiones] = useState<BoulemaPeticion[]>([])
+
+  // ── Persist nav state to sessionStorage ───────────────────
+  useEffect(() => {
+    if (selectedPlayerId)  sessionStorage.setItem('nav_playerId',  selectedPlayerId)
+    else                   sessionStorage.removeItem('nav_playerId')
+  }, [selectedPlayerId])
+  useEffect(() => {
+    if (selectedClubId)    sessionStorage.setItem('nav_clubId',    selectedClubId)
+    else                   sessionStorage.removeItem('nav_clubId')
+  }, [selectedClubId])
+  useEffect(() => {
+    if (selectedProfileId) sessionStorage.setItem('nav_profileId', selectedProfileId)
+    else                   sessionStorage.removeItem('nav_profileId')
+  }, [selectedProfileId])
+  useEffect(() => {
+    sessionStorage.setItem('nav_section', mainSection)
+  }, [mainSection])
 
   const addNotification = useCallback((msg: string, type: AppNotification['type'], playerId?: string) => {
     setNotifications((prev) => [
@@ -431,6 +457,7 @@ export default function App() {
           tasks={tasks}
           players={players}
           onBack={() => setSelectedProfileId(null)}
+          onSelectPlayer={(id) => { setSelectedProfileId(null); navigateToPlayer(id, false) }}
         />
       )
     }

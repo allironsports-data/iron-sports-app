@@ -13,6 +13,8 @@ import { uploadContractPdf, fetchNotes, createNote, updateNote, deleteNote,
   updatePlayerActivity, updateGroupActivity, deletePlayerActivity, deleteGroupActivity,
 } from "../lib/db";
 import { TaskDetailPanel } from "../components/TaskDetailPanel";
+import { ToastStack } from "../components/ToastStack";
+import { useToast } from "../hooks/useToast";
 import {
   ArrowLeft, LogOut, ClipboardList, FileText,
   TrendingUp, User, Plus, X, Calendar, AlertCircle,
@@ -126,7 +128,7 @@ export function PlayerDetail({
             <div className="w-6 h-6 rounded overflow-hidden bg-white flex-shrink-0">
               <img src={logoImg} className="w-full h-full object-contain" alt="AIS" />
             </div>
-            <span className="text-xs text-slate-400 hidden sm:inline">Jugadores</span>
+            <button onClick={onBack} className="text-xs text-slate-400 hover:text-slate-600 transition-colors hidden sm:inline">Jugadores</button>
             <span className="text-xs text-slate-300 hidden sm:inline">/</span>
             <span className="text-sm font-semibold text-slate-800">{player.name}</span>
           </div>
@@ -154,7 +156,7 @@ export function PlayerDetail({
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
           {contractBadgeLabel && (
-            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${contractBadgeCls}`}>
+            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${contractBadgeCls}`}>
               {contractBadgeLabel}
             </span>
           )}
@@ -220,7 +222,7 @@ export function PlayerDetail({
 
                 {/* Contract badge */}
                 {contractBadgeLabel && (
-                  <span className={`inline-flex items-center mt-2 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${contractBadgeCls}`}>
+                  <span className={`inline-flex items-center mt-2 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${contractBadgeCls}`}>
                     Contrato · {contractBadgeLabel}
                   </span>
                 )}
@@ -229,7 +231,7 @@ export function PlayerDetail({
                 {managers.length > 0 && (
                   <div className="flex flex-wrap gap-1 justify-center mt-2">
                     {managers.map((m) => (
-                      <span key={m.id} className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">{m.name}</span>
+                      <span key={m.id} className="text-[11px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">{m.name}</span>
                     ))}
                   </div>
                 )}
@@ -274,7 +276,7 @@ export function PlayerDetail({
                           <span className={active ? "text-blue-500" : "text-slate-400"}>{item.icon}</span>
                           <span className="flex-1 truncate">{item.label}</span>
                           {item.count !== undefined && (
-                            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                            <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-full ${
                               active ? "bg-blue-100 text-blue-600" : "bg-slate-100 text-slate-500"
                             }`}>
                               {item.count}
@@ -559,7 +561,7 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
           <div className="flex items-center gap-2 px-2.5 py-1.5 bg-slate-100 rounded-lg">
             <AlertCircle className="w-3.5 h-3.5 text-slate-400" />
             <span className="text-xs font-semibold text-slate-600 flex-1">Pendiente</span>
-            <span className="text-[10px] font-mono text-slate-400">{pendingFiltered.length}</span>
+            <span className="text-[11px] font-mono text-slate-400">{pendingFiltered.length}</span>
           </div>
           <div className="space-y-2">
             {sortByPrio(activeTasks.filter(t => t.status === "pendiente")).map(t => <TaskCard key={t.id} task={t} />)}
@@ -583,7 +585,7 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
           <div className="flex items-center gap-2 px-2.5 py-1.5 bg-blue-50 rounded-lg">
             <Clock className="w-3.5 h-3.5 text-blue-400" />
             <span className="text-xs font-semibold text-blue-700 flex-1">En progreso</span>
-            <span className="text-[10px] font-mono text-blue-400">{inProgressFiltered.length}</span>
+            <span className="text-[11px] font-mono text-blue-400">{inProgressFiltered.length}</span>
           </div>
           <div className="space-y-2">
             {sortByPrio(activeTasks.filter(t => t.status === "en_progreso")).map(t => <TaskCard key={t.id} task={t} />)}
@@ -611,7 +613,7 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
         >
           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
           <span className="text-xs font-semibold text-emerald-700 flex-1">Completadas</span>
-          <span className="text-[10px] font-mono text-emerald-500 mr-1">{completedCount}</span>
+          <span className="text-[11px] font-mono text-emerald-500 mr-1">{completedCount}</span>
           <ChevronDown className={`w-3.5 h-3.5 text-emerald-400 transition-transform ${showCompleted ? 'rotate-180' : ''}`} />
         </button>
         {showCompleted && (
@@ -744,7 +746,7 @@ function AddTaskModal({ profiles, tasks, playerId, player, isAdmin, onClose, onA
               />
               <span className="text-sm text-slate-700 font-medium">Solo para admins</span>
               {adminOnly && (
-                <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 border border-amber-200 rounded px-1.5 py-0.5">
+                <span className="ml-auto text-[11px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 border border-amber-200 rounded px-1.5 py-0.5">
                   Admin
                 </span>
               )}
@@ -998,7 +1000,7 @@ function PerformanceTab({ player, profiles, onUpdate }: { player: Player; profil
               section === s.id ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"
             }`}>
             {s.icon}{s.label}
-            {(s.count ?? 0) > 0 && <span className={`text-[10px] rounded-full px-1.5 py-0.5 ${section === s.id ? "bg-slate-100 text-slate-600" : "bg-slate-200 text-slate-500"}`}>{s.count}</span>}
+            {(s.count ?? 0) > 0 && <span className={`text-[11px] rounded-full px-1.5 py-0.5 ${section === s.id ? "bg-slate-100 text-slate-600" : "bg-slate-200 text-slate-500"}`}>{s.count}</span>}
           </button>
         ))}
       </div>
@@ -1021,7 +1023,7 @@ function PerformanceTab({ player, profiles, onUpdate }: { player: Player; profil
               <div key={note.id} className="bg-white border border-slate-200 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-2 gap-3">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-600">{note.category}</span>
+                    <span className="px-1.5 py-0.5 rounded text-[11px] font-medium bg-blue-50 text-blue-600">{note.category}</span>
                     <span className="text-xs text-slate-400">{new Date(note.date).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}</span>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
@@ -1036,7 +1038,7 @@ function PerformanceTab({ player, profiles, onUpdate }: { player: Player; profil
                     </div>
                     <span className={`text-sm font-bold tabular-nums ${
                       note.rating >= 8 ? 'text-green-600' : note.rating >= 6 ? 'text-amber-600' : note.rating >= 4 ? 'text-orange-500' : 'text-red-500'
-                    }`}>{note.rating}<span className="text-[10px] font-normal text-slate-400">/10</span></span>
+                    }`}>{note.rating}<span className="text-[11px] font-normal text-slate-400">/10</span></span>
                   </div>
                 </div>
                 {note.title && <p className="text-sm font-semibold text-slate-800 mb-1">{note.title}</p>}
@@ -1779,6 +1781,7 @@ function buildMergedEvents(
 function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: {
   player: Player; players?: Player[]; tasks: Task[]; profiles: Profile[]; currentProfile: Profile;
 }) {
+  const { toasts, showToast, dismissToast } = useToast();
   const [activities, setActivities] = useState<PlayerActivity[]>([]);
   const [loading, setLoading]       = useState(true);
   const [showForm, setShowForm]     = useState(false);
@@ -1878,6 +1881,9 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
         }
       }
       setShowForm(false);
+      showToast(editing ? "Evento actualizado" : "Evento registrado", "success");
+    } catch {
+      showToast("No se pudo guardar el evento", "error");
     } finally {
       setSaving(false);
     }
@@ -1907,6 +1913,7 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
     }
     await deletePlayerActivity(act.id);
     setActivities(prev => prev.filter(a => a.id !== act.id));
+    showToast("Evento eliminado", "info");
   }
 
   async function confirmGroupDelete(all: boolean) {
@@ -1918,6 +1925,7 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
       await deletePlayerActivity(groupDeletePending.id);
       setActivities(prev => prev.filter(a => a.id !== groupDeletePending.id));
     }
+    showToast("Evento eliminado", "info");
     setGroupDeletePending(null);
   }
 
@@ -1984,7 +1992,7 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
                           <div className="flex items-start justify-between gap-2">
                             <p className="text-sm font-medium text-slate-700 leading-snug">{evt.title}</p>
                             <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
-                              <span className="text-[10px] text-slate-400">
+                              <span className="text-[11px] text-slate-400">
                                 {new Date(evt.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
                               </span>
                               {evt.type === 'activity' && evt.activityRef && (
@@ -2010,14 +2018,14 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
                             <div className="flex items-center gap-1.5 mt-1.5 pt-1.5 border-t border-slate-50 flex-wrap">
                               {/* Group peers (linked players) */}
                               {groupPeers.map(p => (
-                                <span key={p.id} className="inline-flex items-center gap-1 text-[10px] bg-blue-50 text-blue-600 border border-blue-100 px-1.5 py-0.5 rounded-full font-medium">
+                                <span key={p.id} className="inline-flex items-center gap-1 text-[11px] bg-blue-50 text-blue-600 border border-blue-100 px-1.5 py-0.5 rounded-full font-medium">
                                   <Users className="w-2.5 h-2.5" />
                                   {p.name.split(' ')[0]}
                                 </span>
                               ))}
                               {/* Staff participants */}
                               {participantProfiles.map(p => (
-                                <span key={p.id} className="inline-flex items-center gap-1 text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full font-medium">
+                                <span key={p.id} className="inline-flex items-center gap-1 text-[11px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full font-medium">
                                   <span className="w-3 h-3 rounded-full flex items-center justify-center text-[7px] font-bold text-white flex-shrink-0"
                                     style={{ background: PRIMARY }}>
                                     {p.avatar}
@@ -2027,7 +2035,7 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
                               ))}
                               {/* Author */}
                               {author && (
-                                <span className="inline-flex items-center gap-1 text-[10px] text-slate-400 ml-auto">
+                                <span className="inline-flex items-center gap-1 text-[11px] text-slate-400 ml-auto">
                                   <span className="w-4 h-4 rounded-full bg-slate-100 text-[9px] font-semibold flex items-center justify-center text-slate-500 flex-shrink-0">
                                     {author.avatar}
                                   </span>
@@ -2155,7 +2163,7 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
                 })()}
 
                 {fLinkedPlayers.length > 0 && (
-                  <p className="text-[10px] text-blue-600">
+                  <p className="text-[11px] text-blue-600">
                     Este evento aparecerá en el timeline de {fLinkedPlayers.length + 1} jugadores.
                   </p>
                 )}
@@ -2329,6 +2337,8 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
           </div>
         </div>
       )}
+
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
@@ -2487,7 +2497,7 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
           {/* Club contract */}
           {clubEnd && (
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Cto. club</span>
+              <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">Cto. club</span>
               <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${clubBadge}`}>
                 {fmtDate(clubEnd)}{clubDays !== null && clubDays <= 180 ? ` · ${clubDays}d` : ''}
               </span>
@@ -2497,7 +2507,7 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
           {/* Representation contract */}
           {reprEnd && (
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Cto. repr.</span>
+              <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">Cto. repr.</span>
               <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${reprBadge}`}>
                 {fmtDate(reprEnd)}{reprDays !== null && reprDays <= 180 ? ` · ${reprDays}d` : ''}
               </span>
@@ -2507,7 +2517,7 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
           {/* Release clause */}
           {player.clubContract?.releaseClause && (
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Cláusula</span>
+              <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">Cláusula</span>
               <span className="text-[11px] font-semibold text-slate-600">{player.clubContract.releaseClause}</span>
             </div>
           )}
@@ -2520,7 +2530,7 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
           {/* Distribution priority */}
           {distributionEntry?.priority && (
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Prioridad dist.</span>
+              <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">Prioridad dist.</span>
               <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${PRIORITY_COLORS[distributionEntry.priority] ?? 'bg-slate-100 text-slate-500 border-slate-200'}`}>
                 {distributionEntry.priority}
               </span>
@@ -2530,7 +2540,7 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
           {/* Distribution condition */}
           {distributionEntry?.condition && (
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Condición</span>
+              <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">Condición</span>
               <span className="text-[11px] font-semibold text-slate-600">{distributionEntry.condition}</span>
             </div>
           )}
@@ -2538,7 +2548,7 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
           {/* Active negotiations */}
           {activeNegs.length > 0 && (
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Negociaciones</span>
+              <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">Negociaciones</span>
               <button onClick={() => onNavigate('distribucion')}
                 className="text-[11px] font-semibold text-blue-600 hover:underline">
                 {activeNegs.length} activa{activeNegs.length > 1 ? 's' : ''}{negSummary ? ` (${negSummary})` : ''}
@@ -2563,10 +2573,10 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
               <ClipboardList className="w-3.5 h-3.5 text-slate-400" />
               Tareas pendientes
               {pendingTasks.length > 0 && (
-                <span className="bg-blue-100 text-blue-600 text-[10px] font-semibold px-1.5 py-0.5 rounded-full">{pendingTasks.length}</span>
+                <span className="bg-blue-100 text-blue-600 text-[11px] font-semibold px-1.5 py-0.5 rounded-full">{pendingTasks.length}</span>
               )}
             </h4>
-            <button onClick={() => onNavigate('tareas')} className="text-[10px] text-blue-600 hover:underline">Ver todas →</button>
+            <button onClick={() => onNavigate('tareas')} className="text-[11px] text-blue-600 hover:underline">Ver todas →</button>
           </div>
 
           {pendingTasks.length === 0 ? (
@@ -2582,13 +2592,13 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
                     }`} />
                     <div className="min-w-0 flex-1">
                       <p className="text-xs text-slate-700 leading-snug truncate">{t.title}</p>
-                      {assignee && <p className="text-[10px] text-slate-400">{assignee.name.split(' ')[0]}</p>}
+                      {assignee && <p className="text-[11px] text-slate-400">{assignee.name.split(' ')[0]}</p>}
                     </div>
                   </div>
                 );
               })}
               {pendingTasks.length > 5 && (
-                <button onClick={() => onNavigate('tareas')} className="text-[10px] text-slate-400 hover:text-blue-500 transition-colors">
+                <button onClick={() => onNavigate('tareas')} className="text-[11px] text-slate-400 hover:text-blue-500 transition-colors">
                   +{pendingTasks.length - 5} más…
                 </button>
               )}
@@ -2603,7 +2613,7 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
               <Clock className="w-3.5 h-3.5 text-slate-400" />
               Actividad reciente
             </h4>
-            <button onClick={() => onNavigate('actividad')} className="text-[10px] text-blue-600 hover:underline">Ver toda →</button>
+            <button onClick={() => onNavigate('actividad')} className="text-[11px] text-blue-600 hover:underline">Ver toda →</button>
           </div>
 
           {recentEvents.length === 0 ? (
@@ -2617,7 +2627,7 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
                     <span className="text-sm leading-none mt-0.5 flex-shrink-0">{icon}</span>
                     <div className="min-w-0 flex-1">
                       <p className="text-xs text-slate-700 leading-snug truncate">{evt.title}</p>
-                      <p className="text-[10px] text-slate-400">
+                      <p className="text-[11px] text-slate-400">
                         {new Date(evt.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
                         {evt.extra && ` · ${evt.extra.slice(0, 40)}${evt.extra.length > 40 ? '…' : ''}`}
                       </p>
@@ -2638,7 +2648,7 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
               <BarChart2 className="w-3.5 h-3.5 text-slate-400" />
               Distribución
             </h4>
-            <button onClick={() => onNavigate('distribucion')} className="text-[10px] text-blue-600 hover:underline">Ver detalle →</button>
+            <button onClick={() => onNavigate('distribucion')} className="text-[11px] text-blue-600 hover:underline">Ver detalle →</button>
           </div>
 
           {/* Entry summary */}
@@ -2646,7 +2656,7 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
             <div className="flex flex-wrap gap-3 mb-3 pb-3 border-b border-slate-100">
               {distributionEntry.priority && (
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] text-slate-400">Prioridad</span>
+                  <span className="text-[11px] text-slate-400">Prioridad</span>
                   <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${PRIORITY_COLORS[distributionEntry.priority] ?? 'bg-slate-100 text-slate-500 border-slate-200'}`}>
                     {distributionEntry.priority}
                   </span>
@@ -2654,19 +2664,19 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
               )}
               {distributionEntry.condition && (
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] text-slate-400">Condición</span>
+                  <span className="text-[11px] text-slate-400">Condición</span>
                   <span className="text-[11px] font-semibold text-slate-600">{distributionEntry.condition}</span>
                 </div>
               )}
               {distributionEntry.season && (
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] text-slate-400">Temporada</span>
+                  <span className="text-[11px] text-slate-400">Temporada</span>
                   <span className="text-[11px] font-semibold text-slate-600">{distributionEntry.season}</span>
                 </div>
               )}
               {distributionEntry.transferFee && (
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] text-slate-400">Traspaso</span>
+                  <span className="text-[11px] text-slate-400">Traspaso</span>
                   <span className="text-[11px] font-semibold text-slate-600">{distributionEntry.transferFee}</span>
                 </div>
               )}
@@ -2703,7 +2713,7 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
                   return (
                     <div key={neg.id} className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
-                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded flex-shrink-0 ${NEG_COLORS[neg.status] ?? 'bg-slate-100 text-slate-500'}`}>
+                        <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded flex-shrink-0 ${NEG_COLORS[neg.status] ?? 'bg-slate-100 text-slate-500'}`}>
                           {NEG_LABELS[neg.status] ?? neg.status}
                         </span>
                         <span className="text-xs text-slate-700 truncate">
@@ -2711,7 +2721,7 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
                         </span>
                       </div>
                       {neg.aisManager && (
-                        <span className="text-[10px] text-slate-400 flex-shrink-0">{neg.aisManager}</span>
+                        <span className="text-[11px] text-slate-400 flex-shrink-0">{neg.aisManager}</span>
                       )}
                     </div>
                   );
@@ -2969,7 +2979,7 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
                     <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg mb-2 ${cfg.color}`}>
                       <div className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
                       <span className="text-xs font-semibold flex-1">{cfg.label}</span>
-                      <span className="text-[10px] font-mono opacity-60">{col.length}</span>
+                      <span className="text-[11px] font-mono opacity-60">{col.length}</span>
                     </div>
                     {/* Cards */}
                     <div className="space-y-1.5">
@@ -2983,15 +2993,15 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
                               <div className="flex flex-wrap gap-1">
                                 {NEG_STATUSES_D.map(s => {
                                   const c2 = STATUS_CONFIG_D[s]
-                                  return <button key={s} onClick={() => setEditingNeg({ ...editingNeg!, status: s })} className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${editingNeg!.status === s ? c2.color + ' ring-1 ring-current' : 'bg-slate-100 text-slate-500'}`}>{c2.label}</button>
+                                  return <button key={s} onClick={() => setEditingNeg({ ...editingNeg!, status: s })} className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${editingNeg!.status === s ? c2.color + ' ring-1 ring-current' : 'bg-slate-100 text-slate-500'}`}>{c2.label}</button>
                                 })}
                               </div>
                               <input value={editingNeg!.aisManager ?? ''} onChange={e => setEditingNeg({ ...editingNeg!, aisManager: e.target.value })} placeholder="Gestor AIS" className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs" />
                               <input value={editingNeg!.notes ?? ''} onChange={e => setEditingNeg({ ...editingNeg!, notes: e.target.value })} placeholder="Notas" className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs" />
                               <div className="flex gap-1.5">
-                                <button onClick={async () => { await onDeleteNegotiation?.(neg.id); setEditingNeg(null) }} className="px-2 py-1 text-[10px] border border-red-200 text-red-500 rounded-lg">Eliminar</button>
-                                <button onClick={() => setEditingNeg(null)} className="flex-1 py-1 text-[10px] border border-slate-200 rounded-lg text-slate-500">Cancelar</button>
-                                <button onClick={saveEditNeg} className="flex-1 py-1 text-[10px] bg-[hsl(220,72%,36%)] text-white rounded-lg">Guardar</button>
+                                <button onClick={async () => { await onDeleteNegotiation?.(neg.id); setEditingNeg(null) }} className="px-2 py-1 text-[11px] border border-red-200 text-red-500 rounded-lg">Eliminar</button>
+                                <button onClick={() => setEditingNeg(null)} className="flex-1 py-1 text-[11px] border border-slate-200 rounded-lg text-slate-500">Cancelar</button>
+                                <button onClick={saveEditNeg} className="flex-1 py-1 text-[11px] bg-[hsl(220,72%,36%)] text-white rounded-lg">Guardar</button>
                               </div>
                             </div>
                           )
@@ -3011,11 +3021,11 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
                                 <Edit3 className="w-3 h-3" />
                               </button>
                             </div>
-                            {club.league && <p className="text-[10px] text-slate-400 mt-0.5 truncate">{club.league}</p>}
+                            {club.league && <p className="text-[11px] text-slate-400 mt-0.5 truncate">{club.league}</p>}
                             <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                              {neg.aisManager && <span className="text-[10px] font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{neg.aisManager}</span>}
+                              {neg.aisManager && <span className="text-[11px] font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{neg.aisManager}</span>}
                               {neg.updates && neg.updates.length > 0 && (
-                                <span className="text-[10px] text-slate-400">📝 {neg.updates.length}</span>
+                                <span className="text-[11px] text-slate-400">📝 {neg.updates.length}</span>
                               )}
                               {onSelectClub && (
                                 <button
@@ -3027,13 +3037,13 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
                                 </button>
                               )}
                             </div>
-                            {neg.notes && <p className="text-[10px] text-slate-500 mt-1 line-clamp-2">{neg.notes}</p>}
+                            {neg.notes && <p className="text-[11px] text-slate-500 mt-1 line-clamp-2">{neg.notes}</p>}
                           </div>
                         )
                       })}
                       {col.length === 0 && (
                         <div className="h-12 rounded-xl border-2 border-dashed border-slate-100 flex items-center justify-center">
-                          <span className="text-[10px] text-slate-300">Vacío</span>
+                          <span className="text-[11px] text-slate-300">Vacío</span>
                         </div>
                       )}
                     </div>
@@ -3051,7 +3061,7 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
                     <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg mb-2 ${cfg.color}`}>
                       <div className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
                       <span className="text-xs font-semibold flex-1">{cfg.label}</span>
-                      <span className="text-[10px] font-mono opacity-60">{descartados.length}</span>
+                      <span className="text-[11px] font-mono opacity-60">{descartados.length}</span>
                     </div>
                     <div className="space-y-1.5">
                       {descartados.map(neg => {
@@ -3060,7 +3070,7 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
                         return (
                           <div key={neg.id} onClick={() => setPanelNegId(neg.id)} className="bg-white border border-slate-100 rounded-xl p-3 cursor-pointer hover:border-slate-200 transition-colors">
                             <span className="text-xs text-slate-500 line-through">{club.name}</span>
-                            {club.league && <p className="text-[10px] text-slate-300 truncate">{club.league}</p>}
+                            {club.league && <p className="text-[11px] text-slate-300 truncate">{club.league}</p>}
                           </div>
                         )
                       })}
@@ -3124,7 +3134,7 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
               <div className="px-4 py-3 border-b border-slate-100 flex-shrink-0 space-y-3">
                 {/* Status chips */}
                 <div>
-                  <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Estado</div>
+                  <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Estado</div>
                   <div className="flex flex-wrap gap-1">
                     {NEG_STATUSES_D.map(s => {
                       const cfg = STATUS_CONFIG_D[s]
@@ -3163,15 +3173,15 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
 
               {/* Updates/notes thread */}
               <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2.5">
-                <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Notas de seguimiento</div>
+                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Notas de seguimiento</div>
                 {sortedUpdates.length === 0 && (
                   <p className="text-xs text-slate-400 py-4 text-center">Sin notas aún</p>
                 )}
                 {sortedUpdates.map(u => (
                   <div key={u.id} className="bg-slate-50 rounded-lg px-3 py-2.5">
                     <div className="flex items-center gap-2 mb-1">
-                      {u.author && <span className="text-[10px] font-mono bg-white border border-slate-200 text-slate-500 px-1.5 py-0.5 rounded">{u.author}</span>}
-                      <span className="text-[10px] text-slate-400 ml-auto">
+                      {u.author && <span className="text-[11px] font-mono bg-white border border-slate-200 text-slate-500 px-1.5 py-0.5 rounded">{u.author}</span>}
+                      <span className="text-[11px] text-slate-400 ml-auto">
                         {new Date(u.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
                         {' '}
                         {new Date(u.date).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}

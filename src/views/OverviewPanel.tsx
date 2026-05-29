@@ -155,7 +155,7 @@ function PlantillaTab({ players, profiles }: { players: Player[]; profiles: Prof
                   className="w-full rounded-t bg-blue-400 transition-all"
                   style={{ height: `${barHeight}px` }}
                 />
-                <span className="text-[10px] text-slate-500 font-medium">{band.label}</span>
+                <span className="text-[11px] text-slate-500 font-medium">{band.label}</span>
               </div>
             );
           })}
@@ -401,7 +401,7 @@ function StatBox({ label, value, color }: { label: string; value: string; color:
   return (
     <div className={`rounded-lg p-3 ${colors[color] || colors.slate}`}>
       <p className="text-lg font-bold">{value}</p>
-      <p className="text-[10px] font-medium opacity-70 uppercase tracking-wide">{label}</p>
+      <p className="text-[11px] font-medium opacity-70 uppercase tracking-wide">{label}</p>
     </div>
   );
 }

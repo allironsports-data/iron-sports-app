@@ -92,7 +92,7 @@ const TIER_COLORS: Record<string, { bg: string; text: string }> = {
 function TierBadge({ tier }: { tier?: string }) {
   if (!tier) return null
   const cls = TIER_COLORS[tier] ?? { bg: 'bg-slate-100', text: 'text-slate-500' }
-  return <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${cls.bg} ${cls.text}`}>{tier}</span>
+  return <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${cls.bg} ${cls.text}`}>{tier}</span>
 }
 
 function initials(name?: string) {
@@ -370,7 +370,7 @@ export function Contactos({ onBack }: { onBack: () => void }) {
             <ArrowLeft className="w-4 h-4" />
           </button>
           <span className="text-sm font-semibold text-slate-800">Contactos</span>
-          <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 text-[10px] font-semibold uppercase tracking-wide">Admin</span>
+          <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 text-[11px] font-semibold uppercase tracking-wide">Admin</span>
 
           <div className="flex-1" />
 
@@ -487,9 +487,9 @@ export function Contactos({ onBack }: { onBack: () => void }) {
                           ? <ChevronDown className="w-3 h-3 text-slate-400" />
                           : <ChevronRight className="w-3 h-3 text-slate-400" />
                         }
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{label}</span>
+                        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">{label}</span>
                       </span>
-                      <span className="text-[10px] text-slate-400">{confTotal}</span>
+                      <span className="text-[11px] text-slate-400">{confTotal}</span>
                     </button>
 
                     {/* Regions in this confederation */}
@@ -775,7 +775,7 @@ function AlphaContactRow({
       />
       {/* Avatar */}
       <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
-        <span className="text-[10px] font-semibold text-slate-500">{initials(c.name)}</span>
+        <span className="text-[11px] font-semibold text-slate-500">{initials(c.name)}</span>
       </div>
       {/* Info */}
       <div className="flex-1 min-w-0 grid grid-cols-[1fr_1fr_auto] gap-x-3 items-center">
@@ -828,7 +828,7 @@ function ContactRow({
   return (
     <div className="px-4 py-2.5 flex items-start gap-3 hover:bg-slate-50 transition-colors group">
       <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-        <span className="text-[10px] font-semibold text-slate-500">{initials(c.name)}</span>
+        <span className="text-[11px] font-semibold text-slate-500">{initials(c.name)}</span>
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">

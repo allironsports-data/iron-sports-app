@@ -223,7 +223,7 @@ function contractBadge(endDate?: string): { label: string; cls: string } | null 
 
 
 function Avatar({ name, photo, size = 'sm' }: { name: string; photo?: string; size?: 'xs' | 'sm' | 'md' }) {
-  const cls = size === 'xs' ? 'w-6 h-6 text-[10px]' : size === 'sm' ? 'w-8 h-8 text-xs' : 'w-10 h-10 text-sm'
+  const cls = size === 'xs' ? 'w-6 h-6 text-[11px]' : size === 'sm' ? 'w-8 h-8 text-xs' : 'w-10 h-10 text-sm'
   if (photo) return <img src={photo} className={`${cls} rounded-full object-cover flex-shrink-0`} />
   const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
   return (
@@ -601,7 +601,7 @@ export function Distribution({
                 <span className="flex items-center gap-1.5">
                   Pipeline
                   {myActiveNegCount > 0 && (
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold leading-none ${
+                    <span className={`text-[11px] px-1.5 py-0.5 rounded-full font-bold leading-none ${
                       tab === t ? 'bg-[hsl(220,72%,36%)] text-white' : 'bg-slate-200 text-slate-600'
                     }`}>{myActiveNegCount}</span>
                   )}
@@ -754,7 +754,7 @@ export function Distribution({
                                     setManagerDropPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
                                     setOpenManagerDropId(entry.id);
                                   }}
-                                  className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold border-2 transition-colors ${
+                                  className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold border-2 transition-colors ${
                                     entry.aisManager
                                       ? 'bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-200'
                                       : 'bg-slate-100 text-slate-400 border-dashed border-slate-300 hover:bg-slate-200'
@@ -930,7 +930,7 @@ export function Distribution({
                                   <div className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${selected ? 'bg-[hsl(220,72%,36%)] border-[hsl(220,72%,36%)]' : 'border-slate-300'}`}>
                                     {selected && <Check className="w-2.5 h-2.5 text-white" />}
                                   </div>
-                                  <span className={`text-[10px] font-bold px-1 py-0.5 rounded ${tierCfg.bg} ${tierCfg.text} flex-shrink-0`}>{tier}</span>
+                                  <span className={`text-[11px] font-bold px-1 py-0.5 rounded ${tierCfg.bg} ${tierCfg.text} flex-shrink-0`}>{tier}</span>
                                   <span className="flex-1 min-w-0">
                                     <span className="font-medium truncate block">{league}</span>
                                     {country && <span className="text-xs text-slate-400">{country}</span>}
@@ -1066,7 +1066,7 @@ export function Distribution({
                     return (
                       <div key={t}>
                         <div className="flex items-center gap-2 mb-1.5">
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${tierCfg.bg} ${tierCfg.text}`}>{t}</span>
+                          <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${tierCfg.bg} ${tierCfg.text}`}>{t}</span>
                           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{tierCfg.title}</span>
                           <span className="text-xs text-slate-400">({tierClubs.length})</span>
                           <div className="flex-1 h-px bg-slate-200" />
@@ -1100,7 +1100,7 @@ export function Distribution({
                     return (
                       <div key={league}>
                         <div className="flex items-center gap-2 mb-1.5">
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${tierCfg.bg} ${tierCfg.text}`}>{tier}</span>
+                          <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${tierCfg.bg} ${tierCfg.text}`}>{tier}</span>
                           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{league}</span>
                           <span className="text-xs text-slate-400">({leagueClubs.length})</span>
                           <span className="text-xs text-slate-300">{CONFEDERATION_LABELS[confederation]}</span>
@@ -1341,7 +1341,7 @@ export function Distribution({
                 <div className="hidden sm:block bg-white rounded-lg border border-slate-200">
                   <table className="w-full text-sm table-fixed">
                     <thead>
-                      <tr className="border-b border-slate-100 bg-slate-50 text-[10px] text-slate-500 uppercase tracking-wider">
+                      <tr className="border-b border-slate-100 bg-slate-50 text-[11px] text-slate-500 uppercase tracking-wider">
                         <th className="text-left px-2 py-2.5 font-semibold w-[140px]">Posición</th>
                         <th className="text-left px-2 py-2.5 font-semibold w-[120px]">Club</th>
                         <th className="text-left px-2 py-2.5 font-semibold w-[130px]">Liga / Tier</th>
@@ -1408,7 +1408,7 @@ export function Distribution({
                                 </td>
                                 <td className="px-2 py-2">
                                   <div className="flex items-center gap-1">
-                                    <span className={`text-[10px] font-bold px-1 py-0.5 rounded flex-shrink-0 ${tierCfg.bg} ${tierCfg.text}`}>{tier}</span>
+                                    <span className={`text-[11px] font-bold px-1 py-0.5 rounded flex-shrink-0 ${tierCfg.bg} ${tierCfg.text}`}>{tier}</span>
                                     <span className="text-xs text-slate-500 truncate">{club.league ?? '—'}</span>
                                   </div>
                                 </td>
@@ -1438,7 +1438,7 @@ export function Distribution({
                                   {offeredCount > 0 ? (
                                     <button
                                       onClick={e => { e.stopPropagation(); setSelectedNeed({ clubId: club.id, needIndex }); setSelectedEntryId(null); setSelectedClubId(null) }}
-                                      className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap hover:bg-blue-100 transition-colors"
+                                      className="text-[11px] bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap hover:bg-blue-100 transition-colors"
                                     >
                                       {offeredCount} jug.
                                     </button>
@@ -1621,13 +1621,13 @@ export function Distribution({
                                   </div>
                                   <div className="text-sm text-slate-600 truncate w-36 flex-shrink-0">{club.name}</div>
                                   {neg.aisManager && (
-                                    <span className="text-[10px] font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded flex-shrink-0">{neg.aisManager}</span>
+                                    <span className="text-[11px] font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded flex-shrink-0">{neg.aisManager}</span>
                                   )}
                                   {pcfg && (
-                                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold flex-shrink-0 ${pcfg.bg} ${pcfg.text}`}>{entry?.priority}</span>
+                                    <span className={`text-[11px] px-1.5 py-0.5 rounded font-bold flex-shrink-0 ${pcfg.bg} ${pcfg.text}`}>{entry?.priority}</span>
                                   )}
                                   <div className="text-right flex-shrink-0 w-20">
-                                    <span className={`text-[10px] ${stale ? 'text-orange-500 font-semibold' : 'text-slate-400'}`}>
+                                    <span className={`text-[11px] ${stale ? 'text-orange-500 font-semibold' : 'text-slate-400'}`}>
                                       {stale ? `⏰ ${daysAgo}d` : daysAgo < 999 ? `${daysAgo}d` : '—'}
                                     </span>
                                   </div>
@@ -1676,10 +1676,10 @@ export function Distribution({
                                       <Avatar name={player.name} photo={player.photo} size="xs" />
                                       <div className="flex-1 min-w-0">
                                         <div className="text-xs font-semibold text-slate-800 truncate">{player.name}</div>
-                                        <div className="text-[10px] text-slate-400">{player.positions[0]}</div>
+                                        <div className="text-[11px] text-slate-400">{player.positions[0]}</div>
                                       </div>
                                       {pcfg && (
-                                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold flex-shrink-0 ${pcfg.bg} ${pcfg.text}`}>
+                                        <span className={`text-[11px] px-1.5 py-0.5 rounded font-bold flex-shrink-0 ${pcfg.bg} ${pcfg.text}`}>
                                           {entry?.priority}
                                         </span>
                                       )}
@@ -1692,15 +1692,15 @@ export function Distribution({
                                     {/* Meta */}
                                     <div className="mt-2 flex items-center gap-1.5 flex-wrap">
                                       {neg.aisManager && (
-                                        <span className="text-[10px] font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">
+                                        <span className="text-[11px] font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">
                                           {neg.aisManager}
                                         </span>
                                       )}
                                       {stale && (
-                                        <span className="text-[10px] text-orange-500 font-semibold">⏰ {daysSince(neg.updatedAt)}d sin cambios</span>
+                                        <span className="text-[11px] text-orange-500 font-semibold">⏰ {daysSince(neg.updatedAt)}d sin cambios</span>
                                       )}
                                       {neg.notes && !stale && (
-                                        <p className="text-[10px] text-slate-400 line-clamp-2 w-full">{neg.notes}</p>
+                                        <p className="text-[11px] text-slate-400 line-clamp-2 w-full">{neg.notes}</p>
                                       )}
                                     </div>
                                   </div>
@@ -1783,7 +1783,7 @@ export function Distribution({
                       <span className="text-xs text-slate-400">{player.positions[0]}</span>
                     </div>
                     <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${PRIORITY_BADGE[entry.priority]}`}>
+                      <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${PRIORITY_BADGE[entry.priority]}`}>
                         {entry.priority}
                       </span>
                       {entry.condition && (
@@ -1939,9 +1939,9 @@ export function Distribution({
                     </div>
                     {panelGestores.length > 1 && (
                       <div className="flex gap-1.5 flex-wrap mb-2">
-                        <button onClick={() => setPlayerPanelGestorFilter('')} className={`px-2 py-1 rounded text-[10px] font-medium border transition-colors ${!playerPanelGestorFilter ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'}`}>Todos</button>
+                        <button onClick={() => setPlayerPanelGestorFilter('')} className={`px-2 py-1 rounded text-[11px] font-medium border transition-colors ${!playerPanelGestorFilter ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'}`}>Todos</button>
                         {panelGestores.map(g => (
-                          <button key={g} onClick={() => setPlayerPanelGestorFilter(playerPanelGestorFilter === g ? '' : g)} className={`px-2 py-1 rounded text-[10px] font-medium border transition-colors ${playerPanelGestorFilter === g ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'}`}>{g}</button>
+                          <button key={g} onClick={() => setPlayerPanelGestorFilter(playerPanelGestorFilter === g ? '' : g)} className={`px-2 py-1 rounded text-[11px] font-medium border transition-colors ${playerPanelGestorFilter === g ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'}`}>{g}</button>
                         ))}
                       </div>
                     )}
@@ -2039,7 +2039,7 @@ export function Distribution({
                         {need.ageMax && <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">Sub-{need.ageMax}</span>}
                       </div>
                       <div className="flex items-center gap-1.5 mt-1 text-xs text-slate-500">
-                        <span className={`text-[10px] font-bold px-1 py-0.5 rounded ${tierCfg.bg} ${tierCfg.text}`}>{tier}</span>
+                        <span className={`text-[11px] font-bold px-1 py-0.5 rounded ${tierCfg.bg} ${tierCfg.text}`}>{tier}</span>
                         <span className="font-medium text-slate-700">{club.name}</span>
                         {club.league && <span className="text-slate-400">· {club.league}</span>}
                       </div>
@@ -2090,7 +2090,7 @@ export function Distribution({
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-1.5">
                                   <span className="text-sm font-medium text-slate-700 truncate">{p.name}</span>
-                                  {pcfg && <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold flex-shrink-0 ${pcfg.bg} ${pcfg.text}`}>{entry?.priority}</span>}
+                                  {pcfg && <span className={`text-[11px] px-1.5 py-0.5 rounded font-bold flex-shrink-0 ${pcfg.bg} ${pcfg.text}`}>{entry?.priority}</span>}
                                 </div>
                                 <span className={`text-xs px-2 py-0.5 rounded-full inline-block mt-0.5 ${scfg.color}`}>{scfg.label}</span>
                               </div>
@@ -2124,7 +2124,7 @@ export function Distribution({
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-1.5">
                                     <span className="text-sm font-medium text-slate-700 truncate">{p.name}</span>
-                                    {pcfg && <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold flex-shrink-0 ${pcfg.bg} ${pcfg.text}`}>{entry?.priority}</span>}
+                                    {pcfg && <span className={`text-[11px] px-1.5 py-0.5 rounded font-bold flex-shrink-0 ${pcfg.bg} ${pcfg.text}`}>{entry?.priority}</span>}
                                   </div>
                                   <div className="text-xs text-slate-400">{p.positions[0]}</div>
                                 </div>
@@ -2251,7 +2251,7 @@ export function Distribution({
                         {selectedNeedPosition && (
                           <button
                             onClick={() => setSelectedNeedPosition(null)}
-                            className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100"
+                            className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100"
                           >
                             {selectedNeedPosition} <X className="w-2.5 h-2.5" />
                           </button>
@@ -2284,7 +2284,7 @@ export function Distribution({
                               <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                                 <span className={`text-xs px-2 py-0.5 rounded-full ${scfg.color}`}>{scfg.label}</span>
                                 {neg.needPosition && (
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-medium">
+                                  <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-medium">
                                     {neg.needPosition}
                                   </span>
                                 )}
@@ -2544,7 +2544,7 @@ function ClubCard({ club, negotiations, isSelected, onClick, onOffer, onTogglePr
         isSelected ? 'border-blue-300 ring-1 ring-blue-200' : isStale ? 'border-orange-300' : 'border-slate-200'
       } ${club.isPriority ? 'border-l-4 border-l-green-400' : isStale ? 'border-l-4 border-l-orange-400' : ''}`}
     >
-      <div className={`w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0 text-[10px] font-bold ${tierCfg.bg} ${tierCfg.text}`}>
+      <div className={`w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0 text-[11px] font-bold ${tierCfg.bg} ${tierCfg.text}`}>
         {tier}
       </div>
       <div className="flex-1 min-w-0">
@@ -3323,8 +3323,8 @@ function EditNegotiationModal({ neg, clubs, players, currentProfile, onClose, on
               {sortedUpdates.map(u => (
                 <div key={u.id} className="bg-slate-50 rounded-lg px-3 py-2">
                   <div className="flex items-center gap-2 mb-0.5">
-                    {u.author && <span className="text-[10px] font-mono bg-white border border-slate-200 text-slate-500 px-1.5 py-0.5 rounded">{u.author}</span>}
-                    <span className="text-[10px] text-slate-400 ml-auto">
+                    {u.author && <span className="text-[11px] font-mono bg-white border border-slate-200 text-slate-500 px-1.5 py-0.5 rounded">{u.author}</span>}
+                    <span className="text-[11px] text-slate-400 ml-auto">
                       {new Date(u.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
                       {' '}
                       {new Date(u.date).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}

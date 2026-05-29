@@ -120,7 +120,7 @@ function AssessmentChip({ a, small }: { a?: ScoutingAssessment; small?: boolean 
   if (!a) return <span className="text-slate-300 text-xs">—</span>
   const cfg = ASSESSMENT_CONFIG[a]
   return (
-    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium border ${cfg.bg} ${cfg.text} ${cfg.border} ${small ? 'text-[10px] px-1' : ''}`}>
+    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium border ${cfg.bg} ${cfg.text} ${cfg.border} ${small ? 'text-[11px] px-1' : ''}`}>
       {cfg.label}
     </span>
   )
@@ -129,7 +129,7 @@ function AssessmentChip({ a, small }: { a?: ScoutingAssessment; small?: boolean 
 function FormRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">{label}</label>
+      <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">{label}</label>
       {children}
     </div>
   )
@@ -138,7 +138,7 @@ function FormRow({ label, children }: { label: string; children: React.ReactNode
 function InfoItem({ label, value }: { label: string; value: string }) {
   return (
     <div className="bg-slate-50 rounded-lg px-2.5 py-2">
-      <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">{label}</div>
+      <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">{label}</div>
       <div className="text-xs font-medium text-slate-700 mt-0.5 truncate">{value}</div>
     </div>
   )
@@ -212,7 +212,7 @@ function ReportCard({
     return (
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs space-y-2">
         <div className="flex items-center justify-between mb-1">
-          <span className="text-[10px] font-semibold text-blue-600 uppercase tracking-wide">Editando informe</span>
+          <span className="text-[11px] font-semibold text-blue-600 uppercase tracking-wide">Editando informe</span>
           <button onClick={() => setEditMode(false)} className="text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>
         </div>
         <input
@@ -261,7 +261,7 @@ function ReportCard({
           {report.titulo && (
             <div className="font-semibold text-slate-700 text-sm mb-0.5 truncate">{report.titulo}</div>
           )}
-          <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-400">
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400">
             <span className="flex items-center gap-1">
               <Calendar className="w-3 h-3" />
               {fmtDate(report.fecha)}
@@ -275,12 +275,12 @@ function ReportCard({
               </span>
             )}
             {report.conclusion && (
-              <span className={`px-1.5 py-0.5 rounded font-medium text-[10px] ${CONCLUSION_STYLE[report.conclusion] ?? 'bg-slate-100 text-slate-600'}`}>
+              <span className={`px-1.5 py-0.5 rounded font-medium text-[11px] ${CONCLUSION_STYLE[report.conclusion] ?? 'bg-slate-100 text-slate-600'}`}>
                 {report.conclusion}
               </span>
             )}
             {matchLabel && (
-              <span className="px-1.5 py-0.5 bg-violet-50 text-violet-700 border border-violet-200 rounded text-[10px] flex items-center gap-0.5">
+              <span className="px-1.5 py-0.5 bg-violet-50 text-violet-700 border border-violet-200 rounded text-[11px] flex items-center gap-0.5">
                 🏟 {matchLabel}
               </span>
             )}
@@ -394,7 +394,7 @@ function MatchRow({
         {/* Local */}
         <td className="px-3 py-2 text-sm font-medium text-slate-800 whitespace-nowrap">{match.homeTeam}</td>
         {/* vs */}
-        <td className="px-2 py-2 text-[10px] font-bold text-slate-400 text-center">vs</td>
+        <td className="px-2 py-2 text-[11px] font-bold text-slate-400 text-center">vs</td>
         {/* Visitante */}
         <td className="px-3 py-2 text-sm font-medium text-slate-800 whitespace-nowrap">{match.awayTeam}</td>
         {/* Competición */}
@@ -406,8 +406,8 @@ function MatchRow({
         {/* Modo */}
         <td className="px-3 py-2 text-xs whitespace-nowrap">
           {match.viewMode === 'campo'
-            ? <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded text-[10px] font-medium">🏟️ Campo</span>
-            : <span className="inline-flex items-center gap-1 text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded text-[10px] font-medium">📹 Vídeo</span>
+            ? <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded text-[11px] font-medium">🏟️ Campo</span>
+            : <span className="inline-flex items-center gap-1 text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded text-[11px] font-medium">📹 Vídeo</span>
           }
         </td>
         {/* Scout */}
@@ -440,7 +440,7 @@ function MatchRow({
         <td className="px-3 py-2">
           <button
             onClick={() => { setPlayersOpen(o => !o); setPlayerSearch('') }}
-            className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded border transition-colors ${
+            className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded border transition-colors ${
               linkedPlayers.length > 0
                 ? 'bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100'
                 : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
@@ -473,8 +473,8 @@ function MatchRow({
             </button>
             {isAdmin && (confirm
               ? <div className="flex items-center gap-1">
-                  <button onClick={() => { onDelete(match.id); setConfirm(false) }} className="px-2 py-0.5 text-[10px] bg-red-600 text-white rounded font-medium">Sí</button>
-                  <button onClick={() => setConfirm(false)} className="px-2 py-0.5 text-[10px] border border-slate-200 rounded text-slate-600">No</button>
+                  <button onClick={() => { onDelete(match.id); setConfirm(false) }} className="px-2 py-0.5 text-[11px] bg-red-600 text-white rounded font-medium">Sí</button>
+                  <button onClick={() => setConfirm(false)} className="px-2 py-0.5 text-[11px] border border-slate-200 rounded text-slate-600">No</button>
                 </div>
               : <button onClick={() => setConfirm(true)} className="p-1 text-slate-300 hover:text-red-500 transition-colors" title="Eliminar"><Trash2 className="w-3.5 h-3.5" /></button>
             )}
@@ -489,7 +489,7 @@ function MatchRow({
             {/* Linked players row */}
             {linkedPlayers.length > 0 && (
               <div className="flex flex-wrap gap-1.5 items-center mb-2.5">
-                <span className="text-[10px] font-semibold text-violet-600 uppercase tracking-wide mr-1">Vistos</span>
+                <span className="text-[11px] font-semibold text-violet-600 uppercase tracking-wide mr-1">Vistos</span>
                 {linkedPlayers.map(p => (
                   <span key={p.id} className="inline-flex items-center gap-1 bg-white border border-violet-200 text-violet-800 text-xs px-2 py-0.5 rounded-full">
                     {p.fullName}
@@ -517,7 +517,7 @@ function MatchRow({
                 {searchResults.length > 0 ? (
                   <div className="flex flex-wrap gap-1 items-center">
                     {playerSearch.length < 2 && teamSuggested.length > 0 && (
-                      <span className="text-[10px] text-violet-500 font-semibold uppercase tracking-wide mr-1">
+                      <span className="text-[11px] text-violet-500 font-semibold uppercase tracking-wide mr-1">
                         En BD de este partido:
                       </span>
                     )}
@@ -528,7 +528,7 @@ function MatchRow({
                         className="text-xs bg-white border border-violet-200 text-violet-700 hover:bg-violet-100 px-2 py-0.5 rounded-full transition-colors flex items-center gap-1"
                       >
                         <Plus className="w-3 h-3" />{p.fullName}
-                        {p.team && <span className="text-violet-400 text-[10px]">· {p.team}</span>}
+                        {p.team && <span className="text-violet-400 text-[11px]">· {p.team}</span>}
                       </button>
                     ))}
                   </div>
@@ -965,9 +965,9 @@ function RespondWithInformeModal({
             {authorName && authorName !== peticion.requestedBy && ` · ${authorName.split(' ')[0]}`}
           </div>
           {existingPlayer ? (
-            <div className="mt-1 text-[10px] text-blue-400">✓ Jugador encontrado en la base de datos</div>
+            <div className="mt-1 text-[11px] text-blue-400">✓ Jugador encontrado en la base de datos</div>
           ) : (
-            <div className="mt-1 text-[10px] text-blue-400">Se creará un nuevo jugador en captación</div>
+            <div className="mt-1 text-[11px] text-blue-400">Se creará un nuevo jugador en captación</div>
           )}
         </div>
 
@@ -1866,7 +1866,7 @@ export function Captacion({
                     <div className="text-lg font-bold text-slate-800">{count}</div>
                     <div className="text-[11px] font-mono font-semibold text-slate-600">{persona}</div>
                     {name && name !== persona && (
-                      <div className="text-[10px] text-slate-400 truncate">{name}</div>
+                      <div className="text-[11px] text-slate-400 truncate">{name}</div>
                     )}
                   </div>
                 )
@@ -1916,9 +1916,9 @@ export function Captacion({
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2 mb-0.5">
                           <span className="font-semibold text-slate-800 text-sm">{player?.fullName ?? '—'}</span>
-                          {player?.position1 && <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{player.position1}</span>}
+                          {player?.position1 && <span className="text-[11px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{player.position1}</span>}
                           {r.conclusion && (
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${CONCLUSION_STYLE[r.conclusion] ?? 'bg-slate-100 text-slate-600'}`}>
+                            <span className={`text-[11px] px-1.5 py-0.5 rounded font-medium ${CONCLUSION_STYLE[r.conclusion] ?? 'bg-slate-100 text-slate-600'}`}>
                               {r.conclusion}
                             </span>
                           )}
@@ -1929,13 +1929,13 @@ export function Captacion({
                       <div className="flex-shrink-0 text-right min-w-[72px]">
                         <div className="flex flex-col items-end gap-0.5">
                           {rel && (
-                            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${rel === 'hoy' ? 'bg-green-100 text-green-700' : rel === 'ayer' ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>
+                            <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-full ${rel === 'hoy' ? 'bg-green-100 text-green-700' : rel === 'ayer' ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>
                               {rel}
                             </span>
                           )}
-                          <div className="text-[10px] text-slate-400">{fmtDate(r.fecha)}</div>
+                          <div className="text-[11px] text-slate-400">{fmtDate(r.fecha)}</div>
                           {r.persona && (
-                            <span className="text-[10px] font-mono font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">{r.persona}</span>
+                            <span className="text-[11px] font-mono font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">{r.persona}</span>
                           )}
                         </div>
                       </div>
@@ -2145,7 +2145,7 @@ export function Captacion({
                   {/* Pendientes por persona */}
                   {Object.keys(matchStats.pendienteByPersona).length > 0 && (
                     <div className="mt-3 pt-3 border-t border-slate-100">
-                      <div className="text-[10px] font-semibold text-amber-600 uppercase mb-2">Pendientes de ver</div>
+                      <div className="text-[11px] font-semibold text-amber-600 uppercase mb-2">Pendientes de ver</div>
                       {Object.entries(matchStats.pendienteByPersona).map(([persona, count]) => (
                         <StatBar
                           key={persona}
@@ -2170,13 +2170,13 @@ export function Captacion({
                     {matchStats.video > 0 && (
                       <div className="flex-1 text-center bg-blue-50 rounded-lg py-2">
                         <div className="text-sm font-bold text-blue-700">{Math.round((matchStats.video / scoutingMatches.length) * 100)}%</div>
-                        <div className="text-[10px] text-blue-500">vídeo</div>
+                        <div className="text-[11px] text-blue-500">vídeo</div>
                       </div>
                     )}
                     {matchStats.campo > 0 && (
                       <div className="flex-1 text-center bg-emerald-50 rounded-lg py-2">
                         <div className="text-sm font-bold text-emerald-700">{Math.round((matchStats.campo / scoutingMatches.length) * 100)}%</div>
-                        <div className="text-[10px] text-emerald-500">campo</div>
+                        <div className="text-[11px] text-emerald-500">campo</div>
                       </div>
                     )}
                   </div>
@@ -2658,21 +2658,21 @@ export function Captacion({
                           <div className="flex flex-wrap items-center gap-1.5 mb-1">
                             <span className="font-semibold text-slate-800 text-sm">{p.playerName}</span>
                             {p.position && (
-                              <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{p.position}</span>
+                              <span className="text-[11px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{p.position}</span>
                             )}
                             {(p.birthYear || monthLabel) && (
-                              <span className="text-[10px] text-slate-400 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded font-mono">
+                              <span className="text-[11px] text-slate-400 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded font-mono">
                                 {[monthLabel, p.birthYear].filter(Boolean).join('/')}
                               </span>
                             )}
                             {p.team && (
-                              <span className="text-[10px] text-slate-500 italic">{p.team}</span>
+                              <span className="text-[11px] text-slate-500 italic">{p.team}</span>
                             )}
                             {p.country && (
-                              <span className="text-[10px] text-slate-500 italic">{p.country}</span>
+                              <span className="text-[11px] text-slate-500 italic">{p.country}</span>
                             )}
                             {p.nationality && (
-                              <span className="text-[10px] text-violet-600 bg-violet-50 border border-violet-100 px-1.5 py-0.5 rounded">{p.nationality}</span>
+                              <span className="text-[11px] text-violet-600 bg-violet-50 border border-violet-100 px-1.5 py-0.5 rounded">{p.nationality}</span>
                             )}
                           </div>
 
@@ -2745,7 +2745,7 @@ export function Captacion({
                                   <span className="font-mono font-bold">{report.persona ?? '?'}</span>
                                   {reportDate && <span className="text-green-600 opacity-80">{reportDate}</span>}
                                   {report.conclusion && (
-                                    <span className={`ml-0.5 px-1.5 py-0.5 rounded text-[10px] ${BOULEMA_CONCLUSION_STYLE[report.conclusion] ?? 'bg-slate-100 text-slate-600'}`}>
+                                    <span className={`ml-0.5 px-1.5 py-0.5 rounded text-[11px] ${BOULEMA_CONCLUSION_STYLE[report.conclusion] ?? 'bg-slate-100 text-slate-600'}`}>
                                       {report.conclusion}
                                     </span>
                                   )}
@@ -2767,7 +2767,7 @@ export function Captacion({
                         {/* Right: date + actions */}
                         <div className="flex-shrink-0 flex flex-col items-end gap-1">
                           {rel && (
-                            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                            <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-full ${
                               rel === 'hoy' ? 'bg-green-100 text-green-700' :
                               rel === 'ayer' ? 'bg-blue-50 text-blue-600' :
                               'bg-slate-100 text-slate-500'
@@ -2775,13 +2775,13 @@ export function Captacion({
                               {rel}
                             </span>
                           )}
-                          <div className="text-[10px] text-slate-400">{fmtDate(p.createdAt)}</div>
+                          <div className="text-[11px] text-slate-400">{fmtDate(p.createdAt)}</div>
                           <div className="flex items-center gap-1 mt-1">
                             {isConfirming ? (
                               <>
                                 <button
                                   onClick={() => setConfirmDeletePeticion(null)}
-                                  className="text-[10px] px-2 py-0.5 border border-slate-200 rounded text-slate-500 hover:bg-slate-50"
+                                  className="text-[11px] px-2 py-0.5 border border-slate-200 rounded text-slate-500 hover:bg-slate-50"
                                 >
                                   Cancelar
                                 </button>
@@ -2790,7 +2790,7 @@ export function Captacion({
                                     await onDeleteBoulemaPeticion(p.id)
                                     setConfirmDeletePeticion(null)
                                   }}
-                                  className="text-[10px] px-2 py-0.5 bg-red-500 text-white rounded hover:bg-red-600"
+                                  className="text-[11px] px-2 py-0.5 bg-red-500 text-white rounded hover:bg-red-600"
                                 >
                                   Eliminar
                                 </button>
@@ -3048,18 +3048,18 @@ export function Captacion({
 
                     {panelPlayer.comentarios && (
                       <div className="px-3 py-2.5 bg-amber-50 border border-amber-100 rounded-lg text-xs text-slate-700 leading-relaxed">
-                        <div className="text-[10px] font-semibold text-amber-600 uppercase mb-1">Comentarios</div>
+                        <div className="text-[11px] font-semibold text-amber-600 uppercase mb-1">Comentarios</div>
                         {panelPlayer.comentarios}
                       </div>
                     )}
 
                     {/* Quick assessment — available to all users */}
                     <div>
-                      <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Assessment</div>
+                      <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Assessment</div>
                       <div className="flex flex-wrap gap-1">
                         <button
                           onClick={() => handleQuickAssessment(panelPlayer, undefined)}
-                          className={`px-2 py-1 text-[10px] font-medium rounded border transition-colors ${
+                          className={`px-2 py-1 text-[11px] font-medium rounded border transition-colors ${
                             !panelPlayer.assessment ? 'bg-slate-700 text-white border-slate-700' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
                           }`}
                         >
@@ -3072,7 +3072,7 @@ export function Captacion({
                             <button
                               key={a}
                               onClick={() => handleQuickAssessment(panelPlayer, a)}
-                              className={`px-2 py-1 text-[10px] font-medium rounded border transition-colors ${
+                              className={`px-2 py-1 text-[11px] font-medium rounded border transition-colors ${
                                 active ? `${cfg.bg} ${cfg.text} ${cfg.border}` : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
                               }`}
                             >
@@ -3154,7 +3154,7 @@ export function Captacion({
                                 <div className="flex items-center justify-between">
                                   <span className="text-xs font-semibold text-blue-700">Nuevo informe</span>
                                   <div className="flex items-center gap-2">
-                                    <span className="text-[10px] font-mono bg-white border border-blue-200 px-1.5 py-0.5 rounded text-slate-600">
+                                    <span className="text-[11px] font-mono bg-white border border-blue-200 px-1.5 py-0.5 rounded text-slate-600">
                                       {currentProfile.avatar} · {currentProfile.name.split(' ')[0]}
                                     </span>
                                     <button onClick={() => setShowAddReportForm(false)} className="text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>
@@ -3232,7 +3232,7 @@ export function Captacion({
                                   </div>
                                 </div>
                                 <div className="flex items-center justify-between">
-                                  <span className="text-[10px] text-slate-400">⌘+Enter para guardar</span>
+                                  <span className="text-[11px] text-slate-400">⌘+Enter para guardar</span>
                                   <button
                                     onClick={handleAddReport}
                                     disabled={!reportText.trim() || savingReport}
@@ -3294,16 +3294,16 @@ export function Captacion({
                               const d = `${m.date.slice(8)} ${MONTHS_ES[parseInt(m.date.slice(5,7))-1]} '${m.date.slice(2,4)}`
                               return (
                                 <div key={m.id} className="flex items-center gap-2 bg-slate-50 rounded-lg px-2.5 py-1.5 group">
-                                  <span className="text-[10px] text-slate-400 font-mono flex-shrink-0 w-20">{d}</span>
+                                  <span className="text-[11px] text-slate-400 font-mono flex-shrink-0 w-20">{d}</span>
                                   <span className="text-xs text-slate-700 font-medium flex-1 min-w-0 truncate">
                                     {m.homeTeam} <span className="text-slate-400 font-normal">vs</span> {m.awayTeam}
                                   </span>
                                   {m.competition && (
-                                    <span className="text-[10px] bg-white border border-slate-200 text-slate-500 px-1.5 py-0.5 rounded flex-shrink-0">{m.competition}</span>
+                                    <span className="text-[11px] bg-white border border-slate-200 text-slate-500 px-1.5 py-0.5 rounded flex-shrink-0">{m.competition}</span>
                                   )}
                                   {m.viewMode === 'campo'
-                                    ? <span className="text-[10px] text-emerald-600 flex-shrink-0">🏟</span>
-                                    : <span className="text-[10px] text-blue-500 flex-shrink-0">📹</span>
+                                    ? <span className="text-[11px] text-emerald-600 flex-shrink-0">🏟</span>
+                                    : <span className="text-[11px] text-blue-500 flex-shrink-0">📹</span>
                                   }
                                   <button
                                     onClick={() => onRemoveMatchPlayer(m.id, panelPlayerId)}

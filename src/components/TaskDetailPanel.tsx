@@ -136,23 +136,23 @@ export function TaskDetailPanel({
                   {/* Badges row */}
                   <div className="flex items-center gap-2 flex-wrap mb-1.5">
                     {task.adminOnly && (
-                      <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 border border-rose-200">
+                      <span className="text-[11px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 border border-rose-200">
                         Admin
                       </span>
                     )}
                     <span
-                      className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full"
+                      className="text-[11px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full"
                       style={{ background: priorityBadge.bg, color: priorityBadge.color }}
                     >
                       {priorityBadge.label}
                     </span>
                     {task.label && (
-                      <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200">
+                      <span className="text-[11px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200">
                         {task.label}
                       </span>
                     )}
                     {isOverdue && (
-                      <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200">
+                      <span className="text-[11px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200">
                         Vencida
                       </span>
                     )}
@@ -210,7 +210,7 @@ export function TaskDetailPanel({
 
                 {/* Status */}
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Estado</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Estado</p>
                   <div className="flex gap-1.5">
                     {(["pendiente", "en_progreso", "completada"] as const).map(s => {
                       const cfg = statusConfig[s];
@@ -233,7 +233,7 @@ export function TaskDetailPanel({
 
                 {/* Description */}
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Descripción</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Descripción</p>
                   {canEdit ? (
                     <textarea
                       value={description}
@@ -251,7 +251,7 @@ export function TaskDetailPanel({
                 <div className="grid grid-cols-2 gap-2.5">
                   {/* Assignee */}
                   <div className="bg-slate-50 rounded-xl p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Responsable</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Responsable</p>
                     {canEdit ? (
                       <select
                         value={assigneeId}
@@ -280,13 +280,13 @@ export function TaskDetailPanel({
 
                   {/* Due date */}
                   <div className="bg-slate-50 rounded-xl p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Fecha límite</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Fecha límite</p>
                     {task.dueDate ? (
                       <>
                         <p className={`text-sm font-medium ${isOverdue ? "text-red-600" : "text-slate-700"}`}>
                           {new Date(task.dueDate).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" })}
                         </p>
-                        {isOverdue && <p className="text-[10px] text-red-500 mt-0.5">Vencida</p>}
+                        {isOverdue && <p className="text-[11px] text-red-500 mt-0.5">Vencida</p>}
                       </>
                     ) : (
                       <p className="text-xs text-slate-400">Sin fecha</p>
@@ -295,7 +295,7 @@ export function TaskDetailPanel({
 
                   {/* Priority */}
                   <div className="bg-slate-50 rounded-xl p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Prioridad</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Prioridad</p>
                     <span
                       className="text-xs font-semibold px-2 py-0.5 rounded-full"
                       style={{ background: priorityBadge.bg, color: priorityBadge.color }}
@@ -306,7 +306,7 @@ export function TaskDetailPanel({
 
                   {/* Label / Tipo */}
                   <div className="bg-slate-50 rounded-xl p-3 col-span-2">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Tipo</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Tipo</p>
                     {canEdit ? (
                       <select
                         value={label}
@@ -329,7 +329,7 @@ export function TaskDetailPanel({
 
                   {/* Player */}
                   <div className="bg-slate-50 rounded-xl p-3 col-span-2">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Jugador</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Jugador</p>
                     {canEdit ? (
                       <select
                         value={playerId}
@@ -350,7 +350,7 @@ export function TaskDetailPanel({
 
                   {/* Created */}
                   <div className="bg-slate-50 rounded-xl p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Creada</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Creada</p>
                     <p className="text-sm text-slate-700">
                       {new Date(task.createdAt).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" })}
                     </p>
@@ -359,7 +359,7 @@ export function TaskDetailPanel({
 
                 {/* Watchers */}
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Adjuntados</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Adjuntados</p>
                   <div className="flex flex-wrap gap-1.5">
                     {profiles.map(p => {
                       const active = watchers.includes(p.id);
@@ -441,7 +441,7 @@ export function TaskDetailPanel({
                           >
                             {comment.content}
                           </div>
-                          <p className="text-[10px] text-slate-400 mt-0.5 px-1">
+                          <p className="text-[11px] text-slate-400 mt-0.5 px-1">
                             {isMe ? "Tú" : (author?.name.split(" ")[0] ?? "?")} ·{" "}
                             {new Date(comment.createdAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}
                           </p>

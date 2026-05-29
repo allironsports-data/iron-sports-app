@@ -313,7 +313,7 @@ export function ClubDetail({
                         </div>
                         {need.notes && <p className="text-xs text-slate-500 mt-1">{need.notes}</p>}
                         {(need.createdAt || need.addedBy) && (
-                          <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-400">
+                          <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-400">
                             {need.createdAt && (
                               <span>{new Date(need.createdAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                             )}
@@ -621,7 +621,7 @@ function AddPlayerToClubModal({ players, entries, existingPlayerIds, clubId, pos
                         <div className="text-xs text-slate-500">{p.positions[0]}</div>
                       </div>
                       {posMatch && !query && (
-                        <span className="text-[10px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded font-medium flex-shrink-0">✓ pos.</span>
+                        <span className="text-[11px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded font-medium flex-shrink-0">✓ pos.</span>
                       )}
                       {entry && (
                         <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${PRIORITY_CONFIG[entry.priority].bg} ${PRIORITY_CONFIG[entry.priority].text}`}>{entry.priority}</span>

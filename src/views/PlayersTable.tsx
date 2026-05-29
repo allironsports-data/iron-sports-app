@@ -362,7 +362,7 @@ export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onLogo
               </tbody>
             </table>
           </div>
-          <div className="px-3 py-2 bg-slate-50 border-t border-slate-100 text-[10px] text-slate-400">
+          <div className="px-3 py-2 bg-slate-50 border-t border-slate-100 text-[11px] text-slate-400">
             {filtered.length} jugador{filtered.length !== 1 ? 'es' : ''} · Haz clic en cualquier celda para editar · Tab para avanzar · Enter para confirmar · Esc para cancelar
           </div>
         </div>

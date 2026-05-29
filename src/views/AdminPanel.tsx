@@ -261,7 +261,7 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-slate-800">{p.name}</span>
                         {p.is_admin && (
-                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700">
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] font-semibold bg-blue-50 text-blue-700">
                             <Shield className="w-2.5 h-2.5" /> Admin
                           </span>
                         )}
@@ -284,7 +284,7 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                     <button onClick={() => handleToggleAdmin(p)}
-                      className={`text-[10px] px-2 py-1 rounded border transition-colors ${
+                      className={`text-[11px] px-2 py-1 rounded border transition-colors ${
                         p.is_admin ? 'border-blue-200 text-blue-600 hover:bg-blue-50' : 'border-slate-200 text-slate-500 hover:text-slate-700'
                       }`}>
                       {p.is_admin ? 'Quitar admin' : 'Hacer admin'}
@@ -427,7 +427,7 @@ function TaskTrackingTab({ profiles, tasks, players }: { profiles: Profile[]; ta
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-sm font-semibold text-slate-800">{p.name}</p>
                     {overdue.length > 0 && (
-                      <span className="flex items-center gap-0.5 text-[10px] text-red-600 bg-red-50 border border-red-200 rounded-full px-1.5 py-0.5">
+                      <span className="flex items-center gap-0.5 text-[11px] text-red-600 bg-red-50 border border-red-200 rounded-full px-1.5 py-0.5">
                         <AlertTriangle className="w-2.5 h-2.5" /> {overdue.length} vencida{overdue.length !== 1 ? 's' : ''}
                       </span>
                     )}
@@ -440,14 +440,14 @@ function TaskTrackingTab({ profiles, tasks, players }: { profiles: Profile[]; ta
                     <div className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
                       <div className="h-full rounded-full bg-emerald-400 transition-all" style={{ width: `${(completed.length / assigned.length) * 100}%` }} />
                     </div>
-                    <span className="text-[10px] text-slate-400">{Math.round((completed.length / assigned.length) * 100)}% hecho</span>
+                    <span className="text-[11px] text-slate-400">{Math.round((completed.length / assigned.length) * 100)}% hecho</span>
                   </div>
                 )}
                 {/* Stats pills */}
                 <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <span className="text-[10px] bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded">{completed.length}✓</span>
-                  {inProgress.length > 0 && <span className="text-[10px] bg-violet-50 text-violet-600 px-1.5 py-0.5 rounded">{inProgress.length}▶</span>}
-                  {pending.length > 0 && <span className="text-[10px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded">{pending.filter(t => t.status === 'pendiente').length}○</span>}
+                  <span className="text-[11px] bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded">{completed.length}✓</span>
+                  {inProgress.length > 0 && <span className="text-[11px] bg-violet-50 text-violet-600 px-1.5 py-0.5 rounded">{inProgress.length}▶</span>}
+                  {pending.length > 0 && <span className="text-[11px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded">{pending.filter(t => t.status === 'pendiente').length}○</span>}
                 </div>
                 {isExpanded ? <ChevronDown className="w-4 h-4 text-slate-400 flex-shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 flex-shrink-0" />}
               </button>
@@ -467,7 +467,7 @@ function TaskTrackingTab({ profiles, tasks, players }: { profiles: Profile[]; ta
                             {taskStatusIcon(t)}
                             <div className="flex-1 min-w-0">
                               <div className="text-xs font-medium text-slate-700 truncate">{t.title}</div>
-                              <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-400 flex-wrap">
+                              <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400 flex-wrap">
                                 <span className="truncate">{playerName}</span>
                                 {t.priority === 'alta' && <span className="text-red-500 font-semibold">Alta</span>}
                                 {t.dueDate && (
@@ -477,7 +477,7 @@ function TaskTrackingTab({ profiles, tasks, players }: { profiles: Profile[]; ta
                                 )}
                               </div>
                             </div>
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${
+                            <span className={`text-[11px] px-1.5 py-0.5 rounded flex-shrink-0 ${
                               t.status === 'completada' ? 'bg-emerald-50 text-emerald-600' :
                               t.status === 'en_progreso' ? 'bg-violet-50 text-violet-600' :
                               'bg-slate-100 text-slate-500'
@@ -510,7 +510,7 @@ function SummaryBox({ label, value, color }: { label: string; value: number; col
   return (
     <div className={`rounded-lg p-3 ${colors[color] || colors.blue}`}>
       <p className="text-xl font-bold">{value}</p>
-      <p className="text-[10px] font-medium opacity-70 uppercase tracking-wide">{label}</p>
+      <p className="text-[11px] font-medium opacity-70 uppercase tracking-wide">{label}</p>
     </div>
   )
 }
