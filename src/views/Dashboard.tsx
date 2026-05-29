@@ -480,40 +480,62 @@ export function Dashboard({
           </div>
         </div>
 
-        {/* Tab nav: Tareas | Jugadores | Equipo | Distribución | Captación */}
+        {/* Two-level nav: Mantenimiento | Distribución | Captación → Tareas | Jugadores | Equipo */}
         {onViewChange && (
-          <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center border-t border-slate-100 overflow-x-auto scrollbar-none">
-            {([
-              { id: 'tareas'       as const, label: 'Tareas',       internal: false },
-              { id: 'jugadores'    as const, label: 'Jugadores',    internal: false },
-              { id: 'equipo'       as const, label: 'Equipo',       internal: true  },
-              { id: 'distribucion' as const, label: 'Distribución', internal: false, icon: <TrendingUp className="w-3.5 h-3.5" /> },
-              { id: 'captacion'    as const, label: 'Captación',    internal: false, icon: <Eye className="w-3.5 h-3.5" /> },
-            ]).map(tab => {
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => {
-                    if (tab.id === 'equipo') {
-                      setInternalTab('equipo');
-                    } else {
-                      setInternalTab(null);
-                      onViewChange(tab.id as 'tareas' | 'jugadores' | 'distribucion' | 'captacion');
-                    }
-                  }}
-                  className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-                    isActive
-                      ? 'border-[hsl(220,72%,26%)] text-[hsl(220,72%,26%)]'
-                      : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
-                  }`}
-                >
-                  {tab.icon}
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
+          <>
+            {/* Level 1: main sections */}
+            <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center border-t border-slate-100 overflow-x-auto scrollbar-none">
+              {/* Mantenimiento — always active while Dashboard is mounted */}
+              <button className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 border-[hsl(220,72%,26%)] text-[hsl(220,72%,26%)] transition-colors">
+                Mantenimiento
+              </button>
+              <button
+                onClick={() => { setInternalTab(null); onViewChange('distribucion'); }}
+                className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
+              >
+                <TrendingUp className="w-3.5 h-3.5" />
+                Distribución
+              </button>
+              <button
+                onClick={() => { setInternalTab(null); onViewChange('captacion'); }}
+                className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
+              >
+                <Eye className="w-3.5 h-3.5" />
+                Captación
+              </button>
+            </div>
+
+            {/* Level 2: Mantenimiento sub-tabs */}
+            <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center bg-slate-50 border-t border-slate-100 overflow-x-auto scrollbar-none">
+              {([
+                { id: 'tareas'    as const, label: 'Tareas' },
+                { id: 'jugadores' as const, label: 'Jugadores' },
+                { id: 'equipo'    as const, label: 'Equipo' },
+              ]).map(tab => {
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => {
+                      if (tab.id === 'equipo') {
+                        setInternalTab('equipo');
+                      } else {
+                        setInternalTab(null);
+                        onViewChange(tab.id);
+                      }
+                    }}
+                    className={`flex-shrink-0 px-4 py-2 text-xs font-medium border-b-2 transition-colors ${
+                      isActive
+                        ? 'border-[hsl(220,72%,26%)] text-[hsl(220,72%,26%)]'
+                        : 'border-transparent text-slate-400 hover:text-slate-700 hover:border-slate-300'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+          </>
         )}
       </header>
 
@@ -577,7 +599,7 @@ export function Dashboard({
         )}
 
         {/* ── Tareas section ──────────────────────────────── */}
-        {view === 'tareas' && (<>
+        {activeTab === 'tareas' && (<>
 
         {/* ── Stat cards ──────────────────────────────────── */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-5">
@@ -900,7 +922,7 @@ export function Dashboard({
         </>)}
 
         {/* ── Jugadores section ────────────────────────────── */}
-        {view === 'jugadores' && (<>
+        {activeTab === 'jugadores' && (<>
 
         {/* Players list header */}
         <div className="flex flex-col gap-2 mb-3">
