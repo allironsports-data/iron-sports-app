@@ -173,10 +173,13 @@ export function Dashboard({
   const [quickFilter, setQuickFilter] = useState<"overdue" | "urgent" | "inprogress" | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
   const [tasksMainView, setTasksMainView] = useState<'mis' | 'equipo'>('mis');
+  const [equipoSubView, setEquipoSubView] = useState<'persona' | 'todas'>('persona');
   const [weekOffset, setWeekOffset] = useState(0);
   // Activities per profile for the equipo weekly view
   const [teamActivities, setTeamActivities] = useState<Record<string, PlayerActivity[]>>({});
   const [loadingTeamActivities, setLoadingTeamActivities] = useState(false);
+  const [showCompletedTeam, setShowCompletedTeam] = useState(false);
+  const [equipoQuickFilter, setEquipoQuickFilter] = useState<'overdue' | 'inprogress' | null>(null);
   const [detailTask, setDetailTask] = useState<Task | null>(null);
 
   // Bulk select state
@@ -296,6 +299,14 @@ export function Dashboard({
     return d >= thisMonday && d <= thisSunday;
   });
   const myTasksInProgress = myTasks.filter(t => t.status === 'en_progreso');
+
+  // Team-wide tasks (for Equipo "Todas" kanban)
+  const teamAllTasks = tasks.filter(t => !(t.adminOnly && !currentProfile.is_admin));
+  const teamPendingAll = teamAllTasks.filter(t => t.status !== 'completada');
+  const teamCompletedAll = teamAllTasks.filter(t => t.status === 'completada');
+  const teamOverdue = teamPendingAll.filter(t => t.dueDate && t.dueDate < todayStr);
+  const teamDueToday = teamPendingAll.filter(t => t.dueDate === todayStr);
+  const teamInProgress = teamAllTasks.filter(t => t.status === 'en_progreso');
 
   // Birthdays
   const birthdaysToday = visiblePlayers.filter((p) => isBirthdayToday(p.birthDate));
@@ -734,6 +745,26 @@ export function Dashboard({
         {/* ── EQUIPO view ──────────────────────────────────── */}
         {tasksMainView === 'equipo' && (<>
 
+          {/* Sub-toggle: Por persona | Todas las tareas */}
+          <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5 mb-5 w-fit">
+            {(['persona', 'todas'] as const).map(v => (
+              <button
+                key={v}
+                onClick={() => { setEquipoSubView(v); setEquipoQuickFilter(null); }}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                  equipoSubView === v
+                    ? 'bg-white text-slate-800 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                {v === 'persona' ? 'Por persona' : 'Todas las tareas'}
+              </button>
+            ))}
+          </div>
+
+          {/* ── Por persona: week cards ── */}
+          {equipoSubView === 'persona' && (<>
+
           {/* Week navigator */}
           <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-2">
@@ -776,7 +807,6 @@ export function Dashboard({
 
               const weekTasks = tasks.filter(t =>
                 t.assigneeId === p.id &&
-                t.status !== 'completada' &&
                 t.dueDate != null &&
                 t.dueDate >= weekMonStr &&
                 t.dueDate <= weekSunStr
@@ -790,12 +820,9 @@ export function Dashboard({
                 t.dueDate != null &&
                 t.dueDate < todayStr
               );
-              const completedWeek = tasks.filter(t =>
+              const allCompleted = tasks.filter(t =>
                 t.assigneeId === p.id &&
-                t.status === 'completada' &&
-                t.dueDate != null &&
-                t.dueDate >= weekMonStr &&
-                t.dueDate <= weekSunStr
+                t.status === 'completada'
               );
               const profileActs = teamActivities[p.id] ?? [];
               const weekEvents = profileActs.filter(a =>
@@ -841,7 +868,8 @@ export function Dashboard({
                               className="flex items-center gap-2 cursor-pointer group">
                               <div className="w-1.5 h-1.5 rounded-full flex-shrink-0"
                                 style={{
-                                  background: t.status === 'en_progreso' ? '#3b82f6'
+                                  background: t.status === 'completada' ? '#10b981'
+                                    : t.status === 'en_progreso' ? '#3b82f6'
                                     : t.priority === 'alta' ? '#E24B4A'
                                     : t.priority === 'media' ? '#EF9F27' : '#94a3b8'
                                 }} />
@@ -904,10 +932,10 @@ export function Dashboard({
                         {inProgressP.length > 0 && (
                           <span className="text-blue-600 font-medium">{inProgressP.length} en progreso</span>
                         )}
-                        {completedWeek.length > 0 && (
-                          <span className="text-emerald-600 font-medium">✓ {completedWeek.length} completadas</span>
+                        {allCompleted.length > 0 && (
+                          <span className="text-emerald-600 font-medium">✓ {allCompleted.length} completadas</span>
                         )}
-                        {inProgressP.length === 0 && completedWeek.length === 0 && weekTasks.length === 0 && weekEvents.length === 0 && (
+                        {inProgressP.length === 0 && allCompleted.length === 0 && weekTasks.length === 0 && weekEvents.length === 0 && (
                           <span className="text-slate-300">Sin actividad</span>
                         )}
                       </div>
@@ -926,6 +954,110 @@ export function Dashboard({
             })}
           </div>
         </>)}
+
+          </>)}
+
+          {/* ── Todas las tareas: team kanban ── */}
+          {equipoSubView === 'todas' && (<>
+
+            {/* 4-stat strip */}
+            <div className="grid grid-cols-4 gap-2 mb-4">
+              <button
+                onClick={() => setEquipoQuickFilter(q => q === 'overdue' ? null : 'overdue')}
+                className={`rounded-xl p-3 text-center border transition-all active:scale-95 ${
+                  equipoQuickFilter === 'overdue'
+                    ? 'bg-red-50 border-red-400 shadow-sm'
+                    : teamOverdue.length > 0
+                      ? 'bg-white border-red-200 hover:border-red-300'
+                      : 'bg-white border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                <p className={`text-xl font-semibold ${teamOverdue.length > 0 ? 'text-red-500' : 'text-slate-800'}`}>
+                  {teamOverdue.length}
+                </p>
+                <p className="text-[11px] text-slate-400 mt-0.5">Vencidas</p>
+              </button>
+              <div className="bg-white border border-slate-200 rounded-xl p-3 text-center">
+                <p className="text-xl font-semibold text-slate-800">{teamDueToday.length}</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">Hoy</p>
+              </div>
+              <div className="bg-white border border-slate-200 rounded-xl p-3 text-center">
+                <p className="text-xl font-semibold text-slate-800">{teamPendingAll.length}</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">Pendientes</p>
+              </div>
+              <button
+                onClick={() => setEquipoQuickFilter(q => q === 'inprogress' ? null : 'inprogress')}
+                className={`rounded-xl p-3 text-center border transition-all active:scale-95 ${
+                  equipoQuickFilter === 'inprogress'
+                    ? 'bg-blue-50 border-blue-400 shadow-sm'
+                    : teamInProgress.length > 0
+                      ? 'bg-white border-blue-200 hover:border-blue-300'
+                      : 'bg-white border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                <p className={`text-xl font-semibold ${teamInProgress.length > 0 ? 'text-blue-600' : 'text-slate-800'}`}>
+                  {teamInProgress.length}
+                </p>
+                <p className="text-[11px] text-slate-400 mt-0.5">En progreso</p>
+              </button>
+            </div>
+
+            {/* Team kanban */}
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between">
+                <p className="text-xs font-semibold text-slate-600">
+                  Todas las tareas <span className="font-normal text-slate-400">({teamAllTasks.length})</span>
+                </p>
+                {equipoQuickFilter && (
+                  <button onClick={() => setEquipoQuickFilter(null)} className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1">
+                    <X className="w-3 h-3" /> Limpiar filtro
+                  </button>
+                )}
+              </div>
+              {(() => {
+                const filtered2 = equipoQuickFilter === 'overdue'
+                  ? teamPendingAll.filter(t => t.dueDate && t.dueDate < todayStr)
+                  : equipoQuickFilter === 'inprogress'
+                    ? teamAllTasks.filter(t => t.status === 'en_progreso')
+                    : teamPendingAll;
+                const colPending    = filtered2.filter(t => t.status === 'pendiente');
+                const colInProgress = filtered2.filter(t => t.status === 'en_progreso');
+                return (
+                  <>
+                    <div className="hidden sm:grid grid-cols-3 gap-0 divide-x divide-slate-100 p-4 pt-3">
+                      <KanbanCol label="Pendiente" dotColor="#94a3b8"
+                        tasks={colPending} players={players} profiles={profiles}
+                        onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
+                      />
+                      <KanbanCol label="En progreso" dotColor="#378ADD"
+                        tasks={colInProgress} players={players} profiles={profiles}
+                        onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
+                      />
+                      <KanbanCol label="Completada" dotColor="#1D9E75"
+                        tasks={[]} players={players} profiles={profiles}
+                        onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
+                        showCompleted={showCompletedTeam} onToggleCompleted={() => setShowCompletedTeam(v => !v)}
+                        completedCount={teamCompletedAll.length} completedTasks={teamCompletedAll}
+                        isCompletedCol
+                      />
+                    </div>
+                    <div className="sm:hidden p-4 space-y-2">
+                      {filtered2.length === 0
+                        ? <p className="text-center py-6 text-sm text-slate-400">✓ Sin tareas pendientes</p>
+                        : filtered2.map(t => (
+                            <TaskListRow key={t.id} task={t} players={players} profiles={profiles}
+                              onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask}
+                              detailTaskId={detailTask?.id}
+                              overdue={!!(t.dueDate && new Date(t.dueDate) < new Date())} />
+                          ))
+                      }
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+
+          </>)}
 
         </>)}
 
