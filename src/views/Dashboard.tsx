@@ -23,6 +23,7 @@ import {
   Cake,
   Calendar,
   BarChart3,
+  ChevronLeft,
   ChevronRight,
   ChevronDown,
   LayoutList,
@@ -171,7 +172,9 @@ export function Dashboard({
   // quick filter from stat cards: overlays on top of tab filter
   const [quickFilter, setQuickFilter] = useState<"overdue" | "urgent" | "inprogress" | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [tasksTab, setTasksTab] = useState<"yo" | "jugadores" | "equipo">("yo");
+  const [tasksMainView, setTasksMainView] = useState<'mis' | 'equipo'>('mis');
+  const [equipoSubView, setEquipoSubView] = useState<'personas' | 'semana'>('personas');
+  const [weekOffset, setWeekOffset] = useState(0);
   const [detailTask, setDetailTask] = useState<Task | null>(null);
 
   // Bulk select state
@@ -217,10 +220,6 @@ export function Dashboard({
   const visiblePlayers = players.filter(p => !p.hiddenFromManagement)
 
   const pendingTasks = tasks.filter((t) => t.status !== "completada");
-  const urgentTasks = tasks.filter(
-    (t) => t.priority === "alta" && t.status !== "completada"
-  );
-  const inProgressTasks = tasks.filter((t) => t.status === "en_progreso");
 
   // helper: is the current user involved in a task (assignee OR watcher)
   const iAmInvolved = (t: Task) =>
@@ -246,87 +245,12 @@ export function Dashboard({
     const player = players.find((p) => p.id === t.playerId);
     return player && player.managedBy.includes(currentProfile.id);
   });
-  const myPlayerTasksCompleted = tasks.filter((t) => {
-    if (t.status !== "completada") return false;
-    if (t.adminOnly && !currentProfile.is_admin) return false;
-    const player = players.find((p) => p.id === t.playerId);
-    return player && player.managedBy.includes(currentProfile.id);
-  });
-
-  // generalTasksCompleted: completed general tasks for kanban
-  const generalTasksCompleted = tasks.filter((t) => {
-    if (t.status !== "completada") return false;
-    if (t.playerId !== "" && t.playerId !== "general") return false;
-    if (t.adminOnly && !currentProfile.is_admin) return false;
-    return true;
-  });
-
-  // Tasks for kanban: respects tab filter + quickFilter from stat cards
-  const activeDashboardTasks = (status: Task["status"]) => {
-    const now = new Date();
-    const notAdmin = (t: Task) => t.adminOnly && !currentProfile.is_admin;
-
-    // quickFilter uses the FULL task pool (ignore mineSubTab)
-    if (quickFilter === "overdue") {
-      const pool = tasks.filter(t => t.status !== "completada" && t.dueDate && new Date(t.dueDate) < now && !notAdmin(t));
-      return pool.filter(t => t.status === status).sort((a, b) => {
-        const prio = { alta: 0, media: 1, baja: 2 };
-        return prio[a.priority] - prio[b.priority];
-      });
-    }
-    if (quickFilter === "urgent") {
-      const pool = tasks.filter(t => t.priority === "alta" && t.status !== "completada" && !notAdmin(t));
-      return pool.filter(t => t.status === status);
-    }
-    if (quickFilter === "inprogress") {
-      if (status !== "en_progreso") return [];
-      return tasks.filter(t => t.status === "en_progreso" && !notAdmin(t));
-    }
-
-    // Normal pool from tab selection (used by "Equipo" kanban)
-    let pool: Task[] = [];
-    if (tasksTab === "jugadores") {
-      pool = myPlayerTasks;
-    } else if (tasksTab === "equipo") {
-      pool = tasks.filter(t => t.status !== "completada" && !notAdmin(t));
-      if (assigneeFilter !== "all") {
-        pool = pool.filter(t => t.assigneeId === assigneeFilter);
-      }
-    } else {
-      // "yo" tab
-      pool = myTasks;
-    }
-    return pool
-      .filter(t => t.status === status)
-      .sort((a, b) => {
-        const aOver = a.dueDate && new Date(a.dueDate) < now ? 0 : 1;
-        const bOver = b.dueDate && new Date(b.dueDate) < now ? 0 : 1;
-        if (aOver !== bOver) return aOver - bOver;
-        const prio = { alta: 0, media: 1, baja: 2 };
-        return prio[a.priority] - prio[b.priority];
-      });
-  };
-
   const overdueDashboardTasks = tasks.filter(
     t => t.status !== "completada" && t.dueDate && new Date(t.dueDate) < new Date()
     && !(t.adminOnly && !currentProfile.is_admin)
   );
 
-  const completedTasksForKanban = [
-    ...myTasksCompleted,
-    ...myPlayerTasksCompleted,
-    ...generalTasksCompleted,
-  ].filter((t, i, arr) => arr.findIndex(x => x.id === t.id) === i);
-
-  // Same pool but filtered by the assignee chip (used in Equipo kanban)
-  const completedTasksForEquipo = assigneeFilter === "all"
-    ? completedTasksForKanban
-    : completedTasksForKanban.filter(t => t.assigneeId === assigneeFilter);
-
-  // "Yo" tab computed
   const overdueMyTasks = myTasks.filter(t => t.dueDate && new Date(t.dueDate) < new Date());
-  const urgentMyCount  = myTasks.filter(t => t.priority === "alta").length;
-  const inProgressMyCount = myTasks.filter(t => t.status === "en_progreso").length;
 
   // "Mis jugadores" tab: group by player
   const playerTaskGroups: { player: Player; ptasks: Task[] }[] = (() => {
@@ -335,6 +259,49 @@ export function Dashboard({
       .map(pid => ({ player: players.find(p => p.id === pid)!, ptasks: myPlayerTasks.filter(t => t.playerId === pid) }))
       .filter(g => g.player != null);
   })();
+
+  // ── Revamped tasks: week view + per-person stats ──────────────
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const weekMonday = (() => {
+    const d = new Date();
+    const day = d.getDay();
+    d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day) + weekOffset * 7);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  })();
+  const weekDays = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(weekMonday);
+    d.setDate(weekMonday.getDate() + i);
+    return d;
+  });
+  const myTasksDueToday = myTasks.filter(t => t.dueDate === todayStr);
+  const myTasksDueThisWeek = myTasks.filter(t => {
+    if (!t.dueDate) return false;
+    const d = new Date(t.dueDate + 'T12:00:00');
+    return d >= weekDays[0] && d <= weekDays[6];
+  });
+  const myTasksInProgress = myTasks.filter(t => t.status === 'en_progreso');
+  const profileStats = profiles.map(p => {
+    const assigned = tasks.filter(t => t.assigneeId === p.id && t.status !== 'completada');
+    return {
+      profile: p,
+      total: assigned.length,
+      overdue: assigned.filter(t => t.dueDate && new Date(t.dueDate + 'T12:00:00') < new Date()).length,
+      inProgress: assigned.filter(t => t.status === 'en_progreso').length,
+    };
+  });
+  const tasksWithoutDate = tasks.filter(t =>
+    !t.dueDate && t.status !== 'completada' &&
+    (assigneeFilter === 'all' || t.assigneeId === assigneeFilter)
+  );
+  const tasksForWeekDay = (date: Date): Task[] => {
+    const dateStr = date.toISOString().slice(0, 10);
+    return tasks.filter(t =>
+      t.dueDate === dateStr &&
+      t.status !== 'completada' &&
+      (assigneeFilter === 'all' || t.assigneeId === assigneeFilter)
+    );
+  };
 
   // Birthdays
   const birthdaysToday = visiblePlayers.filter((p) => isBirthdayToday(p.birthDate));
@@ -601,323 +568,437 @@ export function Dashboard({
         {/* ── Tareas section ──────────────────────────────── */}
         {activeTab === 'tareas' && (<>
 
-        {/* ── Stat cards ──────────────────────────────────── */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-5">
-          {/* Jugadores — informativo, no es filtro */}
-          <div className="bg-white border border-slate-200 rounded-xl p-3 text-center">
-            <p className="text-2xl font-semibold text-slate-800">{visiblePlayers.length}</p>
-            <p className="text-xs text-slate-500 mt-0.5">Jugadores</p>
+        {/* ── Header: Mis tareas / Equipo toggle + actions ── */}
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
+            {(['mis', 'equipo'] as const).map(v => (
+              <button
+                key={v}
+                onClick={() => { setTasksMainView(v); setQuickFilter(null); }}
+                className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                  tasksMainView === v
+                    ? 'bg-white text-slate-800 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                {v === 'mis' ? 'Mis tareas' : 'Equipo'}
+              </button>
+            ))}
           </div>
-          {/* Vencidas */}
-          <button
-            onClick={() => setQuickFilter(q => q === "overdue" ? null : "overdue")}
-            className={`border rounded-xl p-3 text-center cursor-pointer transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 ${
-              quickFilter === "overdue"
-                ? "bg-red-50 border-red-400 shadow-sm"
-                : overdueDashboardTasks.length > 0
-                  ? "bg-white border-red-200 hover:border-red-400 hover:shadow-sm"
-                  : "bg-white border-slate-200 hover:border-slate-300 hover:shadow-sm"
-            }`}
-          >
-            <p className={`text-2xl font-semibold ${overdueDashboardTasks.length > 0 ? "text-red-500" : "text-slate-800"}`}>
-              {overdueDashboardTasks.length}
-            </p>
-            <p className="text-xs text-slate-500 mt-0.5">Vencidas</p>
-            {quickFilter === "overdue" && <p className="text-[11px] text-red-400 mt-0.5 font-medium">Filtrando ×</p>}
-          </button>
-          {/* Urgentes */}
-          <button
-            onClick={() => setQuickFilter(q => q === "urgent" ? null : "urgent")}
-            className={`border rounded-xl p-3 text-center cursor-pointer transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${
-              quickFilter === "urgent"
-                ? "bg-amber-50 border-amber-400 shadow-sm"
-                : "bg-white border-slate-200 hover:border-amber-300 hover:shadow-sm"
-            }`}
-          >
-            <p className={`text-2xl font-semibold ${urgentTasks.length > 0 ? "text-amber-600" : "text-slate-800"}`}>{urgentTasks.length}</p>
-            <p className="text-xs text-slate-500 mt-0.5">Urgentes</p>
-            {quickFilter === "urgent" && <p className="text-[11px] text-amber-500 mt-0.5 font-medium">Filtrando ×</p>}
-          </button>
-          {/* En progreso */}
-          <button
-            onClick={() => setQuickFilter(q => q === "inprogress" ? null : "inprogress")}
-            className={`border rounded-xl p-3 text-center cursor-pointer transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
-              quickFilter === "inprogress"
-                ? "bg-blue-50 border-blue-400 shadow-sm"
-                : "bg-white border-slate-200 hover:border-blue-300 hover:shadow-sm"
-            }`}
-          >
-            <p className="text-2xl font-semibold text-slate-800">{inProgressTasks.length}</p>
-            <p className="text-xs text-slate-500 mt-0.5">En progreso</p>
-            {quickFilter === "inprogress" && <p className="text-[11px] text-blue-500 mt-0.5 font-medium">Filtrando ×</p>}
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={openAddEvent}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
+            >
+              <Activity className="w-3 h-3" /> Evento
+            </button>
+            {onAddGeneralTask && (
+              <button
+                onClick={() => setShowAddGeneralTask(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-[hsl(220,72%,26%)] text-[hsl(220,72%,26%)] hover:bg-blue-50 transition-colors"
+              >
+                <Plus className="w-3 h-3" /> Nueva tarea
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* ── Tareas (nueva arquitectura) ──────────────────── */}
-        <div className="bg-white border border-slate-200 rounded-xl mb-5 overflow-hidden">
+        {/* ── MIS TAREAS view ─────────────────────────────── */}
+        {tasksMainView === 'mis' && (<>
 
-          {/* Header: 3 tabs + Nueva button */}
-          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-1 overflow-x-auto scrollbar-none">
-              {([
-                { id: "yo"        as const, label: `Yo (${myTasks.length})` },
-                { id: "jugadores" as const, label: `Mis jugadores (${myPlayerTasks.length})` },
-                { id: "equipo"    as const, label: "Equipo" },
-              ]).map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => {
-                    setTasksTab(tab.id);
-                    setQuickFilter(null);
-                    if (tab.id !== "equipo") setAssigneeFilter("all");
-                  }}
-                  className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                    tasksTab === tab.id
-                      ? "text-white border-transparent"
-                      : "bg-white border-slate-200 text-slate-500 hover:text-slate-700"
-                  }`}
-                  style={tasksTab === tab.id ? { background: PRIMARY } : {}}
-                >
-                  {tab.label}
-                </button>
-              ))}
+          {/* 4-stat strip */}
+          <div className="grid grid-cols-4 gap-2 mb-4">
+            <button
+              onClick={() => setQuickFilter(q => q === 'overdue' ? null : 'overdue')}
+              className={`rounded-xl p-3 text-center border transition-all active:scale-95 ${
+                quickFilter === 'overdue'
+                  ? 'bg-red-50 border-red-400 shadow-sm'
+                  : overdueMyTasks.length > 0
+                    ? 'bg-white border-red-200 hover:border-red-300'
+                    : 'bg-white border-slate-200 hover:border-slate-300'
+              }`}
+            >
+              <p className={`text-xl font-semibold ${overdueMyTasks.length > 0 ? 'text-red-500' : 'text-slate-800'}`}>
+                {overdueMyTasks.length}
+              </p>
+              <p className="text-[11px] text-slate-400 mt-0.5">Vencidas</p>
+            </button>
+            <div className="bg-white border border-slate-200 rounded-xl p-3 text-center">
+              <p className="text-xl font-semibold text-slate-800">{myTasksDueToday.length}</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">Hoy</p>
             </div>
-            <div className="flex items-center gap-1.5 flex-shrink-0">
-              <button
-                onClick={openAddEvent}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
-                title="Nuevo evento de actividad"
-              >
-                <Activity className="w-3 h-3" /> Evento
-              </button>
-              {onAddGeneralTask && (
-                <button
-                  onClick={() => setShowAddGeneralTask(true)}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
-                >
-                  <Plus className="w-3 h-3" /> Nueva
-                </button>
-              )}
+            <div className="bg-white border border-slate-200 rounded-xl p-3 text-center">
+              <p className="text-xl font-semibold text-slate-800">{myTasksDueThisWeek.length}</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">Esta semana</p>
             </div>
+            <button
+              onClick={() => setQuickFilter(q => q === 'inprogress' ? null : 'inprogress')}
+              className={`rounded-xl p-3 text-center border transition-all active:scale-95 ${
+                quickFilter === 'inprogress'
+                  ? 'bg-blue-50 border-blue-400 shadow-sm'
+                  : myTasksInProgress.length > 0
+                    ? 'bg-white border-blue-200 hover:border-blue-300'
+                    : 'bg-white border-slate-200 hover:border-slate-300'
+              }`}
+            >
+              <p className={`text-xl font-semibold ${myTasksInProgress.length > 0 ? 'text-blue-600' : 'text-slate-800'}`}>
+                {myTasksInProgress.length}
+              </p>
+              <p className="text-[11px] text-slate-400 mt-0.5">En progreso</p>
+            </button>
           </div>
 
-          {/* ── TAB: YO ───────────────────────────────────── */}
-          {tasksTab === "yo" && (
-            <>
-              {/* Filter chips */}
-              <div className="px-4 pt-3 pb-3 border-b border-slate-100 flex items-center gap-2 flex-wrap">
-                <button
-                  onClick={() => setQuickFilter(q => q === "overdue" ? null : "overdue")}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${
-                    quickFilter === "overdue"
-                      ? "bg-red-500 border-red-500 text-white"
-                      : overdueMyTasks.length > 0
-                        ? "bg-red-50 border-red-200 text-red-700 hover:bg-red-100 cursor-pointer"
-                        : "bg-slate-50 border-slate-200 text-slate-400 cursor-default"
-                  }`}
-                >
-                  <AlertTriangle className="w-3 h-3" /> {overdueMyTasks.length} vencida{overdueMyTasks.length !== 1 ? "s" : ""}
+          {/* Personal kanban */}
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden mb-4">
+            <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between">
+              <p className="text-xs font-semibold text-slate-600">
+                Mis tareas <span className="font-normal text-slate-400">({myTasks.length})</span>
+              </p>
+              {quickFilter && (
+                <button onClick={() => setQuickFilter(null)} className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1">
+                  <X className="w-3 h-3" /> Limpiar filtro
                 </button>
-                <button
-                  onClick={() => setQuickFilter(q => q === "urgent" ? null : "urgent")}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${
-                    quickFilter === "urgent"
-                      ? "bg-amber-500 border-amber-500 text-white"
-                      : urgentMyCount > 0
-                        ? "bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100 cursor-pointer"
-                        : "bg-slate-50 border-slate-200 text-slate-400 cursor-default"
-                  }`}
-                >
-                  <Zap className="w-3 h-3" /> {urgentMyCount} urgente{urgentMyCount !== 1 ? "s" : ""}
-                </button>
-                <button
-                  onClick={() => setQuickFilter(q => q === "inprogress" ? null : "inprogress")}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${
-                    quickFilter === "inprogress"
-                      ? "bg-blue-500 border-blue-500 text-white"
-                      : inProgressMyCount > 0
-                        ? "bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100 cursor-pointer"
-                        : "bg-slate-50 border-slate-200 text-slate-400 cursor-default"
-                  }`}
-                >
-                  {inProgressMyCount} en progreso
-                </button>
-                {quickFilter && (
-                  <button onClick={() => setQuickFilter(null)} className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1 ml-1">
-                    <X className="w-3 h-3" /> Limpiar
-                  </button>
-                )}
-              </div>
-
-              {/* Desktop: 3-column kanban */}
-              <div className="hidden sm:grid grid-cols-3 gap-0 divide-x divide-slate-100 p-4 pt-3">
-                <KanbanCol
-                  label="Pendiente" dotColor="#94a3b8"
-                  tasks={activeDashboardTasks("pendiente")}
-                  players={players} profiles={profiles}
-                  onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
-                />
-                <KanbanCol
-                  label="En progreso" dotColor="#378ADD"
-                  tasks={activeDashboardTasks("en_progreso")}
-                  players={players} profiles={profiles}
-                  onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
-                />
-                <KanbanCol
-                  label="Completada" dotColor="#1D9E75"
-                  tasks={[]}
-                  players={players} profiles={profiles}
-                  onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
-                  showCompleted={showCompletedMine} onToggleCompleted={() => setShowCompletedMine(v => !v)}
-                  completedCount={myTasksCompleted.length} completedTasks={myTasksCompleted}
-                  isCompletedCol
-                />
-              </div>
-
-              {/* Mobile: flat list */}
-              <div className="sm:hidden p-4 space-y-2">
-                {[...activeDashboardTasks("pendiente"), ...activeDashboardTasks("en_progreso")].length === 0 ? (
-                  <p className="text-center py-6 text-sm text-slate-400">✓ Sin tareas pendientes</p>
-                ) : (
-                  [...activeDashboardTasks("pendiente"), ...activeDashboardTasks("en_progreso")].map(t => (
-                    <TaskListRow key={t.id} task={t} players={players} profiles={profiles}
-                      onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask}
-                      detailTaskId={detailTask?.id}
-                      overdue={!!(t.dueDate && new Date(t.dueDate) < new Date())} />
-                  ))
-                )}
-              </div>
-            </>
-          )}
-
-          {/* ── TAB: MIS JUGADORES ────────────────────────── */}
-          {tasksTab === "jugadores" && (
-            <div className="p-4 space-y-5">
-              {playerTaskGroups.length === 0 && (
-                <div className="text-center py-8 text-sm text-slate-400">Sin tareas pendientes de tus jugadores</div>
               )}
-              {playerTaskGroups.map(({ player, ptasks }) => (
-                <div key={player.id}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <div
-                      className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[9px] font-bold text-white"
-                      style={{ background: PRIMARY }}
-                    >
-                      {player.name.split(" ").map(n => n[0]).join("").slice(0, 2)}
-                    </div>
-                    <p className="text-xs font-semibold text-slate-700">{player.name}</p>
-                    <span className="text-[11px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded-full font-medium">{ptasks.length}</span>
-                  </div>
-                  <div className="space-y-2 ml-8">
-                    {ptasks.map(t => (
-                      <TaskListRow key={t.id} task={t} players={players} profiles={profiles}
-                        onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask}
-                        detailTaskId={detailTask?.id}
-                        overdue={!!(t.dueDate && new Date(t.dueDate) < new Date())} />
-                    ))}
-                  </div>
-                </div>
-              ))}
             </div>
-          )}
+            {(() => {
+              const misFiltered = quickFilter === 'overdue'
+                ? myTasks.filter(t => t.dueDate && new Date(t.dueDate + 'T12:00:00') < new Date())
+                : quickFilter === 'inprogress'
+                  ? myTasks.filter(t => t.status === 'en_progreso')
+                  : myTasks;
+              const misPending   = misFiltered.filter(t => t.status === 'pendiente');
+              const misInProgress = misFiltered.filter(t => t.status === 'en_progreso');
+              return (
+                <>
+                  <div className="hidden sm:grid grid-cols-3 gap-0 divide-x divide-slate-100 p-4 pt-3">
+                    <KanbanCol label="Pendiente" dotColor="#94a3b8"
+                      tasks={misPending} players={players} profiles={profiles}
+                      onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
+                    />
+                    <KanbanCol label="En progreso" dotColor="#378ADD"
+                      tasks={misInProgress} players={players} profiles={profiles}
+                      onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
+                    />
+                    <KanbanCol label="Completada" dotColor="#1D9E75"
+                      tasks={[]} players={players} profiles={profiles}
+                      onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
+                      showCompleted={showCompletedMine} onToggleCompleted={() => setShowCompletedMine(v => !v)}
+                      completedCount={myTasksCompleted.length} completedTasks={myTasksCompleted}
+                      isCompletedCol
+                    />
+                  </div>
+                  <div className="sm:hidden p-4 space-y-2">
+                    {[...misPending, ...misInProgress].length === 0
+                      ? <p className="text-center py-6 text-sm text-slate-400">✓ Sin tareas pendientes</p>
+                      : [...misPending, ...misInProgress].map(t => (
+                          <TaskListRow key={t.id} task={t} players={players} profiles={profiles}
+                            onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask}
+                            detailTaskId={detailTask?.id}
+                            overdue={!!(t.dueDate && new Date(t.dueDate) < new Date())} />
+                        ))
+                    }
+                  </div>
+                </>
+              );
+            })()}
+          </div>
 
-          {/* ── TAB: EQUIPO ───────────────────────────────── */}
-          {tasksTab === "equipo" && (
-            <>
-              {/* Person filter chips */}
-              <div className="px-4 pt-3 pb-3 border-b border-slate-100 flex items-center gap-2 flex-wrap">
-                <button
-                  onClick={() => setAssigneeFilter("all")}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
-                    assigneeFilter === "all" ? "text-white border-transparent" : "bg-white border-slate-200 text-slate-500 hover:text-slate-700"
-                  }`}
-                  style={assigneeFilter === "all" ? { background: PRIMARY } : {}}
-                >
-                  Todos
-                </button>
-                {profiles.map(p => (
-                  <div key={p.id} className="flex items-center gap-1">
-                    <button
-                      onClick={() => setAssigneeFilter(assigneeFilter === p.id ? "all" : p.id)}
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
-                        assigneeFilter === p.id ? "text-white border-transparent" : "bg-white border-slate-200 text-slate-500 hover:text-slate-700"
-                      }`}
-                      style={assigneeFilter === p.id ? { background: PRIMARY } : {}}
-                    >
-                      <span
-                        className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0"
-                        style={{ background: assigneeFilter === p.id ? "rgba(255,255,255,0.3)" : PRIMARY }}
-                      >
-                        {p.avatar}
-                      </span>
-                      {p.name.split(" ")[0]}
-                    </button>
-                    {onSelectProfile && (
-                      <button
-                        onClick={() => onSelectProfile(p.id)}
-                        className="p-1 text-slate-300 hover:text-slate-600 transition-colors rounded"
-                        title={`Ver actividad de ${p.name.split(" ")[0]}`}
-                      >
-                        <Activity className="w-3 h-3" />
-                      </button>
-                    )}
+          {/* Mis jugadores */}
+          {playerTaskGroups.length > 0 && (
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-slate-100">
+                <p className="text-xs font-semibold text-slate-600">
+                  Mis jugadores <span className="font-normal text-slate-400">({myPlayerTasks.length} tareas)</span>
+                </p>
+              </div>
+              <div className="p-4 space-y-5">
+                {playerTaskGroups.map(({ player, ptasks }) => (
+                  <div key={player.id}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[9px] font-bold text-white"
+                        style={{ background: PRIMARY }}>
+                        {player.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                      </div>
+                      <p className="text-xs font-semibold text-slate-700">{player.name}</p>
+                      <span className="text-[11px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded-full font-medium">{ptasks.length}</span>
+                    </div>
+                    <div className="space-y-2 ml-8">
+                      {ptasks.map(t => (
+                        <TaskListRow key={t.id} task={t} players={players} profiles={profiles}
+                          onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask}
+                          detailTaskId={detailTask?.id}
+                          overdue={!!(t.dueDate && new Date(t.dueDate) < new Date())} />
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+        </>)}
 
-              {/* Overdue banner */}
-              {overdueDashboardTasks.length > 0 && (
-                <div className="mx-4 mt-3 flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
-                  <AlertTriangle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
-                  <p className="text-xs text-red-700 font-medium">
-                    {overdueDashboardTasks.length} tarea{overdueDashboardTasks.length > 1 ? "s" : ""} vencida{overdueDashboardTasks.length > 1 ? "s" : ""} · revisa antes de continuar
+        {/* ── EQUIPO view ──────────────────────────────────── */}
+        {tasksMainView === 'equipo' && (<>
+
+          {/* Sub-toggle */}
+          <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5 self-start mb-3 w-fit">
+            {(['personas', 'semana'] as const).map(v => (
+              <button
+                key={v}
+                onClick={() => setEquipoSubView(v)}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                  equipoSubView === v
+                    ? 'bg-white text-slate-800 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                {v === 'personas' ? 'Por persona' : 'Esta semana'}
+              </button>
+            ))}
+          </div>
+
+          {/* Person filter chips */}
+          <div className="flex items-center gap-2 flex-wrap mb-4">
+            <button
+              onClick={() => setAssigneeFilter('all')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                assigneeFilter === 'all' ? 'text-white border-transparent' : 'bg-white border-slate-200 text-slate-500 hover:text-slate-700'
+              }`}
+              style={assigneeFilter === 'all' ? { background: PRIMARY } : {}}
+            >
+              Todos
+            </button>
+            {profiles.map(p => (
+              <button
+                key={p.id}
+                onClick={() => setAssigneeFilter(assigneeFilter === p.id ? 'all' : p.id)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                  assigneeFilter === p.id ? 'text-white border-transparent' : 'bg-white border-slate-200 text-slate-500 hover:text-slate-700'
+                }`}
+                style={assigneeFilter === p.id ? { background: PRIMARY } : {}}
+              >
+                <span className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0"
+                  style={{ background: assigneeFilter === p.id ? 'rgba(255,255,255,0.3)' : PRIMARY }}>
+                  {p.avatar}
+                </span>
+                {p.name.split(' ')[0]}
+              </button>
+            ))}
+          </div>
+
+          {/* ── Por persona ── */}
+          {equipoSubView === 'personas' && (<>
+            {/* Workload cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 mb-4">
+              {profileStats.map(({ profile: p, total, overdue, inProgress }) => {
+                const isFiltered = assigneeFilter === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => setAssigneeFilter(isFiltered ? 'all' : p.id)}
+                    className={`bg-white border rounded-xl p-3 text-left transition-all hover:shadow-sm active:scale-[0.98] ${
+                      isFiltered
+                        ? 'border-[hsl(220,72%,26%)] ring-1 ring-[hsl(220,72%,26%)]'
+                        : 'border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-2.5">
+                      <div className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white"
+                        style={{ background: PRIMARY }}>
+                        {p.avatar}
+                      </div>
+                      <p className="text-xs font-semibold text-slate-800 truncate">{p.name.split(' ')[0]}</p>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1">
+                      <div className="text-center">
+                        <p className="text-sm font-semibold text-slate-700">{total}</p>
+                        <p className="text-[10px] text-slate-400">Total</p>
+                      </div>
+                      <div className="text-center">
+                        <p className={`text-sm font-semibold ${overdue > 0 ? 'text-red-500' : 'text-slate-700'}`}>{overdue}</p>
+                        <p className="text-[10px] text-slate-400">Venc.</p>
+                      </div>
+                      <div className="text-center">
+                        <p className={`text-sm font-semibold ${inProgress > 0 ? 'text-blue-600' : 'text-slate-700'}`}>{inProgress}</p>
+                        <p className="text-[10px] text-slate-400">Prog.</p>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Overdue banner */}
+            {overdueDashboardTasks.length > 0 && (
+              <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2 mb-4">
+                <AlertTriangle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
+                <p className="text-xs text-red-700 font-medium">
+                  {overdueDashboardTasks.length} tarea{overdueDashboardTasks.length > 1 ? 's' : ''} vencida{overdueDashboardTasks.length > 1 ? 's' : ''} en el equipo
+                </p>
+              </div>
+            )}
+
+            {/* Filtered kanban */}
+            {(() => {
+              const eqFiltered = tasks.filter(t =>
+                t.status !== 'completada' &&
+                (assigneeFilter === 'all' || t.assigneeId === assigneeFilter) &&
+                !(t.adminOnly && !currentProfile.is_admin)
+              );
+              const eqPending    = eqFiltered.filter(t => t.status === 'pendiente');
+              const eqInProgress = eqFiltered.filter(t => t.status === 'en_progreso');
+              const eqCompleted  = tasks.filter(t =>
+                t.status === 'completada' &&
+                (assigneeFilter === 'all' || t.assigneeId === assigneeFilter)
+              );
+              return (
+                <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                  <div className="hidden sm:grid grid-cols-3 gap-0 divide-x divide-slate-100 p-4 pt-3">
+                    <KanbanCol label="Pendiente" dotColor="#94a3b8"
+                      tasks={eqPending} players={players} profiles={profiles}
+                      onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
+                    />
+                    <KanbanCol label="En progreso" dotColor="#378ADD"
+                      tasks={eqInProgress} players={players} profiles={profiles}
+                      onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
+                    />
+                    <KanbanCol label="Completada" dotColor="#1D9E75"
+                      tasks={[]} players={players} profiles={profiles}
+                      onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
+                      showCompleted={showCompletedMine} onToggleCompleted={() => setShowCompletedMine(v => !v)}
+                      completedCount={eqCompleted.length} completedTasks={eqCompleted}
+                      isCompletedCol
+                    />
+                  </div>
+                  <div className="sm:hidden p-4 space-y-2">
+                    {[...eqPending, ...eqInProgress].length === 0
+                      ? <p className="text-center py-6 text-sm text-slate-400">Sin tareas</p>
+                      : [...eqPending, ...eqInProgress].map(t => (
+                          <TaskListRow key={t.id} task={t} players={players} profiles={profiles}
+                            onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask}
+                            detailTaskId={detailTask?.id}
+                            overdue={!!(t.dueDate && new Date(t.dueDate) < new Date())} />
+                        ))
+                    }
+                  </div>
+                </div>
+              );
+            })()}
+          </>)}
+
+          {/* ── Esta semana ── */}
+          {equipoSubView === 'semana' && (<>
+            {/* Week navigator */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setWeekOffset(o => o - 1)}
+                  className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setWeekOffset(0)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                    weekOffset === 0
+                      ? 'bg-slate-800 text-white border-slate-800'
+                      : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  Hoy
+                </button>
+                <button
+                  onClick={() => setWeekOffset(o => o + 1)}
+                  className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+              <p className="text-xs font-medium text-slate-500">
+                {weekDays[0].toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                {' – '}
+                {weekDays[6].toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+              </p>
+            </div>
+
+            {/* 7-day grid */}
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden mb-4">
+              <div className="grid grid-cols-7 divide-x divide-slate-100">
+                {weekDays.map((day, idx) => {
+                  const dayTasks = tasksForWeekDay(day);
+                  const isToday  = day.toISOString().slice(0, 10) === todayStr;
+                  const dayNames = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa', 'Do'];
+                  return (
+                    <div key={idx} className={`p-2 min-h-[130px] ${isToday ? 'bg-blue-50/50' : ''}`}>
+                      <div className="mb-2 text-center">
+                        <p className={`text-[10px] font-semibold uppercase ${isToday ? 'text-blue-600' : 'text-slate-400'}`}>
+                          {dayNames[idx]}
+                        </p>
+                        <p className={`text-sm font-bold leading-tight ${isToday ? 'text-blue-700' : 'text-slate-700'}`}>
+                          {day.getDate()}
+                        </p>
+                      </div>
+                      <div className="space-y-1">
+                        {dayTasks.slice(0, 3).map(t => {
+                          const assignee = profiles.find(pr => pr.id === t.assigneeId);
+                          const isOverdue = !!(t.dueDate && new Date(t.dueDate + 'T12:00:00') < new Date());
+                          return (
+                            <div
+                              key={t.id}
+                              onClick={() => setDetailTask(t)}
+                              className={`cursor-pointer rounded px-1.5 py-1 text-[10px] leading-tight border-l-2 transition-opacity hover:opacity-75 ${
+                                isOverdue
+                                  ? 'bg-red-50 border-red-400 text-red-700'
+                                  : t.priority === 'alta'
+                                    ? 'bg-red-50 border-red-300 text-red-700'
+                                    : t.priority === 'media'
+                                      ? 'bg-amber-50 border-amber-300 text-amber-700'
+                                      : 'bg-slate-50 border-slate-300 text-slate-600'
+                              }`}
+                              title={t.title}
+                            >
+                              <p className="font-medium truncate">{t.title}</p>
+                              {assignee && (
+                                <p className="text-[9px] opacity-70">{assignee.name.split(' ')[0]}</p>
+                              )}
+                            </div>
+                          );
+                        })}
+                        {dayTasks.length > 3 && (
+                          <p className="text-[10px] text-slate-400 text-center">+{dayTasks.length - 3} más</p>
+                        )}
+                        {dayTasks.length === 0 && (
+                          <p className="text-[10px] text-slate-300 text-center pt-1">—</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Tasks without date */}
+            {tasksWithoutDate.length > 0 && (
+              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-slate-100">
+                  <p className="text-xs font-semibold text-slate-500">
+                    Sin fecha · {tasksWithoutDate.length} tarea{tasksWithoutDate.length > 1 ? 's' : ''}
                   </p>
                 </div>
-              )}
-
-              {/* Desktop: 3-column kanban */}
-              <div className="hidden sm:grid grid-cols-3 gap-0 divide-x divide-slate-100 p-4 pt-3">
-                <KanbanCol
-                  label="Pendiente" dotColor="#94a3b8"
-                  tasks={activeDashboardTasks("pendiente")}
-                  players={players} profiles={profiles}
-                  onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
-                  showCompleted={showCompletedMine} onToggleCompleted={() => setShowCompletedMine(v => !v)}
-                  completedCount={completedTasksForEquipo.length} completedTasks={completedTasksForEquipo}
-                />
-                <KanbanCol
-                  label="En progreso" dotColor="#378ADD"
-                  tasks={activeDashboardTasks("en_progreso")}
-                  players={players} profiles={profiles}
-                  onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
-                />
-                <KanbanCol
-                  label="Completada" dotColor="#1D9E75"
-                  tasks={[]}
-                  players={players} profiles={profiles}
-                  onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
-                  showCompleted={showCompletedMine} onToggleCompleted={() => setShowCompletedMine(v => !v)}
-                  completedCount={completedTasksForEquipo.length} completedTasks={completedTasksForEquipo}
-                  isCompletedCol
-                />
-              </div>
-
-              {/* Mobile: flat list (no kanban) */}
-              <div className="sm:hidden p-4 space-y-2">
-                {[...activeDashboardTasks("pendiente"), ...activeDashboardTasks("en_progreso")].length === 0 ? (
-                  <p className="text-center py-6 text-sm text-slate-400">Sin tareas</p>
-                ) : (
-                  [...activeDashboardTasks("pendiente"), ...activeDashboardTasks("en_progreso")].map(t => (
+                <div className="p-4 space-y-2">
+                  {tasksWithoutDate.slice(0, 6).map(t => (
                     <TaskListRow key={t.id} task={t} players={players} profiles={profiles}
                       onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask}
-                      detailTaskId={detailTask?.id}
-                      overdue={!!(t.dueDate && new Date(t.dueDate) < new Date())} />
-                  ))
-                )}
+                      detailTaskId={detailTask?.id} overdue={false} />
+                  ))}
+                  {tasksWithoutDate.length > 6 && (
+                    <p className="text-xs text-slate-400 text-center pt-1">+{tasksWithoutDate.length - 6} más sin fecha</p>
+                  )}
+                </div>
               </div>
-            </>
-          )}
-        </div>
+            )}
+          </>)}
+        </>)}
 
         </>)}
 
