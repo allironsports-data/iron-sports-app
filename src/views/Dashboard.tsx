@@ -3,9 +3,9 @@ import { TaskDetailPanel } from "../components/TaskDetailPanel";
 import { ToastStack } from "../components/ToastStack";
 import { useToast } from "../hooks/useToast";
 import logoImg from '../assets/logo.jpeg';
-import type { Player, Task, TaskLabel } from "../types";
+import type { Player, Task, TaskLabel, PlayerActivity } from "../types";
 import { calcAge, clubsLabel } from "../types";
-import { createPlayerActivity } from "../lib/db";
+import { createPlayerActivity, fetchActivitiesByAuthor } from "../lib/db";
 import type { Profile } from "../contexts/AuthContext";
 import type { AppNotification } from "../App";
 import {
@@ -173,8 +173,10 @@ export function Dashboard({
   const [quickFilter, setQuickFilter] = useState<"overdue" | "urgent" | "inprogress" | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
   const [tasksMainView, setTasksMainView] = useState<'mis' | 'equipo'>('mis');
-  const [equipoSubView, setEquipoSubView] = useState<'personas' | 'semana'>('personas');
   const [weekOffset, setWeekOffset] = useState(0);
+  // Activities per profile for the equipo weekly view
+  const [teamActivities, setTeamActivities] = useState<Record<string, PlayerActivity[]>>({});
+  const [loadingTeamActivities, setLoadingTeamActivities] = useState(false);
   const [detailTask, setDetailTask] = useState<Task | null>(null);
 
   // Bulk select state
@@ -192,8 +194,6 @@ export function Dashboard({
   const [yearFilters, setYearFilters] = useState<string[]>([]);
   const [activityFilter, setActivityFilter] = useState(false);
 
-  // Tareas: assignee filter (only used in mineSubTab="all")
-  const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
 
   // Cmd+K / Ctrl+K global search
   useEffect(() => {
@@ -215,6 +215,20 @@ export function Dashboard({
       return () => clearTimeout(timer);
     }
   }, [notifications]);
+
+  // Fetch activities for all profiles when equipo tab is active
+  useEffect(() => {
+    if (tasksMainView !== 'equipo') return;
+    if (Object.keys(teamActivities).length > 0) return; // already loaded
+    setLoadingTeamActivities(true);
+    Promise.all(
+      profiles.map(p => fetchActivitiesByAuthor(p.id).then(acts => ({ id: p.id, acts })))
+    ).then(results => {
+      const byProfile: Record<string, PlayerActivity[]> = {};
+      results.forEach(r => { byProfile[r.id] = r.acts; });
+      setTeamActivities(byProfile);
+    }).catch(() => {}).finally(() => setLoadingTeamActivities(false));
+  }, [tasksMainView, profiles]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Exclude intermediation-only players from mantenimiento
   const visiblePlayers = players.filter(p => !p.hiddenFromManagement)
@@ -245,11 +259,6 @@ export function Dashboard({
     const player = players.find((p) => p.id === t.playerId);
     return player && player.managedBy.includes(currentProfile.id);
   });
-  const overdueDashboardTasks = tasks.filter(
-    t => t.status !== "completada" && t.dueDate && new Date(t.dueDate) < new Date()
-    && !(t.adminOnly && !currentProfile.is_admin)
-  );
-
   const overdueMyTasks = myTasks.filter(t => t.dueDate && new Date(t.dueDate) < new Date());
 
   // "Mis jugadores" tab: group by player
@@ -260,8 +269,9 @@ export function Dashboard({
       .filter(g => g.player != null);
   })();
 
-  // ── Revamped tasks: week view + per-person stats ──────────────
+  // ── Tasks stats + week nav ──────────────────────────────────
   const todayStr = new Date().toISOString().slice(0, 10);
+  // Week window (driven by weekOffset for the Equipo view)
   const weekMonday = (() => {
     const d = new Date();
     const day = d.getDay();
@@ -269,39 +279,23 @@ export function Dashboard({
     d.setHours(0, 0, 0, 0);
     return d;
   })();
-  const weekDays = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(weekMonday);
-    d.setDate(weekMonday.getDate() + i);
+  const weekSunday = new Date(weekMonday.getTime() + 6 * 24 * 60 * 60 * 1000);
+  // For "esta semana" stat in Mis tareas we always use offset=0
+  const thisMonday = (() => {
+    const d = new Date();
+    const day = d.getDay();
+    d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
+    d.setHours(0, 0, 0, 0);
     return d;
-  });
+  })();
+  const thisSunday = new Date(thisMonday.getTime() + 6 * 24 * 60 * 60 * 1000);
   const myTasksDueToday = myTasks.filter(t => t.dueDate === todayStr);
   const myTasksDueThisWeek = myTasks.filter(t => {
     if (!t.dueDate) return false;
     const d = new Date(t.dueDate + 'T12:00:00');
-    return d >= weekDays[0] && d <= weekDays[6];
+    return d >= thisMonday && d <= thisSunday;
   });
   const myTasksInProgress = myTasks.filter(t => t.status === 'en_progreso');
-  const profileStats = profiles.map(p => {
-    const assigned = tasks.filter(t => t.assigneeId === p.id && t.status !== 'completada');
-    return {
-      profile: p,
-      total: assigned.length,
-      overdue: assigned.filter(t => t.dueDate && new Date(t.dueDate + 'T12:00:00') < new Date()).length,
-      inProgress: assigned.filter(t => t.status === 'en_progreso').length,
-    };
-  });
-  const tasksWithoutDate = tasks.filter(t =>
-    !t.dueDate && t.status !== 'completada' &&
-    (assigneeFilter === 'all' || t.assigneeId === assigneeFilter)
-  );
-  const tasksForWeekDay = (date: Date): Task[] => {
-    const dateStr = date.toISOString().slice(0, 10);
-    return tasks.filter(t =>
-      t.dueDate === dateStr &&
-      t.status !== 'completada' &&
-      (assigneeFilter === 'all' || t.assigneeId === assigneeFilter)
-    );
-  };
 
   // Birthdays
   const birthdaysToday = visiblePlayers.filter((p) => isBirthdayToday(p.birthDate));
@@ -740,264 +734,197 @@ export function Dashboard({
         {/* ── EQUIPO view ──────────────────────────────────── */}
         {tasksMainView === 'equipo' && (<>
 
-          {/* Sub-toggle */}
-          <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5 self-start mb-3 w-fit">
-            {(['personas', 'semana'] as const).map(v => (
+          {/* Week navigator */}
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-2">
               <button
-                key={v}
-                onClick={() => setEquipoSubView(v)}
-                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                  equipoSubView === v
-                    ? 'bg-white text-slate-800 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700'
+                onClick={() => { setWeekOffset(o => o - 1); setTeamActivities({}); }}
+                className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => { setWeekOffset(0); setTeamActivities({}); }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                  weekOffset === 0
+                    ? 'bg-slate-800 text-white border-slate-800'
+                    : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                 }`}
               >
-                {v === 'personas' ? 'Por persona' : 'Esta semana'}
+                Esta semana
               </button>
-            ))}
-          </div>
-
-          {/* Person filter chips */}
-          <div className="flex items-center gap-2 flex-wrap mb-4">
-            <button
-              onClick={() => setAssigneeFilter('all')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
-                assigneeFilter === 'all' ? 'text-white border-transparent' : 'bg-white border-slate-200 text-slate-500 hover:text-slate-700'
-              }`}
-              style={assigneeFilter === 'all' ? { background: PRIMARY } : {}}
-            >
-              Todos
-            </button>
-            {profiles.map(p => (
               <button
-                key={p.id}
-                onClick={() => setAssigneeFilter(assigneeFilter === p.id ? 'all' : p.id)}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
-                  assigneeFilter === p.id ? 'text-white border-transparent' : 'bg-white border-slate-200 text-slate-500 hover:text-slate-700'
-                }`}
-                style={assigneeFilter === p.id ? { background: PRIMARY } : {}}
+                onClick={() => { setWeekOffset(o => o + 1); setTeamActivities({}); }}
+                className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
               >
-                <span className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0"
-                  style={{ background: assigneeFilter === p.id ? 'rgba(255,255,255,0.3)' : PRIMARY }}>
-                  {p.avatar}
-                </span>
-                {p.name.split(' ')[0]}
+                <ChevronRight className="w-4 h-4" />
               </button>
-            ))}
+            </div>
+            <p className="text-xs font-medium text-slate-500">
+              {weekMonday.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+              {' – '}
+              {weekSunday.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+            </p>
           </div>
 
-          {/* ── Por persona ── */}
-          {equipoSubView === 'personas' && (<>
-            {/* Workload cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 mb-4">
-              {profileStats.map(({ profile: p, total, overdue, inProgress }) => {
-                const isFiltered = assigneeFilter === p.id;
-                return (
-                  <button
-                    key={p.id}
-                    onClick={() => setAssigneeFilter(isFiltered ? 'all' : p.id)}
-                    className={`bg-white border rounded-xl p-3 text-left transition-all hover:shadow-sm active:scale-[0.98] ${
-                      isFiltered
-                        ? 'border-[hsl(220,72%,26%)] ring-1 ring-[hsl(220,72%,26%)]'
-                        : 'border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 mb-2.5">
-                      <div className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white"
+          {/* Per-person cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {profiles.map(p => {
+              const isMe = p.id === currentProfile.id;
+              const weekMonStr = weekMonday.toISOString().slice(0, 10);
+              const weekSunStr = weekSunday.toISOString().slice(0, 10);
+
+              const weekTasks = tasks.filter(t =>
+                t.assigneeId === p.id &&
+                t.status !== 'completada' &&
+                t.dueDate != null &&
+                t.dueDate >= weekMonStr &&
+                t.dueDate <= weekSunStr
+              );
+              const inProgressP = tasks.filter(t =>
+                t.assigneeId === p.id && t.status === 'en_progreso'
+              );
+              const overdueP = tasks.filter(t =>
+                t.assigneeId === p.id &&
+                t.status !== 'completada' &&
+                t.dueDate != null &&
+                t.dueDate < todayStr
+              );
+              const completedWeek = tasks.filter(t =>
+                t.assigneeId === p.id &&
+                t.status === 'completada' &&
+                t.dueDate != null &&
+                t.dueDate >= weekMonStr &&
+                t.dueDate <= weekSunStr
+              );
+              const profileActs = teamActivities[p.id] ?? [];
+              const weekEvents = profileActs.filter(a =>
+                a.date >= weekMonStr && a.date <= weekSunStr
+              );
+
+              return (
+                <div key={p.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden hover:shadow-md transition-shadow">
+                  {/* Header */}
+                  <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white"
                         style={{ background: PRIMARY }}>
                         {p.avatar}
                       </div>
-                      <p className="text-xs font-semibold text-slate-800 truncate">{p.name.split(' ')[0]}</p>
-                    </div>
-                    <div className="grid grid-cols-3 gap-1">
-                      <div className="text-center">
-                        <p className="text-sm font-semibold text-slate-700">{total}</p>
-                        <p className="text-[10px] text-slate-400">Total</p>
-                      </div>
-                      <div className="text-center">
-                        <p className={`text-sm font-semibold ${overdue > 0 ? 'text-red-500' : 'text-slate-700'}`}>{overdue}</p>
-                        <p className="text-[10px] text-slate-400">Venc.</p>
-                      </div>
-                      <div className="text-center">
-                        <p className={`text-sm font-semibold ${inProgress > 0 ? 'text-blue-600' : 'text-slate-700'}`}>{inProgress}</p>
-                        <p className="text-[10px] text-slate-400">Prog.</p>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">{p.name}</p>
+                        {isMe && <p className="text-[11px] text-slate-400">Tú</p>}
                       </div>
                     </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Overdue banner */}
-            {overdueDashboardTasks.length > 0 && (
-              <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2 mb-4">
-                <AlertTriangle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
-                <p className="text-xs text-red-700 font-medium">
-                  {overdueDashboardTasks.length} tarea{overdueDashboardTasks.length > 1 ? 's' : ''} vencida{overdueDashboardTasks.length > 1 ? 's' : ''} en el equipo
-                </p>
-              </div>
-            )}
-
-            {/* Filtered kanban */}
-            {(() => {
-              const eqFiltered = tasks.filter(t =>
-                t.status !== 'completada' &&
-                (assigneeFilter === 'all' || t.assigneeId === assigneeFilter) &&
-                !(t.adminOnly && !currentProfile.is_admin)
-              );
-              const eqPending    = eqFiltered.filter(t => t.status === 'pendiente');
-              const eqInProgress = eqFiltered.filter(t => t.status === 'en_progreso');
-              const eqCompleted  = tasks.filter(t =>
-                t.status === 'completada' &&
-                (assigneeFilter === 'all' || t.assigneeId === assigneeFilter)
-              );
-              return (
-                <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-                  <div className="hidden sm:grid grid-cols-3 gap-0 divide-x divide-slate-100 p-4 pt-3">
-                    <KanbanCol label="Pendiente" dotColor="#94a3b8"
-                      tasks={eqPending} players={players} profiles={profiles}
-                      onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
-                    />
-                    <KanbanCol label="En progreso" dotColor="#378ADD"
-                      tasks={eqInProgress} players={players} profiles={profiles}
-                      onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
-                    />
-                    <KanbanCol label="Completada" dotColor="#1D9E75"
-                      tasks={[]} players={players} profiles={profiles}
-                      onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
-                      showCompleted={showCompletedMine} onToggleCompleted={() => setShowCompletedMine(v => !v)}
-                      completedCount={eqCompleted.length} completedTasks={eqCompleted}
-                      isCompletedCol
-                    />
+                    {overdueP.length > 0 && (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full flex-shrink-0">
+                        <AlertTriangle className="w-3 h-3" />
+                        {overdueP.length} venc.
+                      </span>
+                    )}
                   </div>
-                  <div className="sm:hidden p-4 space-y-2">
-                    {[...eqPending, ...eqInProgress].length === 0
-                      ? <p className="text-center py-6 text-sm text-slate-400">Sin tareas</p>
-                      : [...eqPending, ...eqInProgress].map(t => (
-                          <TaskListRow key={t.id} task={t} players={players} profiles={profiles}
-                            onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask}
-                            detailTaskId={detailTask?.id}
-                            overdue={!!(t.dueDate && new Date(t.dueDate) < new Date())} />
-                        ))
-                    }
-                  </div>
-                </div>
-              );
-            })()}
-          </>)}
 
-          {/* ── Esta semana ── */}
-          {equipoSubView === 'semana' && (<>
-            {/* Week navigator */}
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setWeekOffset(o => o - 1)}
-                  className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setWeekOffset(0)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                    weekOffset === 0
-                      ? 'bg-slate-800 text-white border-slate-800'
-                      : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                  }`}
-                >
-                  Hoy
-                </button>
-                <button
-                  onClick={() => setWeekOffset(o => o + 1)}
-                  className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-              <p className="text-xs font-medium text-slate-500">
-                {weekDays[0].toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
-                {' – '}
-                {weekDays[6].toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
-              </p>
-            </div>
-
-            {/* 7-day grid */}
-            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden mb-4">
-              <div className="grid grid-cols-7 divide-x divide-slate-100">
-                {weekDays.map((day, idx) => {
-                  const dayTasks = tasksForWeekDay(day);
-                  const isToday  = day.toISOString().slice(0, 10) === todayStr;
-                  const dayNames = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa', 'Do'];
-                  return (
-                    <div key={idx} className={`p-2 min-h-[130px] ${isToday ? 'bg-blue-50/50' : ''}`}>
-                      <div className="mb-2 text-center">
-                        <p className={`text-[10px] font-semibold uppercase ${isToday ? 'text-blue-600' : 'text-slate-400'}`}>
-                          {dayNames[idx]}
-                        </p>
-                        <p className={`text-sm font-bold leading-tight ${isToday ? 'text-blue-700' : 'text-slate-700'}`}>
-                          {day.getDate()}
-                        </p>
+                  {/* Body */}
+                  <div className="p-4 space-y-3">
+                    {/* Tasks this week */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Tareas esta semana</p>
+                        <span className="text-[11px] font-medium text-slate-500">{weekTasks.length}</span>
                       </div>
-                      <div className="space-y-1">
-                        {dayTasks.slice(0, 3).map(t => {
-                          const assignee = profiles.find(pr => pr.id === t.assigneeId);
-                          const isOverdue = !!(t.dueDate && new Date(t.dueDate + 'T12:00:00') < new Date());
-                          return (
-                            <div
-                              key={t.id}
-                              onClick={() => setDetailTask(t)}
-                              className={`cursor-pointer rounded px-1.5 py-1 text-[10px] leading-tight border-l-2 transition-opacity hover:opacity-75 ${
-                                isOverdue
-                                  ? 'bg-red-50 border-red-400 text-red-700'
-                                  : t.priority === 'alta'
-                                    ? 'bg-red-50 border-red-300 text-red-700'
-                                    : t.priority === 'media'
-                                      ? 'bg-amber-50 border-amber-300 text-amber-700'
-                                      : 'bg-slate-50 border-slate-300 text-slate-600'
-                              }`}
-                              title={t.title}
-                            >
-                              <p className="font-medium truncate">{t.title}</p>
-                              {assignee && (
-                                <p className="text-[9px] opacity-70">{assignee.name.split(' ')[0]}</p>
+                      {weekTasks.length === 0 ? (
+                        <p className="text-xs text-slate-300 italic">Sin tareas programadas</p>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {weekTasks.slice(0, 3).map(t => (
+                            <div key={t.id} onClick={() => setDetailTask(t)}
+                              className="flex items-center gap-2 cursor-pointer group">
+                              <div className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                                style={{
+                                  background: t.status === 'en_progreso' ? '#3b82f6'
+                                    : t.priority === 'alta' ? '#E24B4A'
+                                    : t.priority === 'media' ? '#EF9F27' : '#94a3b8'
+                                }} />
+                              <p className="text-xs text-slate-700 truncate group-hover:text-blue-600 transition-colors flex-1">{t.title}</p>
+                              {t.dueDate && (
+                                <span className="text-[10px] text-slate-400 flex-shrink-0">
+                                  {new Date(t.dueDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                                </span>
                               )}
                             </div>
-                          );
-                        })}
-                        {dayTasks.length > 3 && (
-                          <p className="text-[10px] text-slate-400 text-center">+{dayTasks.length - 3} más</p>
+                          ))}
+                          {weekTasks.length > 3 && (
+                            <p className="text-[11px] text-slate-400">+{weekTasks.length - 3} más</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="border-t border-slate-100" />
+
+                    {/* Events this week */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Eventos esta semana</p>
+                        <span className="text-[11px] font-medium text-slate-500">
+                          {loadingTeamActivities ? '…' : weekEvents.length}
+                        </span>
+                      </div>
+                      {loadingTeamActivities ? (
+                        <p className="text-xs text-slate-300 italic">Cargando…</p>
+                      ) : weekEvents.length === 0 ? (
+                        <p className="text-xs text-slate-300 italic">Sin eventos registrados</p>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {weekEvents.slice(0, 3).map(a => {
+                            const evtPlayer = players.find(pl => pl.id === a.playerId);
+                            return (
+                              <div key={a.id} className="flex items-center gap-2">
+                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
+                                <p className="text-xs text-slate-700 truncate flex-1">
+                                  {a.type}
+                                  {evtPlayer && <span className="text-slate-400"> · {evtPlayer.name}</span>}
+                                </p>
+                                <span className="text-[10px] text-slate-400 flex-shrink-0">
+                                  {new Date(a.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                                </span>
+                              </div>
+                            );
+                          })}
+                          {weekEvents.length > 3 && (
+                            <p className="text-[11px] text-slate-400">+{weekEvents.length - 3} más</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Footer */}
+                    <div className="border-t border-slate-100 pt-2.5 flex items-center justify-between">
+                      <div className="flex items-center gap-3 text-[11px]">
+                        {inProgressP.length > 0 && (
+                          <span className="text-blue-600 font-medium">{inProgressP.length} en progreso</span>
                         )}
-                        {dayTasks.length === 0 && (
-                          <p className="text-[10px] text-slate-300 text-center pt-1">—</p>
+                        {completedWeek.length > 0 && (
+                          <span className="text-emerald-600 font-medium">✓ {completedWeek.length} completadas</span>
+                        )}
+                        {inProgressP.length === 0 && completedWeek.length === 0 && weekTasks.length === 0 && weekEvents.length === 0 && (
+                          <span className="text-slate-300">Sin actividad</span>
                         )}
                       </div>
+                      {onSelectProfile && (
+                        <button
+                          onClick={() => onSelectProfile(p.id)}
+                          className="text-[11px] text-slate-400 hover:text-[hsl(220,72%,26%)] transition-colors font-medium"
+                        >
+                          Ver todo →
+                        </button>
+                      )}
                     </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Tasks without date */}
-            {tasksWithoutDate.length > 0 && (
-              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-                <div className="px-4 py-2.5 border-b border-slate-100">
-                  <p className="text-xs font-semibold text-slate-500">
-                    Sin fecha · {tasksWithoutDate.length} tarea{tasksWithoutDate.length > 1 ? 's' : ''}
-                  </p>
+                  </div>
                 </div>
-                <div className="p-4 space-y-2">
-                  {tasksWithoutDate.slice(0, 6).map(t => (
-                    <TaskListRow key={t.id} task={t} players={players} profiles={profiles}
-                      onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask}
-                      detailTaskId={detailTask?.id} overdue={false} />
-                  ))}
-                  {tasksWithoutDate.length > 6 && (
-                    <p className="text-xs text-slate-400 text-center pt-1">+{tasksWithoutDate.length - 6} más sin fecha</p>
-                  )}
-                </div>
-              </div>
-            )}
-          </>)}
+              );
+            })}
+          </div>
         </>)}
 
         </>)}
@@ -1530,7 +1457,8 @@ export function Dashboard({
       )}
 
       {showAddGeneralTask && onAddGeneralTask && (
-        <AddGeneralTaskModal profiles={profiles} players={players} onClose={() => setShowAddGeneralTask(false)}
+        <AddGeneralTaskModal profiles={profiles} players={players} currentProfileId={currentProfile.id}
+          onClose={() => setShowAddGeneralTask(false)}
           onAdd={(t) => { onAddGeneralTask(t); setShowAddGeneralTask(false); }} />
       )}
 
@@ -1555,6 +1483,7 @@ export function Dashboard({
         <QuickTaskModal
           player={quickTaskPlayer}
           profiles={profiles}
+          currentProfileId={currentProfile.id}
           onClose={() => setQuickTaskPlayer(null)}
           onAdd={(t) => { onAddGeneralTask(t); setQuickTaskPlayer(null); }}
         />
@@ -2236,12 +2165,12 @@ function AddPlayerModal({ profiles, onClose, onAdd }: {
   );
 }
 
-function AddGeneralTaskModal({ profiles, players, onClose, onAdd }: {
-  profiles: Profile[]; players: Player[]; onClose: () => void; onAdd: (task: Task) => void;
+function AddGeneralTaskModal({ profiles, players, currentProfileId, onClose, onAdd }: {
+  profiles: Profile[]; players: Player[]; currentProfileId?: string; onClose: () => void; onAdd: (task: Task) => void;
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [assigneeId, setAssigneeId] = useState("");
+  const [assigneeId, setAssigneeId] = useState(currentProfileId ?? "");
   const [selectedPlayerId, setSelectedPlayerId] = useState("");
   const [priority, setPriority] = useState<"alta" | "media" | "baja">("media");
   const [label, setLabel] = useState<TaskLabel | "">("");
@@ -2490,12 +2419,12 @@ function Sel({ label, value, onChange, options }: {
 }
 
 // ── QUICK TASK MODAL ─────────────────────────────────────────
-function QuickTaskModal({ player, profiles, onClose, onAdd }: {
-  player: Player; profiles: Profile[];
+function QuickTaskModal({ player, profiles, currentProfileId, onClose, onAdd }: {
+  player: Player; profiles: Profile[]; currentProfileId?: string;
   onClose: () => void; onAdd: (task: Task) => void;
 }) {
   const [title, setTitle] = useState("");
-  const [assigneeId, setAssigneeId] = useState("");
+  const [assigneeId, setAssigneeId] = useState(currentProfileId ?? "");
   const [priority, setPriority] = useState<"alta" | "media" | "baja">("media");
   const [dueDate, setDueDate] = useState("");
 
