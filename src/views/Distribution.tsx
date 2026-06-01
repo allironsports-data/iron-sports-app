@@ -271,7 +271,10 @@ export function Distribution({
   onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation,
   onCreatePlayer,
 }: Props) {
-  const [tab, setTab] = useState<'jugadores' | 'clubes' | 'solicitudes' | 'pipeline' | 'encargados'>('jugadores')
+  const [tab, setTab] = useState<'jugadores' | 'clubes' | 'solicitudes' | 'pipeline' | 'encargados'>(
+    () => (sessionStorage.getItem('nav_dist_tab') as 'jugadores' | 'clubes' | 'solicitudes' | 'pipeline' | 'encargados') ?? 'jugadores'
+  )
+  useEffect(() => { sessionStorage.setItem('nav_dist_tab', tab) }, [tab])
   const season = CURRENT_SEASON
   const [search, setSearch] = useState('')
 

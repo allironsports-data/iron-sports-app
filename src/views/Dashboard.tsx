@@ -172,8 +172,12 @@ export function Dashboard({
   // quick filter from stat cards: overlays on top of tab filter
   const [quickFilter, setQuickFilter] = useState<"overdue" | "urgent" | "inprogress" | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [tasksMainView, setTasksMainView] = useState<'mis' | 'equipo'>('mis');
-  const [equipoSubView, setEquipoSubView] = useState<'persona' | 'todas'>('persona');
+  const [tasksMainView, setTasksMainView] = useState<'mis' | 'equipo'>(
+    () => (sessionStorage.getItem('nav_tasks_view') as 'mis' | 'equipo') ?? 'mis'
+  );
+  const [equipoSubView, setEquipoSubView] = useState<'persona' | 'todas'>(
+    () => (sessionStorage.getItem('nav_equipo_subview') as 'persona' | 'todas') ?? 'persona'
+  );
   const [weekOffset, setWeekOffset] = useState(0);
   // Activities per profile for the equipo weekly view
   const [teamActivities, setTeamActivities] = useState<Record<string, PlayerActivity[]>>({});
@@ -222,6 +226,10 @@ export function Dashboard({
       return () => clearTimeout(timer);
     }
   }, [notifications]);
+
+  // Persist tasksMainView + equipoSubView so refresh restores position
+  useEffect(() => { sessionStorage.setItem('nav_tasks_view', tasksMainView) }, [tasksMainView]);
+  useEffect(() => { sessionStorage.setItem('nav_equipo_subview', equipoSubView) }, [equipoSubView]);
 
   // Fetch activities for all profiles when equipo tab is active
   useEffect(() => {
