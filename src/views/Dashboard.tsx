@@ -2662,7 +2662,7 @@ function AddGeneralTaskModal({ profiles, players, currentProfileId, onClose, onA
             <select value={label} onChange={(e) => setLabel(e.target.value as TaskLabel | "")}
               className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
               <option value="">— Sin tipo —</option>
-              {(['General','Scouting','Distribución','Negociación','Reunión/Comida','Administrativa','Seguimiento','Informe'] as const).map(l => (
+              {(['General','Scouting','Distribución','Negociación','Reunión/Comida','Administrativa','Seguimiento','Informe','Marketing','Comunicación'] as const).map(l => (
                 <option key={l} value={l}>{l}</option>
               ))}
             </select>
@@ -2781,7 +2781,7 @@ function EditGeneralTaskModal({ task, profiles, players, onClose, onUpdate, onDe
             <select value={label} onChange={(e) => setLabel(e.target.value as TaskLabel | "")}
               className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
               <option value="">— Sin tipo —</option>
-              {(['General','Scouting','Distribución','Negociación','Reunión/Comida','Administrativa','Seguimiento','Informe'] as const).map(l => (
+              {(['General','Scouting','Distribución','Negociación','Reunión/Comida','Administrativa','Seguimiento','Informe','Marketing','Comunicación'] as const).map(l => (
                 <option key={l} value={l}>{l}</option>
               ))}
             </select>

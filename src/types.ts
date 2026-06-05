@@ -37,7 +37,7 @@ export interface TaskComment {
   attachments: TaskAttachment[];
 }
 
-export type TaskLabel = 'General' | 'Scouting' | 'Distribución' | 'Negociación' | 'Reunión/Comida' | 'Administrativa' | 'Seguimiento' | 'Informe'
+export type TaskLabel = 'General' | 'Scouting' | 'Distribución' | 'Negociación' | 'Reunión/Comida' | 'Administrativa' | 'Seguimiento' | 'Informe' | 'Marketing' | 'Comunicación'
 
 export interface Task {
   id: string;

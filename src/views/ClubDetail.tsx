@@ -54,6 +54,39 @@ interface Props {
 
 // ── helpers ───────────────────────────────────────────────────
 
+function ClubInfoStrip({ club }: { club: Club }) {
+  const hasAny = club.league || club.contactPerson || club.aisManager || club.isPriority
+  if (!hasAny) return null
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-500">
+      {club.league && (
+        <span className="flex items-center gap-1">
+          <span className="text-slate-400">Liga</span>
+          <span className="font-medium text-slate-700">{club.league}</span>
+        </span>
+      )}
+      {club.contactPerson && (
+        <span className="flex items-center gap-1">
+          <Phone className="w-3 h-3 text-slate-400" />
+          <span className="font-medium text-slate-700">{club.contactPerson}</span>
+        </span>
+      )}
+      {club.aisManager && (
+        <span className="flex items-center gap-1">
+          <span className="text-slate-400">Gestor</span>
+          <span className="font-mono bg-white border border-slate-200 text-slate-700 px-1.5 py-0.5 rounded">{club.aisManager}</span>
+        </span>
+      )}
+      {club.isPriority && (
+        <span className="flex items-center gap-1 text-amber-600 font-medium">
+          <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+          Prioritario
+        </span>
+      )}
+    </div>
+  )
+}
+
 function Avatar({ name, photo, size = 'sm' }: { name: string; photo?: string; size?: 'sm' | 'md' | 'lg' }) {
   const cls = size === 'sm' ? 'w-8 h-8 text-xs' : size === 'md' ? 'w-10 h-10 text-sm' : 'w-12 h-12 text-base'
   if (photo) return <img src={photo} className={`${cls} rounded-full object-cover flex-shrink-0`} />
@@ -173,6 +206,7 @@ export function ClubDetail({
         {/* ── JUGADORES TAB ── */}
         {activeTab === 'jugadores' && (
           <div className="max-w-2xl space-y-3">
+            <ClubInfoStrip club={club} />
             {/* Status filter pills */}
             <div className="flex gap-1.5 flex-wrap">
               <button
@@ -276,6 +310,7 @@ export function ClubDetail({
         {/* ── NECESIDADES TAB ── */}
         {activeTab === 'necesidades' && (
           <div className="max-w-2xl space-y-3">
+            <ClubInfoStrip club={club} />
             <div className="flex justify-end">
               <button
                 onClick={() => setShowAddNeed(true)}

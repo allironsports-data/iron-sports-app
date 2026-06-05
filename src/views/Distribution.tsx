@@ -1901,12 +1901,26 @@ export function Distribution({
                           {selectedEntry.transferFee}
                         </span>
                       )}
-                      <button
-                        onClick={() => setEditingEntry(selectedEntry)}
-                        className="ml-auto p-1 text-slate-400 hover:text-slate-600"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="ml-auto flex items-center gap-1">
+                        <button
+                          onClick={() => setEditingEntry(selectedEntry)}
+                          className="p-1 text-slate-400 hover:text-slate-600 rounded hover:bg-slate-100"
+                          title="Editar"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (!confirm('¿Quitar este jugador de distribución?')) return
+                            await onDeleteEntry(selectedEntry.id)
+                            closePanel()
+                          }}
+                          className="p-1 text-red-400 hover:text-red-600 rounded hover:bg-red-50"
+                          title="Quitar de distribución"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                     {selectedEntry.notes && (
                       <p className="text-xs text-slate-500 mt-2">{selectedEntry.notes}</p>
