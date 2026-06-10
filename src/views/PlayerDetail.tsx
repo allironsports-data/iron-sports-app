@@ -15,6 +15,9 @@ import { uploadContractPdf, fetchNotes, createNote, updateNote, deleteNote,
 import { TaskDetailPanel } from "../components/TaskDetailPanel";
 import { ToastStack } from "../components/ToastStack";
 import { useToast } from "../hooks/useToast";
+import { ConfirmModal } from "../components/ConfirmModal";
+import { useEscapeKey } from "../hooks/useEscapeKey";
+import { isValidUrl, normalizeUrl } from "../lib/validate";
 import {
   ArrowLeft, LogOut, ClipboardList, FileText,
   TrendingUp, User, Plus, X, Calendar, AlertCircle,
@@ -67,6 +70,7 @@ export function PlayerDetail({
   const [activeTab, setActiveTab] = useState<TabId>("resumen");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEditPlayer, setShowEditPlayer] = useState(false);
+  const { toasts, showToast, dismissToast } = useToast();
 
   const pendingCount   = tasks.filter((t) => t.status !== "completada").length;
   const rendimCount    = (player.videoSessions?.length ?? 0) || undefined;
@@ -122,7 +126,7 @@ export function PlayerDetail({
       <header className="bg-white border-b border-slate-200 sticky top-0 z-20">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-12 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button onClick={onBack} className="text-slate-400 hover:text-slate-600 transition-colors">
+            <button onClick={onBack} aria-label="Volver" className="text-slate-400 hover:text-slate-600 transition-colors">
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div className="w-6 h-6 rounded overflow-hidden bg-white flex-shrink-0">
@@ -134,11 +138,11 @@ export function PlayerDetail({
           </div>
           <div className="flex items-center gap-2">
             {onAdmin && (
-              <button onClick={onAdmin} className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors" title="Admin">
+              <button onClick={onAdmin} aria-label="Admin" className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors" title="Admin">
                 <Users className="w-4 h-4" />
               </button>
             )}
-            <button onClick={onLogout} className="text-slate-400 hover:text-slate-600 transition-colors">
+            <button onClick={onLogout} aria-label="Cerrar sesión" title="Cerrar sesión" className="text-slate-400 hover:text-slate-600 transition-colors">
               <LogOut className="w-4 h-4" />
             </button>
           </div>
@@ -162,6 +166,7 @@ export function PlayerDetail({
           )}
           <button
             onClick={() => setShowEditPlayer(true)}
+            aria-label="Editar jugador"
             className="p-1.5 text-slate-400 hover:text-slate-600 border border-slate-200 rounded-lg"
           >
             <Edit3 className="w-3.5 h-3.5" />
@@ -248,6 +253,7 @@ export function PlayerDetail({
                   {onDeletePlayer && currentProfile.is_admin && (
                     <button
                       onClick={() => setShowDeleteConfirm(true)}
+                      aria-label="Eliminar jugador"
                       className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-red-500 border border-red-200 hover:bg-red-50 transition-colors"
                     >
                       <Trash2 className="w-3 h-3" />
@@ -347,35 +353,27 @@ export function PlayerDetail({
         />
       )}
 
-      {showDeleteConfirm && onDeletePlayer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-lg w-full max-w-sm">
-            <div className="px-4 py-3 border-b border-slate-100">
-              <h2 className="text-sm font-semibold text-slate-800">Confirmar eliminación</h2>
-            </div>
-            <div className="p-4">
-              <p className="text-sm text-slate-700 mb-4">
-                ¿Eliminar a {player.name}? Esta acción no se puede deshacer.
-              </p>
-              <div className="flex gap-2 justify-end">
-                <button
-                  onClick={() => setShowDeleteConfirm(false)}
-                  className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={() => { onDeletePlayer(player.id); setShowDeleteConfirm(false); onBack(); }}
-                  className="px-3 py-1.5 rounded-lg text-white text-sm font-medium transition-colors"
-                  style={{ background: "hsl(0, 84%, 60%)" }}
-                >
-                  Eliminar
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+      {onDeletePlayer && (
+        <ConfirmModal
+          open={showDeleteConfirm}
+          title={`¿Eliminar a ${player.name}?`}
+          message="Esta acción no se puede deshacer."
+          confirmLabel="Eliminar"
+          variant="danger"
+          onConfirm={async () => {
+            try {
+              await Promise.resolve(onDeletePlayer(player.id));
+              setShowDeleteConfirm(false);
+              onBack();
+            } catch {
+              showToast("No se pudo eliminar al jugador", "error");
+            }
+          }}
+          onCancel={() => setShowDeleteConfirm(false)}
+        />
       )}
+
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
@@ -416,6 +414,8 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
   const [showAdd, setShowAdd] = useState(false);
   const [detailTask, setDetailTask] = useState<Task | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
+  const { toasts, showToast, dismissToast } = useToast();
 
   const now = new Date();
   const overdueTasks   = tasks.filter((t) => t.status !== "completada" && t.dueDate && new Date(t.dueDate) < now);
@@ -518,10 +518,10 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
             </div>
             {canEdit && (
               <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                <button onClick={() => setDetailTask(task)} className="text-slate-300 hover:text-blue-500 transition-colors" title="Ver detalles">
+                <button onClick={() => setDetailTask(task)} aria-label="Ver detalles de la tarea" className="text-slate-300 hover:text-blue-500 transition-colors" title="Ver detalles">
                   <Edit3 className="w-3.5 h-3.5" />
                 </button>
-                <button onClick={() => onDeleteTask(task.id)} className="text-slate-300 hover:text-red-400 transition-colors">
+                <button onClick={() => setTaskToDelete(task)} aria-label="Eliminar tarea" title="Eliminar tarea" className="text-slate-300 hover:text-red-400 transition-colors">
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -546,8 +546,7 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
         </div>
         <button
           onClick={() => setShowAdd(true)}
-          className="inline-flex items-center gap-1 rounded-lg text-white text-xs font-medium px-2.5 py-1.5 transition-colors flex-shrink-0"
-          style={{ background: PRIMARY }}
+          className="inline-flex items-center gap-1 rounded-lg text-white text-xs font-medium px-2.5 py-1.5 transition-colors flex-shrink-0 bg-primary hover:bg-primary/90"
         >
           <Plus className="w-3.5 h-3.5" /> Nueva tarea
         </button>
@@ -644,6 +643,28 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
           onDelete={(taskId) => { onDeleteTask(taskId); setDetailTask(null); }}
         />
       )}
+
+      <ConfirmModal
+        open={!!taskToDelete}
+        title="¿Eliminar tarea?"
+        message={taskToDelete ? `Se eliminará «${taskToDelete.title}». Esta acción no se puede deshacer.` : undefined}
+        confirmLabel="Eliminar"
+        variant="danger"
+        onConfirm={async () => {
+          if (!taskToDelete) return;
+          try {
+            await Promise.resolve(onDeleteTask(taskToDelete.id));
+            if (detailTask?.id === taskToDelete.id) setDetailTask(null);
+            setTaskToDelete(null);
+            showToast("Tarea eliminada", "info");
+          } catch {
+            showToast("No se pudo eliminar la tarea", "error");
+          }
+        }}
+        onCancel={() => setTaskToDelete(null)}
+      />
+
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
@@ -661,6 +682,8 @@ function AddTaskModal({ profiles, tasks, playerId, player, isAdmin, onClose, onA
   const [depends, setDepends] = useState("");
   const [adminOnly, setAdminOnly] = useState(false);
 
+  useEscapeKey(onClose);
+
   const playerManagers = player.managedBy.map((id) => profiles.find((m) => m.id === id)).filter(Boolean) as Profile[];
 
   return (
@@ -668,7 +691,7 @@ function AddTaskModal({ profiles, tasks, playerId, player, isAdmin, onClose, onA
       <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-md max-h-[92vh] overflow-y-auto">
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white">
           <h2 className="text-sm font-semibold text-slate-800">Nueva tarea</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
         </div>
         <form onSubmit={(e) => {
           e.preventDefault();
@@ -754,8 +777,7 @@ function AddTaskModal({ profiles, tasks, playerId, player, isAdmin, onClose, onA
           )}
           <div className="pt-2">
             <button type="submit" disabled={!title || !assignee}
-              className="w-full rounded-md text-white text-sm font-medium py-2 disabled:opacity-40 transition-colors"
-              style={{ background: PRIMARY }}>
+              className="w-full rounded-md text-white text-sm font-medium py-2 disabled:opacity-40 transition-colors bg-primary hover:bg-primary/90">
               Crear tarea
             </button>
           </div>
@@ -772,6 +794,7 @@ function ContractTab({ player, onUpdate, isAdmin }: { player: Player; onUpdate: 
   const [repr, setRepr] = useState(player.representationContract);
   const [club, setClub] = useState(player.clubContract);
   const fileRef = useRef<HTMLInputElement>(null);
+  const { toasts, showToast, dismissToast } = useToast();
 
   const reprDaysLeft = Math.ceil((new Date(player.representationContract.end).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
   const clubDaysLeft = player.clubContract.endDate
@@ -812,7 +835,7 @@ function ContractTab({ player, onUpdate, isAdmin }: { player: Player; onUpdate: 
             <div className="flex gap-2 justify-end">
               <button onClick={() => setEditingRepr(false)} className="text-xs px-3 py-1.5 rounded border border-slate-200 text-slate-500">Cancelar</button>
               <button onClick={() => { onUpdate({ ...player, representationContract: repr }); setEditingRepr(false); }}
-                className="text-xs px-3 py-1.5 rounded text-white" style={{ background: PRIMARY }}>Guardar</button>
+                className="text-xs px-3 py-1.5 rounded text-white bg-primary hover:bg-primary/90">Guardar</button>
             </div>
           </div>
         ) : (
@@ -857,7 +880,7 @@ function ContractTab({ player, onUpdate, isAdmin }: { player: Player; onUpdate: 
                     info: { ...player.info },
                   });
                 } catch (err) {
-                  alert("Error al subir PDF: " + (err as Error).message);
+                  showToast("Error al subir PDF: " + (err as Error).message, "error");
                 }
                 e.target.value = "";
               }}
@@ -895,7 +918,7 @@ function ContractTab({ player, onUpdate, isAdmin }: { player: Player; onUpdate: 
             <div className="flex gap-2 justify-end">
               <button onClick={() => setEditingClub(false)} className="text-xs px-3 py-1.5 rounded border border-slate-200 text-slate-500">Cancelar</button>
               <button onClick={() => { onUpdate({ ...player, clubContract: club }); setEditingClub(false); }}
-                className="text-xs px-3 py-1.5 rounded text-white" style={{ background: PRIMARY }}>Guardar</button>
+                className="text-xs px-3 py-1.5 rounded text-white bg-primary hover:bg-primary/90">Guardar</button>
             </div>
           </div>
         ) : (
@@ -964,6 +987,8 @@ function ContractTab({ player, onUpdate, isAdmin }: { player: Player; onUpdate: 
           </div>
         </div>
       )}
+
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
@@ -976,6 +1001,9 @@ function PerformanceTab({ player, profiles, onUpdate }: { player: Player; profil
   const [editingNote, setEditingNote] = useState<PerformanceNote | null>(null);
   const [dbNotes, setDbNotes] = useState<PerformanceNote[]>(player.performance);
   const [notesLoading, setNotesLoading] = useState(true);
+  const [noteToDelete, setNoteToDelete] = useState<PerformanceNote | null>(null);
+  const [videoToDelete, setVideoToDelete] = useState<VideoSession | null>(null);
+  const { toasts, showToast, dismissToast } = useToast();
 
   useEffect(() => {
     setNotesLoading(true);
@@ -1011,8 +1039,7 @@ function PerformanceTab({ player, profiles, onUpdate }: { player: Player; profil
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-slate-800">Informes y valoraciones</h3>
             <button onClick={() => setShowAddNote(true)}
-              className="inline-flex items-center gap-1 rounded-md text-white text-xs font-medium px-2.5 py-1.5"
-              style={{ background: PRIMARY }}>
+              className="inline-flex items-center gap-1 rounded-md text-white text-xs font-medium px-2.5 py-1.5 bg-primary hover:bg-primary/90 transition-colors">
               <Plus className="w-3.5 h-3.5" />Nuevo informe
             </button>
           </div>
@@ -1051,13 +1078,12 @@ function PerformanceTab({ player, profiles, onUpdate }: { player: Player; profil
                     </div>
                     <div className="flex items-center gap-1">
                       <button onClick={() => setEditingNote(note)}
+                        aria-label="Editar informe"
                         className="p-1 text-slate-300 hover:text-blue-500">
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={async () => {
-                          await deleteNote(note.id);
-                          setDbNotes(prev => prev.filter(n => n.id !== note.id));
-                        }}
+                      <button onClick={() => setNoteToDelete(note)}
+                        aria-label="Eliminar informe"
                         className="p-1 text-slate-300 hover:text-red-500">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -1076,8 +1102,7 @@ function PerformanceTab({ player, profiles, onUpdate }: { player: Player; profil
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-slate-800">Sesiones de vídeoanalisis</h3>
             <button onClick={() => setShowAddVideo(true)}
-              className="inline-flex items-center gap-1 rounded-md text-white text-xs font-medium px-2.5 py-1.5"
-              style={{ background: PRIMARY }}>
+              className="inline-flex items-center gap-1 rounded-md text-white text-xs font-medium px-2.5 py-1.5 bg-primary hover:bg-primary/90 transition-colors">
               <Plus className="w-3.5 h-3.5" />Nueva sesión
             </button>
           </div>
@@ -1104,7 +1129,8 @@ function PerformanceTab({ player, profiles, onUpdate }: { player: Player; profil
                       <ExternalLink className="w-3 h-3" /> Ver vídeo
                     </a>
                   </div>
-                  <button onClick={() => onUpdate({ ...player, videoSessions: player.videoSessions.filter(s => s.id !== v.id) })}
+                  <button onClick={() => setVideoToDelete(v)}
+                    aria-label="Eliminar sesión de vídeo"
                     className="p-1 text-slate-300 hover:text-red-500 flex-shrink-0">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -1137,6 +1163,47 @@ function PerformanceTab({ player, profiles, onUpdate }: { player: Player; profil
         <AddVideoSessionModal onClose={() => setShowAddVideo(false)}
           onSave={(v) => { onUpdate({ ...player, videoSessions: [v, ...(player.videoSessions ?? [])] }); setShowAddVideo(false); }} />
       )}
+
+      <ConfirmModal
+        open={!!noteToDelete}
+        title="¿Eliminar informe?"
+        message="Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        variant="danger"
+        onConfirm={async () => {
+          if (!noteToDelete) return;
+          try {
+            await deleteNote(noteToDelete.id);
+            setDbNotes(prev => prev.filter(n => n.id !== noteToDelete.id));
+            setNoteToDelete(null);
+            showToast("Informe eliminado", "info");
+          } catch {
+            showToast("No se pudo eliminar el informe", "error");
+          }
+        }}
+        onCancel={() => setNoteToDelete(null)}
+      />
+
+      <ConfirmModal
+        open={!!videoToDelete}
+        title="¿Eliminar sesión de vídeo?"
+        message={videoToDelete?.description ? `Se eliminará «${videoToDelete.description}».` : "Esta acción no se puede deshacer."}
+        confirmLabel="Eliminar"
+        variant="danger"
+        onConfirm={async () => {
+          if (!videoToDelete) return;
+          try {
+            await Promise.resolve(onUpdate({ ...player, videoSessions: player.videoSessions.filter(s => s.id !== videoToDelete.id) }));
+            setVideoToDelete(null);
+            showToast("Sesión eliminada", "info");
+          } catch {
+            showToast("No se pudo eliminar la sesión", "error");
+          }
+        }}
+        onCancel={() => setVideoToDelete(null)}
+      />
+
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
@@ -1148,20 +1215,27 @@ function AddVideoSessionModal({ onClose, onSave }: {
   const [videoUrl, setVideoUrl] = useState("");
   const [description, setDescription] = useState("");
   const [duration, setDuration] = useState("");
+  const [urlError, setUrlError] = useState(false);
+
+  useEscapeKey(onClose);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-0 sm:p-4">
       <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-sm">
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
           <h2 className="text-sm font-semibold text-slate-800">Nueva sesión de vídeoanalisis</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
         </div>
         <form onSubmit={(e) => {
           e.preventDefault();
-          onSave({ id: "vs" + Date.now(), date, videoUrl, description, duration: duration ? parseInt(duration) : undefined });
+          if (!isValidUrl(videoUrl)) { setUrlError(true); return; }
+          onSave({ id: "vs" + Date.now(), date, videoUrl: normalizeUrl(videoUrl), description, duration: duration ? parseInt(duration) : undefined });
         }} className="p-4 space-y-3 pb-8">
           <TF label="Fecha" value={date} onChange={setDate} type="date" required />
-          <TF label="Enlace al vídeo (Streamable, YouTube, etc.)" value={videoUrl} onChange={setVideoUrl} required />
+          <div>
+            <TF label="Enlace al vídeo (Streamable, YouTube, etc.)" value={videoUrl} onChange={(v) => { setVideoUrl(v); setUrlError(false); }} required />
+            {urlError && <p className="text-xs text-red-500 mt-1">URL no válida</p>}
+          </div>
           <TF label="Duración (minutos, opcional)" value={duration} onChange={setDuration} type="number" />
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Descripción de la sesión</label>
@@ -1170,8 +1244,7 @@ function AddVideoSessionModal({ onClose, onSave }: {
               className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 resize-none" />
           </div>
           <button type="submit" disabled={!videoUrl || !description}
-            className="w-full rounded-md text-white text-sm font-medium py-2.5 disabled:opacity-40"
-            style={{ background: PRIMARY }}>Guardar sesión</button>
+            className="w-full rounded-md text-white text-sm font-medium py-2.5 disabled:opacity-40 bg-primary hover:bg-primary/90 transition-colors">Guardar sesión</button>
         </form>
       </div>
     </div>
@@ -1191,13 +1264,15 @@ function AddPerformanceModal({ profiles, onClose, onAdd, initialNote }: {
   const [error, setError] = useState<string | null>(null);
   const isEdit = !!initialNote;
 
+  useEscapeKey(onClose, !saving);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     setError(null);
     try {
       await onAdd({ date, authorId: author, category, rating, content, title: title || undefined });
-    } catch (err) {
+    } catch {
       setError('Error al guardar. Inténtalo de nuevo.');
       setSaving(false);
     }
@@ -1205,10 +1280,10 @@ function AddPerformanceModal({ profiles, onClose, onAdd, initialNote }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="bg-white rounded-lg border border-slate-200 shadow-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-lg border border-slate-200 shadow-lg w-full max-w-md max-h-[90vh] overflow-y-auto [scrollbar-gutter:stable] overscroll-contain">
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
           <h2 className="text-sm font-semibold text-slate-800">{isEdit ? 'Editar informe' : 'Nuevo informe'}</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
         </div>
         <form onSubmit={handleSubmit} className="p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
@@ -1245,8 +1320,8 @@ function AddPerformanceModal({ profiles, onClose, onAdd, initialNote }: {
           </div>
           {error && <p className="text-xs text-red-500 text-center">{error}</p>}
           <button type="submit" disabled={!author || !content || saving}
-            className="w-full rounded-md text-white text-sm font-medium py-2 disabled:opacity-40"
-            style={{ background: PRIMARY }}>
+            className="w-full rounded-md text-white text-sm font-medium py-2 disabled:opacity-40 bg-primary hover:bg-primary/90 inline-flex items-center justify-center gap-2 transition-colors">
+            {saving && <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
             {saving ? 'Guardando…' : isEdit ? 'Guardar cambios' : 'Guardar informe'}
           </button>
         </form>
@@ -1261,6 +1336,7 @@ function InfoTab({ player, onUpdate }: { player: Player; onUpdate: (p: Player) =
   const [info, setInfo] = useState(player.info);
   const [uploading, setUploading] = useState(false);
   const passportRef = useRef<HTMLInputElement>(null);
+  const { toasts, showToast, dismissToast } = useToast();
 
   const handlePassportUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1273,6 +1349,7 @@ function InfoTab({ player, onUpdate }: { player: Player; onUpdate: (p: Player) =
       onUpdate(updated);
     } catch (err) {
       console.error(err);
+      showToast("No se pudo subir el pasaporte", "error");
     } finally {
       setUploading(false);
     }
@@ -1286,7 +1363,7 @@ function InfoTab({ player, onUpdate }: { player: Player; onUpdate: (p: Player) =
           <div className="flex gap-2">
             <button onClick={() => setEditing(false)} className="text-xs px-3 py-1.5 rounded border border-slate-200 text-slate-500">Cancelar</button>
             <button onClick={() => { onUpdate({ ...player, info }); setEditing(false); }}
-              className="text-xs px-3 py-1.5 rounded text-white" style={{ background: PRIMARY }}>Guardar</button>
+              className="text-xs px-3 py-1.5 rounded text-white bg-primary hover:bg-primary/90">Guardar</button>
           </div>
         </div>
         <TF label="Teléfono" value={info.phone ?? ''} onChange={(v) => setInfo({ ...info, phone: v })} />
@@ -1350,6 +1427,8 @@ function InfoTab({ player, onUpdate }: { player: Player; onUpdate: (p: Player) =
         )}
         <input ref={passportRef} type="file" accept=".pdf,image/*" className="hidden" onChange={handlePassportUpload} />
       </div>
+
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
@@ -1358,20 +1437,32 @@ function InfoTab({ player, onUpdate }: { player: Player; onUpdate: (p: Player) =
 function LinksSection({ player, onUpdate }: { player: Player; onUpdate: (p: Player) => void }) {
   const [tmUrl, setTmUrl] = useState(player.transfermarktUrl ?? "");
   const [editingTm, setEditingTm] = useState(false);
+  const [tmUrlError, setTmUrlError] = useState(false);
   const [newLabel, setNewLabel] = useState("");
   const [newUrl, setNewUrl] = useState("");
+  const [newUrlError, setNewUrlError] = useState(false);
   const [showAddLink, setShowAddLink] = useState(false);
 
   const saveTransfermarkt = () => {
-    onUpdate({ ...player, transfermarktUrl: tmUrl || undefined });
+    const trimmed = tmUrl.trim();
+    if (trimmed && !isValidUrl(trimmed)) {
+      setTmUrlError(true);
+      return;
+    }
+    onUpdate({ ...player, transfermarktUrl: trimmed ? normalizeUrl(trimmed) : undefined });
+    setTmUrlError(false);
     setEditingTm(false);
   };
 
   const addLink = () => {
     if (!newLabel.trim() || !newUrl.trim()) return;
-    const link: PlayerLink = { id: Date.now().toString(), label: newLabel.trim(), url: newUrl.trim() };
+    if (!isValidUrl(newUrl)) {
+      setNewUrlError(true);
+      return;
+    }
+    const link: PlayerLink = { id: Date.now().toString(), label: newLabel.trim(), url: normalizeUrl(newUrl) };
     onUpdate({ ...player, links: [...(player.links ?? []), link] });
-    setNewLabel(""); setNewUrl(""); setShowAddLink(false);
+    setNewLabel(""); setNewUrl(""); setNewUrlError(false); setShowAddLink(false);
   };
 
   const removeLink = (id: string) => {
@@ -1388,22 +1479,29 @@ function LinksSection({ player, onUpdate }: { player: Player; onUpdate: (p: Play
       <div>
         <p className="text-xs font-medium text-slate-500 mb-1">Transfermarkt</p>
         {editingTm ? (
-          <div className="flex gap-2">
-            <input
-              type="url"
-              value={tmUrl}
-              onChange={(e) => setTmUrl(e.target.value)}
-              placeholder="https://www.transfermarkt.es/..."
-              className="flex-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-            />
-            <button onClick={saveTransfermarkt}
-              className="px-3 py-1.5 rounded-md text-xs font-medium text-white" style={{ background: PRIMARY }}>
-              Guardar
-            </button>
-            <button onClick={() => { setTmUrl(player.transfermarktUrl ?? ""); setEditingTm(false); }}
-              className="px-2 py-1.5 rounded-md text-xs text-slate-500 border border-slate-200">
-              ✕
-            </button>
+          <div>
+            <div className="flex gap-2">
+              <input
+                type="url"
+                value={tmUrl}
+                onChange={(e) => { setTmUrl(e.target.value); setTmUrlError(false); }}
+                placeholder="https://www.transfermarkt.es/..."
+                aria-invalid={tmUrlError}
+                className={`flex-1 rounded-md border bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 ${
+                  tmUrlError ? "border-red-400 focus:ring-red-200" : "border-slate-200 focus:ring-blue-200"
+                }`}
+              />
+              <button onClick={saveTransfermarkt}
+                className="px-3 py-1.5 rounded-md text-xs font-medium text-white bg-primary hover:bg-primary/90">
+                Guardar
+              </button>
+              <button onClick={() => { setTmUrl(player.transfermarktUrl ?? ""); setTmUrlError(false); setEditingTm(false); }}
+                aria-label="Cancelar edición"
+                className="px-2 py-1.5 rounded-md text-xs text-slate-500 border border-slate-200">
+                ✕
+              </button>
+            </div>
+            {tmUrlError && <p className="text-xs text-red-500 mt-1">URL no válida</p>}
           </div>
         ) : player.transfermarktUrl ? (
           <div className="flex items-center gap-2">
@@ -1436,12 +1534,16 @@ function LinksSection({ player, onUpdate }: { player: Player; onUpdate: (p: Play
             <input type="text" value={newLabel} onChange={(e) => setNewLabel(e.target.value)}
               placeholder="Nombre (ej. Vídeo Streamable, Instagram…)"
               className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
-            <input type="url" value={newUrl} onChange={(e) => setNewUrl(e.target.value)}
+            <input type="url" value={newUrl} onChange={(e) => { setNewUrl(e.target.value); setNewUrlError(false); }}
               placeholder="https://..."
-              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+              aria-invalid={newUrlError}
+              className={`w-full rounded-md border bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 ${
+                newUrlError ? "border-red-400 focus:ring-red-200" : "border-slate-200 focus:ring-blue-200"
+              }`} />
+            {newUrlError && <p className="text-xs text-red-500">URL no válida</p>}
             <div className="flex gap-2">
               <button onClick={addLink} disabled={!newLabel.trim() || !newUrl.trim()}
-                className="px-3 py-1.5 rounded-md text-xs font-medium text-white disabled:opacity-40" style={{ background: PRIMARY }}>
+                className="px-3 py-1.5 rounded-md text-xs font-medium text-white disabled:opacity-40 bg-primary hover:bg-primary/90">
                 Añadir enlace
               </button>
               <button onClick={() => setShowAddLink(false)} className="px-3 py-1.5 rounded-md text-xs border border-slate-200 text-slate-500">
@@ -1463,6 +1565,7 @@ function LinksSection({ player, onUpdate }: { player: Player; onUpdate: (p: Play
                 {link.label}
               </a>
               <button onClick={() => removeLink(link.id)}
+                aria-label={`Eliminar enlace ${link.label}`}
                 className="p-1 text-slate-300 hover:text-red-500 flex-shrink-0">
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -1552,8 +1655,11 @@ function EditPlayerModal({ player, profiles, onClose, onSave }: {
   const [club1, setClub1] = useState(player.clubs[0]?.name ?? "");
   const [club2, setClub2] = useState(player.clubs[1]?.name ?? "");
   const [isLoan, setIsLoan] = useState(player.clubs.some((c) => c.type === "cedido_en" || c.type === "propietario"));
+  const [saving, setSaving] = useState(false);
 
-  const handleSave = () => {
+  useEscapeKey(onClose, !saving);
+
+  const handleSave = async () => {
     const clubs = [];
     if (isLoan && club1 && club2) {
       clubs.push({ name: club1, type: "propietario" as const });
@@ -1564,33 +1670,38 @@ function EditPlayerModal({ player, profiles, onClose, onSave }: {
     } else if (club1) {
       clubs.push({ name: club1, type: "principal" as const });
     }
-    onSave({
-      ...player,
-      name,
-      birthDate,
-      positions: [pos1, pos2].filter(Boolean),
-      nationality,
-      clubs,
-      partner: partner || undefined,
-      managedBy: [managed1, managed2].filter(Boolean),
-      info: { ...player.info, phone },
-      representationContract: { ...player.representationContract, start: reprStart, end: reprEnd },
-      clubContract: {
-        ...player.clubContract,
-        endDate: clubEnd,
-        optionalYears: optYears ? parseInt(optYears) : undefined,
-        releaseClause: releaseClause || undefined,
-        agentCommission: commission || undefined,
-      },
-    });
+    setSaving(true);
+    try {
+      await Promise.resolve(onSave({
+        ...player,
+        name,
+        birthDate,
+        positions: [pos1, pos2].filter(Boolean),
+        nationality,
+        clubs,
+        partner: partner || undefined,
+        managedBy: [managed1, managed2].filter(Boolean),
+        info: { ...player.info, phone },
+        representationContract: { ...player.representationContract, start: reprStart, end: reprEnd },
+        clubContract: {
+          ...player.clubContract,
+          endDate: clubEnd,
+          optionalYears: optYears ? parseInt(optYears) : undefined,
+          releaseClause: releaseClause || undefined,
+          agentCommission: commission || undefined,
+        },
+      }));
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="bg-white rounded-lg border border-slate-200 shadow-lg w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white">
+      <div className="bg-white rounded-lg border border-slate-200 shadow-lg w-full max-w-lg max-h-[90vh] overflow-y-auto [scrollbar-gutter:stable] overscroll-contain">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white z-10">
           <h2 className="text-sm font-semibold text-slate-800">Editar jugador</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
         </div>
         <div className="p-4 space-y-3">
           <EF label="Nombre completo" value={name} onChange={setName} />
@@ -1644,16 +1755,19 @@ function EditPlayerModal({ player, profiles, onClose, onSave }: {
           </div>
 
           <div className="pt-2 flex gap-2">
-            <button onClick={onClose} className="flex-1 rounded-md border border-slate-200 text-slate-600 text-sm py-2">Cancelar</button>
+            <button onClick={onClose} disabled={saving} className="flex-1 rounded-md border border-slate-200 text-slate-600 text-sm py-2 disabled:opacity-50">Cancelar</button>
             <button
               onClick={handleSave}
-              className="flex-1 rounded-md text-white text-sm font-medium py-2 transition-colors"
-              style={{ background: PRIMARY }}
+              disabled={saving}
+              className="flex-1 rounded-md text-white text-sm font-medium py-2 transition-colors bg-primary hover:bg-primary/90 disabled:opacity-60 inline-flex items-center justify-center gap-2"
             >
-              Guardar cambios
+              {saving && <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
+              {saving ? 'Guardando…' : 'Guardar cambios'}
             </button>
           </div>
         </div>
+        {/* Indicador de scroll: gradiente fijo al pie del modal */}
+        <div className="sticky bottom-0 h-6 -mt-6 bg-gradient-to-t from-white to-transparent pointer-events-none" aria-hidden="true" />
       </div>
     </div>
   );
@@ -1800,6 +1914,12 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
   // Group edit/delete confirmation dialogs
   const [groupEditPending, setGroupEditPending]     = useState<PlayerActivity | null>(null);
   const [groupDeletePending, setGroupDeletePending] = useState<PlayerActivity | null>(null);
+  // Single (non-group) delete confirmation
+  const [deletePending, setDeletePending] = useState<PlayerActivity | null>(null);
+
+  useEscapeKey(() => setShowForm(false), showForm && !saving);
+  useEscapeKey(() => setGroupEditPending(null), !!groupEditPending);
+  useEscapeKey(() => setGroupDeletePending(null), !!groupDeletePending);
 
   useEffect(() => {
     setLoading(true);
@@ -1891,41 +2011,60 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
 
   async function confirmGroupEdit(all: boolean) {
     if (!groupEditPending) return;
-    if (all) {
-      await updateGroupActivity(groupEditPending);
-      // Update all activities in current player's list that share the group_id
-      setActivities(prev => prev.map(a =>
-        a.groupId === groupEditPending.groupId
-          ? { ...a, date: groupEditPending.date, type: groupEditPending.type, notes: groupEditPending.notes }
-          : a
-      ));
-    } else {
-      await updatePlayerActivity(groupEditPending);
-      setActivities(prev => prev.map(a => a.id === groupEditPending.id ? groupEditPending : a));
+    try {
+      if (all) {
+        await updateGroupActivity(groupEditPending);
+        // Update all activities in current player's list that share the group_id
+        setActivities(prev => prev.map(a =>
+          a.groupId === groupEditPending.groupId
+            ? { ...a, date: groupEditPending.date, type: groupEditPending.type, notes: groupEditPending.notes }
+            : a
+        ));
+      } else {
+        await updatePlayerActivity(groupEditPending);
+        setActivities(prev => prev.map(a => a.id === groupEditPending.id ? groupEditPending : a));
+      }
+      showToast("Evento actualizado", "success");
+    } catch {
+      showToast("No se pudo actualizar el evento", "error");
     }
     setGroupEditPending(null);
   }
 
-  async function handleDelete(act: PlayerActivity) {
+  function handleDelete(act: PlayerActivity) {
     if (act.groupId && (act.linkedPlayerIds?.length ?? 0) > 1) {
       setGroupDeletePending(act);
       return;
     }
-    await deletePlayerActivity(act.id);
-    setActivities(prev => prev.filter(a => a.id !== act.id));
-    showToast("Evento eliminado", "info");
+    setDeletePending(act);
+  }
+
+  async function confirmSingleDelete() {
+    if (!deletePending) return;
+    try {
+      await deletePlayerActivity(deletePending.id);
+      setActivities(prev => prev.filter(a => a.id !== deletePending.id));
+      showToast("Evento eliminado", "info");
+    } catch {
+      showToast("No se pudo eliminar el evento", "error");
+    }
+    setDeletePending(null);
   }
 
   async function confirmGroupDelete(all: boolean) {
     if (!groupDeletePending) return;
-    if (all && groupDeletePending.groupId) {
-      await deleteGroupActivity(groupDeletePending.groupId);
-      setActivities(prev => prev.filter(a => a.groupId !== groupDeletePending.groupId));
-    } else {
-      await deletePlayerActivity(groupDeletePending.id);
-      setActivities(prev => prev.filter(a => a.id !== groupDeletePending.id));
+    try {
+      if (all && groupDeletePending.groupId) {
+        await deleteGroupActivity(groupDeletePending.groupId);
+        setActivities(prev => prev.filter(a => a.groupId !== groupDeletePending.groupId));
+      } else {
+        await deletePlayerActivity(groupDeletePending.id);
+        setActivities(prev => prev.filter(a => a.id !== groupDeletePending.id));
+      }
+      showToast("Evento eliminado", "info");
+    } catch {
+      showToast("No se pudo eliminar el evento", "error");
     }
-    showToast("Evento eliminado", "info");
     setGroupDeletePending(null);
   }
 
@@ -1941,8 +2080,7 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
         <h3 className="text-sm font-semibold text-slate-800">Actividad</h3>
         <button
           onClick={openNew}
-          className="inline-flex items-center gap-1 rounded-md text-white text-xs font-medium px-2.5 py-1.5"
-          style={{ background: PRIMARY }}
+          className="inline-flex items-center gap-1 rounded-md text-white text-xs font-medium px-2.5 py-1.5 bg-primary hover:bg-primary/90 transition-colors"
         >
           <Plus className="w-3.5 h-3.5" />Añadir evento
         </button>
@@ -1997,10 +2135,10 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
                               </span>
                               {evt.type === 'activity' && evt.activityRef && (
                                 <>
-                                  <button onClick={() => openEdit(evt.activityRef!)} className="p-0.5 text-slate-300 hover:text-blue-500 rounded transition-colors">
+                                  <button onClick={() => openEdit(evt.activityRef!)} aria-label="Editar evento" className="p-0.5 text-slate-300 hover:text-blue-500 rounded transition-colors">
                                     <Edit3 className="w-3 h-3" />
                                   </button>
-                                  <button onClick={() => handleDelete(evt.activityRef!)} className="p-0.5 text-slate-300 hover:text-red-500 rounded transition-colors">
+                                  <button onClick={() => handleDelete(evt.activityRef!)} aria-label="Eliminar evento" className="p-0.5 text-slate-300 hover:text-red-500 rounded transition-colors">
                                     <Trash2 className="w-3 h-3" />
                                   </button>
                                 </>
@@ -2262,8 +2400,8 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
               </button>
               <button onClick={handleSave}
                 disabled={saving || !fDate || (fType === 'custom' && !fCustomType.trim())}
-                className="flex-1 py-2 text-xs rounded-lg text-white disabled:opacity-50 transition-colors"
-                style={{ background: PRIMARY }}>
+                className="flex-1 py-2 text-xs rounded-lg text-white disabled:opacity-50 transition-colors bg-primary hover:bg-primary/90 inline-flex items-center justify-center gap-2">
+                {saving && <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
                 {saving ? 'Guardando…' : 'Guardar'}
               </button>
             </div>
@@ -2292,8 +2430,7 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
                 Solo este jugador
               </button>
               <button onClick={() => confirmGroupEdit(true)}
-                className="w-full py-2.5 text-xs rounded-xl text-white transition-colors font-medium"
-                style={{ background: PRIMARY }}>
+                className="w-full py-2.5 text-xs rounded-xl text-white transition-colors font-medium bg-primary hover:bg-primary/90">
                 Todos los jugadores del evento
               </button>
               <button onClick={() => setGroupEditPending(null)}
@@ -2338,6 +2475,17 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
         </div>
       )}
 
+      {/* Single delete confirmation */}
+      <ConfirmModal
+        open={!!deletePending}
+        title="¿Eliminar evento?"
+        message={deletePending ? `Se eliminará «${deletePending.type}» del ${new Date(deletePending.date).toLocaleDateString('es-ES')}. Esta acción no se puede deshacer.` : undefined}
+        confirmLabel="Eliminar"
+        variant="danger"
+        onConfirm={confirmSingleDelete}
+        onCancel={() => setDeletePending(null)}
+      />
+
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
@@ -2359,6 +2507,9 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
   const [fCustomType, setFCustomType] = useState('');
   const [fNotes, setFNotes]           = useState('');
   const [saving, setSaving]           = useState(false);
+  const { toasts, showToast, dismissToast } = useToast();
+
+  useEscapeKey(() => setShowForm(false), showForm && !saving);
 
   useEffect(() => {
     fetchPlayerActivities(player.id).then(setActivities).catch(() => {});
@@ -2390,6 +2541,9 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
       });
       setActivities(prev => [created, ...prev]);
       setShowForm(false);
+      showToast("Evento registrado", "success");
+    } catch {
+      showToast("No se pudo guardar el evento", "error");
     } finally {
       setSaving(false);
     }
@@ -2443,8 +2597,7 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
           )}
           <button
             onClick={openNew}
-            className="inline-flex items-center gap-1 rounded-md text-white text-xs font-medium px-2.5 py-1.5"
-            style={{ background: PRIMARY }}
+            className="inline-flex items-center gap-1 rounded-md text-white text-xs font-medium px-2.5 py-1.5 bg-primary hover:bg-primary/90 transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />Añadir evento
           </button>
@@ -2773,8 +2926,8 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
               </button>
               <button onClick={handleSave}
                 disabled={saving || !fDate || (fType === 'custom' && !fCustomType.trim())}
-                className="flex-1 py-2 text-xs rounded-lg text-white disabled:opacity-50 transition-colors"
-                style={{ background: PRIMARY }}>
+                className="flex-1 py-2 text-xs rounded-lg text-white disabled:opacity-50 transition-colors bg-primary hover:bg-primary/90 inline-flex items-center justify-center gap-2">
+                {saving && <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
                 {saving ? 'Guardando…' : 'Guardar'}
               </button>
             </div>
@@ -2794,6 +2947,8 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
           onAdd={(t) => { onAddTask(t); setShowAddTask(false); }}
         />
       )}
+
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
@@ -2843,6 +2998,8 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
   const [negNotes, setNegNotes] = useState('')
   const [savingNeg, setSavingNeg] = useState(false)
   const [editingNeg, setEditingNeg] = useState<ClubNegotiation | null>(null)
+  const [negToDelete, setNegToDelete] = useState<ClubNegotiation | null>(null)
+  const { toasts, showToast, dismissToast } = useToast()
 
   // Side panel state
   const [panelNegId, setPanelNegId] = useState<string | null>(null)
@@ -2851,6 +3008,7 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
   const panelNeg = negotiations.find(n => n.id === panelNegId) ?? null
   const panelClub = panelNeg ? clubs.find(c => c.id === panelNeg.clubId) ?? null : null
 
+  useEscapeKey(() => setPanelNegId(null), !!panelNegId)
 
   async function saveEntry() {
     if (!entry) return
@@ -2858,6 +3016,8 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
     try {
       await onUpdateEntry?.({ ...entry, priority: editPriority, condition: editCondition || undefined, transferFee: editFee || undefined, notes: editNotes || undefined })
       setEditingEntry(false)
+    } catch {
+      showToast('No se pudieron guardar los cambios', 'error')
     } finally { setSavingEntry(false) }
   }
 
@@ -2868,13 +3028,19 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
       await onCreateNegotiation?.({ playerId: player.id, clubId: negClubId, status: negStatus, aisManager: negAis || undefined, notes: negNotes || undefined })
       setShowAddNeg(false)
       setNegClubId(''); setNegAis(''); setNegNotes(''); setNegStatus('ofrecido')
+    } catch {
+      showToast('No se pudo añadir el club', 'error')
     } finally { setSavingNeg(false) }
   }
 
   async function saveEditNeg() {
     if (!editingNeg) return
-    await onUpdateNegotiation?.(editingNeg)
-    setEditingNeg(null)
+    try {
+      await onUpdateNegotiation?.(editingNeg)
+      setEditingNeg(null)
+    } catch {
+      showToast('No se pudieron guardar los cambios', 'error')
+    }
   }
 
   if (!entry) {
@@ -2923,7 +3089,10 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
             <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)} rows={2} placeholder="Notas…" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none" />
             <div className="flex gap-2">
               <button onClick={() => setEditingEntry(false)} className="flex-1 py-1.5 text-sm border border-slate-200 rounded-lg text-slate-500">Cancelar</button>
-              <button onClick={saveEntry} disabled={savingEntry} className="flex-1 py-1.5 text-sm bg-[hsl(220,72%,36%)] text-white rounded-lg disabled:opacity-60">{savingEntry ? '…' : 'Guardar'}</button>
+              <button onClick={saveEntry} disabled={savingEntry} className="flex-1 py-1.5 text-sm bg-primary hover:bg-primary/90 text-white rounded-lg disabled:opacity-60 inline-flex items-center justify-center gap-2">
+                {savingEntry && <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
+                {savingEntry ? 'Guardando…' : 'Guardar'}
+              </button>
             </div>
           </div>
         )}
@@ -2959,7 +3128,10 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
             <input value={negNotes} onChange={e => setNegNotes(e.target.value)} placeholder="Notas (opcional)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
             <div className="flex gap-2">
               <button onClick={() => setShowAddNeg(false)} className="flex-1 py-1.5 text-xs border border-slate-200 rounded-lg text-slate-500">Cancelar</button>
-              <button onClick={saveNeg} disabled={!negClubId || savingNeg} className="flex-1 py-1.5 text-xs bg-[hsl(220,72%,36%)] text-white rounded-lg disabled:opacity-60">{savingNeg ? '…' : 'Guardar'}</button>
+              <button onClick={saveNeg} disabled={!negClubId || savingNeg} className="flex-1 py-1.5 text-xs bg-primary hover:bg-primary/90 text-white rounded-lg disabled:opacity-60 inline-flex items-center justify-center gap-2">
+                {savingNeg && <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
+                {savingNeg ? 'Guardando…' : 'Guardar'}
+              </button>
             </div>
           </div>
         )}
@@ -2999,9 +3171,9 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
                               <input value={editingNeg!.aisManager ?? ''} onChange={e => setEditingNeg({ ...editingNeg!, aisManager: e.target.value })} placeholder="Gestor AIS" className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs" />
                               <input value={editingNeg!.notes ?? ''} onChange={e => setEditingNeg({ ...editingNeg!, notes: e.target.value })} placeholder="Notas" className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs" />
                               <div className="flex gap-1.5">
-                                <button onClick={async () => { await onDeleteNegotiation?.(neg.id); setEditingNeg(null) }} className="px-2 py-1 text-[11px] border border-red-200 text-red-500 rounded-lg">Eliminar</button>
+                                <button onClick={() => setNegToDelete(neg)} className="px-2 py-1 text-[11px] border border-red-200 text-red-500 rounded-lg">Eliminar</button>
                                 <button onClick={() => setEditingNeg(null)} className="flex-1 py-1 text-[11px] border border-slate-200 rounded-lg text-slate-500">Cancelar</button>
-                                <button onClick={saveEditNeg} className="flex-1 py-1 text-[11px] bg-[hsl(220,72%,36%)] text-white rounded-lg">Guardar</button>
+                                <button onClick={saveEditNeg} className="flex-1 py-1 text-[11px] bg-primary hover:bg-primary/90 text-white rounded-lg">Guardar</button>
                               </div>
                             </div>
                           )
@@ -3016,6 +3188,7 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
                               <span className="font-medium text-slate-800 text-xs leading-tight">{club.name}</span>
                               <button
                                 onClick={e => { e.stopPropagation(); setEditingNeg(neg) }}
+                                aria-label="Editar negociación"
                                 className="p-0.5 text-slate-200 hover:text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
                               >
                                 <Edit3 className="w-3 h-3" />
@@ -3102,12 +3275,18 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
             }
             await onUpdateNegotiation({ ...neg, updates: [...(neg.updates ?? []), newUpdate] })
             setPanelUpdateText('')
+          } catch {
+            showToast('No se pudo guardar la nota', 'error')
           } finally { setSavingUpdate(false) }
         }
 
         async function changeStatus(s: ClubNegotiation['status']) {
           if (!onUpdateNegotiation) return
-          await onUpdateNegotiation({ ...neg, status: s })
+          try {
+            await onUpdateNegotiation({ ...neg, status: s })
+          } catch {
+            showToast('No se pudo cambiar el estado', 'error')
+          }
         }
 
         return (
@@ -3125,7 +3304,7 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
                   <div className="font-semibold text-slate-800 text-sm truncate">{club.name}</div>
                   {club.league && <div className="text-xs text-slate-400">{club.league}</div>}
                 </div>
-                <button onClick={() => setPanelNegId(null)} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400">
+                <button onClick={() => setPanelNegId(null)} aria-label="Cerrar panel" className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -3206,9 +3385,10 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
                   <button
                     onClick={addUpdate}
                     disabled={!panelUpdateText.trim() || savingUpdate}
-                    className="w-full py-1.5 text-xs bg-[hsl(220,72%,36%)] text-white rounded-lg disabled:opacity-50 hover:bg-[hsl(220,72%,30%)] transition-colors"
+                    className="w-full py-1.5 text-xs bg-primary text-white rounded-lg disabled:opacity-50 hover:bg-primary/90 transition-colors inline-flex items-center justify-center gap-2"
                   >
-                    {savingUpdate ? '…' : 'Guardar nota'}
+                    {savingUpdate && <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
+                    {savingUpdate ? 'Guardando…' : 'Guardar nota'}
                   </button>
                 </div>
               )}
@@ -3216,6 +3396,29 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
           </>
         )
       })()}
+
+      {/* Confirmación de borrado de negociación */}
+      <ConfirmModal
+        open={!!negToDelete}
+        title="¿Eliminar negociación?"
+        message={negToDelete ? `Se eliminará la negociación con ${clubs.find(c => c.id === negToDelete.clubId)?.name ?? 'este club'}. Esta acción no se puede deshacer.` : undefined}
+        confirmLabel="Eliminar"
+        variant="danger"
+        onConfirm={async () => {
+          if (!negToDelete) return
+          try {
+            await onDeleteNegotiation?.(negToDelete.id)
+            setEditingNeg(null)
+            setNegToDelete(null)
+            showToast('Negociación eliminada', 'info')
+          } catch {
+            showToast('No se pudo eliminar la negociación', 'error')
+          }
+        }}
+        onCancel={() => setNegToDelete(null)}
+      />
+
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   )
 }

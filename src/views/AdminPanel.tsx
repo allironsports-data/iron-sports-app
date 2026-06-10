@@ -6,7 +6,6 @@ import { updateProfile } from '../lib/db'
 import { supabase } from '../lib/supabase'
 import { ArrowLeft, LogOut, Shield, UserPlus, Check, X, Edit3, Copy, Trash2, KeyRound, AlertTriangle, BarChart3, Users, ChevronDown, ChevronRight, Clock, CheckCircle2, Circle } from 'lucide-react'
 
-const PRIMARY = 'hsl(220,72%,26%)'
 
 function generatePassword() {
   const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
@@ -53,7 +52,7 @@ export function AdminPanel({ profiles, tasks, players, onBack, onRefresh, onLogo
           {tabs.map((t) => (
             <button key={t.id} onClick={() => setTab(t.id)}
               className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
-                tab === t.id ? 'border-[hsl(220,72%,26%)] text-slate-800' : 'border-transparent text-slate-400 hover:text-slate-600'
+                tab === t.id ? 'border-primary text-slate-800' : 'border-transparent text-slate-400 hover:text-slate-600'
               }`}>
               {t.icon}{t.label}
             </button>
@@ -219,7 +218,7 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
             </div>
             <div className="flex items-center gap-3">
               <button type="submit" disabled={inviteStatus === 'sending'}
-                className="rounded-md text-white text-sm font-medium px-4 py-2 disabled:opacity-50" style={{ background: PRIMARY }}>
+                className="rounded-md text-white text-sm font-medium px-4 py-2 disabled:opacity-50 bg-primary hover:bg-primary/90">
                 {inviteStatus === 'sending' ? 'Creando...' : 'Crear usuario'}
               </button>
               {inviteStatus === 'error' && (
@@ -244,8 +243,8 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
             return (
               <div key={p.id} className="px-5 py-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full text-white text-xs font-bold flex items-center justify-center flex-shrink-0"
-                    style={{ background: PRIMARY }}>{p.avatar}</div>
+                  <div className="w-9 h-9 rounded-full text-white text-xs font-bold flex items-center justify-center flex-shrink-0 bg-primary"
+                   >{p.avatar}</div>
 
                   {editingId === p.id ? (
                     <div className="flex items-center gap-2 flex-1 flex-wrap">
@@ -328,7 +327,7 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
               <h2 className="text-sm font-semibold text-slate-800">Tabla de jugadores</h2>
               <p className="text-xs text-slate-400 mt-0.5">Edición rápida de datos de jugadores</p>
             </div>
-            <button onClick={onOpenTable} className="inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg text-white font-medium" style={{ background: 'hsl(220,72%,26%)' }}>
+            <button onClick={onOpenTable} className="inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg text-white font-medium bg-primary hover:bg-primary/90" >
               Abrir tabla
             </button>
           </div>
@@ -422,7 +421,7 @@ function TaskTrackingTab({ profiles, tasks, players }: { profiles: Profile[]; ta
                 onClick={() => toggleExpand(p.id)}
                 className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left"
               >
-                <div className="w-9 h-9 rounded-full text-white text-xs font-bold flex items-center justify-center flex-shrink-0" style={{ background: PRIMARY }}>{p.avatar}</div>
+                <div className="w-9 h-9 rounded-full text-white text-xs font-bold flex items-center justify-center flex-shrink-0 bg-primary">{p.avatar}</div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-sm font-semibold text-slate-800">{p.name}</p>

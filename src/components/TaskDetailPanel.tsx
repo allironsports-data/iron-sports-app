@@ -3,6 +3,8 @@ import { X, Trash2, ChevronRight, Send } from "lucide-react";
 import type { Task, Player, TaskLabel } from "../types";
 import type { Profile } from "../contexts/AuthContext";
 import * as db from "../lib/db";
+import { ConfirmModal } from "./ConfirmModal";
+import { useEscapeKey } from "../hooks/useEscapeKey";
 
 const PRIMARY = "hsl(220,72%,26%)";
 
@@ -36,6 +38,13 @@ export function TaskDetailPanel({
   const [commentText, setCommentText] = useState("");
   const [localComments, setLocalComments] = useState(task.comments ?? []);
   const [sendingComment, setSendingComment] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  // ESC cierra el panel (salvo cuando el modal de confirmación está abierto)
+  useEscapeKey(onClose, !confirmDelete);
 
   const loadComments = useCallback(async () => {
     try {
@@ -58,8 +67,20 @@ export function TaskDetailPanel({
 
   const effectivePlayerId = playerId || "general";
 
-  const handleSave = () => {
-    onSaveAndClose({ ...task, playerId: effectivePlayerId, title, description, status, assigneeId, label: label || undefined, watchers });
+  const handleSave = async () => {
+    setActionError(null);
+    setSaving(true);
+    try {
+      await Promise.resolve(
+        onSaveAndClose({ ...task, playerId: effectivePlayerId, title, description, status, assigneeId, label: label || undefined, watchers })
+      );
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch {
+      setActionError("No se pudo guardar. Inténtalo de nuevo.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleStatusChange = (newStatus: Task["status"]) => {
@@ -187,7 +208,7 @@ export function TaskDetailPanel({
                     </div>
                   )}
                 </div>
-                <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-0.5 flex-shrink-0 mt-0.5">
+                <button onClick={onClose} aria-label="Cerrar panel de tarea" className="text-slate-500 hover:text-slate-700 p-0.5 flex-shrink-0 mt-0.5">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -389,20 +410,28 @@ export function TaskDetailPanel({
 
               {/* Footer buttons — always visible, outside scroll area */}
               {canEdit && (
-                <div className="flex-shrink-0 px-5 pb-5 pt-3 flex gap-2 border-t border-slate-100 bg-white">
-                  <button
-                    onClick={handleSave}
-                    className="flex-1 rounded-xl text-white text-sm font-medium py-2.5 transition-colors hover:opacity-90"
-                    style={{ background: PRIMARY }}
-                  >
-                    Guardar cambios
-                  </button>
-                  <button
-                    onClick={() => { if (confirm("¿Eliminar esta tarea?")) onDelete(task.id); }}
-                    className="rounded-xl border border-red-200 text-red-600 px-4 py-2.5 hover:bg-red-50 transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                <div className="flex-shrink-0 px-5 pb-5 pt-3 border-t border-slate-100 bg-white">
+                  {actionError && (
+                    <p className="text-xs text-red-600 mb-2" role="alert">{actionError}</p>
+                  )}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleSave}
+                      disabled={saving}
+                      className={`flex-1 rounded-xl text-white text-sm font-medium py-2.5 transition-colors disabled:opacity-60 ${
+                        saved ? "bg-emerald-600" : "bg-primary hover:bg-primary/90"
+                      }`}
+                    >
+                      {saving ? "Guardando…" : saved ? "Guardado ✓" : "Guardar cambios"}
+                    </button>
+                    <button
+                      onClick={() => setConfirmDelete(true)}
+                      aria-label="Eliminar tarea"
+                      className="rounded-xl border border-red-200 text-red-600 px-4 py-2.5 hover:bg-red-50 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -418,7 +447,7 @@ export function TaskDetailPanel({
               {/* Thread */}
               <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
                 {localComments.length === 0 ? (
-                  <p className="text-xs text-slate-400 text-center py-6">Sin comentarios aún</p>
+                  <p className="text-xs text-slate-400 text-center py-6">Sin comentarios</p>
                 ) : (
                   localComments.map(comment => {
                     const author = profiles.find(p => p.id === comment.authorId);
@@ -471,8 +500,8 @@ export function TaskDetailPanel({
                 <button
                   onClick={handleSendComment}
                   disabled={!commentText.trim() || sendingComment}
-                  className="rounded-full p-1.5 disabled:opacity-40 transition-colors flex-shrink-0"
-                  style={{ background: PRIMARY }}
+                  aria-label="Enviar comentario"
+                  className="rounded-full p-1.5 disabled:opacity-40 transition-colors flex-shrink-0 bg-primary hover:bg-primary/90"
                 >
                   <Send className="w-3.5 h-3.5 text-white" />
                 </button>
@@ -481,6 +510,26 @@ export function TaskDetailPanel({
           </div>
         </div>
       </div>
+
+      {/* Confirmación de borrado */}
+      <ConfirmModal
+        open={confirmDelete}
+        title="¿Eliminar esta tarea?"
+        message="Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        variant="danger"
+        onConfirm={async () => {
+          setActionError(null);
+          try {
+            await Promise.resolve(onDelete(task.id));
+            setConfirmDelete(false);
+          } catch {
+            setConfirmDelete(false);
+            setActionError("No se pudo guardar. Inténtalo de nuevo.");
+          }
+        }}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </>
   );
 }

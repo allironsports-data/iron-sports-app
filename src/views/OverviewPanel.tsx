@@ -3,6 +3,7 @@ import type { Player } from "../types";
 import { calcAge } from "../types";
 import type { Profile } from "../contexts/AuthContext";
 import logoImg from '../assets/logo.jpeg';
+import { EmptyState } from "../components/EmptyState";
 import {
   ArrowLeft, LogOut, Users, FileText, AlertTriangle, Shield,
 } from "lucide-react";
@@ -30,7 +31,7 @@ export function OverviewPanel({ players, profiles, onBack, onLogout, onAdmin }: 
       {/* Header */}
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="mx-auto max-w-5xl flex items-center gap-3 px-4 py-3">
-          <button onClick={onBack} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600">
+          <button onClick={onBack} aria-label="Volver" className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500 hover:text-slate-700">
             <ArrowLeft className="w-5 h-5" />
           </button>
           <img src={logoImg} alt="" className="h-8 w-auto rounded" />
@@ -40,11 +41,11 @@ export function OverviewPanel({ players, profiles, onBack, onLogout, onAdmin }: 
           </div>
           <div className="flex items-center gap-2">
             {onAdmin && (
-              <button onClick={onAdmin} className="p-2 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600" title="Admin">
+              <button onClick={onAdmin} aria-label="Admin" className="p-2 rounded-md hover:bg-slate-100 text-slate-500 hover:text-slate-700" title="Admin">
                 <Shield className="w-4 h-4" />
               </button>
             )}
-            <button onClick={onLogout} className="p-2 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600" title="Cerrar sesión">
+            <button onClick={onLogout} aria-label="Cerrar sesión" className="p-2 rounded-md hover:bg-slate-100 text-slate-500 hover:text-slate-700" title="Cerrar sesión">
               <LogOut className="w-4 h-4" />
             </button>
           </div>
@@ -54,7 +55,7 @@ export function OverviewPanel({ players, profiles, onBack, onLogout, onAdmin }: 
           {tabs.map((t) => (
             <button key={t.id} onClick={() => setTab(t.id)}
               className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
-                tab === t.id ? 'border-[hsl(220,72%,26%)] text-slate-800' : 'border-transparent text-slate-400 hover:text-slate-600'
+                tab === t.id ? 'border-primary text-slate-800' : 'border-transparent text-slate-500 hover:text-slate-700'
               }`}>
               {t.icon}{t.label}
             </button>
@@ -186,7 +187,9 @@ function PlantillaTab({ players, profiles }: { players: Player[]; profiles: Prof
                 <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">{count}</span>
               </div>
             ))}
-            {positions.length === 0 && <p className="text-xs text-slate-400">Sin datos</p>}
+            {positions.length === 0 && (
+              <EmptyState icon={<Users className="w-8 h-8" />} title="Sin datos" subtitle="Añade posiciones a los jugadores para verlas aquí." />
+            )}
           </div>
         </div>
 
@@ -200,7 +203,9 @@ function PlantillaTab({ players, profiles }: { players: Player[]; profiles: Prof
                 <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">{count}</span>
               </div>
             ))}
-            {clubs.length === 0 && <p className="text-xs text-slate-400">Sin datos</p>}
+            {clubs.length === 0 && (
+              <EmptyState icon={<Shield className="w-8 h-8" />} title="Sin datos" subtitle="Añade clubes a los jugadores para verlos aquí." />
+            )}
           </div>
         </div>
 
@@ -219,6 +224,9 @@ function PlantillaTab({ players, profiles }: { players: Player[]; profiles: Prof
                 <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">{m.count} jugadores</span>
               </div>
             ))}
+            {managers.length === 0 && (
+              <EmptyState icon={<Users className="w-8 h-8" />} title="Sin datos" subtitle="Asigna encargados a los jugadores para verlos aquí." />
+            )}
           </div>
         </div>
       </div>

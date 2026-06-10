@@ -1,7 +1,12 @@
 import { useState, useEffect } from "react";
 import { TaskDetailPanel } from "../components/TaskDetailPanel";
+import { ConfirmModal } from "../components/ConfirmModal";
+import { EmptyState } from "../components/EmptyState";
 import { ToastStack } from "../components/ToastStack";
 import { useToast } from "../hooks/useToast";
+import { useEscapeKey } from "../hooks/useEscapeKey";
+import { useDebounce } from "../hooks/useDebounce";
+import { isValidName, isValidBirthDate } from "../lib/validate";
 import logoImg from '../assets/logo.jpeg';
 import type { Player, Task, TaskLabel, PlayerActivity } from "../types";
 import { calcAge, clubsLabel } from "../types";
@@ -194,6 +199,7 @@ export function Dashboard({
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showCompletedMine, setShowCompletedMine] = useState(false);
   const [playerView, setPlayerView] = useState<'grid' | 'list' | 'table'>('grid');
@@ -205,6 +211,9 @@ export function Dashboard({
   const [yearFilters, setYearFilters] = useState<string[]>([]);
   const [activityFilter, setActivityFilter] = useState(false);
 
+
+  // ESC cierra el modal de evento
+  useEscapeKey(() => setShowAddEvent(false), showAddEvent);
 
   // Cmd+K / Ctrl+K global search
   useEffect(() => {
@@ -358,30 +367,57 @@ export function Dashboard({
 
   const exitSelectMode = () => { setSelectMode(false); setSelected(new Set()); };
 
-  const handleBulkDelete = async () => {
+  const handleBulkDelete = () => {
     if (!onBulkDelete || selected.size === 0) return;
-    if (!confirm(`¿Eliminar ${selected.size} jugador${selected.size > 1 ? "es" : ""}? No se puede deshacer.`)) return;
+    setShowBulkDeleteConfirm(true);
+  };
+
+  const confirmBulkDelete = async () => {
+    if (!onBulkDelete || selected.size === 0) return;
     setBulkLoading(true);
-    try { await onBulkDelete(Array.from(selected)); exitSelectMode(); } finally { setBulkLoading(false); }
+    try {
+      await onBulkDelete(Array.from(selected));
+      setShowBulkDeleteConfirm(false);
+      exitSelectMode();
+      showToast("Jugadores eliminados", "info");
+    } catch {
+      setShowBulkDeleteConfirm(false);
+      showToast("No se pudo guardar. Inténtalo de nuevo.", "error");
+    } finally {
+      setBulkLoading(false);
+    }
   };
 
   const handleBulkAssign = async (managerId: string) => {
     if (!onBulkAssignManager || selected.size === 0) return;
     setBulkLoading(true);
-    try { await onBulkAssignManager(Array.from(selected), managerId); setShowAssignModal(false); exitSelectMode(); } finally { setBulkLoading(false); }
+    try {
+      await onBulkAssignManager(Array.from(selected), managerId);
+      setShowAssignModal(false);
+      exitSelectMode();
+      showToast("Manager asignado", "success");
+    } catch {
+      showToast("No se pudo guardar. Inténtalo de nuevo.", "error");
+    } finally {
+      setBulkLoading(false);
+    }
   };
 
-  const cycleTaskStatus = (task: Task) => {
+  const cycleTaskStatus = async (task: Task) => {
     const next: Record<string, Task["status"]> = {
       "pendiente": "en_progreso",
       "en_progreso": "completada",
       "completada": "pendiente",
     };
     const updated = { ...task, status: next[task.status] ?? "pendiente" };
-    if (task.playerId === "general" || task.playerId === "") {
-      if (onUpdateGeneralTask) onUpdateGeneralTask(updated);
-    } else {
-      if (onUpdateTask) onUpdateTask(updated);
+    try {
+      if (task.playerId === "general" || task.playerId === "") {
+        if (onUpdateGeneralTask) await Promise.resolve(onUpdateGeneralTask(updated));
+      } else {
+        if (onUpdateTask) await Promise.resolve(onUpdateTask(updated));
+      }
+    } catch {
+      showToast("No se pudo guardar. Inténtalo de nuevo.", "error");
     }
   };
 
@@ -399,7 +435,7 @@ export function Dashboard({
             }`}>
               <Bell className="w-4 h-4 mt-0.5 flex-shrink-0" />
               <span className="flex-1">{t.message}</span>
-              <button onClick={() => setNotifToasts((p) => p.filter((x) => x.id !== t.id))} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setNotifToasts((p) => p.filter((x) => x.id !== t.id))} aria-label="Cerrar notificación" className="text-slate-500 hover:text-slate-700">
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -422,8 +458,9 @@ export function Dashboard({
             {/* Global search */}
             <button
               onClick={() => setShowSearch(true)}
-              className="flex items-center gap-1.5 px-2 py-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              className="flex items-center gap-1.5 px-2 py-1 rounded-md text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
               title="Buscar (⌘K)"
+              aria-label="Buscar (⌘K)"
             >
               <Search className="w-4 h-4" />
               <span className="hidden sm:inline text-xs text-slate-400 border border-slate-200 rounded px-1 py-px">⌘K</span>
@@ -431,8 +468,9 @@ export function Dashboard({
             {/* Notification bell */}
             <button
               onClick={() => setShowNotifications(!showNotifications)}
-              className="relative p-1.5 text-slate-400 hover:text-slate-600 transition-colors"
+              className="relative p-1.5 text-slate-500 hover:text-slate-700 transition-colors"
               title="Notificaciones"
+              aria-label="Notificaciones"
             >
               <Bell className="w-4 h-4" />
               {unreadNotifs > 0 && (
@@ -449,16 +487,16 @@ export function Dashboard({
               style={{ background: PRIMARY }}
             >{currentProfile.avatar}</div>
             {currentProfile.is_admin && onOverview && (
-              <button onClick={onOverview} className="p-1 sm:p-1.5 text-slate-400 hover:text-slate-600 transition-colors" title="Overview">
+              <button onClick={onOverview} aria-label="Overview" className="p-1 sm:p-1.5 text-slate-500 hover:text-slate-700 transition-colors" title="Overview">
                 <BarChart3 className="w-4 h-4" />
               </button>
             )}
             {currentProfile.is_admin && onAdmin && (
-              <button onClick={onAdmin} className="p-1 sm:p-1.5 text-slate-400 hover:text-slate-600 transition-colors" title="Admin">
+              <button onClick={onAdmin} aria-label="Administración" className="p-1 sm:p-1.5 text-slate-500 hover:text-slate-700 transition-colors" title="Admin">
                 <Users className="w-4 h-4" />
               </button>
             )}
-            <button onClick={onLogout} className="text-slate-400 hover:text-slate-600 transition-colors p-1">
+            <button onClick={onLogout} aria-label="Cerrar sesión" title="Cerrar sesión" className="text-slate-500 hover:text-slate-700 transition-colors p-1">
               <LogOut className="w-4 h-4" />
             </button>
           </div>
@@ -470,7 +508,7 @@ export function Dashboard({
             {/* Level 1: main sections */}
             <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center border-t border-slate-100 overflow-x-auto scrollbar-none">
               {/* Mantenimiento — always active while Dashboard is mounted */}
-              <button className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 border-[hsl(220,72%,26%)] text-[hsl(220,72%,26%)] transition-colors">
+              <button className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 border-primary text-primary transition-colors">
                 Mantenimiento
               </button>
               <button
@@ -510,8 +548,8 @@ export function Dashboard({
                     }}
                     className={`flex-shrink-0 px-4 py-2 text-xs font-medium border-b-2 transition-colors ${
                       isActive
-                        ? 'border-[hsl(220,72%,26%)] text-[hsl(220,72%,26%)]'
-                        : 'border-transparent text-slate-400 hover:text-slate-700 hover:border-slate-300'
+                        ? 'border-primary text-primary'
+                        : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
                     }`}
                   >
                     {tab.label}
@@ -528,7 +566,7 @@ export function Dashboard({
         <div className="fixed top-12 sm:top-14 right-2 sm:right-4 z-30 w-72 sm:w-80 max-h-96 bg-white border border-slate-200 rounded-lg shadow-xl overflow-y-auto">
           <div className="px-3 py-2 border-b border-slate-100 flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-700">Notificaciones</span>
-            <button onClick={() => setShowNotifications(false)} className="text-slate-400"><X className="w-3.5 h-3.5" /></button>
+            <button onClick={() => setShowNotifications(false)} aria-label="Cerrar notificaciones" className="text-slate-500 hover:text-slate-700"><X className="w-3.5 h-3.5" /></button>
           </div>
           {notifications.length === 0 ? (
             <div className="p-4 text-center text-xs text-slate-400">Sin notificaciones</div>
@@ -545,7 +583,7 @@ export function Dashboard({
                   <p className="text-[11px] text-slate-400 mt-0.5">{new Date(n.ts).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}</p>
                 </div>
                 {onDismissNotification && (
-                  <button onClick={(e) => { e.stopPropagation(); onDismissNotification(n.id); }} className="text-slate-300 hover:text-slate-500 p-0.5">
+                  <button onClick={(e) => { e.stopPropagation(); onDismissNotification(n.id); }} aria-label="Descartar notificación" className="text-slate-400 hover:text-slate-600 p-0.5">
                     <X className="w-3 h-3" />
                   </button>
                 )}
@@ -612,7 +650,7 @@ export function Dashboard({
             {onAddGeneralTask && (
               <button
                 onClick={() => setShowAddGeneralTask(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-[hsl(220,72%,26%)] text-[hsl(220,72%,26%)] hover:bg-blue-50 transition-colors"
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-primary text-primary hover:bg-blue-50 transition-colors"
               >
                 <Plus className="w-3 h-3" /> Nueva tarea
               </button>
@@ -804,6 +842,7 @@ export function Dashboard({
             <div className="flex items-center gap-2">
               <button
                 onClick={() => { setWeekOffset(o => o - 1); setTeamActivities({}); }}
+                aria-label="Semana anterior"
                 className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
               >
                 <ChevronLeft className="w-4 h-4" />
@@ -820,6 +859,7 @@ export function Dashboard({
               </button>
               <button
                 onClick={() => { setWeekOffset(o => o + 1); setTeamActivities({}); }}
+                aria-label="Semana siguiente"
                 className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
               >
                 <ChevronRight className="w-4 h-4" />
@@ -976,7 +1016,7 @@ export function Dashboard({
                       {onSelectProfile && (
                         <button
                           onClick={() => onSelectProfile(p.id)}
-                          className="text-[11px] text-slate-400 hover:text-[hsl(220,72%,26%)] transition-colors font-medium"
+                          className="text-[11px] text-slate-500 hover:text-primary transition-colors font-medium"
                         >
                           Ver todo →
                         </button>
@@ -1145,8 +1185,8 @@ export function Dashboard({
                 </button>
               )}
               <button onClick={() => setShowAddPlayer(true)}
-                className="inline-flex items-center gap-1.5 rounded-md text-white text-sm font-medium px-3 py-2 transition-colors flex-shrink-0"
-                style={{ background: PRIMARY }}>
+                aria-label="Nuevo jugador"
+                className="inline-flex items-center gap-1.5 rounded-md text-white text-sm font-medium px-3 py-2 transition-colors flex-shrink-0 bg-primary hover:bg-primary/90">
                 <Plus className="w-4 h-4" /><span className="hidden sm:inline">Nuevo jugador</span>
               </button>
             </div>
@@ -1203,7 +1243,7 @@ export function Dashboard({
             onClick={() => setActivityFilter(v => !v)}
             className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
               activityFilter
-                ? 'bg-[hsl(220,72%,36%)] text-white border-[hsl(220,72%,36%)]'
+                ? 'bg-primary text-white border-primary'
                 : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
             }`}
           >
@@ -1224,18 +1264,18 @@ export function Dashboard({
           <span className="text-xs text-slate-400">{filtered.length} jugador{filtered.length !== 1 ? "es" : ""}</span>
           <div className="flex items-center gap-1 bg-slate-100 rounded-md p-0.5">
             <button onClick={() => setPlayerView('grid')}
-              className={`p-1.5 rounded transition-colors ${playerView === 'grid' ? "bg-white shadow-sm text-slate-700" : "text-slate-400 hover:text-slate-600"}`}
-              title="Vista tarjetas">
+              className={`p-1.5 rounded transition-colors ${playerView === 'grid' ? "bg-white shadow-sm text-slate-700" : "text-slate-500 hover:text-slate-700"}`}
+              title="Vista tarjetas" aria-label="Vista tarjetas">
               <LayoutGrid className="w-3.5 h-3.5" />
             </button>
             <button onClick={() => setPlayerView('list')}
-              className={`p-1.5 rounded transition-colors ${playerView === 'list' ? "bg-white shadow-sm text-slate-700" : "text-slate-400 hover:text-slate-600"}`}
-              title="Vista lista">
+              className={`p-1.5 rounded transition-colors ${playerView === 'list' ? "bg-white shadow-sm text-slate-700" : "text-slate-500 hover:text-slate-700"}`}
+              title="Vista lista" aria-label="Vista lista">
               <LayoutList className="w-3.5 h-3.5" />
             </button>
             <button onClick={() => setPlayerView('table')}
-              className={`p-1.5 rounded transition-colors ${playerView === 'table' ? "bg-white shadow-sm text-slate-700" : "text-slate-400 hover:text-slate-600"}`}
-              title="Vista tabla">
+              className={`p-1.5 rounded transition-colors ${playerView === 'table' ? "bg-white shadow-sm text-slate-700" : "text-slate-500 hover:text-slate-700"}`}
+              title="Vista tabla" aria-label="Vista tabla">
               <Table className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -1277,8 +1317,9 @@ export function Dashboard({
                   {!selectMode && onAddGeneralTask && (
                     <button
                       onClick={(e) => { e.stopPropagation(); setQuickTaskPlayer(player); }}
-                      className="absolute top-3 right-3 w-6 h-6 rounded-full bg-slate-100 hover:bg-blue-100 text-slate-400 hover:text-blue-600 flex items-center justify-center transition-colors"
+                      className="absolute top-3 right-3 w-6 h-6 rounded-full bg-slate-100 hover:bg-blue-100 text-slate-500 hover:text-blue-600 flex items-center justify-center transition-colors"
                       title="Nueva tarea rápida"
+                      aria-label="Nueva tarea rápida"
                     >
                       <Zap className="w-3 h-3" />
                     </button>
@@ -1396,8 +1437,9 @@ export function Dashboard({
                     {!selectMode && onAddGeneralTask && (
                       <button
                         onClick={(e) => { e.stopPropagation(); setQuickTaskPlayer(player); }}
-                        className="w-6 h-6 rounded-full bg-slate-100 hover:bg-blue-100 text-slate-400 hover:text-blue-600 flex items-center justify-center transition-colors flex-shrink-0"
+                        className="w-6 h-6 rounded-full bg-slate-100 hover:bg-blue-100 text-slate-500 hover:text-blue-600 flex items-center justify-center transition-colors flex-shrink-0"
                         title="Nueva tarea rápida"
+                        aria-label="Nueva tarea rápida"
                       >
                         <Zap className="w-3 h-3" />
                       </button>
@@ -1521,13 +1563,21 @@ export function Dashboard({
               </tbody>
             </table>
             {filtered.length === 0 && (
-              <div className="text-center py-10 text-sm text-slate-400">No se encontraron jugadores</div>
+              <EmptyState
+                icon={<Search className="w-8 h-8" />}
+                title="No se encontraron jugadores"
+                subtitle="Prueba con otro término de búsqueda o ajusta los filtros."
+              />
             )}
           </div>
         )}
 
         {filtered.length === 0 && playerView !== 'table' && (
-          <div className="text-center py-12 text-sm text-slate-400">No se encontraron jugadores</div>
+          <EmptyState
+            icon={<Search className="w-8 h-8" />}
+            title="No se encontraron jugadores"
+            subtitle="Prueba con otro término de búsqueda o ajusta los filtros."
+          />
         )}
 
         </>)}
@@ -1618,8 +1668,7 @@ export function Dashboard({
             <div className="flex items-center gap-2">
               {onBulkAssignManager && (
                 <button onClick={() => setShowAssignModal(true)} disabled={bulkLoading}
-                  className="inline-flex items-center gap-1.5 rounded-md text-white text-sm font-medium px-3 py-2 disabled:opacity-40 transition-colors"
-                  style={{ background: PRIMARY }}>
+                  className="inline-flex items-center gap-1.5 rounded-md text-white text-sm font-medium px-3 py-2 disabled:opacity-40 transition-colors bg-primary hover:bg-primary/90">
                   <UserPlus className="w-4 h-4" /><span>Asignar manager</span>
                 </button>
               )}
@@ -1636,8 +1685,27 @@ export function Dashboard({
 
       {showAddPlayer && (
         <AddPlayerModal profiles={profiles} onClose={() => setShowAddPlayer(false)}
-          onAdd={(p) => { onAddPlayer(p); setShowAddPlayer(false); }} />
+          onAdd={async (p) => {
+            try {
+              await Promise.resolve(onAddPlayer(p));
+              setShowAddPlayer(false);
+              showToast(`Jugador ${p.name} añadido`, "success");
+            } catch {
+              showToast("No se pudo guardar. Inténtalo de nuevo.", "error");
+            }
+          }} />
       )}
+
+      {/* Confirmación de borrado masivo */}
+      <ConfirmModal
+        open={showBulkDeleteConfirm}
+        title={`¿Eliminar ${selected.size} jugador${selected.size > 1 ? "es" : ""}?`}
+        message="No se puede deshacer."
+        confirmLabel="Eliminar"
+        variant="danger"
+        onConfirm={confirmBulkDelete}
+        onCancel={() => setShowBulkDeleteConfirm(false)}
+      />
 
       {showAssignModal && (
         <AssignManagerModal profiles={profiles} count={selected.size} loading={bulkLoading}
@@ -1647,7 +1715,15 @@ export function Dashboard({
       {showAddGeneralTask && onAddGeneralTask && (
         <AddGeneralTaskModal profiles={profiles} players={players} currentProfileId={currentProfile.id}
           onClose={() => setShowAddGeneralTask(false)}
-          onAdd={(t) => { onAddGeneralTask(t); setShowAddGeneralTask(false); }} />
+          onAdd={async (t) => {
+            try {
+              await Promise.resolve(onAddGeneralTask(t));
+              setShowAddGeneralTask(false);
+              showToast("Tarea creada", "success");
+            } catch {
+              showToast("No se pudo guardar. Inténtalo de nuevo.", "error");
+            }
+          }} />
       )}
 
       {editingGeneralTask && (
@@ -1656,13 +1732,23 @@ export function Dashboard({
           profiles={profiles}
           players={players}
           onClose={() => setEditingGeneralTask(null)}
-          onUpdate={(updated) => {
-            if (onUpdateGeneralTask) onUpdateGeneralTask(updated);
-            setEditingGeneralTask(null);
+          onUpdate={async (updated) => {
+            try {
+              if (onUpdateGeneralTask) await Promise.resolve(onUpdateGeneralTask(updated));
+              setEditingGeneralTask(null);
+              showToast("Tarea actualizada", "success");
+            } catch {
+              showToast("No se pudo guardar. Inténtalo de nuevo.", "error");
+            }
           }}
-          onDelete={onDeleteGeneralTask ? (id) => {
-            onDeleteGeneralTask(id);
-            setEditingGeneralTask(null);
+          onDelete={onDeleteGeneralTask ? async (id) => {
+            try {
+              await Promise.resolve(onDeleteGeneralTask(id));
+              setEditingGeneralTask(null);
+              showToast("Tarea eliminada", "info");
+            } catch {
+              showToast("No se pudo guardar. Inténtalo de nuevo.", "error");
+            }
           } : undefined}
         />
       )}
@@ -1673,7 +1759,15 @@ export function Dashboard({
           profiles={profiles}
           currentProfileId={currentProfile.id}
           onClose={() => setQuickTaskPlayer(null)}
-          onAdd={(t) => { onAddGeneralTask(t); setQuickTaskPlayer(null); }}
+          onAdd={async (t) => {
+            try {
+              await Promise.resolve(onAddGeneralTask(t));
+              setQuickTaskPlayer(null);
+              showToast("Tarea creada", "success");
+            } catch {
+              showToast("No se pudo guardar. Inténtalo de nuevo.", "error");
+            }
+          }}
         />
       )}
 
@@ -1710,7 +1804,8 @@ export function Dashboard({
                       <button
                         type="button"
                         onClick={() => { setEvtPlayer(""); setEvtPlayerQ(""); }}
-                        className="text-slate-400 hover:text-slate-700 leading-none text-sm"
+                        aria-label="Quitar jugador"
+                        className="text-slate-500 hover:text-slate-700 leading-none text-sm"
                       >×</button>
                     </div>
                   ) : (
@@ -1805,7 +1900,8 @@ export function Dashboard({
                             <button
                               type="button"
                               onClick={() => setEvtExtraPlayers(prev => prev.filter(id => id !== pid))}
-                              className="ml-0.5 text-green-500 hover:text-green-800 leading-none"
+                              aria-label={`Quitar a ${pl.name}`}
+                              className="ml-0.5 text-green-600 hover:text-green-800 leading-none"
                             >×</button>
                           </span>
                         );
@@ -1874,7 +1970,7 @@ export function Dashboard({
                               {prof.avatar}
                             </span>
                             {prof.name.split(' ')[0]}
-                            <button onClick={() => setEvtParticipants(prev => prev.filter(id => id !== pid))} className="ml-0.5 text-blue-400 hover:text-blue-700 leading-none">×</button>
+                            <button onClick={() => setEvtParticipants(prev => prev.filter(id => id !== pid))} aria-label={`Quitar a ${prof.name}`} className="ml-0.5 text-blue-500 hover:text-blue-700 leading-none">×</button>
                           </span>
                         );
                       })}
@@ -1921,8 +2017,7 @@ export function Dashboard({
               <button
                 onClick={handleSaveEvent}
                 disabled={evtSaving || !evtPlayer || !evtDate || (evtType === 'custom' && !evtCustomType.trim())}
-                className="flex-1 py-2 text-xs rounded-lg text-white disabled:opacity-50 transition-colors"
-                style={{ background: PRIMARY }}
+                className="flex-1 py-2 text-xs rounded-lg text-white disabled:opacity-50 transition-colors bg-primary hover:bg-primary/90"
               >
                 {evtSaving ? 'Guardando…' : 'Guardar evento'}
               </button>
@@ -1940,20 +2035,34 @@ export function Dashboard({
           currentProfile={currentProfile}
           onGoToPlayer={onSelectPlayer}
           onClose={() => setDetailTask(null)}
-          onUpdate={(updated) => {
-            if (onUpdateTask) onUpdateTask(updated);
-            if (onUpdateGeneralTask) onUpdateGeneralTask(updated);
+          onUpdate={async (updated) => {
+            try {
+              if (onUpdateTask) await Promise.resolve(onUpdateTask(updated));
+              if (onUpdateGeneralTask) await Promise.resolve(onUpdateGeneralTask(updated));
+            } catch {
+              showToast("No se pudo guardar. Inténtalo de nuevo.", "error");
+            }
           }}
-          onSaveAndClose={(updated) => {
-            if (onUpdateTask) onUpdateTask(updated);
-            if (onUpdateGeneralTask) onUpdateGeneralTask(updated);
-            setDetailTask(null);
-            showToast("Tarea actualizada", "success");
+          onSaveAndClose={async (updated) => {
+            try {
+              if (onUpdateTask) await Promise.resolve(onUpdateTask(updated));
+              if (onUpdateGeneralTask) await Promise.resolve(onUpdateGeneralTask(updated));
+              setDetailTask(null);
+              showToast("Tarea actualizada", "success");
+            } catch (err) {
+              showToast("No se pudo guardar. Inténtalo de nuevo.", "error");
+              throw err; // el panel mantiene su estado y muestra el error inline
+            }
           }}
-          onDelete={(taskId) => {
-            if (onDeleteGeneralTask) onDeleteGeneralTask(taskId);
-            setDetailTask(null);
-            showToast("Tarea eliminada", "info");
+          onDelete={async (taskId) => {
+            try {
+              if (onDeleteGeneralTask) await Promise.resolve(onDeleteGeneralTask(taskId));
+              setDetailTask(null);
+              showToast("Tarea eliminada", "info");
+            } catch (err) {
+              showToast("No se pudo guardar. Inténtalo de nuevo.", "error");
+              throw err;
+            }
           }}
         />
       )}
@@ -1981,7 +2090,7 @@ function MultiSelectFilter({ label, options, selected, onChange }: {
         onClick={() => setOpen(o => !o)}
         className={`flex items-center gap-1.5 pl-3 pr-2 py-1.5 text-sm rounded-lg border transition-colors ${
           isActive
-            ? 'bg-[hsl(220,72%,36%)] text-white border-[hsl(220,72%,36%)]'
+            ? 'bg-primary text-white border-primary'
             : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
         }`}
       >
@@ -2040,6 +2149,7 @@ function TaskListRow({
     >
       <button
         onClick={e => { e.stopPropagation(); onCycleStatus(task); }}
+        aria-label="Cambiar estado de la tarea"
         className="flex-shrink-0 w-4 h-4 rounded-full border-2 transition-colors"
         style={{
           background: task.status === "completada" ? "#10b981" : task.status === "en_progreso" ? "#3b82f6" : "transparent",
@@ -2067,8 +2177,7 @@ function TaskListRow({
       </div>
       {assignee && (
         <span
-          className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white"
-          style={{ background: "hsl(220,72%,26%)" }}
+          className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white bg-primary"
           title={assignee.name}
         >
           {assignee.avatar}
@@ -2096,7 +2205,8 @@ function ViewModeToggle({ mode, onChange }: {
           key={m}
           onClick={() => onChange(m)}
           title={label}
-          className={`p-1.5 rounded transition-colors ${mode === m ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+          aria-label={`Vista ${label}`}
+          className={`p-1.5 rounded transition-colors ${mode === m ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
         >
           <Icon className="w-3.5 h-3.5" />
         </button>
@@ -2139,6 +2249,7 @@ function CompactTaskList({ tasks, completedTasks, players, profiles, onCycleStat
         <div className="w-1 self-stretch rounded-full flex-shrink-0" style={{ background: prioBorderColor(t) }} />
         <button
           onClick={e => { e.stopPropagation(); onCycleStatus(t); }}
+          aria-label="Cambiar estado de la tarea"
           className="flex-shrink-0 w-3.5 h-3.5 rounded-full border-2 transition-colors"
           style={{
             background: isDone ? '#10b981' : t.status === 'en_progreso' ? '#3b82f6' : 'transparent',
@@ -2151,8 +2262,7 @@ function CompactTaskList({ tasks, completedTasks, players, profiles, onCycleStat
         </div>
         {assignee && (
           <span
-            className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white"
-            style={{ background: 'hsl(220,72%,26%)' }}
+            className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white bg-primary"
             title={assignee.name}
           >{assignee.avatar}</span>
         )}
@@ -2239,7 +2349,7 @@ function TaskTableView({ tasks, players, profiles, onOpenDetail, detailTaskId, s
   const prioBadge = (p: Task['priority']) =>
     p === 'alta' ? 'bg-red-50 text-red-700 border border-red-200'
     : p === 'media' ? 'bg-amber-50 text-amber-700 border border-amber-200'
-    : 'bg-slate-100 text-slate-500';
+    : 'bg-slate-200 text-slate-700';
 
   const statusBadge = (s: Task['status']) =>
     s === 'completada' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
@@ -2284,8 +2394,8 @@ function TaskTableView({ tasks, players, profiles, onOpenDetail, detailTaskId, s
                 <td className="px-3 py-2">
                   {assignee && (
                     <div className="flex items-center gap-1.5">
-                      <span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0"
-                        style={{ background: 'hsl(220,72%,26%)' }} title={assignee.name}>{assignee.avatar}</span>
+                      <span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0 bg-primary"
+                        title={assignee.name}>{assignee.avatar}</span>
                       <span className="text-slate-600 truncate">{assignee.name.split(' ')[0]}</span>
                     </div>
                   )}
@@ -2362,6 +2472,7 @@ function KanbanCol({
           <div className="flex items-start gap-2">
             <button
               onClick={e => { e.stopPropagation(); onCycleStatus(task); }}
+              aria-label="Cambiar estado de la tarea"
               className="mt-0.5 flex-shrink-0 w-3.5 h-3.5 rounded-full border-2 transition-colors"
               style={{
                 background: task.status === "completada" ? "#10b981" : task.status === "en_progreso" ? "#3b82f6" : "transparent",
@@ -2449,12 +2560,13 @@ function AssignManagerModal({ profiles, count, loading, onClose, onAssign }: {
   onClose: () => void; onAssign: (managerId: string) => void;
 }) {
   const [managerId, setManagerId] = useState("");
+  useEscapeKey(onClose);
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-0 sm:p-4">
       <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-sm">
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
           <h2 className="text-sm font-semibold text-slate-800">Asignar manager a {count} jugador{count > 1 ? "es" : ""}</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="text-slate-500 hover:text-slate-700"><X className="w-4 h-4" /></button>
         </div>
         <div className="p-4 space-y-3">
           <div>
@@ -2466,8 +2578,7 @@ function AssignManagerModal({ profiles, count, loading, onClose, onAssign }: {
             </select>
           </div>
           <button onClick={() => managerId && onAssign(managerId)} disabled={!managerId || loading}
-            className="w-full rounded-md text-white text-sm font-medium py-2 disabled:opacity-40 transition-colors"
-            style={{ background: PRIMARY }}>
+            className="w-full rounded-md text-white text-sm font-medium py-2 disabled:opacity-40 transition-colors bg-primary hover:bg-primary/90">
             {loading ? "Asignando…" : "Asignar"}
           </button>
         </div>
@@ -2493,9 +2604,22 @@ function AddPlayerModal({ profiles, onClose, onAdd }: {
   const [reprEnd, setReprEnd] = useState("");
   const [clubEnd, setClubEnd] = useState("");
   const [optYears, setOptYears] = useState("");
+  const [errors, setErrors] = useState<{ name?: string; birthDate?: string }>({});
+
+  useEscapeKey(onClose);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Validación: nombre y fecha de nacimiento
+    const nextErrors: { name?: string; birthDate?: string } = {};
+    if (!isValidName(name)) {
+      nextErrors.name = "Introduce un nombre válido (mínimo 2 caracteres).";
+    }
+    if (!isValidBirthDate(birthDate)) {
+      nextErrors.birthDate = "Fecha no válida: no puede ser futura ni de hace más de 60 años.";
+    }
+    setErrors(nextErrors);
+    if (nextErrors.name || nextErrors.birthDate) return;
     const clubs = [];
     if (isLoan && club1 && club2) {
       clubs.push({ name: club1, type: "propietario" as const });
@@ -2522,12 +2646,12 @@ function AddPlayerModal({ profiles, onClose, onAdd }: {
       <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-lg max-h-[92vh] overflow-y-auto">
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white">
           <h2 className="text-sm font-semibold text-slate-800">Nuevo jugador</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="text-slate-500 hover:text-slate-700"><X className="w-4 h-4" /></button>
         </div>
         <form onSubmit={handleSubmit} className="p-4 space-y-3 pb-8">
-          <F label="Nombre completo" value={name} onChange={setName} required />
+          <F label="Nombre completo" value={name} onChange={(v) => { setName(v); if (errors.name) setErrors(prev => ({ ...prev, name: undefined })); }} required error={errors.name} />
           <div className="grid grid-cols-2 gap-3">
-            <F label="Fecha de nacimiento" value={birthDate} onChange={setBirthDate} type="date" required />
+            <F label="Fecha de nacimiento" value={birthDate} onChange={(v) => { setBirthDate(v); if (errors.birthDate) setErrors(prev => ({ ...prev, birthDate: undefined })); }} type="date" required error={errors.birthDate} />
             <F label="Nacionalidad" value={nationality} onChange={setNationality} required />
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -2575,8 +2699,7 @@ function AddPlayerModal({ profiles, onClose, onAdd }: {
           </div>
           <div className="pt-2">
             <button type="submit" disabled={!name || !pos1 || !birthDate}
-              className="w-full rounded-md text-white text-sm font-medium py-2.5 disabled:opacity-40 transition-colors"
-              style={{ background: PRIMARY }}>
+              className="w-full rounded-md text-white text-sm font-medium py-2.5 disabled:opacity-40 transition-colors bg-primary hover:bg-primary/90">
               Añadir jugador
             </button>
           </div>
@@ -2597,6 +2720,8 @@ function AddGeneralTaskModal({ profiles, players, currentProfileId, onClose, onA
   const [label, setLabel] = useState<TaskLabel | "">("");
   const [dueDate, setDueDate] = useState("");
   const [adminOnly, setAdminOnly] = useState(false);
+
+  useEscapeKey(onClose);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -2621,7 +2746,7 @@ function AddGeneralTaskModal({ profiles, players, currentProfileId, onClose, onA
       <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-sm">
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white">
           <h2 className="text-sm font-semibold text-slate-800">Nueva tarea</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="text-slate-500 hover:text-slate-700"><X className="w-4 h-4" /></button>
         </div>
         <form onSubmit={handleSubmit} className="p-4 space-y-3 pb-8">
           <div>
@@ -2685,8 +2810,7 @@ function AddGeneralTaskModal({ profiles, players, currentProfileId, onClose, onA
           </label>
           <div className="pt-2">
             <button type="submit" disabled={!title}
-              className="w-full rounded-md text-white text-sm font-medium py-2.5 disabled:opacity-40 transition-colors"
-              style={{ background: PRIMARY }}>
+              className="w-full rounded-md text-white text-sm font-medium py-2.5 disabled:opacity-40 transition-colors bg-primary hover:bg-primary/90">
               Crear tarea
             </button>
           </div>
@@ -2708,6 +2832,9 @@ function EditGeneralTaskModal({ task, profiles, players, onClose, onUpdate, onDe
   const [label, setLabel] = useState<TaskLabel | "">(task.label ?? "");
   const [status, setStatus] = useState<"pendiente" | "en_progreso" | "completada">(task.status);
   const [dueDate, setDueDate] = useState(task.dueDate ?? "");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  useEscapeKey(onClose, !confirmDelete);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -2729,7 +2856,7 @@ function EditGeneralTaskModal({ task, profiles, players, onClose, onUpdate, onDe
       <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-md max-h-[92vh] overflow-y-auto">
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white z-10">
           <h2 className="text-sm font-semibold text-slate-800">Editar tarea</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="text-slate-500 hover:text-slate-700"><X className="w-4 h-4" /></button>
         </div>
         <form onSubmit={handleSave} className="p-4 space-y-3 pb-8">
           <div>
@@ -2789,18 +2916,31 @@ function EditGeneralTaskModal({ task, profiles, players, onClose, onUpdate, onDe
           <F label="Fecha de vencimiento" value={dueDate} onChange={setDueDate} type="date" />
           <div className="pt-2 flex gap-2">
             <button type="submit" disabled={!title}
-              className="flex-1 rounded-md text-white text-sm font-medium py-2.5 disabled:opacity-40 transition-colors"
-              style={{ background: PRIMARY }}>
+              className="flex-1 rounded-md text-white text-sm font-medium py-2.5 disabled:opacity-40 transition-colors bg-primary hover:bg-primary/90">
               Guardar cambios
             </button>
             {onDelete && (
-              <button type="button" onClick={() => { if (confirm("¿Eliminar esta tarea?")) onDelete(task.id); }}
+              <button type="button" onClick={() => setConfirmDelete(true)} aria-label="Eliminar tarea"
                 className="rounded-md text-red-600 border border-red-200 text-sm font-medium px-4 py-2.5 hover:bg-red-50 transition-colors">
                 <Trash2 className="w-4 h-4" />
               </button>
             )}
           </div>
         </form>
+        {onDelete && (
+          <ConfirmModal
+            open={confirmDelete}
+            title="¿Eliminar esta tarea?"
+            message="Esta acción no se puede deshacer."
+            confirmLabel="Eliminar"
+            variant="danger"
+            onConfirm={async () => {
+              await Promise.resolve(onDelete(task.id));
+              setConfirmDelete(false);
+            }}
+            onCancel={() => setConfirmDelete(false)}
+          />
+        )}
         {/* Task info */}
         <div className="px-4 pb-4 border-t border-slate-100 pt-3">
           <p className="text-[11px] text-slate-400">
@@ -2812,14 +2952,18 @@ function EditGeneralTaskModal({ task, profiles, players, onClose, onUpdate, onDe
   );
 }
 
-function F({ label, value, onChange, type = "text", required = false }: {
-  label: string; value: string; onChange: (v: string) => void; type?: string; required?: boolean;
+function F({ label, value, onChange, type = "text", required = false, error }: {
+  label: string; value: string; onChange: (v: string) => void; type?: string; required?: boolean; error?: string;
 }) {
   return (
     <div>
       <label className="block text-xs font-medium text-slate-600 mb-1">{label}</label>
       <input type={type} value={value} onChange={(e) => onChange(e.target.value)} required={required}
-        className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+        aria-invalid={error ? true : undefined}
+        className={`w-full rounded-md border bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 ${
+          error ? "border-red-300 focus:ring-red-200" : "border-slate-200 focus:ring-blue-200"
+        }`} />
+      {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
     </div>
   );
 }
@@ -2849,6 +2993,8 @@ function QuickTaskModal({ player, profiles, currentProfileId, onClose, onAdd }: 
   const [priority, setPriority] = useState<"alta" | "media" | "baja">("media");
   const [dueDate, setDueDate] = useState("");
 
+  useEscapeKey(onClose);
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-0 sm:p-4">
       <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-sm">
@@ -2857,7 +3003,7 @@ function QuickTaskModal({ player, profiles, currentProfileId, onClose, onAdd }: 
             <h2 className="text-sm font-semibold text-slate-800">Nueva tarea</h2>
             <p className="text-xs text-slate-400">{player.name}</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="text-slate-500 hover:text-slate-700"><X className="w-4 h-4" /></button>
         </div>
         <div className="p-4 space-y-3 pb-6">
           <div>
@@ -2907,8 +3053,7 @@ function QuickTaskModal({ player, profiles, currentProfileId, onClose, onAdd }: 
                 dueDate: dueDate || undefined, createdAt: new Date().toISOString(), comments: [] });
             }}
             disabled={!title.trim()}
-            className="w-full rounded-md text-white text-sm font-medium py-2.5 disabled:opacity-40 transition-colors"
-            style={{ background: PRIMARY }}
+            className="w-full rounded-md text-white text-sm font-medium py-2.5 disabled:opacity-40 transition-colors bg-primary hover:bg-primary/90"
           >
             Crear tarea
           </button>
@@ -2927,20 +3072,25 @@ function GlobalSearch({ players, tasks, profiles, onSelectPlayer, onSelectTask, 
 }) {
   const [query, setQuery] = useState("");
   const inputRef = useState<HTMLInputElement | null>(null);
+  const debouncedQuery = useDebounce(query, 200);
 
-  const q = query.toLowerCase().trim();
+  const q = debouncedQuery.toLowerCase().trim();
 
-  const matchedPlayers = q.length < 1 ? [] : players.filter(p =>
+  const allMatchedPlayers = q.length < 1 ? [] : players.filter(p =>
     p.name.toLowerCase().includes(q) ||
     p.positions.some(pos => pos.toLowerCase().includes(q)) ||
     p.clubs.some(c => c.name.toLowerCase().includes(q)) ||
     p.nationality.toLowerCase().includes(q)
-  ).slice(0, 5);
+  );
+  const matchedPlayers = allMatchedPlayers.slice(0, 5);
+  const morePlayers = allMatchedPlayers.length - matchedPlayers.length;
 
-  const matchedTasks = q.length < 1 ? [] : tasks.filter(t =>
+  const allMatchedTasks = q.length < 1 ? [] : tasks.filter(t =>
     t.title.toLowerCase().includes(q) ||
     (t.description ?? "").toLowerCase().includes(q)
-  ).slice(0, 5);
+  );
+  const matchedTasks = allMatchedTasks.slice(0, 5);
+  const moreTasks = allMatchedTasks.length - matchedTasks.length;
 
   const hasResults = matchedPlayers.length > 0 || matchedTasks.length > 0;
 
@@ -2958,7 +3108,7 @@ function GlobalSearch({ players, tasks, profiles, onSelectPlayer, onSelectTask, 
             autoFocus
           />
           {query && (
-            <button onClick={() => setQuery("")} className="text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>
+            <button onClick={() => setQuery("")} aria-label="Limpiar búsqueda" className="text-slate-500 hover:text-slate-700"><X className="w-3.5 h-3.5" /></button>
           )}
           <button onClick={onClose} className="text-xs text-slate-400 border border-slate-200 rounded px-1.5 py-0.5 hover:bg-slate-50">Esc</button>
         </div>
@@ -2996,6 +3146,9 @@ function GlobalSearch({ players, tasks, profiles, onSelectPlayer, onSelectTask, 
                   </button>
                 );
               })}
+              {morePlayers > 0 && (
+                <p className="px-4 py-2 text-xs text-slate-400">+{morePlayers} resultado{morePlayers > 1 ? "s" : ""} más</p>
+              )}
             </div>
           )}
 
@@ -3027,6 +3180,9 @@ function GlobalSearch({ players, tasks, profiles, onSelectPlayer, onSelectTask, 
                   </button>
                 );
               })}
+              {moreTasks > 0 && (
+                <p className="px-4 py-2 text-xs text-slate-400">+{moreTasks} resultado{moreTasks > 1 ? "s" : ""} más</p>
+              )}
             </div>
           )}
         </div>

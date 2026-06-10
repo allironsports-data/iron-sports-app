@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo, useEffect, useCallback } from 'react'
 import {
   Search, X, Plus, LogOut, Trash2, ChevronDown,
   FileText, Calendar, ChevronRight,
@@ -9,6 +9,15 @@ import logoImg from '../assets/logo.jpeg'
 import type { ScoutingPlayer, ScoutingReport, ScoutingAssessment, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion } from '../types'
 import type { Profile } from '../contexts/AuthContext'
 import * as db from '../lib/db'
+import { ConfirmModal } from '../components/ConfirmModal'
+import { ToastStack } from '../components/ToastStack'
+import { EmptyState } from '../components/EmptyState'
+import { useToast } from '../hooks/useToast'
+import { useEscapeKey } from '../hooks/useEscapeKey'
+import { useDebounce } from '../hooks/useDebounce'
+import { isValidName } from '../lib/validate'
+
+type ShowToast = (message: string, variant?: 'success' | 'error' | 'info') => void
 
 // ── Constants ────────────────────────────────────────────────
 
@@ -144,6 +153,38 @@ function InfoItem({ label, value }: { label: string; value: string }) {
   )
 }
 
+function Spinner() {
+  return <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+}
+
+// ── Chips de filtros activos ─────────────────────────────────
+type FilterChip = { key: string; label: string; onRemove: () => void }
+function ActiveFilterChips({ chips, onClearAll }: { chips: FilterChip[]; onClearAll: () => void }) {
+  if (chips.length === 0) return null
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Filtros:</span>
+      {chips.map(c => (
+        <button
+          key={c.key}
+          onClick={c.onRemove}
+          aria-label={`Quitar filtro ${c.label}`}
+          className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-primary/10 text-primary border border-primary/20 rounded-full hover:bg-primary/20 transition-colors"
+        >
+          {c.label}
+          <X className="w-3 h-3" />
+        </button>
+      ))}
+      <button
+        onClick={onClearAll}
+        className="text-xs text-slate-500 hover:text-slate-700 underline underline-offset-2 px-1.5 py-0.5"
+      >
+        Limpiar filtros
+      </button>
+    </div>
+  )
+}
+
 function StatBar({ label, value, max, color = 'bg-blue-500' }: { label: string; value: number; max: number; color?: string }) {
   const pct = max > 0 ? Math.round((value / max) * 100) : 0
   return (
@@ -169,6 +210,8 @@ function ReportCard({
   onUpdate,
   playerName,
   matchLabel,
+  showToast,
+  onEditingChange,
 }: {
   report: ScoutingReport
   profiles: Profile[]
@@ -179,20 +222,49 @@ function ReportCard({
   onUpdate?: (r: ScoutingReport) => Promise<void>
   playerName?: string
   matchLabel?: string   // e.g. "Real Madrid vs Barça · 12 Mar '25"
+  showToast?: ShowToast
+  onEditingChange?: (editing: boolean) => void
 }) {
   const isConfirming = confirmDeleteId === report.id
   const [editMode, setEditMode] = useState(false)
   const [editTitle, setEditTitle] = useState(report.titulo ?? '')
   const [editText, setEditText] = useState(report.texto ?? '')
-  const [editConclusion, setEditConclusion] = useState<ConclusionOption>(
+  const initialConclusion: ConclusionOption =
     (CONCLUSION_OPTIONS as readonly string[]).includes(report.conclusion ?? '') ? (report.conclusion ?? '') as ConclusionOption : ''
-  )
+  const [editConclusion, setEditConclusion] = useState<ConclusionOption>(initialConclusion)
   const [saving, setSaving] = useState(false)
+  const [confirmDiscard, setConfirmDiscard] = useState(false)
 
   const authorName = personaToName(report.persona, profiles)
 
+  function setEditing(v: boolean) {
+    setEditMode(v)
+    onEditingChange?.(v)
+  }
+
+  // ¿Hay cambios sin guardar respecto al estado inicial?
+  const isDirty =
+    editTitle !== (report.titulo ?? '') ||
+    editText !== (report.texto ?? '') ||
+    editConclusion !== initialConclusion
+
+  function discardEdit() {
+    setEditTitle(report.titulo ?? '')
+    setEditText(report.texto ?? '')
+    setEditConclusion(initialConclusion)
+    setConfirmDiscard(false)
+    setEditing(false)
+  }
+
+  function requestCloseEdit() {
+    if (isDirty) setConfirmDiscard(true)
+    else discardEdit()
+  }
+
+  useEscapeKey(requestCloseEdit, editMode && !confirmDiscard)
+
   async function handleSaveEdit() {
-    if (!onUpdate) return
+    if (!onUpdate || !editText.trim() || saving) return
     setSaving(true)
     try {
       const updated: ScoutingReport = {
@@ -202,7 +274,10 @@ function ReportCard({
         conclusion: editConclusion || undefined,
       }
       await onUpdate(updated)
-      setEditMode(false)
+      setEditing(false)
+      showToast?.('Informe actualizado')
+    } catch {
+      showToast?.('Error al guardar el informe', 'error')
     } finally {
       setSaving(false)
     }
@@ -211,9 +286,18 @@ function ReportCard({
   if (editMode) {
     return (
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs space-y-2">
+        <ConfirmModal
+          open={confirmDiscard}
+          title="¿Descartar cambios?"
+          message="Has modificado el informe. Si cierras ahora se perderán los cambios."
+          confirmLabel="Descartar"
+          variant="danger"
+          onConfirm={discardEdit}
+          onCancel={() => setConfirmDiscard(false)}
+        />
         <div className="flex items-center justify-between mb-1">
           <span className="text-[11px] font-semibold text-blue-600 uppercase tracking-wide">Editando informe</span>
-          <button onClick={() => setEditMode(false)} className="text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>
+          <button onClick={requestCloseEdit} aria-label="Cerrar edición" className="text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>
         </div>
         <input
           value={editTitle}
@@ -235,16 +319,20 @@ function ReportCard({
           <option value="">Sin conclusión</option>
           {CONCLUSION_OPTIONS.filter(Boolean).map(c => <option key={c} value={c}>{c}</option>)}
         </select>
+        {!editText.trim() && (
+          <p className="text-[11px] text-red-500">El informe no puede estar vacío.</p>
+        )}
         <div className="flex gap-2 pt-1">
-          <button onClick={() => setEditMode(false)} className="flex-1 py-1.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50">
+          <button onClick={requestCloseEdit} className="flex-1 py-1.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50">
             Cancelar
           </button>
           <button
             onClick={handleSaveEdit}
             disabled={saving || !editText.trim()}
-            className="flex-1 py-1.5 bg-[hsl(220,72%,26%)] text-white rounded-lg font-medium hover:bg-[hsl(220,72%,20%)] disabled:opacity-40"
+            className="flex-1 py-1.5 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 disabled:opacity-40 inline-flex items-center justify-center gap-2"
           >
-            {saving ? 'Guardando...' : 'Guardar'}
+            {saving && <Spinner />}
+            {saving ? 'Guardando…' : 'Guardar'}
           </button>
         </div>
       </div>
@@ -289,9 +377,10 @@ function ReportCard({
         <div className="flex items-center gap-0.5 flex-shrink-0">
           {onUpdate && (
             <button
-              onClick={() => setEditMode(true)}
+              onClick={() => setEditing(true)}
               className="text-slate-300 hover:text-blue-500 p-2 sm:p-0.5 rounded"
               title="Editar informe"
+              aria-label="Editar informe"
             >
               <Pencil className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
             </button>
@@ -303,7 +392,7 @@ function ReportCard({
                 <button onClick={() => onConfirmDelete(null)} className="px-2 py-1 text-xs border border-slate-200 rounded text-slate-600">No</button>
               </div>
             ) : (
-              <button onClick={() => onConfirmDelete(report.id)} className="text-slate-300 hover:text-red-500 p-2 sm:p-0.5 rounded">
+              <button onClick={() => onConfirmDelete(report.id)} aria-label="Eliminar informe" className="text-slate-300 hover:text-red-500 p-2 sm:p-0.5 rounded">
                 <Trash2 className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
               </button>
             )
@@ -342,6 +431,7 @@ function MatchRow({
   scoutingPlayers, linkedPlayerIds,
   onEdit, onDelete, onToggleStatus, onAssign,
   onAddMatchPlayer, onRemoveMatchPlayer,
+  showToast,
 }: {
   match: ScoutingMatch
   scoutName: string
@@ -356,8 +446,25 @@ function MatchRow({
   onAssign: (m: ScoutingMatch, assignedTo: string) => void
   onAddMatchPlayer: (matchId: string, playerId: string) => Promise<void>
   onRemoveMatchPlayer: (matchId: string, playerId: string) => Promise<void>
+  showToast?: ShowToast
 }) {
   const [confirm, setConfirm] = useState(false)
+
+  async function handleAddPlayer(playerId: string) {
+    try {
+      await onAddMatchPlayer(match.id, playerId)
+    } catch {
+      showToast?.('Error al vincular el jugador al partido', 'error')
+    }
+  }
+
+  async function handleRemovePlayer(playerId: string) {
+    try {
+      await onRemoveMatchPlayer(match.id, playerId)
+    } catch {
+      showToast?.('Error al desvincular el jugador del partido', 'error')
+    }
+  }
   const [assignOpen, setAssignOpen] = useState(false)
   const [playersOpen, setPlayersOpen] = useState(false)
   const [playerSearch, setPlayerSearch] = useState('')
@@ -456,6 +563,7 @@ function MatchRow({
         <td className="px-3 py-2 text-center">
           <button onClick={() => onToggleStatus(match)}
             title={isVisto ? 'Marcar como pendiente' : 'Marcar como visto'}
+            aria-label={isVisto ? 'Marcar como pendiente' : 'Marcar como visto'}
             className={`inline-flex items-center justify-center w-6 h-6 rounded-full border transition-all ${
               isVisto ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 text-slate-300 hover:border-emerald-400 hover:text-emerald-500'
             }`}
@@ -468,7 +576,7 @@ function MatchRow({
         {/* Acciones */}
         <td className="px-3 py-2">
           <div className="flex items-center gap-1 justify-end">
-            <button onClick={() => onEdit(match)} className="p-1 text-slate-300 hover:text-blue-500 transition-colors" title="Editar">
+            <button onClick={() => onEdit(match)} className="p-1 text-slate-300 hover:text-blue-500 transition-colors" title="Editar" aria-label="Editar partido">
               <Pencil className="w-3.5 h-3.5" />
             </button>
             {isAdmin && (confirm
@@ -476,7 +584,7 @@ function MatchRow({
                   <button onClick={() => { onDelete(match.id); setConfirm(false) }} className="px-2 py-0.5 text-[11px] bg-red-600 text-white rounded font-medium">Sí</button>
                   <button onClick={() => setConfirm(false)} className="px-2 py-0.5 text-[11px] border border-slate-200 rounded text-slate-600">No</button>
                 </div>
-              : <button onClick={() => setConfirm(true)} className="p-1 text-slate-300 hover:text-red-500 transition-colors" title="Eliminar"><Trash2 className="w-3.5 h-3.5" /></button>
+              : <button onClick={() => setConfirm(true)} className="p-1 text-slate-300 hover:text-red-500 transition-colors" title="Eliminar" aria-label="Eliminar partido"><Trash2 className="w-3.5 h-3.5" /></button>
             )}
           </div>
         </td>
@@ -493,7 +601,7 @@ function MatchRow({
                 {linkedPlayers.map(p => (
                   <span key={p.id} className="inline-flex items-center gap-1 bg-white border border-violet-200 text-violet-800 text-xs px-2 py-0.5 rounded-full">
                     {p.fullName}
-                    <button onClick={() => onRemoveMatchPlayer(match.id, p.id)} className="text-violet-400 hover:text-red-500 ml-0.5">
+                    <button onClick={() => handleRemovePlayer(p.id)} aria-label={`Desvincular a ${p.fullName}`} className="text-violet-400 hover:text-red-500 ml-0.5">
                       <X className="w-3 h-3" />
                     </button>
                   </span>
@@ -524,7 +632,7 @@ function MatchRow({
                     {searchResults.map(p => (
                       <button
                         key={p.id}
-                        onClick={() => { onAddMatchPlayer(match.id, p.id); setPlayerSearch('') }}
+                        onClick={() => { handleAddPlayer(p.id); setPlayerSearch('') }}
                         className="text-xs bg-white border border-violet-200 text-violet-700 hover:bg-violet-100 px-2 py-0.5 rounded-full transition-colors flex items-center gap-1"
                       >
                         <Plus className="w-3 h-3" />{p.fullName}
@@ -581,11 +689,12 @@ type MatchFormState = { date: string; homeTeam: string; awayTeam: string; compet
 function emptyMatchForm(): MatchFormState {
   return { date: '', homeTeam: '', awayTeam: '', competition: '', assignedTo: '', viewMode: 'video', notes: '' }
 }
-function MatchFormPanel({ initial, profiles, onSave, onCancel }: {
+function MatchFormPanel({ initial, profiles, onSave, onCancel, showToast }: {
   initial?: ScoutingMatch
   profiles: Profile[]
   onSave: (f: MatchFormState) => Promise<void>
   onCancel: () => void
+  showToast?: ShowToast
 }) {
   const [form, setForm] = useState<MatchFormState>(initial
     ? { date: initial.date, homeTeam: initial.homeTeam, awayTeam: initial.awayTeam, competition: initial.competition ?? '', assignedTo: initial.assignedTo ?? '', viewMode: initial.viewMode ?? 'video', notes: initial.notes ?? '' }
@@ -594,9 +703,16 @@ function MatchFormPanel({ initial, profiles, onSave, onCancel }: {
   const [saving, setSaving] = useState(false)
   const set = (k: keyof MatchFormState, v: string) => setForm(f => ({ ...f, [k]: v }))
   async function handleSave() {
-    if (!form.homeTeam.trim() || !form.awayTeam.trim() || !form.date) return
+    if (!form.homeTeam.trim() || !form.awayTeam.trim() || !form.date || saving) return
     setSaving(true)
-    try { await onSave(form) } finally { setSaving(false) }
+    try {
+      await onSave(form)
+      showToast?.(initial ? 'Partido actualizado' : 'Partido añadido')
+    } catch {
+      showToast?.('Error al guardar el partido', 'error')
+    } finally {
+      setSaving(false)
+    }
   }
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
@@ -630,8 +746,9 @@ function MatchFormPanel({ initial, profiles, onSave, onCancel }: {
       <div className="flex gap-2">
         <button onClick={onCancel} className="flex-1 py-2 text-sm border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50">Cancelar</button>
         <button onClick={handleSave} disabled={saving || !form.homeTeam.trim() || !form.awayTeam.trim() || !form.date}
-          className="flex-1 py-2 text-sm bg-[hsl(220,72%,26%)] text-white rounded-lg font-medium hover:bg-[hsl(220,72%,20%)] disabled:opacity-40">
-          {saving ? 'Guardando...' : initial ? 'Guardar cambios' : 'Añadir partido'}
+          className="flex-1 py-2 text-sm bg-primary text-white rounded-lg font-medium hover:bg-primary/90 disabled:opacity-40 inline-flex items-center justify-center gap-2">
+          {saving && <Spinner />}
+          {saving ? 'Guardando…' : initial ? 'Guardar cambios' : 'Añadir partido'}
         </button>
       </div>
     </div>
@@ -675,11 +792,15 @@ function AddBoulemaModal({
   }
 
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  useEscapeKey(onClose)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!playerName.trim() || saving) return
     setSaving(true)
+    setError('')
     try {
       await onSave({
         playerName: playerName.trim(),
@@ -695,6 +816,8 @@ function AddBoulemaModal({
         requestedBy: currentProfile.avatar,
         reportIds: initial?.reportIds ?? [],
       })
+    } catch {
+      setError('Error al guardar la petición. Inténtalo de nuevo.')
     } finally {
       setSaving(false)
     }
@@ -709,7 +832,7 @@ function AddBoulemaModal({
             <Send className="w-4 h-4 text-slate-400" />
             {initial ? 'Editar petición' : 'Añadir petición de informe'}
           </h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
+          <button onClick={onClose} aria-label="Cerrar" className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -815,7 +938,7 @@ function AddBoulemaModal({
                     onClick={() => toggleAssignee(p.avatar)}
                     className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-sm transition-colors ${
                       selected
-                        ? 'bg-[hsl(220,72%,26%)] text-white border-[hsl(220,72%,26%)]'
+                        ? 'bg-primary text-white border-primary'
                         : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
                     }`}
                   >
@@ -840,6 +963,8 @@ function AddBoulemaModal({
             />
           </FormRow>
 
+          {error && <p className="text-xs text-red-500">{error}</p>}
+
           <div className="flex gap-2 pt-2">
             <button
               type="button"
@@ -851,9 +976,10 @@ function AddBoulemaModal({
             <button
               type="submit"
               disabled={!playerName.trim() || saving}
-              className="flex-1 py-2 text-sm font-medium bg-[hsl(220,72%,26%)] text-white rounded-xl hover:bg-[hsl(220,72%,20%)] disabled:opacity-40 transition-colors"
+              className="flex-1 py-2 text-sm font-medium bg-primary text-white rounded-xl hover:bg-primary/90 disabled:opacity-40 transition-colors inline-flex items-center justify-center gap-2"
             >
-              {saving ? 'Guardando...' : initial ? 'Guardar cambios' : 'Añadir petición'}
+              {saving && <Spinner />}
+              {saving ? 'Guardando…' : initial ? 'Guardar cambios' : 'Añadir petición'}
             </button>
           </div>
         </form>
@@ -869,19 +995,23 @@ function RespondWithInformeModal({
   profiles,
   currentProfile,
   scoutingPlayers,
+  boulemaPeticiones,
   onClose,
   onAddPlayer,
   onAddReport,
   onLinkReport,
+  showToast,
 }: {
   peticion: BoulemaPeticion
   profiles: Profile[]
   currentProfile: Profile
   scoutingPlayers: ScoutingPlayer[]
+  boulemaPeticiones: BoulemaPeticion[]
   onClose: () => void
   onAddPlayer: (p: ScoutingPlayer) => void
   onAddReport: (r: ScoutingReport) => void
   onLinkReport: (peticionId: string, reportId: string) => Promise<void>
+  showToast?: ShowToast
 }) {
   // Try to find existing player by name match
   const existingPlayer = scoutingPlayers.find(
@@ -894,9 +1024,17 @@ function RespondWithInformeModal({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  useEscapeKey(onClose)
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!text.trim() || saving) return
+    // Verificar que la petición sigue existiendo (estado no obsoleto)
+    if (!boulemaPeticiones.some(p => p.id === peticion.id)) {
+      showToast?.('La petición ya no existe', 'error')
+      onClose()
+      return
+    }
     setSaving(true)
     setError('')
     try {
@@ -928,6 +1066,7 @@ function RespondWithInformeModal({
       onAddReport(report)
       // Link this report back to the petición
       await onLinkReport(peticion.id, report.id)
+      showToast?.('Informe guardado')
       onClose()
     } catch {
       setError('Error al guardar el informe. Inténtalo de nuevo.')
@@ -947,7 +1086,7 @@ function RespondWithInformeModal({
             <FileText className="w-4 h-4 text-slate-400" />
             Crear informe
           </h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
+          <button onClick={onClose} aria-label="Cerrar" className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -1017,9 +1156,10 @@ function RespondWithInformeModal({
             <button
               type="submit"
               disabled={!text.trim() || saving}
-              className="flex-1 py-2 text-sm font-medium bg-[hsl(220,72%,26%)] text-white rounded-xl hover:bg-[hsl(220,72%,20%)] disabled:opacity-40 transition-colors"
+              className="flex-1 py-2 text-sm font-medium bg-primary text-white rounded-xl hover:bg-primary/90 disabled:opacity-40 transition-colors inline-flex items-center justify-center gap-2"
             >
-              {saving ? 'Guardando...' : 'Guardar informe'}
+              {saving && <Spinner />}
+              {saving ? 'Guardando…' : 'Guardar informe'}
             </button>
           </div>
         </form>
@@ -1058,6 +1198,9 @@ export function Captacion({
 }: Props) {
   const isAdmin = currentProfile.is_admin
 
+  // ── toasts ──
+  const { toasts, showToast, dismissToast } = useToast()
+
   // ── section tab ── (must be before header-height effect)
   const [captTab, setCaptTab] = useState<CaptacionTab>('jugadores')
 
@@ -1075,6 +1218,7 @@ export function Captacion({
 
   // ── filter state ──
   const [search, setSearch] = useState('')
+  const debouncedSearch = useDebounce(search, 300)
   const [assessFilter, setAssessFilter] = useState<ScoutingAssessment | 'all'>('all')
   const [categoriaFilter, setCategoriaFilter] = useState<string>('all')
   const [posFilter, setPosFilter] = useState<string>('all')
@@ -1150,7 +1294,7 @@ export function Captacion({
   }, [scoutingPlayers])
 
   const filtered = useMemo(() => {
-    const q = search.toLowerCase().trim()
+    const q = debouncedSearch.toLowerCase().trim()
     return scoutingPlayers.filter(p => {
       if (assessFilter !== 'all' && p.assessment !== assessFilter) return false
       if (categoriaFilter !== 'all' && p.categoria !== categoriaFilter) return false
@@ -1167,9 +1311,9 @@ export function Captacion({
       }
       return true
     })
-  }, [scoutingPlayers, search, assessFilter, categoriaFilter, posFilter])
+  }, [scoutingPlayers, debouncedSearch, assessFilter, categoriaFilter, posFilter])
 
-  useEffect(() => { setPage(0) }, [search, assessFilter, categoriaFilter, posFilter])
+  useEffect(() => { setPage(0) }, [debouncedSearch, assessFilter, categoriaFilter, posFilter])
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
   const paginated = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
@@ -1347,6 +1491,9 @@ export function Captacion({
       setReportText('')
       setReportConclusion('')
       setReportMatchId('')
+      showToast('Informe guardado')
+    } catch {
+      showToast('Error al guardar el informe', 'error')
     } finally {
       setSavingReport(false)
     }
@@ -1358,23 +1505,37 @@ export function Captacion({
   }
 
   async function handleDeleteReport(id: string) {
-    await db.deleteScoutingReport(id)
-    onDeleteReport(id)
-    setConfirmDeleteReport(null)
+    try {
+      await db.deleteScoutingReport(id)
+      onDeleteReport(id)
+      setConfirmDeleteReport(null)
+      showToast('Informe eliminado')
+    } catch {
+      showToast('Error al eliminar el informe', 'error')
+    }
   }
 
   async function handleDeletePlayer() {
     if (!panelPlayer) return
-    await db.deleteScoutingPlayer(panelPlayer.id)
-    onDeletePlayer(panelPlayer.id)
-    setPanelPlayerId(null)
-    setConfirmDeletePlayer(false)
+    try {
+      await db.deleteScoutingPlayer(panelPlayer.id)
+      onDeletePlayer(panelPlayer.id)
+      setPanelPlayerId(null)
+      setConfirmDeletePlayer(false)
+      showToast('Jugador eliminado')
+    } catch {
+      showToast('Error al eliminar el jugador', 'error')
+    }
   }
 
   async function handleQuickAssessment(player: ScoutingPlayer, assessment: ScoutingAssessment | undefined) {
-    const updated = { ...player, assessment }
-    await db.updateScoutingPlayer(updated)
-    onUpdatePlayer(updated)
+    try {
+      const updated = { ...player, assessment }
+      await db.updateScoutingPlayer(updated)
+      onUpdatePlayer(updated)
+    } catch {
+      showToast('Error al actualizar el assessment', 'error')
+    }
   }
 
   // ── player form ──
@@ -1384,9 +1545,12 @@ export function Captacion({
     clubContract: '', contacto: '', categoria: '', comentarios: '',
   })
   const [form, setForm] = useState(emptyForm())
+  const [savingPlayer, setSavingPlayer] = useState(false)
+  const [playerNameError, setPlayerNameError] = useState('')
 
   function openAddPlayer() {
     setForm(emptyForm())
+    setPlayerNameError('')
     setShowAddPlayer(true)
     setShowEditPlayer(false)
     setEditTarget(null)
@@ -1400,12 +1564,19 @@ export function Captacion({
       clubContract: p.clubContract ?? '', contacto: p.contacto ?? '',
       categoria: p.categoria ?? '', comentarios: p.comentarios ?? '',
     })
+    setPlayerNameError('')
     setEditTarget(p)
     setShowEditPlayer(true)
     setShowAddPlayer(false)
   }
 
   async function handleSavePlayer() {
+    if (savingPlayer) return
+    if (!isValidName(form.fullName)) {
+      setPlayerNameError('Introduce un nombre válido (mínimo 2 caracteres)')
+      return
+    }
+    setPlayerNameError('')
     const payload = {
       fullName: form.fullName.trim(),
       position1: form.position1?.trim() || undefined,
@@ -1421,19 +1592,28 @@ export function Captacion({
       categoria: form.categoria?.trim() || undefined,
       comentarios: form.comentarios?.trim() || undefined,
     }
-    if (showEditPlayer && editTarget) {
-      const updated = { ...editTarget, ...payload }
-      await db.updateScoutingPlayer(updated)
-      onUpdatePlayer(updated)
-      setPanelPlayerId(updated.id)
-    } else {
-      const saved = await db.createScoutingPlayer(payload)
-      onAddPlayer(saved)
-      setPanelPlayerId(saved.id)
+    setSavingPlayer(true)
+    try {
+      if (showEditPlayer && editTarget) {
+        const updated = { ...editTarget, ...payload }
+        await db.updateScoutingPlayer(updated)
+        onUpdatePlayer(updated)
+        setPanelPlayerId(updated.id)
+        showToast('Jugador actualizado')
+      } else {
+        const saved = await db.createScoutingPlayer(payload)
+        onAddPlayer(saved)
+        setPanelPlayerId(saved.id)
+        showToast('Jugador creado')
+      }
+      setShowAddPlayer(false)
+      setShowEditPlayer(false)
+      setEditTarget(null)
+    } catch {
+      showToast('Error al guardar el jugador', 'error')
+    } finally {
+      setSavingPlayer(false)
     }
-    setShowAddPlayer(false)
-    setShowEditPlayer(false)
-    setEditTarget(null)
   }
 
   // ── match handlers ──
@@ -1471,20 +1651,33 @@ export function Captacion({
   }
 
   async function handleDeleteMatch(id: string) {
-    await db.deleteScoutingMatch(id)
-    onDeleteMatch(id)
+    try {
+      await db.deleteScoutingMatch(id)
+      onDeleteMatch(id)
+      showToast('Partido eliminado')
+    } catch {
+      showToast('Error al eliminar el partido', 'error')
+    }
   }
 
   async function handleToggleMatchStatus(m: ScoutingMatch) {
-    const updated: ScoutingMatch = { ...m, status: m.status === 'visto' ? 'pendiente' : 'visto' }
-    await db.updateScoutingMatch(updated)
-    onUpdateMatch(updated)
+    try {
+      const updated: ScoutingMatch = { ...m, status: m.status === 'visto' ? 'pendiente' : 'visto' }
+      await db.updateScoutingMatch(updated)
+      onUpdateMatch(updated)
+    } catch {
+      showToast('Error al actualizar el estado del partido', 'error')
+    }
   }
 
   async function handleAssignMatch(m: ScoutingMatch, assignedTo: string) {
-    const updated: ScoutingMatch = { ...m, assignedTo: assignedTo || undefined, status: 'pendiente' }
-    await db.updateScoutingMatch(updated)
-    onUpdateMatch(updated)
+    try {
+      const updated: ScoutingMatch = { ...m, assignedTo: assignedTo || undefined, status: 'pendiente' }
+      await db.updateScoutingMatch(updated)
+      onUpdateMatch(updated)
+    } catch {
+      showToast('Error al asignar el partido', 'error')
+    }
   }
 
   const closeCatMenu = () => setShowCatMenu(false)
@@ -1496,11 +1689,28 @@ export function Captacion({
     setShowEditPlayer(false)
     setConfirmDeletePlayer(false)
     setFullscreen(false)
+    setEditingReportCount(0)
   }
+
+  // ── ESC: cerrar panel lateral (sin pisar modales ni formularios abiertos) ──
+  const [editingReportCount, setEditingReportCount] = useState(0)
+  useEffect(() => { setEditingReportCount(0) }, [panelPlayerId])
+  const handleReportEditingChange = useCallback(
+    (editing: boolean) => setEditingReportCount(c => Math.max(0, c + (editing ? 1 : -1))),
+    []
+  )
 
   // ── render ───────────────────────────────────────────────────
 
   const hasPanel = !!panelPlayer || showAddPlayer || showEditPlayer
+
+  useEscapeKey(
+    closePanel,
+    hasPanel &&
+      !showAddPlayer && !showEditPlayer && !showAddReportForm &&
+      editingReportCount === 0 &&
+      !showAddBoulema && !editingPeticion && !respondingPeticion
+  )
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -1513,7 +1723,7 @@ export function Captacion({
           {onAdmin && (
             <button onClick={onAdmin} className="text-xs text-slate-500 hover:text-slate-800 px-2 py-1 rounded hover:bg-slate-100">Admin</button>
           )}
-          <button onClick={onLogout} className="text-slate-400 hover:text-slate-700 p-1.5 rounded hover:bg-slate-100">
+          <button onClick={onLogout} aria-label="Cerrar sesión" className="text-slate-400 hover:text-slate-700 p-1.5 rounded hover:bg-slate-100">
             <LogOut className="w-4 h-4" />
           </button>
         </div>
@@ -1533,7 +1743,7 @@ export function Captacion({
             <TrendingUp className="w-3.5 h-3.5" />
             Distribución
           </button>
-          <button className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 border-[hsl(220,72%,26%)] text-[hsl(220,72%,26%)] transition-colors">
+          <button className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 border-primary text-primary transition-colors">
             <Eye className="w-3.5 h-3.5" />
             Captación
           </button>
@@ -1553,7 +1763,7 @@ export function Captacion({
               onClick={() => setCaptTab(t.id)}
               className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                 captTab === t.id
-                  ? 'bg-[hsl(220,72%,26%)] text-white'
+                  ? 'bg-primary text-white'
                   : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
               }`}
             >
@@ -1581,7 +1791,7 @@ export function Captacion({
                   className="w-full pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
                 />
                 {search && (
-                  <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  <button onClick={() => setSearch('')} aria-label="Limpiar búsqueda" className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
                     <X className="w-3.5 h-3.5" />
                   </button>
                 )}
@@ -1686,7 +1896,7 @@ export function Captacion({
               {/* Add player — available to all users */}
               <button
                 onClick={openAddPlayer}
-                className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-[hsl(220,72%,26%)] text-white rounded-lg hover:bg-[hsl(220,72%,20%)] transition-colors"
+                className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" />
                 Añadir
@@ -1696,6 +1906,23 @@ export function Captacion({
 
           {/* Table */}
           <div className="flex-1 max-w-6xl mx-auto w-full px-3 sm:px-6 py-4">
+            {/* Chips de filtros activos */}
+            {(() => {
+              const chips: FilterChip[] = []
+              if (search.trim()) chips.push({ key: 'search', label: `Búsqueda: "${search.trim()}"`, onRemove: () => setSearch('') })
+              if (assessFilter !== 'all') chips.push({ key: 'assess', label: `Assessment: ${assessFilter}`, onRemove: () => setAssessFilter('all') })
+              if (categoriaFilter !== 'all') chips.push({ key: 'cat', label: `Categoría: ${categoriaFilter}`, onRemove: () => setCategoriaFilter('all') })
+              if (posFilter !== 'all') chips.push({ key: 'pos', label: `Posición: ${posFilter}`, onRemove: () => setPosFilter('all') })
+              if (chips.length === 0) return null
+              return (
+                <div className="mb-3">
+                  <ActiveFilterChips
+                    chips={chips}
+                    onClearAll={() => { setSearch(''); setAssessFilter('all'); setCategoriaFilter('all'); setPosFilter('all') }}
+                  />
+                </div>
+              )
+            })()}
             <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -1714,8 +1941,12 @@ export function Captacion({
                   <tbody className="divide-y divide-slate-100">
                     {paginated.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="px-3 py-12 text-center text-sm text-slate-400">
-                          No se encontraron jugadores con los filtros actuales
+                        <td colSpan={8}>
+                          <EmptyState
+                            icon={<Users className="w-10 h-10" />}
+                            title="No se encontraron jugadores"
+                            subtitle="Prueba a cambiar o limpiar los filtros actuales"
+                          />
                         </td>
                       </tr>
                     ) : paginated.map(p => {
@@ -1802,15 +2033,16 @@ export function Captacion({
               </div>
 
               {totalPages > 1 && (
-                <div className="border-t border-slate-200 px-4 py-3 flex items-center justify-between bg-slate-50">
-                  <span className="text-xs text-slate-500">
-                    Página {page + 1} de {totalPages} · {filtered.length} resultados
+                <div className="border-t border-slate-200 px-4 py-3 flex flex-wrap items-center justify-between gap-2 bg-slate-50">
+                  <span className="text-sm text-slate-600 font-medium">
+                    Mostrando {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} de {filtered.length}
                   </span>
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => setPage(p => Math.max(0, p - 1))}
                       disabled={page === 0}
-                      className="px-2.5 py-1 text-xs font-medium border border-slate-200 rounded hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed"
+                      aria-label="Página anterior"
+                      className="px-3 py-1.5 text-sm font-medium border border-slate-300 rounded-lg bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     >
                       ← Anterior
                     </button>
@@ -1820,10 +2052,12 @@ export function Captacion({
                         <button
                           key={idx}
                           onClick={() => setPage(idx)}
-                          className={`w-7 h-7 text-xs font-medium rounded border transition-colors ${
+                          aria-label={`Ir a la página ${idx + 1}`}
+                          aria-current={idx === page ? 'page' : undefined}
+                          className={`w-8 h-8 text-sm font-medium rounded-lg border transition-colors ${
                             idx === page
-                              ? 'bg-[hsl(220,72%,26%)] text-white border-[hsl(220,72%,26%)]'
-                              : 'border-slate-200 hover:bg-white text-slate-600'
+                              ? 'bg-primary text-white border-primary'
+                              : 'border-slate-300 bg-white hover:bg-slate-100 text-slate-600'
                           }`}
                         >
                           {idx + 1}
@@ -1833,7 +2067,8 @@ export function Captacion({
                     <button
                       onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
                       disabled={page >= totalPages - 1}
-                      className="px-2.5 py-1 text-xs font-medium border border-slate-200 rounded hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed"
+                      aria-label="Página siguiente"
+                      className="px-3 py-1.5 text-sm font-medium border border-slate-300 rounded-lg bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     >
                       Siguiente →
                     </button>
@@ -2060,7 +2295,7 @@ export function Captacion({
                       <div className="text-[9px] text-slate-500 font-medium">{count || ''}</div>
                       <div className="w-full bg-slate-100 rounded-t" style={{ height: '60px' }}>
                         <div
-                          className="w-full bg-[hsl(220,72%,36%)] rounded-t transition-all"
+                          className="w-full bg-primary rounded-t transition-all"
                           style={{ height: `${pct}%`, marginTop: `${100 - pct}%` }}
                         />
                       </div>
@@ -2263,7 +2498,7 @@ export function Captacion({
             </div>
             <button
               onClick={openAddMatch}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-[hsl(220,72%,26%)] text-white rounded-lg hover:bg-[hsl(220,72%,20%)] transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
             >
               <Plus className="w-3.5 h-3.5" /> Añadir partido
             </button>
@@ -2277,6 +2512,7 @@ export function Captacion({
               profiles={profiles}
               onSave={handleSaveMatch}
               onCancel={() => { setShowAddMatch(false); setEditingMatch(null) }}
+              showToast={showToast}
             />
           )}
 
@@ -2293,7 +2529,7 @@ export function Captacion({
                   className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                 />
                 {matchSearch && (
-                  <button onClick={() => setMatchSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  <button onClick={() => setMatchSearch('')} aria-label="Limpiar búsqueda" className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
                     <X className="w-3 h-3" />
                   </button>
                 )}
@@ -2362,12 +2598,37 @@ export function Captacion({
             </div>
           )}
 
+          {/* Chips de filtros activos (partidos) */}
+          {(() => {
+            const chips: FilterChip[] = []
+            if (matchSearch.trim()) chips.push({ key: 'search', label: `Búsqueda: "${matchSearch.trim()}"`, onRemove: () => setMatchSearch('') })
+            if (matchPersonaFilter !== 'all') chips.push({ key: 'scout', label: `Scout: ${matchPersonaFilter}`, onRemove: () => setMatchPersonaFilter('all') })
+            if (matchCompFilter !== 'all') chips.push({ key: 'comp', label: `Competición: ${matchCompFilter}`, onRemove: () => setMatchCompFilter('all') })
+            if (matchModeFilter !== 'all') chips.push({ key: 'mode', label: matchModeFilter === 'video' ? 'Modo: Vídeo' : 'Modo: Campo', onRemove: () => setMatchModeFilter('all') })
+            if (matchStatusFilter !== 'all') chips.push({ key: 'status', label: matchStatusFilter === 'visto' ? 'Estado: Vistos' : 'Estado: Pendientes', onRemove: () => setMatchStatusFilter('all') })
+            if (chips.length === 0) return null
+            return (
+              <ActiveFilterChips
+                chips={chips}
+                onClearAll={() => { setMatchSearch(''); setMatchPersonaFilter('all'); setMatchCompFilter('all'); setMatchModeFilter('all'); setMatchStatusFilter('all') }}
+              />
+            )
+          })()}
+
           {scoutingMatches.length === 0 && !showAddMatch ? (
-            <div className="text-center py-16 text-slate-400 text-sm">
-              <ClipboardList className="w-10 h-10 mx-auto mb-2 opacity-20" />
-              <p>No hay partidos registrados aún</p>
-              <p className="text-xs mt-1 text-slate-300">Si acabas de activar esta función, recuerda ejecutar el SQL de creación de tabla en Supabase</p>
-            </div>
+            <EmptyState
+              icon={<ClipboardList className="w-10 h-10" />}
+              title="No hay partidos registrados aún"
+              subtitle="Si acabas de activar esta función, recuerda ejecutar el SQL de creación de tabla en Supabase"
+              action={
+                <button
+                  onClick={openAddMatch}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Añadir partido
+                </button>
+              }
+            />
           ) : (
             <>
               {/* ── Mobile card list (hidden on sm+) ── */}
@@ -2402,6 +2663,7 @@ export function Captacion({
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <button
                             onClick={() => handleToggleMatchStatus(m)}
+                            aria-label={isVisto ? 'Marcar como pendiente' : 'Marcar como visto'}
                             className={`inline-flex items-center justify-center w-8 h-8 rounded-full border transition-all ${
                               isVisto ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 text-slate-300'
                             }`}
@@ -2410,7 +2672,7 @@ export function Captacion({
                               <polyline points="2.5,8 6,11.5 13.5,4" />
                             </svg>
                           </button>
-                          <button onClick={() => openEditMatch(m)} className="p-2 text-slate-400 hover:text-blue-500">
+                          <button onClick={() => openEditMatch(m)} aria-label="Editar partido" className="p-2 text-slate-400 hover:text-blue-500">
                             <Pencil className="w-4 h-4" />
                           </button>
                         </div>
@@ -2421,7 +2683,11 @@ export function Captacion({
                           {linkedPlayers.map(p => (
                             <span key={p.id} className="inline-flex items-center gap-1 bg-violet-50 border border-violet-200 text-violet-700 text-xs px-2 py-0.5 rounded-full">
                               {p.fullName}
-                              <button onClick={() => onRemoveMatchPlayer(m.id, p.id)} className="text-violet-400 hover:text-red-500 ml-0.5">
+                              <button
+                                onClick={() => onRemoveMatchPlayer(m.id, p.id).catch(() => showToast('Error al desvincular el jugador del partido', 'error'))}
+                                aria-label={`Desvincular a ${p.fullName}`}
+                                className="text-violet-400 hover:text-red-500 ml-0.5"
+                              >
                                 <X className="w-3 h-3" />
                               </button>
                             </span>
@@ -2472,6 +2738,7 @@ export function Captacion({
                             onAssign={handleAssignMatch}
                             onAddMatchPlayer={onAddMatchPlayer}
                             onRemoveMatchPlayer={onRemoveMatchPlayer}
+                            showToast={showToast}
                           />
                         )
                       })}
@@ -2530,7 +2797,7 @@ export function Captacion({
               </div>
               <button
                 onClick={() => setShowAddBoulema(true)}
-                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-[hsl(220,72%,26%)] text-white rounded-xl hover:bg-[hsl(220,72%,20%)] transition-colors"
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-primary text-white rounded-xl hover:bg-primary/90 transition-colors"
               >
                 <Plus className="w-4 h-4" />
                 <span>Añadir petición</span>
@@ -2549,7 +2816,7 @@ export function Captacion({
                   className="w-full pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                 />
                 {bouSearch && (
-                  <button onClick={() => setBouSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  <button onClick={() => setBouSearch('')} aria-label="Limpiar búsqueda" className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
                     <X className="w-3.5 h-3.5" />
                   </button>
                 )}
@@ -2591,16 +2858,23 @@ export function Captacion({
                 </select>
               )}
 
-              {/* Clear filters */}
-              {(bouPosFilter !== 'all' || bouYearFilter !== 'all' || bouOfferedFilter !== 'all') && (
-                <button
-                  onClick={() => { setBouPosFilter('all'); setBouYearFilter('all'); setBouOfferedFilter('all') }}
-                  className="text-xs text-slate-400 hover:text-slate-600 px-2 py-1.5"
-                >
-                  Limpiar
-                </button>
-              )}
             </div>
+
+            {/* Chips de filtros activos (boulema) */}
+            {(() => {
+              const chips: FilterChip[] = []
+              if (bouSearch.trim()) chips.push({ key: 'search', label: `Búsqueda: "${bouSearch.trim()}"`, onRemove: () => setBouSearch('') })
+              if (bouPosFilter !== 'all') chips.push({ key: 'pos', label: `Posición: ${bouPosFilter}`, onRemove: () => setBouPosFilter('all') })
+              if (bouYearFilter !== 'all') chips.push({ key: 'year', label: `Año: ${bouYearFilter}`, onRemove: () => setBouYearFilter('all') })
+              if (bouOfferedFilter !== 'all') chips.push({ key: 'offered', label: `Ofrecido por: ${bouOfferedFilter}`, onRemove: () => setBouOfferedFilter('all') })
+              if (chips.length === 0) return null
+              return (
+                <ActiveFilterChips
+                  chips={chips}
+                  onClearAll={() => { setBouSearch(''); setBouPosFilter('all'); setBouYearFilter('all'); setBouOfferedFilter('all') }}
+                />
+              )
+            })()}
 
             {/* Peticiones list */}
             <div className="space-y-2">
@@ -2750,7 +3024,7 @@ export function Captacion({
                             {!currentUserDone && (
                               <button
                                 onClick={() => setRespondingPeticion(p)}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-[hsl(220,72%,26%)] text-white rounded-lg hover:bg-[hsl(220,72%,20%)] transition-colors"
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
                               >
                                 <FileText className="w-3 h-3" />
                                 Crear informe
@@ -2782,8 +3056,13 @@ export function Captacion({
                                 </button>
                                 <button
                                   onClick={async () => {
-                                    await onDeleteBoulemaPeticion(p.id)
-                                    setConfirmDeletePeticion(null)
+                                    try {
+                                      await onDeleteBoulemaPeticion(p.id)
+                                      setConfirmDeletePeticion(null)
+                                      showToast('Petición eliminada')
+                                    } catch {
+                                      showToast('Error al eliminar la petición', 'error')
+                                    }
                                   }}
                                   className="text-[11px] px-2 py-0.5 bg-red-500 text-white rounded hover:bg-red-600"
                                 >
@@ -2796,6 +3075,7 @@ export function Captacion({
                                   onClick={() => setEditingPeticion(p)}
                                   className="p-1 rounded text-slate-300 hover:text-blue-500 hover:bg-blue-50 transition-colors"
                                   title="Editar petición"
+                                  aria-label="Editar petición"
                                 >
                                   <Pencil className="w-3.5 h-3.5" />
                                 </button>
@@ -2803,6 +3083,7 @@ export function Captacion({
                                   onClick={() => setConfirmDeletePeticion(p.id)}
                                   className="p-1 rounded text-slate-300 hover:text-red-400 hover:bg-red-50 transition-colors"
                                   title="Eliminar petición"
+                                  aria-label="Eliminar petición"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
@@ -2830,6 +3111,7 @@ export function Captacion({
           onSave={async (peticion) => {
             await onAddBoulemaPeticion(peticion)
             setShowAddBoulema(false)
+            showToast('Petición añadida')
           }}
         />
       )}
@@ -2845,6 +3127,7 @@ export function Captacion({
           onSave={async (updated) => {
             await onUpdateBoulemaPeticion({ ...editingPeticion, ...updated })
             setEditingPeticion(null)
+            showToast('Petición actualizada')
           }}
         />
       )}
@@ -2856,6 +3139,8 @@ export function Captacion({
           profiles={profiles}
           currentProfile={currentProfile}
           scoutingPlayers={scoutingPlayers}
+          boulemaPeticiones={boulemaPeticiones}
+          showToast={showToast}
           onClose={() => setRespondingPeticion(null)}
           onAddPlayer={onAddPlayer}
           onAddReport={onAddReport}
@@ -2917,11 +3202,12 @@ export function Captacion({
                     onClick={() => setFullscreen(f => !f)}
                     className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
                     title={fullscreen ? 'Minimizar' : 'Pantalla completa'}
+                    aria-label={fullscreen ? 'Minimizar panel' : 'Pantalla completa'}
                   >
                     {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
                   </button>
                 )}
-                <button onClick={closePanel} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
+                <button onClick={closePanel} aria-label="Cerrar panel" className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -2934,8 +3220,20 @@ export function Captacion({
               {(showAddPlayer || showEditPlayer) && (
                 <div className="p-4 space-y-3">
                   <FormRow label="Nombre *">
-                    <input value={form.fullName} onChange={e => setForm(f => ({ ...f, fullName: e.target.value }))}
-                      className="field" placeholder="Nombre completo" />
+                    <input
+                      value={form.fullName}
+                      onChange={e => {
+                        const v = e.target.value
+                        setForm(f => ({ ...f, fullName: v }))
+                        if (playerNameError && isValidName(v)) setPlayerNameError('')
+                      }}
+                      className="field"
+                      placeholder="Nombre completo"
+                      aria-invalid={!!playerNameError}
+                    />
+                    {playerNameError && (
+                      <p className="text-xs text-red-500 mt-1">{playerNameError}</p>
+                    )}
                   </FormRow>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <FormRow label="Posición 1">
@@ -3009,10 +3307,11 @@ export function Captacion({
                     </button>
                     <button
                       onClick={handleSavePlayer}
-                      disabled={!form.fullName.trim()}
-                      className="flex-1 py-2 text-sm bg-[hsl(220,72%,26%)] text-white rounded-lg font-medium hover:bg-[hsl(220,72%,20%)] disabled:opacity-40 disabled:cursor-not-allowed"
+                      disabled={!form.fullName.trim() || savingPlayer}
+                      className="flex-1 py-2 text-sm bg-primary text-white rounded-lg font-medium hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
                     >
-                      {showEditPlayer ? 'Guardar cambios' : 'Crear jugador'}
+                      {savingPlayer && <Spinner />}
+                      {savingPlayer ? 'Guardando…' : showEditPlayer ? 'Guardar cambios' : 'Crear jugador'}
                     </button>
                   </div>
                 </div>
@@ -3096,6 +3395,7 @@ export function Captacion({
                         ) : (
                           <button
                             onClick={() => setConfirmDeletePlayer(true)}
+                            aria-label="Eliminar jugador"
                             className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 border border-red-100"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -3137,7 +3437,7 @@ export function Captacion({
                                   // toggle: if form already open close it
                                   setShowAddReportForm(f => !f)
                                 }}
-                                className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-[hsl(220,72%,26%)] text-white rounded-lg hover:bg-[hsl(220,72%,20%)] transition-colors"
+                                className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
                               >
                                 <Plus className="w-3 h-3" /> Añadir informe
                               </button>
@@ -3152,7 +3452,7 @@ export function Captacion({
                                     <span className="text-[11px] font-mono bg-white border border-blue-200 px-1.5 py-0.5 rounded text-slate-600">
                                       {currentProfile.avatar} · {currentProfile.name.split(' ')[0]}
                                     </span>
-                                    <button onClick={() => setShowAddReportForm(false)} className="text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>
+                                    <button onClick={() => setShowAddReportForm(false)} aria-label="Cerrar formulario de informe" className="text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>
                                   </div>
                                 </div>
                                 <input
@@ -3231,9 +3531,10 @@ export function Captacion({
                                   <button
                                     onClick={handleAddReport}
                                     disabled={!reportText.trim() || savingReport}
-                                    className="px-3 py-1.5 text-xs font-semibold bg-[hsl(220,72%,26%)] text-white rounded-lg hover:bg-[hsl(220,72%,20%)] disabled:opacity-40 disabled:cursor-not-allowed"
+                                    className="px-3 py-1.5 text-xs font-semibold bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-2"
                                   >
-                                    {savingReport ? 'Guardando...' : 'Guardar informe'}
+                                    {savingReport && <Spinner />}
+                                    {savingReport ? 'Guardando…' : 'Guardar informe'}
                                   </button>
                                 </div>
                               </div>
@@ -3261,6 +3562,8 @@ export function Captacion({
                               onDelete={handleDeleteReport}
                               onUpdate={handleUpdateReport}
                               matchLabel={matchLabel}
+                              showToast={showToast}
+                              onEditingChange={handleReportEditingChange}
                             />
                           )
                         })}
@@ -3301,9 +3604,10 @@ export function Captacion({
                                     : <span className="text-[11px] text-blue-500 flex-shrink-0">📹</span>
                                   }
                                   <button
-                                    onClick={() => onRemoveMatchPlayer(m.id, panelPlayerId)}
+                                    onClick={() => onRemoveMatchPlayer(m.id, panelPlayerId).catch(() => showToast('Error al desvincular del partido', 'error'))}
                                     className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-400 flex-shrink-0 transition-opacity"
                                     title="Desvincular de este partido"
+                                    aria-label="Desvincular de este partido"
                                   >
                                     <X className="w-3 h-3" />
                                   </button>
@@ -3333,6 +3637,9 @@ export function Captacion({
           </div>
         </>
       )}
+
+      {/* Toasts globales de la vista */}
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
       <style>{`
         .field {

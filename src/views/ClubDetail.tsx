@@ -1,11 +1,22 @@
 import { useState, useMemo, useEffect } from 'react'
 import {
   ArrowLeft, Building2, Star, Plus, X, Pencil,
-  ChevronRight, Trash2, Check, LogOut, AlertCircle, Phone,
+  ChevronRight, Trash2, Check, LogOut, AlertCircle, Phone, Users,
 } from 'lucide-react'
 import type { Club, ClubNegotiation, DistributionEntry, Player, ClubNeed } from '../types'
 import type { Profile } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+import { ConfirmModal } from '../components/ConfirmModal'
+import { EmptyState } from '../components/EmptyState'
+import { ToastStack } from '../components/ToastStack'
+import { useToast } from '../hooks/useToast'
+import { useEscapeKey } from '../hooks/useEscapeKey'
+import { isValidName } from '../lib/validate'
+
+/** Spinner pequeño para botones de guardado */
+function BtnSpinner() {
+  return <span className="inline-block w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin align-middle" />
+}
 
 // ── constants ─────────────────────────────────────────────────
 
@@ -120,6 +131,11 @@ export function ClubDetail({
   // position hint when opening AddPlayerToClubModal from a need card
   const [addPlayerPositionHint, setAddPlayerPositionHint] = useState<string | undefined>(undefined)
 
+  // toasts + feedback de guardado
+  const { toasts, showToast, dismissToast } = useToast()
+  const [updatingNegId, setUpdatingNegId] = useState<string | null>(null)
+  const [confirmDeleteNeedIdx, setConfirmDeleteNeedIdx] = useState<number | null>(null)
+
   const clubNegs = negotiations.filter(n => n.clubId === club.id)
 
   const filteredNegs = useMemo(() => {
@@ -143,14 +159,22 @@ export function ClubDetail({
   ]
 
   async function handleStatusChange(neg: ClubNegotiation, status: ClubNegotiation['status']) {
-    await onUpdateNegotiation({ ...neg, status })
+    setUpdatingNegId(neg.id)
+    try {
+      await onUpdateNegotiation({ ...neg, status })
+      showToast(`Estado actualizado a "${STATUS_CONFIG[status].label}"`)
+    } catch {
+      showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+    } finally {
+      setUpdatingNegId(null)
+    }
   }
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* Header */}
       <header className="bg-white border-b border-slate-200 px-4 h-11 sm:h-14 flex items-center gap-3 flex-shrink-0">
-        <button onClick={onBack} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500">
+        <button onClick={onBack} aria-label="Volver" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500">
           <ArrowLeft className="w-4 h-4" />
         </button>
         <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
@@ -172,7 +196,7 @@ export function ClubDetail({
           {currentProfile.is_admin && onAdmin && (
             <button onClick={onAdmin} className="text-xs text-slate-500 px-2 py-1 rounded hover:bg-slate-100 hidden sm:block">Admin</button>
           )}
-          <button onClick={onLogout} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400">
+          <button onClick={onLogout} aria-label="Cerrar sesión" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400">
             <LogOut className="w-4 h-4" />
           </button>
         </div>
@@ -186,13 +210,13 @@ export function ClubDetail({
             onClick={() => setActiveTab(t.id)}
             className={`px-3 py-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
               activeTab === t.id
-                ? 'border-[hsl(220,72%,36%)] text-[hsl(220,72%,36%)]'
+                ? 'border-primary text-primary'
                 : 'border-transparent text-slate-500 hover:text-slate-700'
             }`}
           >
             {t.label}
             {t.badge !== undefined && (
-              <span className={`text-xs rounded-full px-1.5 py-0.5 font-semibold ${activeTab === t.id ? 'bg-[hsl(220,72%,36%)] text-white' : 'bg-slate-100 text-slate-500'}`}>
+              <span className={`text-xs rounded-full px-1.5 py-0.5 font-semibold ${activeTab === t.id ? 'bg-primary text-white' : 'bg-slate-100 text-slate-500'}`}>
                 {t.badge}
               </span>
             )}
@@ -233,7 +257,7 @@ export function ClubDetail({
             <div className="flex justify-end">
               <button
                 onClick={() => setShowAddPlayer(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-[hsl(220,72%,36%)] text-white text-sm rounded-lg hover:bg-[hsl(220,72%,30%)]"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-sm rounded-lg hover:bg-primary/90"
               >
                 <Plus className="w-4 h-4" /> Añadir jugador
               </button>
@@ -271,8 +295,10 @@ export function ClubDetail({
                       {/* Status dropdown */}
                       <select
                         value={neg.status}
+                        disabled={updatingNegId === neg.id}
                         onChange={e => handleStatusChange(neg, e.target.value as ClubNegotiation['status'])}
-                        className={`text-xs px-2 py-1 rounded-full border-0 font-medium cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-300 ${scfg.color}`}
+                        aria-label="Cambiar estado de la negociación"
+                        className={`text-xs px-2 py-1 rounded-full border-0 font-medium cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-300 disabled:opacity-50 disabled:cursor-wait ${scfg.color}`}
                       >
                         {NEG_STATUSES.map(s => (
                           <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
@@ -280,6 +306,7 @@ export function ClubDetail({
                       </select>
                       <button
                         onClick={() => setEditingNeg(neg)}
+                        aria-label="Editar negociación"
                         className="p-1 text-slate-300 hover:text-slate-500"
                       >
                         <Pencil className="w-3.5 h-3.5" />
@@ -288,6 +315,7 @@ export function ClubDetail({
                         onClick={() => onSelectPlayer(player.id)}
                         className="p-1 text-slate-300 hover:text-blue-500"
                         title="Ver ficha"
+                        aria-label="Ver ficha del jugador"
                       >
                         <ChevronRight className="w-4 h-4" />
                       </button>
@@ -296,12 +324,35 @@ export function ClubDetail({
                 )
               })}
               {filteredNegs.length === 0 && (
-                <div className="text-center py-10 text-slate-400 text-sm">
-                  {statusFilter === 'todos'
-                    ? 'No hay jugadores asignados a este club aún'
-                    : `No hay jugadores con estado "${STATUS_CONFIG[statusFilter].label}"`
-                  }
-                </div>
+                statusFilter === 'todos' ? (
+                  <EmptyState
+                    icon={<Users className="w-10 h-10" />}
+                    title="No hay jugadores asignados a este club aún"
+                    subtitle="Ofrece jugadores de la cartera para empezar a negociar con este club."
+                    action={
+                      <button
+                        onClick={() => setShowAddPlayer(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-sm rounded-lg hover:bg-primary/90"
+                      >
+                        <Plus className="w-4 h-4" /> Añadir jugador
+                      </button>
+                    }
+                  />
+                ) : (
+                  <EmptyState
+                    icon={<Users className="w-10 h-10" />}
+                    title={`No hay jugadores con estado "${STATUS_CONFIG[statusFilter].label}"`}
+                    subtitle="Prueba con otro filtro de estado o muestra todos."
+                    action={
+                      <button
+                        onClick={() => setStatusFilter('todos')}
+                        className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                      >
+                        Ver todos
+                      </button>
+                    }
+                  />
+                )
               )}
             </div>
           </div>
@@ -314,7 +365,7 @@ export function ClubDetail({
             <div className="flex justify-end">
               <button
                 onClick={() => setShowAddNeed(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-[hsl(220,72%,36%)] text-white text-sm rounded-lg hover:bg-[hsl(220,72%,30%)]"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-sm rounded-lg hover:bg-primary/90"
               >
                 <Plus className="w-4 h-4" /> Añadir necesidad
               </button>
@@ -327,10 +378,15 @@ export function ClubDetail({
                     <NeedForm
                       initial={need}
                       onSave={async (updated) => {
-                        const withMeta = { ...updated, createdAt: need.createdAt, addedBy: need.addedBy }
-                        const newNeeds = club.needs.map((n, idx) => idx === i ? withMeta : n)
-                        await onUpdateClub({ ...club, needs: newNeeds })
-                        setEditingNeed(null)
+                        try {
+                          const withMeta = { ...updated, createdAt: need.createdAt, addedBy: need.addedBy }
+                          const newNeeds = club.needs.map((n, idx) => idx === i ? withMeta : n)
+                          await onUpdateClub({ ...club, needs: newNeeds })
+                          setEditingNeed(null)
+                          showToast('Necesidad actualizada')
+                        } catch {
+                          showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+                        }
                       }}
                       onCancel={() => setEditingNeed(null)}
                     />
@@ -393,6 +449,9 @@ export function ClubDetail({
                                         setOfferingPlayerId(p.id)
                                         try {
                                           await onCreateNegotiation({ playerId: p.id, clubId: club.id, status: 'ofrecido' })
+                                          showToast(`${p.name.split(' ')[0]} ofrecido a ${club.name}`)
+                                        } catch {
+                                          showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
                                         } finally {
                                           setOfferingPlayerId(null)
                                         }
@@ -417,13 +476,12 @@ export function ClubDetail({
                         >
                           <Plus className="w-3 h-3" /> Ofrecer
                         </button>
-                        <button onClick={() => setEditingNeed({ index: i, need })} className="p-1 text-slate-300 hover:text-slate-500">
+                        <button onClick={() => setEditingNeed({ index: i, need })} aria-label="Editar necesidad" className="p-1 text-slate-300 hover:text-slate-500">
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={async () => {
-                            await onUpdateClub({ ...club, needs: club.needs.filter((_, idx) => idx !== i) })
-                          }}
+                          onClick={() => setConfirmDeleteNeedIdx(i)}
+                          aria-label="Eliminar necesidad"
                           className="p-1 text-slate-300 hover:text-red-400"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -434,17 +492,32 @@ export function ClubDetail({
                 </div>
               ))}
               {club.needs.length === 0 && !showAddNeed && (
-                <div className="text-center py-10 text-slate-400 text-sm">
-                  No hay necesidades registradas
-                </div>
+                <EmptyState
+                  icon={<AlertCircle className="w-10 h-10" />}
+                  title="No hay necesidades registradas"
+                  subtitle="Anota las posiciones que busca este club para cruzarlas con tu cartera."
+                  action={
+                    <button
+                      onClick={() => setShowAddNeed(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-sm rounded-lg hover:bg-primary/90"
+                    >
+                      <Plus className="w-4 h-4" /> Añadir necesidad
+                    </button>
+                  }
+                />
               )}
               {showAddNeed && (
                 <div className="bg-white rounded-xl border border-slate-200 p-4">
                   <NeedForm
                     onSave={async (need) => {
-                      const enriched = { ...need, createdAt: new Date().toISOString(), addedBy: currentProfile.avatar }
-                      await onUpdateClub({ ...club, needs: [...club.needs, enriched] })
-                      setShowAddNeed(false)
+                      try {
+                        const enriched = { ...need, createdAt: new Date().toISOString(), addedBy: currentProfile.avatar }
+                        await onUpdateClub({ ...club, needs: [...club.needs, enriched] })
+                        setShowAddNeed(false)
+                        showToast('Necesidad añadida')
+                      } catch {
+                        showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+                      }
                     }}
                     onCancel={() => setShowAddNeed(false)}
                   />
@@ -460,7 +533,7 @@ export function ClubDetail({
             <div className="bg-white rounded-xl border border-slate-200 p-4">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Información del club</span>
-                <button onClick={() => setEditingInfo(!editingInfo)} className="p-1 text-slate-400 hover:text-slate-600">
+                <button onClick={() => setEditingInfo(!editingInfo)} aria-label="Editar información del club" className="p-1 text-slate-400 hover:text-slate-600">
                   <Pencil className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -468,8 +541,13 @@ export function ClubDetail({
                 <InfoEditForm
                   club={club}
                   onSave={async (updates) => {
-                    await onUpdateClub({ ...club, ...updates })
-                    setEditingInfo(false)
+                    try {
+                      await onUpdateClub({ ...club, ...updates })
+                      setEditingInfo(false)
+                      showToast('Información del club guardada')
+                    } catch {
+                      showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+                    }
                   }}
                   onCancel={() => setEditingInfo(false)}
                 />
@@ -524,7 +602,19 @@ export function ClubDetail({
                     <p className="text-sm text-slate-600">¿Eliminar {club.name} y todas sus negociaciones?</p>
                     <div className="flex gap-2">
                       <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-1.5 text-sm border border-slate-200 rounded-lg text-slate-500">Cancelar</button>
-                      <button onClick={async () => { await onDeleteClub(club.id); onBack() }} className="flex-1 py-1.5 text-sm bg-red-500 text-white rounded-lg">Eliminar</button>
+                      <button
+                        onClick={async () => {
+                          try {
+                            await onDeleteClub(club.id)
+                            onBack()
+                          } catch {
+                            showToast('No se pudo eliminar. Inténtalo de nuevo.', 'error')
+                          }
+                        }}
+                        className="flex-1 py-1.5 text-sm bg-red-500 text-white rounded-lg"
+                      >
+                        Eliminar
+                      </button>
                     </div>
                   </div>
                 )}
@@ -545,9 +635,14 @@ export function ClubDetail({
           positionHint={addPlayerPositionHint}
           onClose={() => { setShowAddPlayer(false); setAddPlayerPositionHint(undefined) }}
           onSave={async (data) => {
-            await onCreateNegotiation(data)
-            setShowAddPlayer(false)
-            setAddPlayerPositionHint(undefined)
+            try {
+              await onCreateNegotiation(data)
+              setShowAddPlayer(false)
+              setAddPlayerPositionHint(undefined)
+              showToast('Jugador ofrecido al club')
+            } catch {
+              showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+            }
           }}
         />
       )}
@@ -557,15 +652,47 @@ export function ClubDetail({
           neg={editingNeg}
           onClose={() => setEditingNeg(null)}
           onSave={async (updates) => {
-            await onUpdateNegotiation({ ...editingNeg, ...updates })
-            setEditingNeg(null)
+            try {
+              await onUpdateNegotiation({ ...editingNeg, ...updates })
+              setEditingNeg(null)
+              showToast('Cambios guardados')
+            } catch {
+              showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+            }
           }}
           onDelete={async () => {
-            await onDeleteNegotiation(editingNeg.id)
-            setEditingNeg(null)
+            try {
+              await onDeleteNegotiation(editingNeg.id)
+              setEditingNeg(null)
+              showToast('Negociación eliminada')
+            } catch {
+              showToast('No se pudo eliminar. Inténtalo de nuevo.', 'error')
+            }
           }}
         />
       )}
+
+      {/* Confirmación de borrado de necesidad */}
+      <ConfirmModal
+        open={confirmDeleteNeedIdx !== null}
+        title={`¿Eliminar la necesidad${confirmDeleteNeedIdx !== null && club.needs[confirmDeleteNeedIdx] ? ` de ${club.needs[confirmDeleteNeedIdx].position}` : ''}?`}
+        message="Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        onConfirm={async () => {
+          if (confirmDeleteNeedIdx === null) return
+          try {
+            await onUpdateClub({ ...club, needs: club.needs.filter((_, idx) => idx !== confirmDeleteNeedIdx) })
+            showToast('Necesidad eliminada')
+          } catch {
+            showToast('No se pudo eliminar. Inténtalo de nuevo.', 'error')
+          } finally {
+            setConfirmDeleteNeedIdx(null)
+          }
+        }}
+        onCancel={() => setConfirmDeleteNeedIdx(null)}
+      />
+
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   )
 }
@@ -612,8 +739,10 @@ function AddPlayerToClubModal({ players, entries, existingPlayerIds, clubId, pos
       ]
     : baseAvailable
 
+  useEscapeKey(onClose)
+
   async function handleSave() {
-    if (!selected) return
+    if (!selected || saving) return
     setSaving(true)
     try {
       await onSave({ playerId: selected.id, clubId, status, aisManager: aisManager || undefined, notes: notes || undefined })
@@ -630,7 +759,7 @@ function AddPlayerToClubModal({ players, entries, existingPlayerIds, clubId, pos
               <p className="text-xs text-blue-600 mt-0.5">Buscando: <span className="font-semibold">{positionHint}</span></p>
             )}
           </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-slate-100"><X className="w-4 h-4 text-slate-400" /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="p-1 rounded hover:bg-slate-100"><X className="w-4 h-4 text-slate-400" /></button>
         </div>
         <div className="p-4 space-y-3">
           {!selected ? (
@@ -674,7 +803,7 @@ function AddPlayerToClubModal({ players, entries, existingPlayerIds, clubId, pos
                   {selected.name.split(' ').map(w => w[0]).join('').slice(0, 2)}
                 </div>
                 <span className="font-medium text-slate-800 text-sm">{selected.name}</span>
-                <button onClick={() => setSelected(null)} className="ml-auto text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+                <button onClick={() => setSelected(null)} aria-label="Quitar selección" className="ml-auto text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
               </div>
               <div>
                 <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1.5">Estado</label>
@@ -695,8 +824,8 @@ function AddPlayerToClubModal({ players, entries, existingPlayerIds, clubId, pos
               <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Notas (opcional)"
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none" />
               <button onClick={handleSave} disabled={saving}
-                className="w-full py-2 bg-[hsl(220,72%,36%)] text-white text-sm rounded-lg disabled:opacity-60">
-                {saving ? 'Guardando…' : 'Añadir'}
+                className="w-full py-2 bg-primary text-white text-sm rounded-lg hover:bg-primary/90 disabled:opacity-60">
+                {saving ? <span className="flex items-center justify-center gap-2"><BtnSpinner /> Guardando…</span> : 'Añadir'}
               </button>
             </>
           )}
@@ -718,13 +847,16 @@ function EditNegModal({ neg, onClose, onSave, onDelete }: {
   const [aisManager, setAisManager] = useState(neg.aisManager ?? '')
   const [notes, setNotes] = useState(neg.notes ?? '')
   const [saving, setSaving] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+
+  useEscapeKey(onClose, !confirmingDelete)
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
       <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
           <h2 className="font-semibold text-slate-800 text-sm">Editar negociación</h2>
-          <button onClick={onClose} className="p-1 rounded hover:bg-slate-100"><X className="w-4 h-4 text-slate-400" /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="p-1 rounded hover:bg-slate-100"><X className="w-4 h-4 text-slate-400" /></button>
         </div>
         <div className="p-4 space-y-3">
           <div>
@@ -746,20 +878,34 @@ function EditNegModal({ neg, onClose, onSave, onDelete }: {
           <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Notas"
             className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none" />
           <div className="flex gap-2">
-            <button onClick={async () => { if (!confirm('¿Eliminar?')) return; await onDelete() }}
+            <button onClick={() => setConfirmingDelete(true)}
+              aria-label="Eliminar negociación"
               className="px-3 py-2 text-sm border border-red-200 text-red-500 rounded-lg hover:bg-red-50">
               <Trash2 className="w-4 h-4" />
             </button>
             <button onClick={onClose} className="flex-1 py-2 text-sm border border-slate-200 rounded-lg text-slate-500">Cancelar</button>
             <button
-              onClick={async () => { setSaving(true); try { await onSave({ status, aisManager: aisManager || undefined, notes: notes || undefined }) } finally { setSaving(false) } }}
+              onClick={async () => { if (saving) return; setSaving(true); try { await onSave({ status, aisManager: aisManager || undefined, notes: notes || undefined }) } finally { setSaving(false) } }}
               disabled={saving}
-              className="flex-1 py-2 text-sm bg-[hsl(220,72%,36%)] text-white rounded-lg disabled:opacity-60 flex items-center justify-center gap-1"
+              className="flex-1 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-60 flex items-center justify-center gap-1"
             >
-              {saving ? '…' : <><Check className="w-4 h-4" /> Guardar</>}
+              {saving ? <><BtnSpinner /> Guardando…</> : <><Check className="w-4 h-4" /> Guardar</>}
             </button>
           </div>
         </div>
+      </div>
+      <div onClick={e => e.stopPropagation()}>
+        <ConfirmModal
+          open={confirmingDelete}
+          title="¿Eliminar esta negociación?"
+          message="Esta acción no se puede deshacer."
+          confirmLabel="Eliminar"
+          onConfirm={async () => {
+            await onDelete()
+            setConfirmingDelete(false)
+          }}
+          onCancel={() => setConfirmingDelete(false)}
+        />
       </div>
     </div>
   )
@@ -788,7 +934,7 @@ function NeedForm({ initial, onSave, onCancel }: {
   const [saving, setSaving] = useState(false)
 
   async function handleSave() {
-    if (!position.trim()) return
+    if (!position.trim() || saving) return
     setSaving(true)
     try {
       await onSave({
@@ -813,7 +959,7 @@ function NeedForm({ initial, onSave, onCancel }: {
               onClick={() => setPosition(pos)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
                 position === pos
-                  ? 'bg-[hsl(220,72%,36%)] text-white border-[hsl(220,72%,36%)]'
+                  ? 'bg-primary text-white border-primary'
                   : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
               }`}
             >
@@ -849,8 +995,8 @@ function NeedForm({ initial, onSave, onCancel }: {
       <div className="flex gap-2">
         <button onClick={onCancel} className="flex-1 py-2 text-sm border border-slate-200 rounded-lg text-slate-500">Cancelar</button>
         <button onClick={handleSave} disabled={!position.trim() || saving}
-          className="flex-1 py-2 text-sm bg-[hsl(220,72%,36%)] text-white rounded-lg disabled:opacity-60">
-          {saving ? '…' : 'Guardar'}
+          className="flex-1 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-60">
+          {saving ? <span className="flex items-center justify-center gap-2"><BtnSpinner /> Guardando…</span> : 'Guardar'}
         </button>
       </div>
     </div>
@@ -904,12 +1050,29 @@ function InfoEditForm({ club, onSave, onCancel }: {
   const [notes, setNotes] = useState(club.notes ?? '')
   const [isPriority, setIsPriority] = useState(club.isPriority)
   const [saving, setSaving] = useState(false)
+  const [nameError, setNameError] = useState('')
+
+  async function handleSave() {
+    if (saving) return
+    if (!isValidName(name)) {
+      setNameError('Introduce un nombre válido (mínimo 2 caracteres).')
+      return
+    }
+    setNameError('')
+    setSaving(true)
+    try {
+      await onSave({ name: name.trim(), country, league: league || undefined, contactPerson: contactPerson || undefined, aisManager: aisManager || undefined, notes: notes || undefined, isPriority })
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div className="space-y-3">
       <div>
         <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Nombre</label>
-        <input value={name} onChange={e => setName(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+        <input value={name} onChange={e => { setName(e.target.value); if (nameError) setNameError('') }} className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 ${nameError ? 'border-red-300' : 'border-slate-200'}`} />
+        {nameError && <p className="text-xs text-red-600 mt-1">{nameError}</p>}
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
@@ -968,15 +1131,11 @@ function InfoEditForm({ club, onSave, onCancel }: {
       <div className="flex gap-2">
         <button onClick={onCancel} className="flex-1 py-2 text-sm border border-slate-200 rounded-lg text-slate-500">Cancelar</button>
         <button
-          onClick={async () => {
-            setSaving(true)
-            try { await onSave({ name, country, league: league || undefined, contactPerson: contactPerson || undefined, aisManager: aisManager || undefined, notes: notes || undefined, isPriority }) }
-            finally { setSaving(false) }
-          }}
+          onClick={handleSave}
           disabled={saving}
-          className="flex-1 py-2 text-sm bg-[hsl(220,72%,36%)] text-white rounded-lg disabled:opacity-60"
+          className="flex-1 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-60"
         >
-          {saving ? '…' : 'Guardar'}
+          {saving ? <span className="flex items-center justify-center gap-2"><BtnSpinner /> Guardando…</span> : 'Guardar'}
         </button>
       </div>
     </div>

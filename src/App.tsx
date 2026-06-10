@@ -28,7 +28,7 @@ export interface AppNotification {
 function Spinner() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
-      <div className="w-8 h-8 border-4 border-slate-200 border-t-[hsl(220,72%,26%)] rounded-full animate-spin" />
+      <div className="w-8 h-8 border-4 border-slate-200 border-t-primary rounded-full animate-spin" />
     </div>
   )
 }
@@ -229,7 +229,7 @@ export default function App() {
         <p className="text-slate-500 text-sm max-w-md">{dataError}</p>
         <button
           onClick={() => setReloadKey(k => k + 1)}
-          className="px-4 py-2 rounded-lg text-white text-sm font-medium bg-[hsl(220,72%,26%)] hover:bg-[hsl(220,72%,32%)]"
+          className="px-4 py-2 rounded-lg text-white text-sm font-medium bg-primary hover:bg-primary/90"
         >
           Reintentar
         </button>

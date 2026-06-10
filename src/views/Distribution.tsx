@@ -8,6 +8,17 @@ import {
 import logoImg from '../assets/logo.jpeg'
 import type { Player, Club, ClubNeed, DistributionEntry, ClubNegotiation, ClubNegotiationUpdate } from '../types'
 import type { Profile } from '../contexts/AuthContext'
+import { ConfirmModal } from '../components/ConfirmModal'
+import { EmptyState } from '../components/EmptyState'
+import { ToastStack } from '../components/ToastStack'
+import { useToast } from '../hooks/useToast'
+import { useEscapeKey } from '../hooks/useEscapeKey'
+import { isValidName, isValidDate } from '../lib/validate'
+
+/** Spinner pequeño para botones de guardado */
+function BtnSpinner() {
+  return <span className="inline-block w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin align-middle" />
+}
 
 // ── constants ─────────────────────────────────────────────────
 
@@ -277,6 +288,11 @@ export function Distribution({
   useEffect(() => { sessionStorage.setItem('nav_dist_tab', tab) }, [tab])
   const season = CURRENT_SEASON
   const [search, setSearch] = useState('')
+
+  // toasts + confirmaciones
+  const { toasts, showToast, dismissToast } = useToast()
+  const [confirmDeleteEntryId, setConfirmDeleteEntryId] = useState<string | null>(null)
+  const [confirmDeleteClubId, setConfirmDeleteClubId] = useState<string | null>(null)
 
   // panel state
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null)
@@ -551,7 +567,7 @@ export function Distribution({
             {currentProfile.is_admin && onAdmin && (
               <button onClick={onAdmin} className="p-1 sm:p-1.5 text-slate-400 hover:text-slate-600 transition-colors text-xs hidden sm:block">Admin</button>
             )}
-            <button onClick={onLogout} className="text-slate-400 hover:text-slate-600 transition-colors p-1">
+            <button onClick={onLogout} aria-label="Cerrar sesión" className="text-slate-400 hover:text-slate-600 transition-colors p-1">
               <LogOut className="w-4 h-4" />
             </button>
           </div>
@@ -565,7 +581,7 @@ export function Distribution({
           >
             Mantenimiento
           </button>
-          <button className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 border-[hsl(220,72%,26%)] text-[hsl(220,72%,26%)] transition-colors">
+          <button className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 border-primary text-primary transition-colors">
             <TrendingUp className="w-3.5 h-3.5" />
             Distribución
           </button>
@@ -586,7 +602,7 @@ export function Distribution({
               onClick={() => switchTab(t)}
               className={`flex-shrink-0 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors ${
                 tab === t
-                  ? 'border-[hsl(220,72%,36%)] text-[hsl(220,72%,36%)]'
+                  ? 'border-primary text-primary'
                   : 'border-transparent text-slate-500 hover:text-slate-700'
               }`}
             >
@@ -603,7 +619,7 @@ export function Distribution({
                   Pipeline
                   {myActiveNegCount > 0 && (
                     <span className={`text-[11px] px-1.5 py-0.5 rounded-full font-bold leading-none ${
-                      tab === t ? 'bg-[hsl(220,72%,36%)] text-white' : 'bg-slate-200 text-slate-600'
+                      tab === t ? 'bg-primary text-white' : 'bg-slate-200 text-slate-600'
                     }`}>{myActiveNegCount}</span>
                   )}
                 </span>
@@ -648,7 +664,7 @@ export function Distribution({
                     onClick={() => setActivityFilter(!activityFilter)}
                     className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
                       activityFilter
-                        ? 'bg-[hsl(220,72%,36%)] text-white border-[hsl(220,72%,36%)]'
+                        ? 'bg-primary text-white border-primary'
                         : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
                     }`}
                   >
@@ -670,7 +686,7 @@ export function Distribution({
                 </div>
                 <button
                   onClick={() => setShowAddPlayer(true)}
-                  className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-[hsl(220,72%,36%)] text-white text-sm rounded-lg hover:bg-[hsl(220,72%,30%)] transition-colors"
+                  className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-sm rounded-lg hover:bg-primary/90 transition-colors"
                 >
                   <Plus className="w-4 h-4" /> Añadir jugador
                 </button>
@@ -776,21 +792,40 @@ export function Distribution({
               </div>
 
               {filteredEntries.length === 0 && (
-                <div className="text-center py-12 text-slate-400 text-sm space-y-1">
-                  <p className="font-medium text-slate-500">Sin resultados</p>
-                  {(search || posFilters.length > 0 || yearFilters.length > 0 || activityFilter) ? (
-                    <p className="text-xs text-slate-400">
-                      {[
-                        search && `búsqueda "${search}"`,
-                        posFilters.length > 0 && `posición: ${posFilters.join(', ')}`,
-                        yearFilters.length > 0 && `año: ${yearFilters.join(', ')}`,
-                        activityFilter && 'con actividad',
-                      ].filter(Boolean).join(' · ')}
-                    </p>
-                  ) : (
-                    <p className="text-xs">No hay jugadores en distribución para esta temporada</p>
-                  )}
-                </div>
+                (search || posFilters.length > 0 || yearFilters.length > 0 || activityFilter) ? (
+                  <EmptyState
+                    icon={<Search className="w-10 h-10" />}
+                    title="Sin resultados"
+                    subtitle={[
+                      search && `búsqueda "${search}"`,
+                      posFilters.length > 0 && `posición: ${posFilters.join(', ')}`,
+                      yearFilters.length > 0 && `año: ${yearFilters.join(', ')}`,
+                      activityFilter && 'con actividad',
+                    ].filter(Boolean).join(' · ')}
+                    action={
+                      <button
+                        onClick={() => { setSearch(''); setPosFilters([]); setYearFilters([]); setActivityFilter(false) }}
+                        className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                      >
+                        Limpiar filtros
+                      </button>
+                    }
+                  />
+                ) : (
+                  <EmptyState
+                    icon={<Users className="w-10 h-10" />}
+                    title="No hay jugadores en distribución"
+                    subtitle="Añade jugadores de la cartera para empezar a distribuirlos esta temporada."
+                    action={
+                      <button
+                        onClick={() => setShowAddPlayer(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-sm rounded-lg hover:bg-primary/90 transition-colors"
+                      >
+                        <Plus className="w-4 h-4" /> Añadir jugador
+                      </button>
+                    }
+                  />
+                )
               )}
             </div>
           )}
@@ -823,7 +858,7 @@ export function Distribution({
                 </div>
                 <button
                   onClick={() => setShowAddClub(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[hsl(220,72%,36%)] text-white text-sm rounded-lg hover:bg-[hsl(220,72%,30%)] transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-sm rounded-lg hover:bg-primary/90 transition-colors"
                 >
                   <Plus className="w-4 h-4" /> Añadir club
                 </button>
@@ -858,7 +893,7 @@ export function Distribution({
                     onClick={() => setConfDropdownOpen(o => !o)}
                     className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
                       confederationFilter.length > 0
-                        ? 'bg-[hsl(220,72%,36%)] text-white border-[hsl(220,72%,36%)]'
+                        ? 'bg-primary text-white border-primary'
                         : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
                     }`}
                   >
@@ -877,9 +912,9 @@ export function Distribution({
                             const sel = confederationFilter.includes(conf)
                             return (
                               <button key={conf} onClick={() => setConfederationFilter(prev => sel ? prev.filter(c => c !== conf) : [...prev, conf])}
-                                className={`w-full text-left px-2 py-1.5 rounded-lg text-xs flex items-center gap-2 ${sel ? 'bg-blue-50 text-[hsl(220,72%,36%)]' : 'hover:bg-slate-50 text-slate-700'}`}
+                                className={`w-full text-left px-2 py-1.5 rounded-lg text-xs flex items-center gap-2 ${sel ? 'bg-blue-50 text-primary' : 'hover:bg-slate-50 text-slate-700'}`}
                               >
-                                <div className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center ${sel ? 'bg-[hsl(220,72%,36%)] border-[hsl(220,72%,36%)]' : 'border-slate-300'}`}>
+                                <div className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center ${sel ? 'bg-primary border-primary' : 'border-slate-300'}`}>
                                   {sel && <Check className="w-2 h-2 text-white" />}
                                 </div>
                                 {CONFEDERATION_LABELS[conf]}
@@ -902,7 +937,7 @@ export function Distribution({
                       onClick={() => setLeagueDropdownOpen(o => !o)}
                       className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
                         leagueFilter.length > 0
-                          ? 'bg-[hsl(220,72%,36%)] text-white border-[hsl(220,72%,36%)]'
+                          ? 'bg-primary text-white border-primary'
                           : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
                       }`}
                     >
@@ -913,9 +948,9 @@ export function Distribution({
                     {leagueDropdownOpen && (
                       <>
                         <div className="fixed inset-0 z-40" onClick={() => setLeagueDropdownOpen(false)} />
-                        <div className="absolute z-50 mt-1 w-80 bg-white border border-slate-200 rounded-xl shadow-xl max-h-80 overflow-y-auto">
+                        <div className="absolute z-50 mt-1 w-80 max-w-[calc(100vw-2rem)] bg-white border border-slate-200 rounded-xl shadow-xl max-h-[50vh] overflow-y-auto">
                           <div className="p-2 border-b border-slate-100">
-                            <button onClick={() => { setLeagueFilter([]); setLeagueDropdownOpen(false) }} className={`w-full text-left px-3 py-1.5 rounded-lg text-sm transition-colors ${leagueFilter.length === 0 ? 'bg-[hsl(220,72%,36%)] text-white' : 'hover:bg-slate-50 text-slate-700'}`}>
+                            <button onClick={() => { setLeagueFilter([]); setLeagueDropdownOpen(false) }} className={`w-full text-left px-3 py-1.5 rounded-lg text-sm transition-colors ${leagueFilter.length === 0 ? 'bg-primary text-white' : 'hover:bg-slate-50 text-slate-700'}`}>
                               Todas las ligas ({clubs.length})
                             </button>
                           </div>
@@ -926,9 +961,9 @@ export function Distribution({
                               return (
                                 <button key={league}
                                   onClick={() => setLeagueFilter(prev => prev.includes(league) ? prev.filter(l => l !== league) : [...prev, league])}
-                                  className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors ${selected ? 'bg-blue-50 text-[hsl(220,72%,36%)]' : 'hover:bg-slate-50 text-slate-700'}`}
+                                  className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors ${selected ? 'bg-blue-50 text-primary' : 'hover:bg-slate-50 text-slate-700'}`}
                                 >
-                                  <div className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${selected ? 'bg-[hsl(220,72%,36%)] border-[hsl(220,72%,36%)]' : 'border-slate-300'}`}>
+                                  <div className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${selected ? 'bg-primary border-primary' : 'border-slate-300'}`}>
                                     {selected && <Check className="w-2.5 h-2.5 text-white" />}
                                   </div>
                                   <span className={`text-[11px] font-bold px-1 py-0.5 rounded ${tierCfg.bg} ${tierCfg.text} flex-shrink-0`}>{tier}</span>
@@ -956,7 +991,7 @@ export function Distribution({
                     onClick={() => setCountryDropdownOpen(o => !o)}
                     className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
                       countryFilter.length > 0
-                        ? 'bg-[hsl(220,72%,36%)] text-white border-[hsl(220,72%,36%)]'
+                        ? 'bg-primary text-white border-primary'
                         : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
                     }`}
                   >
@@ -967,7 +1002,7 @@ export function Distribution({
                   {countryDropdownOpen && (
                     <>
                       <div className="fixed inset-0 z-40" onClick={() => setCountryDropdownOpen(false)} />
-                      <div className="absolute z-50 mt-1 w-56 bg-white border border-slate-200 rounded-xl shadow-xl max-h-64 overflow-y-auto">
+                      <div className="absolute z-50 mt-1 w-56 max-w-[calc(100vw-2rem)] bg-white border border-slate-200 rounded-xl shadow-xl max-h-[50vh] overflow-y-auto">
                         <div className="p-1.5 border-b border-slate-100">
                           <button onClick={() => { setCountryFilter([]); setCountryDropdownOpen(false) }} className="w-full text-left px-2 py-1.5 rounded-lg text-xs hover:bg-slate-50 text-slate-600">Todos los países</button>
                         </div>
@@ -976,9 +1011,9 @@ export function Distribution({
                             const sel = countryFilter.includes(country)
                             return (
                               <button key={country} onClick={() => setCountryFilter(prev => sel ? prev.filter(c => c !== country) : [...prev, country])}
-                                className={`w-full text-left px-2 py-1.5 rounded-lg text-xs flex items-center gap-2 ${sel ? 'bg-blue-50 text-[hsl(220,72%,36%)]' : 'hover:bg-slate-50 text-slate-700'}`}
+                                className={`w-full text-left px-2 py-1.5 rounded-lg text-xs flex items-center gap-2 ${sel ? 'bg-blue-50 text-primary' : 'hover:bg-slate-50 text-slate-700'}`}
                               >
-                                <div className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center ${sel ? 'bg-[hsl(220,72%,36%)] border-[hsl(220,72%,36%)]' : 'border-slate-300'}`}>
+                                <div className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center ${sel ? 'bg-primary border-primary' : 'border-slate-300'}`}>
                                   {sel && <Check className="w-2 h-2 text-white" />}
                                 </div>
                                 <span className="flex-1 truncate">{country}</span>
@@ -1054,7 +1089,7 @@ export function Distribution({
                         else { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(null) }
                       }}
                       onOffer={() => setShowAddNeg({ clubId: club.id })}
-                      onTogglePriority={() => onUpdateClub({ ...club, isPriority: !club.isPriority })}
+                      onTogglePriority={() => onUpdateClub({ ...club, isPriority: !club.isPriority }).catch(() => showToast('No se pudo guardar. Inténtalo de nuevo.', 'error'))}
                     />
                   ))}
                 </div>
@@ -1084,7 +1119,7 @@ export function Distribution({
                                 else { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(null) }
                               }}
                               onOffer={() => setShowAddNeg({ clubId: club.id })}
-                              onTogglePriority={() => onUpdateClub({ ...club, isPriority: !club.isPriority })}
+                              onTogglePriority={() => onUpdateClub({ ...club, isPriority: !club.isPriority }).catch(() => showToast('No se pudo guardar. Inténtalo de nuevo.', 'error'))}
                             />
                           ))}
                         </div>
@@ -1119,7 +1154,7 @@ export function Distribution({
                                 else { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(null) }
                               }}
                               onOffer={() => setShowAddNeg({ clubId: club.id })}
-                              onTogglePriority={() => onUpdateClub({ ...club, isPriority: !club.isPriority })}
+                              onTogglePriority={() => onUpdateClub({ ...club, isPriority: !club.isPriority }).catch(() => showToast('No se pudo guardar. Inténtalo de nuevo.', 'error'))}
                             />
                           ))}
                         </div>
@@ -1130,9 +1165,35 @@ export function Distribution({
               )}
 
               {filteredClubs.length === 0 && (
-                <div className="text-center py-12 text-slate-400 text-sm">
-                  {(search || leagueFilter.length > 0 || countryFilter.length > 0 || tierFilter.length > 0 || confederationFilter.length > 0 || priorityOnly || hasNeedsOnly || hasContactOnly) ? 'Sin resultados con estos filtros' : 'No hay clubes. Añade uno.'}
-                </div>
+                (search || leagueFilter.length > 0 || countryFilter.length > 0 || tierFilter.length > 0 || confederationFilter.length > 0 || priorityOnly || hasNeedsOnly || hasContactOnly) ? (
+                  <EmptyState
+                    icon={<Search className="w-10 h-10" />}
+                    title="Sin resultados con estos filtros"
+                    subtitle="Prueba a quitar algún filtro o cambia la búsqueda."
+                    action={
+                      <button
+                        onClick={() => { setSearch(''); setLeagueFilter([]); setCountryFilter([]); setTierFilter([]); setConfederationFilter([]); setPriorityOnly(false); setHasNeedsOnly(false); setHasContactOnly(false) }}
+                        className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                      >
+                        Limpiar filtros
+                      </button>
+                    }
+                  />
+                ) : (
+                  <EmptyState
+                    icon={<Building2 className="w-10 h-10" />}
+                    title="No hay clubes todavía"
+                    subtitle="Añade clubes para poder ofrecerles jugadores y registrar sus solicitudes."
+                    action={
+                      <button
+                        onClick={() => setShowAddClub(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-sm rounded-lg hover:bg-primary/90 transition-colors"
+                      >
+                        <Plus className="w-4 h-4" /> Añadir club
+                      </button>
+                    }
+                  />
+                )
               )}
             </div>
           )}
@@ -1164,7 +1225,7 @@ export function Distribution({
                 </div>
                 <button
                   onClick={() => setShowAddNeed(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[hsl(220,72%,36%)] text-white text-sm rounded-lg hover:bg-[hsl(220,72%,30%)] transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-sm rounded-lg hover:bg-primary/90 transition-colors"
                 >
                   <Plus className="w-4 h-4" /> Añadir solicitud
                 </button>
@@ -1251,7 +1312,7 @@ export function Distribution({
                   <button
                     onClick={() => setPositionFilter('')}
                     className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                      !positionFilter ? 'bg-[hsl(220,72%,36%)] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      !positionFilter ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                     }`}
                   >
                     Todas las posiciones
@@ -1261,7 +1322,7 @@ export function Distribution({
                       key={pos}
                       onClick={() => setPositionFilter(positionFilter === pos ? '' : pos)}
                       className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                        positionFilter === pos ? 'bg-[hsl(220,72%,36%)] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        positionFilter === pos ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                       }`}
                     >
                       {pos}
@@ -1271,11 +1332,27 @@ export function Distribution({
               </div>
 
               {clubNeeds.length === 0 ? (
-                <div className="text-center py-12 text-slate-400 text-sm">
-                  {clubs.every(c => c.needs.length === 0)
-                    ? 'Ningún club tiene solicitudes registradas aún'
-                    : 'Sin resultados para este filtro'}
-                </div>
+                clubs.every(c => c.needs.length === 0) ? (
+                  <EmptyState
+                    icon={<AlertCircle className="w-10 h-10" />}
+                    title="Ningún club tiene solicitudes registradas aún"
+                    subtitle="Registra las posiciones que buscan los clubes para cruzarlas con tu cartera."
+                    action={
+                      <button
+                        onClick={() => setShowAddNeed(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-sm rounded-lg hover:bg-primary/90 transition-colors"
+                      >
+                        <Plus className="w-4 h-4" /> Añadir solicitud
+                      </button>
+                    }
+                  />
+                ) : (
+                  <EmptyState
+                    icon={<Search className="w-10 h-10" />}
+                    title="Sin resultados para este filtro"
+                    subtitle="Prueba a quitar algún filtro o cambia la búsqueda."
+                  />
+                )
               ) : (
                 <>
                 {/* ── MOBILE CARD VIEW (hidden sm+) ── */}
@@ -1382,10 +1459,15 @@ export function Distribution({
                                 <NeedFormInline
                                   initial={need}
                                   onSave={async (updated) => {
-                                    const withMeta = { ...updated, createdAt: need.createdAt, addedBy: need.addedBy }
-                                    const newNeeds = club.needs.map((n, idx) => idx === needIndex ? withMeta : n)
-                                    await onUpdateClub({ ...club, needs: newNeeds })
-                                    setEditingNeed(null)
+                                    try {
+                                      const withMeta = { ...updated, createdAt: need.createdAt, addedBy: need.addedBy }
+                                      const newNeeds = club.needs.map((n, idx) => idx === needIndex ? withMeta : n)
+                                      await onUpdateClub({ ...club, needs: newNeeds })
+                                      setEditingNeed(null)
+                                      showToast('Solicitud actualizada')
+                                    } catch {
+                                      showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+                                    }
                                   }}
                                   onCancel={() => setEditingNeed(null)}
                                 />
@@ -1451,6 +1533,7 @@ export function Distribution({
                                   <div className="flex items-center gap-0.5 justify-end">
                                     <button
                                       onClick={e => { e.stopPropagation(); setEditingNeed({ clubId: club.id, index: needIndex }) }}
+                                      aria-label="Editar solicitud"
                                       className="p-1 text-slate-300 hover:text-slate-500 transition-colors"
                                     >
                                       <Pencil className="w-3.5 h-3.5" />
@@ -1524,7 +1607,7 @@ export function Distribution({
                     onClick={() => { setPipelineMyOnly(v => !v); setPipelineGestorFilter('') }}
                     className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors ${
                       pipelineMyOnly
-                        ? 'bg-[hsl(220,72%,36%)] text-white border-[hsl(220,72%,36%)]'
+                        ? 'bg-primary text-white border-primary'
                         : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
                     }`}
                   >
@@ -1820,7 +1903,7 @@ export function Distribution({
                   <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
                     muted
                       ? 'bg-slate-200 text-slate-400'
-                      : 'bg-[hsl(220,72%,26%)] text-white'
+                      : 'bg-primary text-white'
                   }`}>
                     {avatar === '__sin__' ? '?' : avatar}
                   </div>
@@ -1841,9 +1924,11 @@ export function Distribution({
             return (
               <div className="max-w-5xl mx-auto">
                 {managerProfiles.length === 0 && !grouped['__sin__'] && (
-                  <div className="text-center py-12 text-slate-400 text-sm">
-                    No hay jugadores con encargado asignado
-                  </div>
+                  <EmptyState
+                    icon={<Users className="w-10 h-10" />}
+                    title="No hay jugadores con encargado asignado"
+                    subtitle="Asigna un encargado a cada jugador desde la pestaña Jugadores."
+                  />
                 )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
@@ -1870,7 +1955,7 @@ export function Distribution({
               return (
                 <div className="h-full flex flex-col">
                   <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 flex-shrink-0">
-                    <button onClick={closePanel} className="p-1 rounded hover:bg-slate-100 text-slate-400">
+                    <button onClick={closePanel} aria-label="Cerrar panel" className="p-1 rounded hover:bg-slate-100 text-slate-400">
                       <X className="w-4 h-4" />
                     </button>
                     <Avatar name={player.name} photo={player.photo} size="md" />
@@ -1906,17 +1991,15 @@ export function Distribution({
                           onClick={() => setEditingEntry(selectedEntry)}
                           className="p-1 text-slate-400 hover:text-slate-600 rounded hover:bg-slate-100"
                           title="Editar"
+                          aria-label="Editar entrada de distribución"
                         >
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={async () => {
-                            if (!confirm('¿Quitar este jugador de distribución?')) return
-                            await onDeleteEntry(selectedEntry.id)
-                            closePanel()
-                          }}
+                          onClick={() => setConfirmDeleteEntryId(selectedEntry.id)}
                           className="p-1 text-red-400 hover:text-red-600 rounded hover:bg-red-50"
                           title="Quitar de distribución"
+                          aria-label="Quitar de distribución"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -1980,6 +2063,7 @@ export function Distribution({
                             </div>
                             <button
                               onClick={() => setEditingNeg(neg)}
+                              aria-label="Editar negociación"
                               className="ml-auto p-1 text-slate-300 hover:text-slate-500 flex-shrink-0"
                             >
                               <Pencil className="w-3 h-3" />
@@ -2005,11 +2089,7 @@ export function Distribution({
                       Cerrar
                     </button>
                     <button
-                      onClick={async () => {
-                        if (!confirm('¿Quitar este jugador de distribución?')) return
-                        await onDeleteEntry(selectedEntry.id)
-                        closePanel()
-                      }}
+                      onClick={() => setConfirmDeleteEntryId(selectedEntry.id)}
                       className="text-xs text-red-500 hover:text-red-600 flex items-center gap-1"
                     >
                       <Trash2 className="w-3.5 h-3.5" /> Quitar de distribución
@@ -2043,7 +2123,7 @@ export function Distribution({
                 <div className="h-full flex flex-col">
                   {/* Header */}
                   <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 flex-shrink-0">
-                    <button onClick={closePanel} className="p-1 rounded hover:bg-slate-100 text-slate-400">
+                    <button onClick={closePanel} aria-label="Cerrar panel" className="p-1 rounded hover:bg-slate-100 text-slate-400">
                       <X className="w-4 h-4" />
                     </button>
                     <div className="flex-1 min-w-0">
@@ -2109,7 +2189,7 @@ export function Distribution({
                                 </div>
                                 <span className={`text-xs px-2 py-0.5 rounded-full inline-block mt-0.5 ${scfg.color}`}>{scfg.label}</span>
                               </div>
-                              <button onClick={() => setEditingNeg(neg)} className="p-1 text-slate-300 hover:text-slate-500 flex-shrink-0">
+                              <button onClick={() => setEditingNeg(neg)} aria-label="Editar negociación" className="p-1 text-slate-300 hover:text-slate-500 flex-shrink-0">
                                 <Pencil className="w-3 h-3" />
                               </button>
                             </div>
@@ -2147,8 +2227,9 @@ export function Distribution({
                                   onClick={async () => {
                                     try {
                                       await onCreateNegotiation({ playerId: p.id, clubId: club.id, needPosition: need.position, status: 'ofrecido' })
-                                    } catch (e) {
-                                      console.error('Error al ofrecer jugador:', e)
+                                      showToast(`${p.name} ofrecido a ${club.name}`)
+                                    } catch {
+                                      showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
                                     }
                                   }}
                                   className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium px-2 py-1 rounded hover:bg-blue-50 transition-colors flex-shrink-0"
@@ -2191,7 +2272,7 @@ export function Distribution({
               return (
                 <div className="h-full flex flex-col">
                   <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 flex-shrink-0">
-                    <button onClick={closePanel} className="p-1 rounded hover:bg-slate-100 text-slate-400">
+                    <button onClick={closePanel} aria-label="Cerrar panel" className="p-1 rounded hover:bg-slate-100 text-slate-400">
                       <X className="w-4 h-4" />
                     </button>
                     <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
@@ -2201,7 +2282,7 @@ export function Distribution({
                       <div className="font-semibold text-slate-800 text-sm">{selectedClub.name}</div>
                       <div className="text-xs text-slate-500">{selectedClub.league}</div>
                     </div>
-                    <button onClick={() => setEditingClub(selectedClub)} className="p-1 text-slate-400 hover:text-slate-600">
+                    <button onClick={() => setEditingClub(selectedClub)} aria-label="Editar club" className="p-1 text-slate-400 hover:text-slate-600">
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -2245,8 +2326,14 @@ export function Distribution({
                             <button
                               className="ml-auto p-0.5 text-slate-300 hover:text-red-400 flex-shrink-0"
                               title="Eliminar solicitud"
+                              aria-label="Eliminar solicitud"
                               onClick={async () => {
-                                await onUpdateClub({ ...selectedClub, needs: selectedClub.needs.filter((_, idx) => idx !== i) })
+                                try {
+                                  await onUpdateClub({ ...selectedClub, needs: selectedClub.needs.filter((_, idx) => idx !== i) })
+                                  showToast('Solicitud eliminada')
+                                } catch {
+                                  showToast('No se pudo eliminar. Inténtalo de nuevo.', 'error')
+                                }
                               }}
                             >
                               <X className="w-3 h-3" />
@@ -2309,6 +2396,7 @@ export function Distribution({
                             </div>
                             <button
                               onClick={() => setEditingNeg(neg)}
+                              aria-label="Editar negociación"
                               className="p-1 text-slate-300 hover:text-slate-500 flex-shrink-0"
                             >
                               <Pencil className="w-3 h-3" />
@@ -2329,11 +2417,7 @@ export function Distribution({
                   {currentProfile.is_admin && (
                     <div className="px-4 py-3 border-t border-slate-100 flex-shrink-0">
                       <button
-                        onClick={async () => {
-                          if (!confirm('¿Eliminar este club?')) return
-                          await onDeleteClub(selectedClub.id)
-                          closePanel()
-                        }}
+                        onClick={() => setConfirmDeleteClubId(selectedClub.id)}
                         className="text-xs text-red-500 hover:text-red-600 flex items-center gap-1"
                       >
                         <Trash2 className="w-3.5 h-3.5" /> Eliminar club
@@ -2363,9 +2447,14 @@ export function Distribution({
           onClose={() => setShowAddPlayer(false)}
           onCreatePlayer={onCreatePlayer}
           onSave={async (data) => {
-            const saved = await onCreateEntry(data)
-            setSelectedEntryId(saved.id)
-            setShowAddPlayer(false)
+            try {
+              const saved = await onCreateEntry(data)
+              setSelectedEntryId(saved.id)
+              setShowAddPlayer(false)
+              showToast('Jugador añadido a distribución')
+            } catch {
+              showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+            }
           }}
         />
       )}
@@ -2375,9 +2464,14 @@ export function Distribution({
           leagueOptions={sortedLeagues.map(l => ({ league: l.league, country: l.country }))}
           onClose={() => setShowAddClub(false)}
           onSave={async (data) => {
-            const saved = await onCreateClub(data)
-            setSelectedClubId(saved.id)
-            setShowAddClub(false)
+            try {
+              const saved = await onCreateClub(data)
+              setSelectedClubId(saved.id)
+              setShowAddClub(false)
+              showToast('Club creado correctamente')
+            } catch {
+              showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+            }
           }}
         />
       )}
@@ -2392,8 +2486,13 @@ export function Distribution({
           fixedNeedPosition={showAddNeg.needPosition}
           onClose={() => setShowAddNeg(null)}
           onSave={async (data) => {
-            await onCreateNegotiation(data)
-            setShowAddNeg(null)
+            try {
+              await onCreateNegotiation(data)
+              setShowAddNeg(null)
+              showToast('Negociación creada')
+            } catch {
+              showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+            }
           }}
         />
       )}
@@ -2403,8 +2502,13 @@ export function Distribution({
           entry={editingEntry}
           onClose={() => setEditingEntry(null)}
           onSave={async (data) => {
-            await onUpdateEntry({ ...editingEntry, ...data })
-            setEditingEntry(null)
+            try {
+              await onUpdateEntry({ ...editingEntry, ...data })
+              setEditingEntry(null)
+              showToast('Cambios guardados')
+            } catch {
+              showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+            }
           }}
         />
       )}
@@ -2415,8 +2519,13 @@ export function Distribution({
           leagueOptions={sortedLeagues.map(l => l.league)}
           onClose={() => setEditingClub(null)}
           onSave={async (data) => {
-            await onUpdateClub({ ...editingClub, ...data })
-            setEditingClub(null)
+            try {
+              await onUpdateClub({ ...editingClub, ...data })
+              setEditingClub(null)
+              showToast('Cambios guardados')
+            } catch {
+              showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+            }
           }}
         />
       )}
@@ -2429,17 +2538,32 @@ export function Distribution({
           currentProfile={currentProfile}
           onClose={() => setEditingNeg(null)}
           onSave={async (data) => {
-            await onUpdateNegotiation({ ...editingNeg, ...data })
-            setEditingNeg(null)
+            try {
+              await onUpdateNegotiation({ ...editingNeg, ...data })
+              setEditingNeg(null)
+              showToast('Cambios guardados')
+            } catch {
+              showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+            }
           }}
           onSaveUpdate={async (update) => {
-            const updated = { ...editingNeg, updates: [...(editingNeg.updates ?? []), update] }
-            await onUpdateNegotiation(updated)
-            setEditingNeg(updated)
+            try {
+              const updated = { ...editingNeg, updates: [...(editingNeg.updates ?? []), update] }
+              await onUpdateNegotiation(updated)
+              setEditingNeg(updated)
+              showToast('Nota guardada')
+            } catch {
+              showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+            }
           }}
           onDelete={async () => {
-            await onDeleteNegotiation(editingNeg.id)
-            setEditingNeg(null)
+            try {
+              await onDeleteNegotiation(editingNeg.id)
+              setEditingNeg(null)
+              showToast('Negociación eliminada')
+            } catch {
+              showToast('No se pudo eliminar. Inténtalo de nuevo.', 'error')
+            }
           }}
         />
       )}
@@ -2451,9 +2575,14 @@ export function Distribution({
           onSave={async (clubId, need) => {
             const club = clubs.find(c => c.id === clubId)
             if (!club) return
-            const enriched = { ...need, createdAt: new Date().toISOString(), addedBy: currentProfile.avatar }
-            await onUpdateClub({ ...club, needs: [...club.needs, enriched] })
-            setShowAddNeed(false)
+            try {
+              const enriched = { ...need, createdAt: new Date().toISOString(), addedBy: currentProfile.avatar }
+              await onUpdateClub({ ...club, needs: [...club.needs, enriched] })
+              setShowAddNeed(false)
+              showToast('Solicitud añadida')
+            } catch {
+              showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+            }
           }}
         />
       )}
@@ -2464,10 +2593,15 @@ export function Distribution({
           existingNegotiations={negotiations.filter(n => n.playerId === bulkAssignPlayerId)}
           onClose={() => setBulkAssignPlayerId(null)}
           onSave={async (clubIds) => {
-            await Promise.all(
-              clubIds.map(clubId => onCreateNegotiation({ playerId: bulkAssignPlayerId, clubId, status: 'pendiente' }))
-            )
-            setBulkAssignPlayerId(null)
+            try {
+              await Promise.all(
+                clubIds.map(clubId => onCreateNegotiation({ playerId: bulkAssignPlayerId, clubId, status: 'pendiente' }))
+              )
+              setBulkAssignPlayerId(null)
+              showToast(`${clubIds.length} club${clubIds.length !== 1 ? 's' : ''} asignado${clubIds.length !== 1 ? 's' : ''}`)
+            } catch {
+              showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+            }
           }}
         />
       )}
@@ -2486,7 +2620,11 @@ export function Distribution({
               <button
                 key={p.id}
                 onClick={async () => {
-                  await onUpdateEntry({ ...entry, aisManager: p.avatar })
+                  try {
+                    await onUpdateEntry({ ...entry, aisManager: p.avatar })
+                  } catch {
+                    showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+                  }
                   setOpenManagerDropId(null); setManagerDropPos(null)
                 }}
                 className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-slate-50 transition-colors ${
@@ -2504,7 +2642,11 @@ export function Distribution({
                 <div className="border-t border-slate-100 my-1" />
                 <button
                   onClick={async () => {
-                    await onUpdateEntry({ ...entry, aisManager: undefined })
+                    try {
+                      await onUpdateEntry({ ...entry, aisManager: undefined })
+                    } catch {
+                      showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+                    }
                     setOpenManagerDropId(null); setManagerDropPos(null)
                   }}
                   className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-500 hover:bg-red-50 transition-colors"
@@ -2516,6 +2658,48 @@ export function Distribution({
           </div>
         )
       })()}
+
+      {/* ── Confirmaciones ── */}
+      <ConfirmModal
+        open={!!confirmDeleteEntryId}
+        title="¿Quitar este jugador de distribución?"
+        message="Esta acción no se puede deshacer."
+        confirmLabel="Quitar"
+        onConfirm={async () => {
+          if (!confirmDeleteEntryId) return
+          try {
+            await onDeleteEntry(confirmDeleteEntryId)
+            closePanel()
+            showToast('Jugador quitado de distribución')
+          } catch {
+            showToast('No se pudo eliminar. Inténtalo de nuevo.', 'error')
+          } finally {
+            setConfirmDeleteEntryId(null)
+          }
+        }}
+        onCancel={() => setConfirmDeleteEntryId(null)}
+      />
+      <ConfirmModal
+        open={!!confirmDeleteClubId}
+        title={`¿Eliminar ${clubs.find(c => c.id === confirmDeleteClubId)?.name ?? 'este club'}?`}
+        message="Se eliminarán también sus negociaciones. Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        onConfirm={async () => {
+          if (!confirmDeleteClubId) return
+          try {
+            await onDeleteClub(confirmDeleteClubId)
+            closePanel()
+            showToast('Club eliminado')
+          } catch {
+            showToast('No se pudo eliminar. Inténtalo de nuevo.', 'error')
+          } finally {
+            setConfirmDeleteClubId(null)
+          }
+        }}
+        onCancel={() => setConfirmDeleteClubId(null)}
+      />
+
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   )
 }
@@ -2641,6 +2825,8 @@ function AddPlayerModal({ players, existingPlayerIds, season, onClose, onSave, o
   const [transferFee, setTransferFee] = useState('')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
+  const [nameError, setNameError] = useState('')
+  const [yearError, setYearError] = useState('')
 
   const available = players.filter(p =>
     !existingPlayerIds.includes(p.id) &&
@@ -2648,7 +2834,7 @@ function AddPlayerModal({ players, existingPlayerIds, season, onClose, onSave, o
   )
 
   async function handleSave() {
-    if (!selected) return
+    if (!selected || saving) return
     setSaving(true)
     try {
       await onSave({
@@ -2664,7 +2850,17 @@ function AddPlayerModal({ players, existingPlayerIds, season, onClose, onSave, o
   }
 
   async function handleCreateIntermediar() {
-    if (!newName || !newPosition || !onCreatePlayer) return
+    if (!newName || !newPosition || !onCreatePlayer || saving) return
+    let hasErrors = false
+    if (!isValidName(newName)) {
+      setNameError('Introduce un nombre válido (mínimo 2 caracteres).')
+      hasErrors = true
+    }
+    if (newBirthYear && (!isValidDate(`${newBirthYear}-01-01`) || Number(newBirthYear) < 1950 || Number(newBirthYear) > new Date().getFullYear())) {
+      setYearError('Año de nacimiento no válido.')
+      hasErrors = true
+    }
+    if (hasErrors) return
     setSaving(true)
     try {
       const newPlayer: Player = {
@@ -2785,14 +2981,14 @@ function AddPlayerModal({ players, existingPlayerIds, season, onClose, onSave, o
                 <div className="font-medium text-slate-800">{selected.name}</div>
                 <div className="text-xs text-slate-500">{selected.positions[0]}</div>
               </div>
-              <button onClick={() => setSelected(null)} className="ml-auto text-slate-400 hover:text-slate-600">
+              <button onClick={() => setSelected(null)} aria-label="Quitar selección" className="ml-auto text-slate-400 hover:text-slate-600">
                 <X className="w-4 h-4" />
               </button>
             </div>
             {sharedFields}
             <button onClick={handleSave} disabled={saving}
-              className="w-full py-2 bg-[hsl(220,72%,36%)] text-white text-sm rounded-lg hover:bg-[hsl(220,72%,30%)] disabled:opacity-60">
-              {saving ? 'Guardando…' : 'Añadir a distribución'}
+              className="w-full py-2 bg-primary text-white text-sm rounded-lg hover:bg-primary/90 disabled:opacity-60">
+              {saving ? <span className="flex items-center justify-center gap-2"><BtnSpinner /> Guardando…</span> : 'Añadir a distribución'}
             </button>
           </div>
         )
@@ -2802,10 +2998,13 @@ function AddPlayerModal({ players, existingPlayerIds, season, onClose, onSave, o
           <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
             Este jugador aparecerá solo en Distribución. No tendrá ficha de mantenimiento (tareas, contrato, etc.).
           </p>
-          <input autoFocus value={newName} onChange={e => setNewName(e.target.value)}
-            placeholder="Nombre completo *"
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-          />
+          <div>
+            <input autoFocus value={newName} onChange={e => { setNewName(e.target.value); if (nameError) setNameError('') }}
+              placeholder="Nombre completo *"
+              className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 ${nameError ? 'border-red-300' : 'border-slate-200'}`}
+            />
+            {nameError && <p className="text-xs text-red-600 mt-1">{nameError}</p>}
+          </div>
           <select value={newPosition} onChange={e => setNewPosition(e.target.value)}
             className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 text-slate-700">
             <option value="">Posición *</option>
@@ -2816,11 +3015,14 @@ function AddPlayerModal({ players, existingPlayerIds, season, onClose, onSave, o
               placeholder="Nacionalidad"
               className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
             />
-            <input value={newBirthYear} onChange={e => setNewBirthYear(e.target.value)}
-              placeholder="Año nacimiento"
-              type="number" min="1985" max="2010"
-              className="w-32 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-            />
+            <div className="w-32">
+              <input value={newBirthYear} onChange={e => { setNewBirthYear(e.target.value); if (yearError) setYearError('') }}
+                placeholder="Año nacimiento"
+                type="number" min="1985" max="2010"
+                className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 ${yearError ? 'border-red-300' : 'border-slate-200'}`}
+              />
+              {yearError && <p className="text-xs text-red-600 mt-1">{yearError}</p>}
+            </div>
           </div>
           <input value={newClub} onChange={e => setNewClub(e.target.value)}
             placeholder="Club actual (opcional)"
@@ -2830,9 +3032,9 @@ function AddPlayerModal({ players, existingPlayerIds, season, onClose, onSave, o
           <button
             onClick={handleCreateIntermediar}
             disabled={!newName || !newPosition || saving}
-            className="w-full py-2 bg-[hsl(220,72%,36%)] text-white text-sm rounded-lg hover:bg-[hsl(220,72%,30%)] disabled:opacity-60"
+            className="w-full py-2 bg-primary text-white text-sm rounded-lg hover:bg-primary/90 disabled:opacity-60"
           >
-            {saving ? 'Creando…' : 'Crear y añadir a distribución'}
+            {saving ? <span className="flex items-center justify-center gap-2"><BtnSpinner /> Guardando…</span> : 'Crear y añadir a distribución'}
           </button>
         </div>
       )}
@@ -2871,7 +3073,7 @@ function NeedFormInline({ initial, onSave, onCancel }: {
         <div className="flex flex-wrap gap-1.5">
           {FOOTBALL_POSITIONS.map(pos => (
             <button key={pos} type="button" onClick={() => setPosition(pos)}
-              className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${position === pos ? 'bg-[hsl(220,72%,36%)] text-white border-[hsl(220,72%,36%)]' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${position === pos ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}
             >{pos}</button>
           ))}
         </div>
@@ -2896,8 +3098,8 @@ function NeedFormInline({ initial, onSave, onCancel }: {
       </div>
       <div className="flex gap-2">
         <button onClick={onCancel} className="flex-1 py-1.5 text-sm border border-slate-200 rounded-lg text-slate-500">Cancelar</button>
-        <button onClick={handleSave} disabled={!position || saving} className="flex-1 py-1.5 text-sm bg-[hsl(220,72%,36%)] text-white rounded-lg disabled:opacity-60">
-          {saving ? '…' : 'Guardar'}
+        <button onClick={handleSave} disabled={!position || saving} className="flex-1 py-1.5 text-sm bg-primary text-white rounded-lg disabled:opacity-60">
+          {saving ? <span className="flex items-center justify-center gap-2"><BtnSpinner /> Guardando…</span> : 'Guardar'}
         </button>
       </div>
     </div>
@@ -2936,7 +3138,11 @@ function AddClubModal({ onClose, onSave, leagueOptions }: {
   }
 
   async function handleSave() {
-    if (!name.trim()) return
+    if (saving) return
+    if (!isValidName(name)) {
+      setError('Introduce un nombre válido (mínimo 2 caracteres).')
+      return
+    }
     setError('')
     setSaving(true)
     try {
@@ -2950,9 +3156,8 @@ function AddClubModal({ onClose, onSave, leagueOptions }: {
         isPriority,
         needs: [],
       })
-    } catch (e: unknown) {
+    } finally {
       setSaving(false)
-      setError(e instanceof Error ? e.message : 'Error al guardar')
     }
   }
 
@@ -2961,7 +3166,8 @@ function AddClubModal({ onClose, onSave, leagueOptions }: {
       <div className="space-y-3">
         <div>
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Nombre *</label>
-          <input autoFocus value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSave()} placeholder="Deportivo, Racing…" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+          <input autoFocus value={name} onChange={e => { setName(e.target.value); if (error) setError('') }} onKeyDown={e => e.key === 'Enter' && handleSave()} placeholder="Deportivo, Racing…" className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 ${error ? 'border-red-300' : 'border-slate-200'}`} />
+          {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
         </div>
 
         {/* Liga — searchable dropdown */}
@@ -2977,7 +3183,7 @@ function AddClubModal({ onClose, onSave, leagueOptions }: {
           {leagueOpen && filteredLeagues.length > 0 && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setLeagueOpen(false)} />
-              <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-xl max-h-52 overflow-y-auto">
+              <div className="absolute z-50 mt-1 w-full max-w-[calc(100vw-2rem)] bg-white border border-slate-200 rounded-xl shadow-xl max-h-[50vh] overflow-y-auto">
                 {filteredLeagues.slice(0, 60).map(l => (
                   <button
                     key={l.league}
@@ -3018,9 +3224,8 @@ function AddClubModal({ onClose, onSave, leagueOptions }: {
           <span className="text-sm text-slate-600">Club prioritario</span>
           <Star className="w-3.5 h-3.5 text-green-500" />
         </label>
-        {error && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
-        <button onClick={handleSave} disabled={!name.trim() || saving} className="w-full py-2 bg-[hsl(220,72%,36%)] text-white text-sm rounded-lg hover:bg-[hsl(220,72%,30%)] disabled:opacity-60 transition-colors">
-          {saving ? 'Guardando…' : 'Añadir club'}
+        <button onClick={handleSave} disabled={!name.trim() || saving} className="w-full py-2 bg-primary text-white text-sm rounded-lg hover:bg-primary/90 disabled:opacity-60 transition-colors">
+          {saving ? <span className="flex items-center justify-center gap-2"><BtnSpinner /> Guardando…</span> : 'Añadir club'}
         </button>
       </div>
     </ModalShell>
@@ -3106,8 +3311,8 @@ function AddNegotiationModal({ players, clubs, entries, fixedPlayerId, fixedClub
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Notas</label>
           <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="El club está interesado…" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none" />
         </div>
-        <button onClick={handleSave} disabled={!playerId || !clubId || saving} className="w-full py-2 bg-[hsl(220,72%,36%)] text-white text-sm rounded-lg hover:bg-[hsl(220,72%,30%)] disabled:opacity-60">
-          {saving ? 'Guardando…' : 'Guardar'}
+        <button onClick={handleSave} disabled={!playerId || !clubId || saving} className="w-full py-2 bg-primary text-white text-sm rounded-lg hover:bg-primary/90 disabled:opacity-60">
+          {saving ? <span className="flex items-center justify-center gap-2"><BtnSpinner /> Guardando…</span> : 'Guardar'}
         </button>
       </div>
     </ModalShell>
@@ -3164,8 +3369,8 @@ function EditEntryModal({ entry, onClose, onSave }: {
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Notas</label>
           <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none" />
         </div>
-        <button onClick={handleSave} disabled={saving} className="w-full py-2 bg-[hsl(220,72%,36%)] text-white text-sm rounded-lg hover:bg-[hsl(220,72%,30%)] disabled:opacity-60">
-          {saving ? 'Guardando…' : 'Guardar'}
+        <button onClick={handleSave} disabled={saving} className="w-full py-2 bg-primary text-white text-sm rounded-lg hover:bg-primary/90 disabled:opacity-60">
+          {saving ? <span className="flex items-center justify-center gap-2"><BtnSpinner /> Guardando…</span> : 'Guardar'}
         </button>
       </div>
     </ModalShell>
@@ -3239,8 +3444,8 @@ function EditClubModal({ club, leagueOptions = [], onClose, onSave }: {
           <input type="checkbox" checked={isPriority} onChange={e => setIsPriority(e.target.checked)} className="w-4 h-4 rounded" />
           <span className="text-sm text-slate-600">Club prioritario</span>
         </label>
-        <button onClick={handleSave} disabled={saving} className="w-full py-2 bg-[hsl(220,72%,36%)] text-white text-sm rounded-lg hover:bg-[hsl(220,72%,30%)] disabled:opacity-60">
-          {saving ? 'Guardando…' : 'Guardar'}
+        <button onClick={handleSave} disabled={saving} className="w-full py-2 bg-primary text-white text-sm rounded-lg hover:bg-primary/90 disabled:opacity-60">
+          {saving ? <span className="flex items-center justify-center gap-2"><BtnSpinner /> Guardando…</span> : 'Guardar'}
         </button>
       </div>
     </ModalShell>
@@ -3265,6 +3470,7 @@ function EditNegotiationModal({ neg, clubs, players, currentProfile, onClose, on
   const [saving, setSaving] = useState(false)
   const [updateText, setUpdateText] = useState('')
   const [savingUpdate, setSavingUpdate] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
   const player = players.find(p => p.id === neg.playerId)
   const club = clubs.find(c => c.id === neg.clubId)
   const sortedUpdates = [...(neg.updates ?? [])].sort((a, b) => b.date.localeCompare(a.date))
@@ -3290,7 +3496,7 @@ function EditNegotiationModal({ neg, clubs, players, currentProfile, onClose, on
   }
 
   return (
-    <ModalShell title="Editar negociación" onClose={onClose}>
+    <ModalShell title="Editar negociación" onClose={onClose} escDisabled={confirmingDelete}>
       <div className="space-y-3">
         {player && club && (
           <div className="bg-slate-50 rounded-lg px-3 py-2 flex items-center gap-3 text-sm">
@@ -3366,21 +3572,36 @@ function EditNegotiationModal({ neg, clubs, players, currentProfile, onClose, on
             disabled={!updateText.trim() || savingUpdate}
             className="mt-1.5 w-full py-1.5 text-xs bg-slate-100 text-slate-600 rounded-lg disabled:opacity-40 hover:bg-slate-200 transition-colors font-medium"
           >
-            {savingUpdate ? '…' : 'Guardar nota'}
+            {savingUpdate ? 'Guardando…' : 'Guardar nota'}
           </button>
         </div>
 
         <div className="flex gap-2 pt-1">
           <button
-            onClick={async () => { if (!confirm('¿Eliminar esta negociación?')) return; await onDelete() }}
+            onClick={() => setConfirmingDelete(true)}
             className="flex-1 py-2 border border-red-200 text-red-500 text-sm rounded-lg hover:bg-red-50"
           >
             Eliminar
           </button>
-          <button onClick={handleSave} disabled={saving} className="flex-1 py-2 bg-[hsl(220,72%,36%)] text-white text-sm rounded-lg hover:bg-[hsl(220,72%,30%)] disabled:opacity-60">
-            {saving ? '…' : <span className="flex items-center justify-center gap-1"><Check className="w-4 h-4" /> Guardar</span>}
+          <button onClick={handleSave} disabled={saving} className="flex-1 py-2 bg-primary text-white text-sm rounded-lg hover:bg-primary/90 disabled:opacity-60">
+            {saving
+              ? <span className="flex items-center justify-center gap-2"><BtnSpinner /> Guardando…</span>
+              : <span className="flex items-center justify-center gap-1"><Check className="w-4 h-4" /> Guardar</span>}
           </button>
         </div>
+      </div>
+      <div onClick={e => e.stopPropagation()}>
+        <ConfirmModal
+          open={confirmingDelete}
+          title="¿Eliminar esta negociación?"
+          message="Esta acción no se puede deshacer."
+          confirmLabel="Eliminar"
+          onConfirm={async () => {
+            await onDelete()
+            setConfirmingDelete(false)
+          }}
+          onCancel={() => setConfirmingDelete(false)}
+        />
       </div>
     </ModalShell>
   )
@@ -3388,13 +3609,14 @@ function EditNegotiationModal({ neg, clubs, players, currentProfile, onClose, on
 
 // ── MODAL SHELL ───────────────────────────────────────────────
 
-function ModalShell({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+function ModalShell({ title, onClose, children, escDisabled = false }: { title: string; onClose: () => void; children: React.ReactNode; escDisabled?: boolean }) {
+  useEscapeKey(onClose, !escDisabled)
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
       <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white rounded-t-2xl sm:rounded-t-2xl">
           <h2 className="font-semibold text-slate-800 text-sm">{title}</h2>
-          <button onClick={onClose} className="p-1 rounded hover:bg-slate-100 text-slate-400">
+          <button onClick={onClose} aria-label="Cerrar" className="p-1 rounded hover:bg-slate-100 text-slate-400">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -3478,6 +3700,8 @@ function BulkAssignModal({ clubs, existingNegotiations, onClose, onSave }: {
     try { await onSave(newIds) } finally { setSaving(false) }
   }
 
+  useEscapeKey(onClose)
+
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
       <div className="bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
@@ -3489,7 +3713,7 @@ function BulkAssignModal({ clubs, existingNegotiations, onClose, onSave }: {
               {newIds.length} seleccionado{newIds.length !== 1 ? 's' : ''}
             </span>
           )}
-          <button onClick={onClose} className="p-1 rounded hover:bg-slate-100 text-slate-400">
+          <button onClick={onClose} aria-label="Cerrar" className="p-1 rounded hover:bg-slate-100 text-slate-400">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -3583,7 +3807,7 @@ function BulkAssignModal({ clubs, existingNegotiations, onClose, onSave }: {
             disabled={newIds.length === 0 || saving}
             className="flex-1 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 font-medium"
           >
-            {saving ? 'Asignando…' : `Asignar ${newIds.length} club${newIds.length !== 1 ? 's' : ''}`}
+            {saving ? <span className="flex items-center justify-center gap-2"><BtnSpinner /> Asignando…</span> : `Asignar ${newIds.length} club${newIds.length !== 1 ? 's' : ''}`}
           </button>
         </div>
       </div>
@@ -3612,7 +3836,7 @@ function MultiSelect({ label, options, selected, onChange }: {
         onClick={() => setOpen(o => !o)}
         className={`flex items-center gap-1.5 pl-3 pr-2 py-1.5 text-sm rounded-lg border transition-colors ${
           isActive
-            ? 'bg-[hsl(220,72%,36%)] text-white border-[hsl(220,72%,36%)]'
+            ? 'bg-primary text-white border-primary'
             : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
         }`}
       >
@@ -3720,7 +3944,7 @@ function AddNeedModal({ clubs, onClose, onSave }: {
                 <div className="text-sm font-medium text-slate-800 truncate">{selectedClub.name}</div>
                 {selectedClub.league && <div className="text-xs text-slate-400">{selectedClub.league}</div>}
               </div>
-              <button onClick={() => setClubId('')} className="text-slate-400 hover:text-slate-600 flex-shrink-0">
+              <button onClick={() => setClubId('')} aria-label="Quitar selección" className="text-slate-400 hover:text-slate-600 flex-shrink-0">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -3735,7 +3959,7 @@ function AddNeedModal({ clubs, onClose, onSave }: {
                     onClick={() => setPosition(pos)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
                       position === pos
-                        ? 'bg-[hsl(220,72%,36%)] text-white border-[hsl(220,72%,36%)]'
+                        ? 'bg-primary text-white border-primary'
                         : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:text-slate-800'
                     }`}
                   >
@@ -3790,9 +4014,9 @@ function AddNeedModal({ clubs, onClose, onSave }: {
             <button
               onClick={handleSave}
               disabled={!position || saving}
-              className="w-full py-2 bg-[hsl(220,72%,36%)] text-white text-sm rounded-lg hover:bg-[hsl(220,72%,30%)] disabled:opacity-60"
+              className="w-full py-2 bg-primary text-white text-sm rounded-lg hover:bg-primary/90 disabled:opacity-60"
             >
-              {saving ? 'Guardando…' : 'Añadir solicitud'}
+              {saving ? <span className="flex items-center justify-center gap-2"><BtnSpinner /> Guardando…</span> : 'Añadir solicitud'}
             </button>
           </>
         )}

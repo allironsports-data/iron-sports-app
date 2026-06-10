@@ -3,8 +3,10 @@ import type { Player } from "../types";
 import type { Profile } from "../contexts/AuthContext";
 import { ArrowLeft, LogOut, Save, X, Check, Search, Shield } from "lucide-react";
 import logoImg from '../assets/logo.jpeg';
-
-const PRIMARY = "hsl(220,72%,26%)";
+import { useDebounce } from "../hooks/useDebounce";
+import { useToast } from "../hooks/useToast";
+import { ToastStack } from "../components/ToastStack";
+import { isValidDate } from "../lib/validate";
 
 interface Props {
   players: Player[];
@@ -27,17 +29,20 @@ type ColumnDef = {
   width: string;
   getValue: (p: Player) => string;
   setValue: (p: Player, value: string) => Player;
-  type?: "text" | "date" | "select";
+  type?: "text" | "date" | "select" | "number";
   options?: string[];
 };
 
 export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onLogout, onAdmin }: Props) {
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 300);
   const [editing, setEditing] = useState<EditingCell | null>(null);
   const [editValue, setEditValue] = useState("");
+  const [editInvalid, setEditInvalid] = useState(false);
   const [pendingChanges, setPendingChanges] = useState<Map<string, Player>>(new Map());
   const [savedFeedback, setSavedFeedback] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | HTMLSelectElement>(null);
+  const { toasts, showToast, dismissToast } = useToast();
 
   const columns: ColumnDef[] = [
     {
@@ -155,8 +160,8 @@ export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onLogo
 
   const filtered = players
     .filter((p) => {
-      if (!search) return true;
-      const q = search.toLowerCase();
+      if (!debouncedSearch) return true;
+      const q = debouncedSearch.toLowerCase();
       return p.name.toLowerCase().includes(q)
         || p.nationality.toLowerCase().includes(q)
         || p.clubs.some(c => c.name.toLowerCase().includes(q));
@@ -170,11 +175,24 @@ export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onLogo
     const player = getPlayer(playerId);
     setEditing({ playerId, field });
     setEditValue(col.getValue(player));
+    setEditInvalid(false);
+  };
+
+  /** Valida el valor según el tipo de columna antes de guardar. */
+  const isEditValueValid = (col: ColumnDef, value: string): boolean => {
+    if (!value) return true; // vacío = borrar valor, permitido
+    if (col.type === "date") return isValidDate(value);
+    if (col.type === "number") return Number.isFinite(Number(value));
+    return true;
   };
 
   const confirmEdit = () => {
-    if (!editing) return;
+    if (!editing) return false;
     const col = columns.find(c => c.key === editing.field)!;
+    if (!isEditValueValid(col, editValue)) {
+      setEditInvalid(true);
+      return false;
+    }
     const player = getPlayer(editing.playerId);
     const currentValue = col.getValue(player);
     if (editValue !== currentValue) {
@@ -182,18 +200,20 @@ export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onLogo
       setPendingChanges(prev => new Map(prev).set(editing.playerId, updated));
     }
     setEditing(null);
+    setEditInvalid(false);
+    return true;
   };
 
-  const cancelEdit = () => setEditing(null);
+  const cancelEdit = () => { setEditing(null); setEditInvalid(false); };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") confirmEdit();
     if (e.key === "Escape") cancelEdit();
     if (e.key === "Tab") {
       e.preventDefault();
-      confirmEdit();
-      // Move to next cell
-      if (editing) {
+      const ok = confirmEdit();
+      // Move to next cell only if the current value was valid
+      if (ok && editing) {
         const colIdx = columns.findIndex(c => c.key === editing.field);
         const playerIdx = filtered.findIndex(p => p.id === editing.playerId);
         if (colIdx < columns.length - 1) {
@@ -207,12 +227,16 @@ export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onLogo
 
   const saveAll = async () => {
     const changes = Array.from(pendingChanges.values());
-    for (const player of changes) {
-      await onUpdatePlayer(player);
+    try {
+      for (const player of changes) {
+        await onUpdatePlayer(player);
+      }
+      setPendingChanges(new Map());
+      setSavedFeedback(`${changes.length} jugador${changes.length > 1 ? 'es' : ''} actualizado${changes.length > 1 ? 's' : ''}`);
+      setTimeout(() => setSavedFeedback(null), 6000);
+    } catch {
+      showToast("No se pudieron guardar los cambios. Inténtalo de nuevo.", "error");
     }
-    setPendingChanges(new Map());
-    setSavedFeedback(`${changes.length} jugador${changes.length > 1 ? 'es' : ''} actualizado${changes.length > 1 ? 's' : ''}`);
-    setTimeout(() => setSavedFeedback(null), 3000);
   };
 
   const discardAll = () => setPendingChanges(new Map());
@@ -224,7 +248,7 @@ export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onLogo
       {/* Header */}
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="mx-auto max-w-7xl flex items-center gap-3 px-4 py-3">
-          <button onClick={onBack} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600">
+          <button onClick={onBack} aria-label="Volver" className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600">
             <ArrowLeft className="w-5 h-5" />
           </button>
           <img src={logoImg} alt="" className="h-8 w-auto rounded" />
@@ -252,24 +276,27 @@ export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onLogo
                 <X className="w-3 h-3" />Descartar
               </button>
               <button onClick={saveAll}
-                className="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-md text-white font-medium" style={{ background: PRIMARY }}>
+                className="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-md text-white font-medium bg-primary hover:bg-primary/90 transition-colors">
                 <Save className="w-3 h-3" />Guardar todo
               </button>
             </div>
           )}
           {savedFeedback && (
-            <span className="inline-flex items-center gap-1 text-xs text-emerald-600 font-medium">
-              <Check className="w-3.5 h-3.5" />{savedFeedback}
+            <span
+              role="status"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-1 animate-in fade-in duration-200"
+            >
+              <Check className="w-3.5 h-3.5 text-emerald-600" />{savedFeedback}
             </span>
           )}
 
           <div className="flex items-center gap-2">
             {onAdmin && (
-              <button onClick={onAdmin} className="p-2 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600" title="Admin">
+              <button onClick={onAdmin} aria-label="Admin" className="p-2 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600" title="Admin">
                 <Shield className="w-4 h-4" />
               </button>
             )}
-            <button onClick={onLogout} className="p-2 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600" title="Cerrar sesión">
+            <button onClick={onLogout} aria-label="Cerrar sesión" className="p-2 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600" title="Cerrar sesión">
               <LogOut className="w-4 h-4" />
             </button>
           </div>
@@ -336,10 +363,15 @@ export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onLogo
                                   ref={inputRef as React.RefObject<HTMLInputElement>}
                                   type={col.type || "text"}
                                   value={editValue}
-                                  onChange={(e) => setEditValue(e.target.value)}
+                                  onChange={(e) => { setEditValue(e.target.value); setEditInvalid(false); }}
                                   onBlur={confirmEdit}
                                   onKeyDown={handleKeyDown}
-                                  className="w-full rounded border border-blue-300 px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-200"
+                                  aria-invalid={editInvalid}
+                                  className={`w-full rounded border px-1.5 py-1 text-xs focus:outline-none focus:ring-2 ${
+                                    editInvalid
+                                      ? "border-red-400 ring-1 ring-red-200 focus:ring-red-200"
+                                      : "border-blue-300 focus:ring-blue-200"
+                                  }`}
                                 />
                               )
                             ) : (
@@ -367,6 +399,8 @@ export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onLogo
           </div>
         </div>
       </main>
+
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }

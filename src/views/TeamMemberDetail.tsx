@@ -2,12 +2,12 @@ import { useState, useEffect } from "react";
 import type { Player, Task, PlayerActivity } from "../types";
 import type { Profile } from "../contexts/AuthContext";
 import { fetchActivitiesByAuthor } from "../lib/db";
+import { ListSkeleton } from "../components/Skeleton";
+import { EmptyState } from "../components/EmptyState";
 import {
   ArrowLeft, CheckCircle2, Clock, Activity,
   Calendar, AlertCircle, Users, ChevronDown, ChevronUp,
 } from "lucide-react";
-
-const PRIMARY = "hsl(220,72%,26%)";
 
 const ACTIVITY_ICONS: Record<string, string> = {
   'Comunicación con club': '🏟️',
@@ -191,12 +191,11 @@ export function TeamMemberDetail({ profile, tasks, players, onBack, onSelectPlay
       {/* ── Header ─────────────────────────────────────────── */}
       <div className="bg-white border-b border-slate-200 sticky top-0 z-30">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-3">
-          <button onClick={onBack} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors">
+          <button onClick={onBack} aria-label="Volver" className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors">
             <ArrowLeft className="w-4 h-4" />
           </button>
           <div
-            className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
-            style={{ background: PRIMARY }}
+            className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0 bg-primary"
           >
             {initials(profile.name)}
           </div>
@@ -286,14 +285,17 @@ export function TeamMemberDetail({ profile, tasks, players, onBack, onSelectPlay
           </div>
 
           {loading && (
-            <div className="py-12 text-center text-xs text-slate-400">Cargando…</div>
+            <div className="px-4 py-3">
+              <ListSkeleton rows={4} />
+            </div>
           )}
 
           {!loading && timelineItems.length === 0 && (
-            <div className="py-12 text-center">
-              <Activity className="w-8 h-8 mx-auto mb-3 text-slate-200" />
-              <p className="text-sm text-slate-400">Sin actividad en este período</p>
-            </div>
+            <EmptyState
+              icon={<Activity className="w-10 h-10" />}
+              title="Sin actividad en este período"
+              subtitle="Prueba a ampliar el período seleccionado o registra eventos desde la ficha de un jugador."
+            />
           )}
 
           {!loading && months.length > 0 && (

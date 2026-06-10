@@ -48,8 +48,7 @@ export function LoginScreen({ onLogin }: Props) {
             onChange={(e) => setEmail(e.target.value)}
             required
             autoComplete="email"
-            className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm mb-4 focus:outline-none focus:ring-2"
-            style={{ '--tw-ring-color': 'hsl(220,72%,26%)' } as React.CSSProperties}
+            className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-primary"
           />
 
           <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1.5">
@@ -71,8 +70,7 @@ export function LoginScreen({ onLogin }: Props) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-md text-white text-sm font-semibold py-2.5 disabled:opacity-60 transition-colors"
-            style={{ background: 'hsl(220,72%,26%)' }}
+            className="w-full rounded-md text-white text-sm font-semibold py-2.5 disabled:opacity-60 transition-colors bg-primary hover:bg-primary/90"
           >
             {loading ? 'Entrando...' : 'Entrar'}
           </button>
