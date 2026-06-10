@@ -48,7 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
 
     // Listen for auth changes — ignore token refreshes for the same user
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         // Only update user state if it's a genuinely new session (not just a token refresh)
         setUser(prev => {
@@ -56,8 +56,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           fetchProfile(session.user.id)
           return session.user
         })
-        // Still fetch profile on explicit sign-in events
-        if (event === 'SIGNED_IN') fetchProfile(session.user.id)
       } else {
         setUser(null)
         setProfile(null)

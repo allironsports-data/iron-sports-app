@@ -41,6 +41,8 @@ export default function App() {
   const [profiles, setProfiles] = useState<Profile[]>([])
   const profilesRef = useRef<Profile[]>([])
   const [dataLoading, setDataLoading] = useState(false)
+  const [dataError, setDataError] = useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
   // ── Nav state — persisted in sessionStorage so refresh restores position ──
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(
     () => sessionStorage.getItem('nav_playerId')
@@ -108,6 +110,7 @@ export default function App() {
   useEffect(() => {
     if (!user) return
     setDataLoading(true)
+    setDataError(null)
     Promise.all([
       db.fetchPlayers(),
       db.fetchTasks(),
@@ -133,9 +136,12 @@ export default function App() {
       setScoutingMatches(sm as ScoutingMatch[])
       setMatchPlayers(mp as ScoutingMatchPlayer[])
       setBoulemaPeticiones(bp as BoulemaPeticion[])
+    }).catch((err: unknown) => {
+      console.error('Error cargando datos iniciales:', err)
+      setDataError(err instanceof Error ? err.message : 'Error desconocido')
     }).finally(() => setDataLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id])  // user.id — not the object — so token refreshes don't re-trigger this
+  }, [user?.id, reloadKey])  // user.id — not the object — so token refreshes don't re-trigger this
 
   // Supabase realtime: listen for task changes from other users
   useEffect(() => {
@@ -216,6 +222,20 @@ export default function App() {
   if (loading) return <Spinner />
   if (!user || !profile) return <LoginScreen onLogin={signIn} />
   if (dataLoading) return <Spinner />
+  if (dataError) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-4 px-6 text-center">
+        <p className="text-slate-700 font-medium">No se pudieron cargar los datos.</p>
+        <p className="text-slate-500 text-sm max-w-md">{dataError}</p>
+        <button
+          onClick={() => setReloadKey(k => k + 1)}
+          className="px-4 py-2 rounded-lg text-white text-sm font-medium bg-[hsl(220,72%,26%)] hover:bg-[hsl(220,72%,32%)]"
+        >
+          Reintentar
+        </button>
+      </div>
+    )
+  }
 
   const selectedPlayer = players.find((p) => p.id === selectedPlayerId)
 

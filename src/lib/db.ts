@@ -63,24 +63,33 @@ function playerToDb(p: Partial<Player>) {
 
 // ── PASSPORT UPLOAD ──────────────────────────────────────────
 
-export async function uploadPassport(playerId: string, file: File): Promise<string> {
-  const ext = file.name.split('.').pop()
-  const path = `passports/${playerId}.${ext}`
+// El bucket 'attachments' es privado: getPublicUrl devuelve enlaces que dan 403.
+// Usamos URLs firmadas de larga duración (10 años), válidas con bucket privado o público.
+const SIGNED_URL_TTL = 10 * 365 * 24 * 60 * 60 // 10 años en segundos
+
+async function uploadAndSign(path: string, file: File): Promise<string> {
   const { error } = await supabase.storage.from('attachments').upload(path, file, { upsert: true })
   if (error) throw error
-  const { data } = supabase.storage.from('attachments').getPublicUrl(path)
-  return data.publicUrl
+  const { data, error: signError } = await supabase.storage
+    .from('attachments')
+    .createSignedUrl(path, SIGNED_URL_TTL)
+  if (signError || !data?.signedUrl) {
+    // Fallback por si el bucket es público
+    return supabase.storage.from('attachments').getPublicUrl(path).data.publicUrl
+  }
+  return data.signedUrl
+}
+
+export async function uploadPassport(playerId: string, file: File): Promise<string> {
+  const ext = file.name.split('.').pop()
+  return uploadAndSign(`passports/${playerId}.${ext}`, file)
 }
 
 // ── CONTRACT PDF UPLOAD ─────────────────────────────────────
 
 export async function uploadContractPdf(playerId: string, file: File): Promise<string> {
   const ext = file.name.split('.').pop()
-  const path = `contracts/${playerId}_${Date.now()}.${ext}`
-  const { error } = await supabase.storage.from('attachments').upload(path, file, { upsert: true })
-  if (error) throw error
-  const { data } = supabase.storage.from('attachments').getPublicUrl(path)
-  return data.publicUrl
+  return uploadAndSign(`contracts/${playerId}_${Date.now()}.${ext}`, file)
 }
 
 // ── PLAYERS ──────────────────────────────────────────────────
@@ -1065,6 +1074,8 @@ export async function deleteGroupActivity(groupId: string): Promise<void> {
 
 /** Fetch all activities where a profile was the author OR a tagged participant. */
 export async function fetchActivitiesByAuthor(authorId: string): Promise<PlayerActivity[]> {
+  // authorId se interpola en un filtro .or(): validar que es un UUID
+  if (!/^[0-9a-f-]{36}$/i.test(authorId)) throw new Error('authorId inválido')
   const { data, error } = await supabase
     .from('player_activities')
     .select('*')
