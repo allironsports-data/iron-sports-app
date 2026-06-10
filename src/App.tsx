@@ -1,21 +1,24 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, lazy } from 'react'
 import { useAuth } from './contexts/AuthContext'
 import type { Player, Task, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion } from './types'
 import * as db from './lib/db'
 import { supabase } from './lib/supabase'
 import type { Profile } from './contexts/AuthContext'
 import { LoginScreen } from './views/LoginScreen'
-import { Dashboard } from './views/Dashboard'
-import { PlayerDetail } from './views/PlayerDetail'
-import { AdminPanel } from './views/AdminPanel'
-import { OverviewPanel } from './views/OverviewPanel'
-import { PlayersTable } from './views/PlayersTable'
-import { Distribution } from './views/Distribution'
-import { ClubDetail } from './views/ClubDetail'
-import { Captacion } from './views/Captacion'
-import { Contactos } from './views/Contactos'
-import { TeamMemberDetail } from './views/TeamMemberDetail'
 import type { Club, DistributionEntry, ClubNegotiation } from './types'
+
+// Code-splitting por vista: en móvil solo se descarga el código de la
+// sección visitada (reduce mucho la carga inicial del bundle).
+const Dashboard        = lazy(() => import('./views/Dashboard').then(m => ({ default: m.Dashboard })))
+const PlayerDetail     = lazy(() => import('./views/PlayerDetail').then(m => ({ default: m.PlayerDetail })))
+const AdminPanel       = lazy(() => import('./views/AdminPanel').then(m => ({ default: m.AdminPanel })))
+const OverviewPanel    = lazy(() => import('./views/OverviewPanel').then(m => ({ default: m.OverviewPanel })))
+const PlayersTable     = lazy(() => import('./views/PlayersTable').then(m => ({ default: m.PlayersTable })))
+const Distribution     = lazy(() => import('./views/Distribution').then(m => ({ default: m.Distribution })))
+const ClubDetail       = lazy(() => import('./views/ClubDetail').then(m => ({ default: m.ClubDetail })))
+const Captacion        = lazy(() => import('./views/Captacion').then(m => ({ default: m.Captacion })))
+const Contactos        = lazy(() => import('./views/Contactos').then(m => ({ default: m.Contactos })))
+const TeamMemberDetail = lazy(() => import('./views/TeamMemberDetail').then(m => ({ default: m.TeamMemberDetail })))
 
 export interface AppNotification {
   id: string
@@ -109,37 +112,57 @@ export default function App() {
   // so token refreshes (which create a new user object) don't trigger a reload
   useEffect(() => {
     if (!user) return
+    let cancelled = false
     setDataLoading(true)
     setDataError(null)
+
+    // FASE 1 — datos críticos (bloquean la UI): jugadores, tareas y perfiles.
+    // FASE 2 — el resto carga en segundo plano (importante en datos móviles:
+    // la app es usable en cuanto llega la fase 1).
     Promise.all([
       db.fetchPlayers(),
       db.fetchTasks(),
       db.fetchProfiles(),
-      db.fetchClubs(),
-      db.fetchDistributionEntries(),
-      db.fetchNegotiations(),
-      db.fetchScoutingPlayers(),
-      db.fetchScoutingReports(),
-      db.fetchScoutingMatches(),
-      db.fetchMatchPlayers(),
-      db.fetchBoulemaPeticiones().catch(() => [] as BoulemaPeticion[]),
-    ]).then(([p, t, pr, cl, de, ng, sp, sr, sm, mp, bp]) => {
+    ]).then(([p, t, pr]) => {
+      if (cancelled) return
       setPlayers(p)
       setTasks(t)
       profilesRef.current = pr as Profile[]
       setProfiles(pr as Profile[])
-      setClubs(cl as Club[])
-      setDistEntries(de as DistributionEntry[])
-      setNegotiations(ng as ClubNegotiation[])
-      setScoutingPlayers(sp as ScoutingPlayer[])
-      setScoutingReports(sr as ScoutingReport[])
-      setScoutingMatches(sm as ScoutingMatch[])
-      setMatchPlayers(mp as ScoutingMatchPlayer[])
-      setBoulemaPeticiones(bp as BoulemaPeticion[])
+      setDataLoading(false)
+
+      // Fase 2 en background
+      Promise.all([
+        db.fetchClubs(),
+        db.fetchDistributionEntries(),
+        db.fetchNegotiations(),
+        db.fetchScoutingPlayers(),
+        db.fetchScoutingReports(),
+        db.fetchScoutingMatches(),
+        db.fetchMatchPlayers(),
+        db.fetchBoulemaPeticiones().catch(() => [] as BoulemaPeticion[]),
+      ]).then(([cl, de, ng, sp, sr, sm, mp, bp]) => {
+        if (cancelled) return
+        setClubs(cl as Club[])
+        setDistEntries(de as DistributionEntry[])
+        setNegotiations(ng as ClubNegotiation[])
+        setScoutingPlayers(sp as ScoutingPlayer[])
+        setScoutingReports(sr as ScoutingReport[])
+        setScoutingMatches(sm as ScoutingMatch[])
+        setMatchPlayers(mp as ScoutingMatchPlayer[])
+        setBoulemaPeticiones(bp as BoulemaPeticion[])
+      }).catch((err: unknown) => {
+        // No bloquea la app: Distribución/Captación mostrarán listas vacías
+        console.error('Error cargando datos secundarios:', err)
+      })
     }).catch((err: unknown) => {
+      if (cancelled) return
       console.error('Error cargando datos iniciales:', err)
       setDataError(err instanceof Error ? err.message : 'Error desconocido')
-    }).finally(() => setDataLoading(false))
+      setDataLoading(false)
+    })
+
+    return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, reloadKey])  // user.id — not the object — so token refreshes don't re-trigger this
 

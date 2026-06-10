@@ -31,13 +31,13 @@ export function OverviewPanel({ players, profiles, onBack, onLogout, onAdmin }: 
       {/* Header */}
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="mx-auto max-w-5xl flex items-center gap-3 px-4 py-3">
-          <button onClick={onBack} aria-label="Volver" className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500 hover:text-slate-700">
+          <button onClick={onBack} aria-label="Volver" className="p-2 sm:p-1.5 rounded-md hover:bg-slate-100 text-slate-500 hover:text-slate-700">
             <ArrowLeft className="w-5 h-5" />
           </button>
           <img src={logoImg} alt="" className="h-8 w-auto rounded" />
-          <div className="flex-1">
-            <h1 className="text-base font-bold text-slate-800">Overview</h1>
-            <p className="text-xs text-slate-400">Estadísticas generales</p>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-base font-bold text-slate-800 truncate">Overview</h1>
+            <p className="text-xs text-slate-400 truncate">Estadísticas generales</p>
           </div>
           <div className="flex items-center gap-2">
             {onAdmin && (
@@ -169,9 +169,9 @@ function PlantillaTab({ players, profiles }: { players: Player[]; profiles: Prof
           <h3 className="text-sm font-semibold text-slate-800 mb-3">Nacionalidades</h3>
           <div className="space-y-1.5 max-h-48 overflow-y-auto">
             {nationalities.map(([nat, count]) => (
-              <div key={nat} className="flex items-center justify-between py-1">
-                <span className="text-xs text-slate-700">{nat}</span>
-                <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">{count}</span>
+              <div key={nat} className="flex items-center justify-between gap-2 py-1">
+                <span className="text-xs text-slate-700 truncate min-w-0">{nat}</span>
+                <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded flex-shrink-0">{count}</span>
               </div>
             ))}
           </div>
@@ -182,9 +182,9 @@ function PlantillaTab({ players, profiles }: { players: Player[]; profiles: Prof
           <h3 className="text-sm font-semibold text-slate-800 mb-3">Posiciones</h3>
           <div className="space-y-1.5 max-h-48 overflow-y-auto">
             {positions.map(([pos, count]) => (
-              <div key={pos} className="flex items-center justify-between py-1">
-                <span className="text-xs text-slate-700">{pos}</span>
-                <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">{count}</span>
+              <div key={pos} className="flex items-center justify-between gap-2 py-1">
+                <span className="text-xs text-slate-700 truncate min-w-0">{pos}</span>
+                <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded flex-shrink-0">{count}</span>
               </div>
             ))}
             {positions.length === 0 && (
@@ -198,9 +198,9 @@ function PlantillaTab({ players, profiles }: { players: Player[]; profiles: Prof
           <h3 className="text-sm font-semibold text-slate-800 mb-3">Clubes actuales</h3>
           <div className="space-y-1.5 max-h-48 overflow-y-auto">
             {clubs.map(([club, count]) => (
-              <div key={club} className="flex items-center justify-between py-1">
-                <span className="text-xs text-slate-700">{club}</span>
-                <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">{count}</span>
+              <div key={club} className="flex items-center justify-between gap-2 py-1">
+                <span className="text-xs text-slate-700 truncate min-w-0">{club}</span>
+                <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded flex-shrink-0">{count}</span>
               </div>
             ))}
             {clubs.length === 0 && (
@@ -214,14 +214,14 @@ function PlantillaTab({ players, profiles }: { players: Player[]; profiles: Prof
           <h3 className="text-sm font-semibold text-slate-800 mb-3">Encargados</h3>
           <div className="space-y-1.5 max-h-48 overflow-y-auto">
             {managers.map((m) => (
-              <div key={m.profile!.id} className="flex items-center justify-between py-1">
-                <div className="flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-slate-200 text-[9px] font-bold flex items-center justify-center text-slate-600">
+              <div key={m.profile!.id} className="flex items-center justify-between gap-2 py-1">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="w-5 h-5 rounded-full bg-slate-200 text-[9px] font-bold flex items-center justify-center text-slate-600 flex-shrink-0">
                     {m.profile!.avatar}
                   </span>
-                  <span className="text-xs text-slate-700">{m.profile!.name}</span>
+                  <span className="text-xs text-slate-700 truncate">{m.profile!.name}</span>
                 </div>
-                <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">{m.count} jugadores</span>
+                <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded flex-shrink-0 whitespace-nowrap">{m.count} jugadores</span>
               </div>
             ))}
             {managers.length === 0 && (
@@ -316,7 +316,7 @@ function ContratosTab({ players }: { players: Player[] }) {
           <h3 className="text-sm font-semibold text-slate-800">Contratos de representación</h3>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-xs">
+          <table className="w-full min-w-[520px] text-xs">
             <thead>
               <tr className="bg-slate-50 text-slate-500">
                 <th className="text-left px-4 py-2 font-medium">Jugador</th>
@@ -330,7 +330,7 @@ function ContratosTab({ players }: { players: Player[] }) {
                 const d = daysLeft(p.representationContract.end);
                 return (
                   <tr key={p.id} className="border-t border-slate-50 hover:bg-slate-50">
-                    <td className="px-4 py-2 font-medium text-slate-800">{p.name}</td>
+                    <td className="px-4 py-2 font-medium text-slate-800 whitespace-nowrap">{p.name}</td>
                     <td className="px-4 py-2 text-slate-500">
                       {p.representationContract.start ? new Date(p.representationContract.start).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" }) : "—"}
                     </td>
@@ -357,7 +357,7 @@ function ContratosTab({ players }: { players: Player[] }) {
           <h3 className="text-sm font-semibold text-slate-800">Contratos de club</h3>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-xs">
+          <table className="w-full min-w-[600px] text-xs">
             <thead>
               <tr className="bg-slate-50 text-slate-500">
                 <th className="text-left px-4 py-2 font-medium">Jugador</th>
@@ -373,7 +373,7 @@ function ContratosTab({ players }: { players: Player[] }) {
                 const clubName = p.clubs.length > 0 ? p.clubs.find((c) => c.type !== "propietario")?.name || p.clubs[0].name : "—";
                 return (
                   <tr key={p.id} className="border-t border-slate-50 hover:bg-slate-50">
-                    <td className="px-4 py-2 font-medium text-slate-800">{p.name}</td>
+                    <td className="px-4 py-2 font-medium text-slate-800 whitespace-nowrap">{p.name}</td>
                     <td className="px-4 py-2 text-slate-500">{clubName}</td>
                     <td className="px-4 py-2 text-slate-500">
                       {new Date(p.clubContract.endDate).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" })}

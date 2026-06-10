@@ -36,13 +36,13 @@ export function AdminPanel({ profiles, tasks, players, onBack, onRefresh, onLogo
     <div className="min-h-screen bg-slate-50">
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="max-w-5xl mx-auto flex items-center gap-3 px-4 py-3">
-          <button onClick={onBack} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600">
+          <button onClick={onBack} className="p-2 sm:p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600">
             <ArrowLeft className="w-5 h-5" />
           </button>
           <img src={logoImg} alt="" className="h-8 w-auto rounded" />
-          <div className="flex-1">
-            <h1 className="text-base font-bold text-slate-800">Administración</h1>
-            <p className="text-xs text-slate-400">Gestión del equipo y seguimiento</p>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-base font-bold text-slate-800 truncate">Administración</h1>
+            <p className="text-xs text-slate-400 truncate">Gestión del equipo y seguimiento</p>
           </div>
           <button onClick={onLogout} className="p-2 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600" title="Cerrar sesión">
             <LogOut className="w-4 h-4" />
@@ -241,8 +241,8 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
           {profiles.map((p) => {
             const managedCount = players.filter(pl => pl.managedBy.includes(p.id)).length
             return (
-              <div key={p.id} className="px-5 py-3">
-                <div className="flex items-center gap-3">
+              <div key={p.id} className="px-4 sm:px-5 py-3">
+                <div className="flex items-center gap-3 flex-wrap">
                   <div className="w-9 h-9 rounded-full text-white text-xs font-bold flex items-center justify-center flex-shrink-0 bg-primary"
                    >{p.avatar}</div>
 
@@ -257,8 +257,8 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
                     </div>
                   ) : (
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-slate-800">{p.name}</span>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-sm font-medium text-slate-800 truncate">{p.name}</span>
                         {p.is_admin && (
                           <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] font-semibold bg-blue-50 text-blue-700">
                             <Shield className="w-2.5 h-2.5" /> Admin
@@ -269,17 +269,17 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
                     </div>
                   )}
 
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1 sm:gap-1.5 ml-auto flex-wrap justify-end">
                     <button onClick={() => { setEditingId(p.id); setEditName(p.name); setEditAvatar(p.avatar) }}
-                      className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600" title="Editar">
+                      className="p-2 sm:p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600" title="Editar" aria-label="Editar">
                       <Edit3 className="w-3.5 h-3.5" />
                     </button>
                     <button onClick={() => { setResetId(resetId === p.id ? null : p.id); setNewPassword(generatePassword()) }}
-                      className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-amber-500" title="Cambiar contraseña">
+                      className="p-2 sm:p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-amber-500" title="Cambiar contraseña" aria-label="Cambiar contraseña">
                       <KeyRound className="w-3.5 h-3.5" />
                     </button>
                     <button onClick={() => setDeleteId(deleteId === p.id ? null : p.id)}
-                      className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-red-500" title="Eliminar">
+                      className="p-2 sm:p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-red-500" title="Eliminar" aria-label="Eliminar">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                     <button onClick={() => handleToggleAdmin(p)}
@@ -293,7 +293,7 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
 
                 {/* Reset password */}
                 {resetId === p.id && (
-                  <div className="mt-2 ml-12 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
+                  <div className="mt-2 ml-0 sm:ml-12 flex items-center gap-2 flex-wrap bg-amber-50 border border-amber-200 rounded-lg p-2.5">
                     <input type="text" value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
                       className="flex-1 rounded border border-amber-200 px-2 py-1 text-sm font-mono" placeholder="Nueva contraseña" />
                     <button onClick={() => handleResetPassword(p.id)} disabled={resetStatus === 'saving'}
@@ -307,7 +307,7 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
 
                 {/* Delete confirm */}
                 {deleteId === p.id && (
-                  <div className="mt-2 ml-12 flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg p-2.5">
+                  <div className="mt-2 ml-0 sm:ml-12 flex items-center gap-2 flex-wrap bg-red-50 border border-red-200 rounded-lg p-2.5">
                     <span className="text-xs text-red-700 flex-1">¿Eliminar a <strong>{p.name}</strong>? Esta acción no se puede deshacer.</span>
                     <button onClick={() => handleDeleteUser(p)}
                       className="text-xs px-2.5 py-1 rounded bg-red-500 text-white hover:bg-red-600">Eliminar</button>
@@ -322,8 +322,8 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
 
       {onOpenTable && (
         <div className="bg-white border border-slate-200 rounded-lg p-5">
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="min-w-0">
               <h2 className="text-sm font-semibold text-slate-800">Tabla de jugadores</h2>
               <p className="text-xs text-slate-400 mt-0.5">Edición rápida de datos de jugadores</p>
             </div>
@@ -423,8 +423,8 @@ function TaskTrackingTab({ profiles, tasks, players }: { profiles: Profile[]; ta
               >
                 <div className="w-9 h-9 rounded-full text-white text-xs font-bold flex items-center justify-center flex-shrink-0 bg-primary">{p.avatar}</div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-semibold text-slate-800">{p.name}</p>
+                  <div className="flex items-center gap-2 flex-wrap min-w-0">
+                    <p className="text-sm font-semibold text-slate-800 truncate">{p.name}</p>
                     {overdue.length > 0 && (
                       <span className="flex items-center gap-0.5 text-[11px] text-red-600 bg-red-50 border border-red-200 rounded-full px-1.5 py-0.5">
                         <AlertTriangle className="w-2.5 h-2.5" /> {overdue.length} vencida{overdue.length !== 1 ? 's' : ''}

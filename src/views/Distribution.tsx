@@ -567,7 +567,7 @@ export function Distribution({
             {currentProfile.is_admin && onAdmin && (
               <button onClick={onAdmin} className="p-1 sm:p-1.5 text-slate-400 hover:text-slate-600 transition-colors text-xs hidden sm:block">Admin</button>
             )}
-            <button onClick={onLogout} aria-label="Cerrar sesión" className="text-slate-400 hover:text-slate-600 transition-colors p-1">
+            <button onClick={onLogout} aria-label="Cerrar sesión" className="text-slate-400 hover:text-slate-600 transition-colors p-2 sm:p-1">
               <LogOut className="w-4 h-4" />
             </button>
           </div>
@@ -903,7 +903,7 @@ export function Distribution({
                   {confDropdownOpen && (
                     <>
                       <div className="fixed inset-0 z-40" onClick={() => setConfDropdownOpen(false)} />
-                      <div className="absolute z-50 mt-1 w-52 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden">
+                      <div className="absolute z-50 mt-1 w-52 max-w-[calc(100vw-2rem)] bg-white border border-slate-200 rounded-xl shadow-xl max-h-[50vh] overflow-y-auto">
                         <div className="p-1.5 border-b border-slate-100">
                           <button onClick={() => { setConfederationFilter([]); setConfDropdownOpen(false) }} className="w-full text-left px-2 py-1.5 rounded-lg text-xs hover:bg-slate-50 text-slate-600">Todas las confederaciones</button>
                         </div>
@@ -1233,7 +1233,7 @@ export function Distribution({
 
               {/* Stats summary */}
               {clubs.some(c => c.needs.length > 0) && (
-                <div className="flex items-center gap-4 px-3 py-2 bg-slate-50 rounded-lg mb-3 text-xs text-slate-500">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 bg-slate-50 rounded-lg mb-3 text-xs text-slate-500">
                   <span><span className="font-semibold text-slate-700">{clubNeeds.length}</span> solicitudes{hasNeedsFilters ? ' (filtradas)' : ''}</span>
                   <span><span className="font-semibold text-slate-700">{new Set(clubNeeds.map(({need}) => need.position)).size}</span> posiciones distintas</span>
                   <span><span className="font-semibold text-slate-700">{new Set(clubNeeds.filter(({club}) => getClubTier(club.league, club.country) === 'A').map(({club}) => club.id)).size}</span> de clubes Tier A</span>
@@ -1416,8 +1416,8 @@ export function Distribution({
                 </div>
 
                 {/* ── DESKTOP TABLE VIEW (hidden on mobile) ── */}
-                <div className="hidden sm:block bg-white rounded-lg border border-slate-200">
-                  <table className="w-full text-sm table-fixed">
+                <div className="hidden sm:block bg-white rounded-lg border border-slate-200 overflow-x-auto">
+                  <table className="w-full min-w-[760px] text-sm table-fixed">
                     <thead>
                       <tr className="border-b border-slate-100 bg-slate-50 text-[11px] text-slate-500 uppercase tracking-wider">
                         <th className="text-left px-2 py-2.5 font-semibold w-[140px]">Posición</th>
@@ -1703,7 +1703,7 @@ export function Distribution({
                                     <span className="text-sm font-medium text-slate-800">{player.name}</span>
                                     <span className="text-xs text-slate-400 ml-2">{player.positions[0]}</span>
                                   </div>
-                                  <div className="text-sm text-slate-600 truncate w-36 flex-shrink-0">{club.name}</div>
+                                  <div className="text-sm text-slate-600 truncate w-24 sm:w-36 flex-shrink-0">{club.name}</div>
                                   {neg.aisManager && (
                                     <span className="text-[11px] font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded flex-shrink-0">{neg.aisManager}</span>
                                   )}
@@ -1955,7 +1955,7 @@ export function Distribution({
               return (
                 <div className="h-full flex flex-col">
                   <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 flex-shrink-0">
-                    <button onClick={closePanel} aria-label="Cerrar panel" className="p-1 rounded hover:bg-slate-100 text-slate-400">
+                    <button onClick={closePanel} aria-label="Cerrar panel" className="p-2 sm:p-1 rounded hover:bg-slate-100 text-slate-400">
                       <X className="w-4 h-4" />
                     </button>
                     <Avatar name={player.name} photo={player.photo} size="md" />
@@ -1989,7 +1989,7 @@ export function Distribution({
                       <div className="ml-auto flex items-center gap-1">
                         <button
                           onClick={() => setEditingEntry(selectedEntry)}
-                          className="p-1 text-slate-400 hover:text-slate-600 rounded hover:bg-slate-100"
+                          className="p-2 sm:p-1 text-slate-400 hover:text-slate-600 rounded hover:bg-slate-100"
                           title="Editar"
                           aria-label="Editar entrada de distribución"
                         >
@@ -1997,7 +1997,7 @@ export function Distribution({
                         </button>
                         <button
                           onClick={() => setConfirmDeleteEntryId(selectedEntry.id)}
-                          className="p-1 text-red-400 hover:text-red-600 rounded hover:bg-red-50"
+                          className="p-2 sm:p-1 text-red-400 hover:text-red-600 rounded hover:bg-red-50"
                           title="Quitar de distribución"
                           aria-label="Quitar de distribución"
                         >
@@ -2064,7 +2064,7 @@ export function Distribution({
                             <button
                               onClick={() => setEditingNeg(neg)}
                               aria-label="Editar negociación"
-                              className="ml-auto p-1 text-slate-300 hover:text-slate-500 flex-shrink-0"
+                              className="ml-auto p-2 sm:p-1 text-slate-300 hover:text-slate-500 flex-shrink-0"
                             >
                               <Pencil className="w-3 h-3" />
                             </button>
@@ -2123,7 +2123,7 @@ export function Distribution({
                 <div className="h-full flex flex-col">
                   {/* Header */}
                   <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 flex-shrink-0">
-                    <button onClick={closePanel} aria-label="Cerrar panel" className="p-1 rounded hover:bg-slate-100 text-slate-400">
+                    <button onClick={closePanel} aria-label="Cerrar panel" className="p-2 sm:p-1 rounded hover:bg-slate-100 text-slate-400">
                       <X className="w-4 h-4" />
                     </button>
                     <div className="flex-1 min-w-0">
@@ -2141,7 +2141,7 @@ export function Distribution({
                     </div>
                     <button
                       onClick={() => { setSelectedClubId(club.id); setSelectedNeed(null); setSelectedEntryId(null) }}
-                      className="p-1 text-slate-300 hover:text-slate-500 flex-shrink-0"
+                      className="p-2 sm:p-1 text-slate-300 hover:text-slate-500 flex-shrink-0"
                       title="Ver club completo"
                     >
                       <ChevronRight className="w-4 h-4" />
@@ -2189,7 +2189,7 @@ export function Distribution({
                                 </div>
                                 <span className={`text-xs px-2 py-0.5 rounded-full inline-block mt-0.5 ${scfg.color}`}>{scfg.label}</span>
                               </div>
-                              <button onClick={() => setEditingNeg(neg)} aria-label="Editar negociación" className="p-1 text-slate-300 hover:text-slate-500 flex-shrink-0">
+                              <button onClick={() => setEditingNeg(neg)} aria-label="Editar negociación" className="p-2 sm:p-1 text-slate-300 hover:text-slate-500 flex-shrink-0">
                                 <Pencil className="w-3 h-3" />
                               </button>
                             </div>
@@ -2272,7 +2272,7 @@ export function Distribution({
               return (
                 <div className="h-full flex flex-col">
                   <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 flex-shrink-0">
-                    <button onClick={closePanel} aria-label="Cerrar panel" className="p-1 rounded hover:bg-slate-100 text-slate-400">
+                    <button onClick={closePanel} aria-label="Cerrar panel" className="p-2 sm:p-1 rounded hover:bg-slate-100 text-slate-400">
                       <X className="w-4 h-4" />
                     </button>
                     <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
@@ -2282,7 +2282,7 @@ export function Distribution({
                       <div className="font-semibold text-slate-800 text-sm">{selectedClub.name}</div>
                       <div className="text-xs text-slate-500">{selectedClub.league}</div>
                     </div>
-                    <button onClick={() => setEditingClub(selectedClub)} aria-label="Editar club" className="p-1 text-slate-400 hover:text-slate-600">
+                    <button onClick={() => setEditingClub(selectedClub)} aria-label="Editar club" className="p-2 sm:p-1 text-slate-400 hover:text-slate-600">
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -2397,7 +2397,7 @@ export function Distribution({
                             <button
                               onClick={() => setEditingNeg(neg)}
                               aria-label="Editar negociación"
-                              className="p-1 text-slate-300 hover:text-slate-500 flex-shrink-0"
+                              className="p-2 sm:p-1 text-slate-300 hover:text-slate-500 flex-shrink-0"
                             >
                               <Pencil className="w-3 h-3" />
                             </button>
@@ -2612,7 +2612,7 @@ export function Distribution({
         if (!entry) return null
         return (
           <div
-            className="fixed z-[200] bg-white border border-slate-200 rounded-xl shadow-xl py-1 min-w-[160px]"
+            className="fixed z-[200] bg-white border border-slate-200 rounded-xl shadow-xl py-1 min-w-[160px] max-w-[calc(100vw-2rem)] max-h-[50vh] overflow-y-auto"
             style={{ top: managerDropPos.top, right: managerDropPos.right }}
             onClick={e => e.stopPropagation()}
           >
@@ -2772,7 +2772,7 @@ function ClubCard({ club, negotiations, isSelected, onClick, onOffer, onTogglePr
           <button
             onClick={e => { e.stopPropagation(); onTogglePriority() }}
             title={club.isPriority ? 'Quitar prioritario' : 'Marcar como prioritario'}
-            className={`p-1 rounded transition-all ${
+            className={`p-2 sm:p-1 rounded transition-all ${
               club.isPriority
                 ? 'text-green-500 hover:text-green-600'
                 : 'text-slate-300 sm:opacity-0 sm:group-hover:opacity-100 hover:text-amber-400'
@@ -3616,11 +3616,11 @@ function ModalShell({ title, onClose, children, escDisabled = false }: { title: 
       <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white rounded-t-2xl sm:rounded-t-2xl">
           <h2 className="font-semibold text-slate-800 text-sm">{title}</h2>
-          <button onClick={onClose} aria-label="Cerrar" className="p-1 rounded hover:bg-slate-100 text-slate-400">
+          <button onClick={onClose} aria-label="Cerrar" className="p-2 sm:p-1 rounded hover:bg-slate-100 text-slate-400">
             <X className="w-4 h-4" />
           </button>
         </div>
-        <div className="p-4">{children}</div>
+        <div className="p-4 safe-area-bottom">{children}</div>
       </div>
     </div>
   )
@@ -3713,7 +3713,7 @@ function BulkAssignModal({ clubs, existingNegotiations, onClose, onSave }: {
               {newIds.length} seleccionado{newIds.length !== 1 ? 's' : ''}
             </span>
           )}
-          <button onClick={onClose} aria-label="Cerrar" className="p-1 rounded hover:bg-slate-100 text-slate-400">
+          <button onClick={onClose} aria-label="Cerrar" className="p-2 sm:p-1 rounded hover:bg-slate-100 text-slate-400">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -3798,7 +3798,7 @@ function BulkAssignModal({ clubs, existingNegotiations, onClose, onSave }: {
         </div>
 
         {/* Footer */}
-        <div className="px-4 py-3 border-t border-slate-100 flex gap-2 flex-shrink-0">
+        <div className="px-4 py-3 border-t border-slate-100 flex gap-2 flex-shrink-0 safe-area-bottom">
           <button onClick={onClose} className="flex-1 py-2 text-sm border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50">
             Cancelar
           </button>
@@ -3846,7 +3846,7 @@ function MultiSelect({ label, options, selected, onChange }: {
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-20 min-w-[180px] py-1 max-h-60 overflow-y-auto">
+          <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-20 min-w-[180px] max-w-[calc(100vw-2rem)] py-1 max-h-[50vh] overflow-y-auto">
             {options.map(opt => (
               <label key={opt} className="flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 cursor-pointer">
                 <input

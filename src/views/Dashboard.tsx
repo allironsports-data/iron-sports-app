@@ -454,11 +454,11 @@ export function Dashboard({
             </div>
             <span className="hidden sm:block font-black text-sm tracking-tight text-slate-900 uppercase">All Iron Sports</span>
           </div>
-          <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="flex items-center gap-0.5 sm:gap-2 min-w-0">
             {/* Global search */}
             <button
               onClick={() => setShowSearch(true)}
-              className="flex items-center gap-1.5 px-2 py-1 rounded-md text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+              className="flex items-center gap-1.5 px-2 py-2 sm:py-1 rounded-md text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors flex-shrink-0"
               title="Buscar (⌘K)"
               aria-label="Buscar (⌘K)"
             >
@@ -468,7 +468,7 @@ export function Dashboard({
             {/* Notification bell */}
             <button
               onClick={() => setShowNotifications(!showNotifications)}
-              className="relative p-1.5 text-slate-500 hover:text-slate-700 transition-colors"
+              className="relative p-2 sm:p-1.5 text-slate-500 hover:text-slate-700 transition-colors flex-shrink-0"
               title="Notificaciones"
               aria-label="Notificaciones"
             >
@@ -487,16 +487,16 @@ export function Dashboard({
               style={{ background: PRIMARY }}
             >{currentProfile.avatar}</div>
             {currentProfile.is_admin && onOverview && (
-              <button onClick={onOverview} aria-label="Overview" className="p-1 sm:p-1.5 text-slate-500 hover:text-slate-700 transition-colors" title="Overview">
+              <button onClick={onOverview} aria-label="Overview" className="p-2 sm:p-1.5 text-slate-500 hover:text-slate-700 transition-colors flex-shrink-0" title="Overview">
                 <BarChart3 className="w-4 h-4" />
               </button>
             )}
             {currentProfile.is_admin && onAdmin && (
-              <button onClick={onAdmin} aria-label="Administración" className="p-1 sm:p-1.5 text-slate-500 hover:text-slate-700 transition-colors" title="Admin">
+              <button onClick={onAdmin} aria-label="Administración" className="p-2 sm:p-1.5 text-slate-500 hover:text-slate-700 transition-colors flex-shrink-0" title="Admin">
                 <Users className="w-4 h-4" />
               </button>
             )}
-            <button onClick={onLogout} aria-label="Cerrar sesión" title="Cerrar sesión" className="text-slate-500 hover:text-slate-700 transition-colors p-1">
+            <button onClick={onLogout} aria-label="Cerrar sesión" title="Cerrar sesión" className="text-slate-500 hover:text-slate-700 transition-colors p-2 sm:p-1.5 flex-shrink-0">
               <LogOut className="w-4 h-4" />
             </button>
           </div>
@@ -624,7 +624,7 @@ export function Dashboard({
         {activeTab === 'tareas' && (<>
 
         {/* ── Header: Mis tareas / Equipo toggle + actions ── */}
-        <div className="flex items-center justify-between gap-3 mb-4">
+        <div className="flex items-center justify-between gap-2 sm:gap-3 mb-4 flex-wrap">
           <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
             {(['mis', 'equipo'] as const).map(v => (
               <button
@@ -662,7 +662,7 @@ export function Dashboard({
         {tasksMainView === 'mis' && (<>
 
           {/* 4-stat strip */}
-          <div className="grid grid-cols-4 gap-2 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
             <button
               onClick={() => setQuickFilter(q => q === 'overdue' ? null : 'overdue')}
               className={`rounded-xl p-3 text-center border transition-all active:scale-95 ${
@@ -1035,7 +1035,7 @@ export function Dashboard({
           {equipoSubView === 'todas' && (<>
 
             {/* 4-stat strip */}
-            <div className="grid grid-cols-4 gap-2 mb-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
               <button
                 onClick={() => setEquipoQuickFilter(q => q === 'overdue' ? null : 'overdue')}
                 className={`rounded-xl p-3 text-center border transition-all active:scale-95 ${
@@ -1437,7 +1437,7 @@ export function Dashboard({
                     {!selectMode && onAddGeneralTask && (
                       <button
                         onClick={(e) => { e.stopPropagation(); setQuickTaskPlayer(player); }}
-                        className="w-6 h-6 rounded-full bg-slate-100 hover:bg-blue-100 text-slate-500 hover:text-blue-600 flex items-center justify-center transition-colors flex-shrink-0"
+                        className="w-8 h-8 sm:w-6 sm:h-6 rounded-full bg-slate-100 hover:bg-blue-100 text-slate-500 hover:text-blue-600 flex items-center justify-center transition-colors flex-shrink-0"
                         title="Nueva tarea rápida"
                         aria-label="Nueva tarea rápida"
                       >
@@ -1785,7 +1785,7 @@ export function Dashboard({
       {/* ── Add Event Modal ──────────────────────────────────── */}
       {showAddEvent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-4 sm:p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <h4 className="text-sm font-semibold text-slate-800">Nuevo evento de actividad</h4>
 
             {/* Player selector — combobox */}
@@ -2009,15 +2009,15 @@ export function Dashboard({
               );
             })()}
 
-            <div className="flex gap-2 pt-1">
+            <div className="flex gap-2 pt-1 safe-area-bottom">
               <button onClick={() => setShowAddEvent(false)}
-                className="flex-1 py-2 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
+                className="flex-1 py-2.5 sm:py-2 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
                 Cancelar
               </button>
               <button
                 onClick={handleSaveEvent}
                 disabled={evtSaving || !evtPlayer || !evtDate || (evtType === 'custom' && !evtCustomType.trim())}
-                className="flex-1 py-2 text-xs rounded-lg text-white disabled:opacity-50 transition-colors bg-primary hover:bg-primary/90"
+                className="flex-1 py-2.5 sm:py-2 text-xs rounded-lg text-white disabled:opacity-50 transition-colors bg-primary hover:bg-primary/90"
               >
                 {evtSaving ? 'Guardando…' : 'Guardar evento'}
               </button>
@@ -2563,12 +2563,12 @@ function AssignManagerModal({ profiles, count, loading, onClose, onAssign }: {
   useEscapeKey(onClose);
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-0 sm:p-4">
-      <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-sm">
+      <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-sm max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
           <h2 className="text-sm font-semibold text-slate-800">Asignar manager a {count} jugador{count > 1 ? "es" : ""}</h2>
-          <button onClick={onClose} aria-label="Cerrar" className="text-slate-500 hover:text-slate-700"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="text-slate-500 hover:text-slate-700 p-2 -m-2 sm:p-0 sm:m-0 flex-shrink-0"><X className="w-4 h-4" /></button>
         </div>
-        <div className="p-4 space-y-3">
+        <div className="p-4 space-y-3 safe-area-bottom">
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Selecciona un manager</label>
             <select value={managerId} onChange={(e) => setManagerId(e.target.value)}
@@ -2578,7 +2578,7 @@ function AssignManagerModal({ profiles, count, loading, onClose, onAssign }: {
             </select>
           </div>
           <button onClick={() => managerId && onAssign(managerId)} disabled={!managerId || loading}
-            className="w-full rounded-md text-white text-sm font-medium py-2 disabled:opacity-40 transition-colors bg-primary hover:bg-primary/90">
+            className="w-full rounded-md text-white text-sm font-medium py-2.5 sm:py-2 disabled:opacity-40 transition-colors bg-primary hover:bg-primary/90">
             {loading ? "Asignando…" : "Asignar"}
           </button>
         </div>
@@ -2643,12 +2643,12 @@ function AddPlayerModal({ profiles, onClose, onAdd }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-0 sm:p-4">
-      <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-lg max-h-[92vh] overflow-y-auto">
+      <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white">
           <h2 className="text-sm font-semibold text-slate-800">Nuevo jugador</h2>
-          <button onClick={onClose} aria-label="Cerrar" className="text-slate-500 hover:text-slate-700"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="text-slate-500 hover:text-slate-700 p-2 -m-2 sm:p-0 sm:m-0"><X className="w-4 h-4" /></button>
         </div>
-        <form onSubmit={handleSubmit} className="p-4 space-y-3 pb-8">
+        <form onSubmit={handleSubmit} className="p-4 space-y-3 pb-8 safe-area-bottom">
           <F label="Nombre completo" value={name} onChange={(v) => { setName(v); if (errors.name) setErrors(prev => ({ ...prev, name: undefined })); }} required error={errors.name} />
           <div className="grid grid-cols-2 gap-3">
             <F label="Fecha de nacimiento" value={birthDate} onChange={(v) => { setBirthDate(v); if (errors.birthDate) setErrors(prev => ({ ...prev, birthDate: undefined })); }} type="date" required error={errors.birthDate} />
@@ -2743,12 +2743,12 @@ function AddGeneralTaskModal({ profiles, players, currentProfileId, onClose, onA
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-0 sm:p-4">
-      <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-sm">
+      <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-sm max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white">
           <h2 className="text-sm font-semibold text-slate-800">Nueva tarea</h2>
-          <button onClick={onClose} aria-label="Cerrar" className="text-slate-500 hover:text-slate-700"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="text-slate-500 hover:text-slate-700 p-2 -m-2 sm:p-0 sm:m-0"><X className="w-4 h-4" /></button>
         </div>
-        <form onSubmit={handleSubmit} className="p-4 space-y-3 pb-8">
+        <form onSubmit={handleSubmit} className="p-4 space-y-3 pb-8 safe-area-bottom">
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Jugador (opcional)</label>
             <select value={selectedPlayerId} onChange={(e) => setSelectedPlayerId(e.target.value)}
@@ -2853,12 +2853,12 @@ function EditGeneralTaskModal({ task, profiles, players, onClose, onUpdate, onDe
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-0 sm:p-4">
-      <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-md max-h-[92vh] overflow-y-auto">
+      <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-md max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white z-10">
           <h2 className="text-sm font-semibold text-slate-800">Editar tarea</h2>
-          <button onClick={onClose} aria-label="Cerrar" className="text-slate-500 hover:text-slate-700"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="text-slate-500 hover:text-slate-700 p-2 -m-2 sm:p-0 sm:m-0"><X className="w-4 h-4" /></button>
         </div>
-        <form onSubmit={handleSave} className="p-4 space-y-3 pb-8">
+        <form onSubmit={handleSave} className="p-4 space-y-3 pb-8 safe-area-bottom">
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Jugador (opcional)</label>
             <select value={selectedPlayerId} onChange={(e) => setSelectedPlayerId(e.target.value)}
@@ -2997,15 +2997,15 @@ function QuickTaskModal({ player, profiles, currentProfileId, onClose, onAdd }: 
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-0 sm:p-4">
-      <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-sm">
+      <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-sm max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-          <div>
+          <div className="min-w-0">
             <h2 className="text-sm font-semibold text-slate-800">Nueva tarea</h2>
-            <p className="text-xs text-slate-400">{player.name}</p>
+            <p className="text-xs text-slate-400 truncate">{player.name}</p>
           </div>
-          <button onClick={onClose} aria-label="Cerrar" className="text-slate-500 hover:text-slate-700"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="text-slate-500 hover:text-slate-700 p-2 -m-2 sm:p-0 sm:m-0 flex-shrink-0"><X className="w-4 h-4" /></button>
         </div>
-        <div className="p-4 space-y-3 pb-6">
+        <div className="p-4 space-y-3 pb-6 safe-area-bottom">
           <div>
             <input
               autoFocus
@@ -3108,9 +3108,9 @@ function GlobalSearch({ players, tasks, profiles, onSelectPlayer, onSelectTask, 
             autoFocus
           />
           {query && (
-            <button onClick={() => setQuery("")} aria-label="Limpiar búsqueda" className="text-slate-500 hover:text-slate-700"><X className="w-3.5 h-3.5" /></button>
+            <button onClick={() => setQuery("")} aria-label="Limpiar búsqueda" className="text-slate-500 hover:text-slate-700 p-2 -m-1.5 sm:p-0 sm:m-0 flex-shrink-0"><X className="w-3.5 h-3.5" /></button>
           )}
-          <button onClick={onClose} className="text-xs text-slate-400 border border-slate-200 rounded px-1.5 py-0.5 hover:bg-slate-50">Esc</button>
+          <button onClick={onClose} className="text-xs text-slate-400 border border-slate-200 rounded px-1.5 py-1 sm:py-0.5 hover:bg-slate-50 flex-shrink-0">Esc</button>
         </div>
 
         {/* Results */}

@@ -365,8 +365,8 @@ export function Contactos({ onBack }: { onBack: () => void }) {
     <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* ── Header ── */}
       <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-sm">
-        <div className="max-w-6xl mx-auto px-4 h-14 flex items-center gap-2">
-          <button onClick={onBack} className="p-1.5 -ml-1 rounded hover:bg-slate-100 text-slate-500">
+        <div className="max-w-6xl mx-auto px-4 py-2 sm:py-0 sm:h-14 flex flex-wrap sm:flex-nowrap items-center gap-2">
+          <button onClick={onBack} className="p-2 sm:p-1.5 -ml-1 rounded hover:bg-slate-100 text-slate-500">
             <ArrowLeft className="w-4 h-4" />
           </button>
           <span className="text-sm font-semibold text-slate-800">Contactos</span>
@@ -424,8 +424,8 @@ export function Contactos({ onBack }: { onBack: () => void }) {
             Añadir
           </button>
 
-          {/* Search — wider */}
-          <div className="relative w-64">
+          {/* Search — wider; full row on mobile */}
+          <div className="relative w-full sm:w-64">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
             <input
               value={search}
@@ -442,15 +442,15 @@ export function Contactos({ onBack }: { onBack: () => void }) {
         </div>
       </header>
 
-      <div className="max-w-6xl mx-auto w-full flex flex-1 gap-0 px-4 py-4">
+      <div className="max-w-6xl mx-auto w-full flex flex-col sm:flex-row flex-1 gap-0 px-4 py-4">
 
         {/* ── Sidebar ── */}
-        <aside className="w-52 flex-shrink-0 mr-4">
-          <div className="bg-white border border-slate-200 rounded-lg overflow-hidden sticky top-20">
+        <aside className="w-full sm:w-52 flex-shrink-0 mb-4 sm:mb-0 sm:mr-4">
+          <div className="bg-white border border-slate-200 rounded-lg overflow-hidden sm:sticky sm:top-20">
             <div className="px-3 py-2 border-b border-slate-100">
               <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Regiones</p>
             </div>
-            <div className="overflow-y-auto max-h-[calc(100vh-120px)]">
+            <div className="overflow-y-auto max-h-64 sm:max-h-[calc(100vh-120px)]">
               {/* Favoritos */}
               <button
                 onClick={() => { setShowFavorites(true); setSelectedRegion(null); setSearch(''); setViewMode('regions') }}
@@ -531,7 +531,7 @@ export function Contactos({ onBack }: { onBack: () => void }) {
           {viewMode === 'alpha' && (
             <div>
               {/* Selection toolbar */}
-              <div className="mb-3 flex items-center gap-2">
+              <div className="mb-3 flex flex-wrap items-center gap-2">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
@@ -778,7 +778,7 @@ function AlphaContactRow({
         <span className="text-[11px] font-semibold text-slate-500">{initials(c.name)}</span>
       </div>
       {/* Info */}
-      <div className="flex-1 min-w-0 grid grid-cols-[1fr_1fr_auto] gap-x-3 items-center">
+      <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-x-3 gap-y-0.5 items-center">
         <div className="min-w-0">
           <p className="text-sm font-medium text-slate-800 truncate">
             {c.name ?? <span className="text-slate-400 italic text-xs">Sin nombre</span>}
@@ -795,18 +795,18 @@ function AlphaContactRow({
         </div>
       </div>
       {/* Actions */}
-      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-        <button onClick={onEdit} className="p-1.5 rounded hover:bg-slate-200 text-slate-400" title="Editar">
+      <div className="flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0">
+        <button onClick={onEdit} className="p-2 sm:p-1.5 rounded hover:bg-slate-200 text-slate-400" title="Editar">
           <Pencil className="w-3.5 h-3.5" />
         </button>
         <button
           onClick={onToggleFavorite}
-          className={`p-1.5 rounded hover:bg-slate-200 ${isFavorite ? 'text-amber-400' : 'text-slate-300'}`}
+          className={`p-2 sm:p-1.5 rounded hover:bg-slate-200 ${isFavorite ? 'text-amber-400' : 'text-slate-300'}`}
           title={isFavorite ? 'Quitar favorito' : 'Añadir favorito'}
         >
           <Star className={`w-3.5 h-3.5 ${isFavorite ? 'fill-amber-400' : ''}`} />
         </button>
-        <button onClick={onDelete} className="p-1.5 rounded hover:bg-red-100 text-slate-300 hover:text-red-500" title="Eliminar">
+        <button onClick={onDelete} className="p-2 sm:p-1.5 rounded hover:bg-red-100 text-slate-300 hover:text-red-500" title="Eliminar">
           <Trash2 className="w-3.5 h-3.5" />
         </button>
       </div>
@@ -848,17 +848,17 @@ function ContactRow({
           {c.phone2 && <PhoneLink phone={c.phone2} />}
         </div>
       </div>
-      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 mt-0.5">
-        <button onClick={onEdit} className="p-1.5 rounded hover:bg-slate-200 text-slate-400" title="Editar">
+      <div className="flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0 mt-0.5">
+        <button onClick={onEdit} className="p-2 sm:p-1.5 rounded hover:bg-slate-200 text-slate-400" title="Editar">
           <Pencil className="w-3.5 h-3.5" />
         </button>
         <button
           onClick={onToggleFavorite}
-          className={`p-1.5 rounded hover:bg-slate-200 ${isFavorite ? 'text-amber-400' : 'text-slate-300'}`}
+          className={`p-2 sm:p-1.5 rounded hover:bg-slate-200 ${isFavorite ? 'text-amber-400' : 'text-slate-300'}`}
         >
           <Star className={`w-3.5 h-3.5 ${isFavorite ? 'fill-amber-400' : ''}`} />
         </button>
-        <button onClick={onDelete} className="p-1.5 rounded hover:bg-red-100 text-slate-300 hover:text-red-500" title="Eliminar">
+        <button onClick={onDelete} className="p-2 sm:p-1.5 rounded hover:bg-red-100 text-slate-300 hover:text-red-500" title="Eliminar">
           <Trash2 className="w-3.5 h-3.5" />
         </button>
       </div>
@@ -975,12 +975,12 @@ function ContactFormModal({
           <h2 className="text-sm font-semibold text-slate-800">
             {mode === 'add' ? 'Nuevo contacto' : 'Editar contacto'}
           </h2>
-          <button onClick={onClose} className="p-1 rounded hover:bg-slate-100 text-slate-400">
+          <button onClick={onClose} className="p-2 sm:p-1 rounded hover:bg-slate-100 text-slate-400">
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="px-5 py-4 space-y-3">
+        <form onSubmit={handleSubmit} className="px-5 py-4 space-y-3 safe-area-bottom">
           {/* Name */}
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Nombre completo</label>

@@ -169,7 +169,7 @@ function ActiveFilterChips({ chips, onClearAll }: { chips: FilterChip[]; onClear
           key={c.key}
           onClick={c.onRemove}
           aria-label={`Quitar filtro ${c.label}`}
-          className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-primary/10 text-primary border border-primary/20 rounded-full hover:bg-primary/20 transition-colors"
+          className="inline-flex items-center gap-1 px-2 py-1.5 sm:py-0.5 text-xs font-medium bg-primary/10 text-primary border border-primary/20 rounded-full hover:bg-primary/20 transition-colors"
         >
           {c.label}
           <X className="w-3 h-3" />
@@ -177,7 +177,7 @@ function ActiveFilterChips({ chips, onClearAll }: { chips: FilterChip[]; onClear
       ))}
       <button
         onClick={onClearAll}
-        className="text-xs text-slate-500 hover:text-slate-700 underline underline-offset-2 px-1.5 py-0.5"
+        className="text-xs text-slate-500 hover:text-slate-700 underline underline-offset-2 px-1.5 py-1.5 sm:py-0.5"
       >
         Limpiar filtros
       </button>
@@ -297,7 +297,7 @@ function ReportCard({
         />
         <div className="flex items-center justify-between mb-1">
           <span className="text-[11px] font-semibold text-blue-600 uppercase tracking-wide">Editando informe</span>
-          <button onClick={requestCloseEdit} aria-label="Cerrar edición" className="text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>
+          <button onClick={requestCloseEdit} aria-label="Cerrar edición" className="text-slate-400 hover:text-slate-600 p-2 -m-2 sm:p-0 sm:m-0"><X className="w-3.5 h-3.5" /></button>
         </div>
         <input
           value={editTitle}
@@ -832,7 +832,7 @@ function AddBoulemaModal({
             <Send className="w-4 h-4 text-slate-400" />
             {initial ? 'Editar petición' : 'Añadir petición de informe'}
           </h2>
-          <button onClick={onClose} aria-label="Cerrar" className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
+          <button onClick={onClose} aria-label="Cerrar" className="p-2.5 sm:p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -965,7 +965,7 @@ function AddBoulemaModal({
 
           {error && <p className="text-xs text-red-500">{error}</p>}
 
-          <div className="flex gap-2 pt-2">
+          <div className="flex gap-2 pt-2 sticky bottom-0 bg-white -mx-5 -mb-5 px-5 pb-5 safe-area-bottom">
             <button
               type="button"
               onClick={onClose}
@@ -1086,7 +1086,7 @@ function RespondWithInformeModal({
             <FileText className="w-4 h-4 text-slate-400" />
             Crear informe
           </h2>
-          <button onClick={onClose} aria-label="Cerrar" className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
+          <button onClick={onClose} aria-label="Cerrar" className="p-2.5 sm:p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -1145,7 +1145,7 @@ function RespondWithInformeModal({
 
           {error && <p className="text-xs text-red-500">{error}</p>}
 
-          <div className="flex gap-2 pt-2">
+          <div className="flex gap-2 pt-2 sticky bottom-0 bg-white -mx-5 -mb-5 px-5 pb-5 safe-area-bottom">
             <button
               type="button"
               onClick={onClose}
@@ -1721,9 +1721,9 @@ export function Captacion({
           <span className="text-xs font-bold text-slate-800 tracking-wide uppercase hidden sm:block">All Iron Sports</span>
           <div className="flex-1" />
           {onAdmin && (
-            <button onClick={onAdmin} className="text-xs text-slate-500 hover:text-slate-800 px-2 py-1 rounded hover:bg-slate-100">Admin</button>
+            <button onClick={onAdmin} className="text-xs text-slate-500 hover:text-slate-800 px-2 py-2 sm:py-1 rounded hover:bg-slate-100">Admin</button>
           )}
-          <button onClick={onLogout} aria-label="Cerrar sesión" className="text-slate-400 hover:text-slate-700 p-1.5 rounded hover:bg-slate-100">
+          <button onClick={onLogout} aria-label="Cerrar sesión" className="text-slate-400 hover:text-slate-700 p-2.5 sm:p-1.5 rounded hover:bg-slate-100">
             <LogOut className="w-4 h-4" />
           </button>
         </div>
@@ -1801,7 +1801,7 @@ export function Captacion({
               <div className="flex items-center gap-1 flex-wrap">
                 <button
                   onClick={() => setAssessFilter('all')}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-full border transition-colors ${
+                  className={`px-2.5 py-1.5 sm:py-1 text-xs font-medium rounded-full border transition-colors ${
                     assessFilter === 'all' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'
                   }`}
                 >
@@ -1814,7 +1814,7 @@ export function Captacion({
                     <button
                       key={a}
                       onClick={() => setAssessFilter(active ? 'all' : a)}
-                      className={`px-2.5 py-1 text-xs font-medium rounded-full border transition-colors ${
+                      className={`px-2.5 py-1.5 sm:py-1 text-xs font-medium rounded-full border transition-colors ${
                         active ? `${cfg.bg} ${cfg.text} ${cfg.border}` : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
                       }`}
                     >
@@ -1958,8 +1958,8 @@ export function Captacion({
                           className={`cursor-pointer hover:bg-slate-50 transition-colors ${panelPlayerId === p.id ? 'bg-blue-50/40' : ''}`}
                         >
                           <td className="px-3 py-2.5">
-                            <div className="font-medium text-slate-800 text-sm">{p.fullName}</div>
-                            {p.nationality && <div className="text-xs text-slate-400">{p.nationality}</div>}
+                            <div className="font-medium text-slate-800 text-sm max-w-[140px] sm:max-w-none truncate">{p.fullName}</div>
+                            {p.nationality && <div className="text-xs text-slate-400 max-w-[140px] sm:max-w-none truncate">{p.nationality}</div>}
                           </td>
                           <td className="px-2 py-2.5 text-xs text-slate-600">
                             <div>{p.position1 ?? '—'}</div>
@@ -1978,7 +1978,7 @@ export function Captacion({
                             <div className="relative inline-block">
                               <button
                                 onClick={() => setQuickAssessId(quickAssessId === p.id ? null : p.id)}
-                                className="group flex items-center gap-1"
+                                className="group flex items-center gap-1 p-2 -m-2 sm:p-0 sm:m-0"
                                 title="Cambiar assessment"
                               >
                                 <AssessmentChip a={p.assessment} />
@@ -2037,12 +2037,12 @@ export function Captacion({
                   <span className="text-sm text-slate-600 font-medium">
                     Mostrando {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} de {filtered.length}
                   </span>
-                  <div className="flex items-center gap-1">
+                  <div className="flex flex-wrap items-center justify-center gap-1">
                     <button
                       onClick={() => setPage(p => Math.max(0, p - 1))}
                       disabled={page === 0}
                       aria-label="Página anterior"
-                      className="px-3 py-1.5 text-sm font-medium border border-slate-300 rounded-lg bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      className="px-3 py-2 sm:py-1.5 text-sm font-medium border border-slate-300 rounded-lg bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     >
                       ← Anterior
                     </button>
@@ -2054,7 +2054,7 @@ export function Captacion({
                           onClick={() => setPage(idx)}
                           aria-label={`Ir a la página ${idx + 1}`}
                           aria-current={idx === page ? 'page' : undefined}
-                          className={`w-8 h-8 text-sm font-medium rounded-lg border transition-colors ${
+                          className={`w-10 h-10 sm:w-8 sm:h-8 text-sm font-medium rounded-lg border transition-colors ${
                             idx === page
                               ? 'bg-primary text-white border-primary'
                               : 'border-slate-300 bg-white hover:bg-slate-100 text-slate-600'
@@ -2068,7 +2068,7 @@ export function Captacion({
                       onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
                       disabled={page >= totalPages - 1}
                       aria-label="Página siguiente"
-                      className="px-3 py-1.5 text-sm font-medium border border-slate-300 rounded-lg bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      className="px-3 py-2 sm:py-1.5 text-sm font-medium border border-slate-300 rounded-lg bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     >
                       Siguiente →
                     </button>
@@ -2286,7 +2286,8 @@ export function Captacion({
             {/* Monthly trend */}
             <div className="bg-white border border-slate-200 rounded-xl p-4 md:col-span-2">
               <h3 className="text-sm font-semibold text-slate-700 mb-3">Actividad mensual (últimos 12 meses)</h3>
-              <div className="flex items-end gap-1 h-24">
+              <div className="overflow-x-auto scrollbar-none">
+              <div className="flex items-end gap-1 h-24 min-w-[440px]">
                 {stats.months.map(({ label, count }) => {
                   const maxCount = Math.max(...stats.months.map(m => m.count), 1)
                   const pct = Math.round((count / maxCount) * 100)
@@ -2303,6 +2304,7 @@ export function Captacion({
                     </div>
                   )
                 })}
+              </div>
               </div>
             </div>
 
@@ -2447,7 +2449,8 @@ export function Captacion({
                 {/* Actividad mensual de partidos */}
                 <div className="bg-white border border-slate-200 rounded-xl p-4 md:col-span-2">
                   <h3 className="text-sm font-semibold text-slate-700 mb-3">Partidos por mes (últimos 12 meses)</h3>
-                  <div className="flex items-end gap-1 h-24">
+                  <div className="overflow-x-auto scrollbar-none">
+                  <div className="flex items-end gap-1 h-24 min-w-[440px]">
                     {matchStats.matchMonths.map(({ label, count }) => {
                       const maxCount = Math.max(...matchStats.matchMonths.map(m => m.count), 1)
                       const pct = Math.round((count / maxCount) * 100)
@@ -2464,6 +2467,7 @@ export function Captacion({
                         </div>
                       )
                     })}
+                  </div>
                   </div>
                 </div>
 
@@ -2576,7 +2580,7 @@ export function Captacion({
                   <button
                     key={s}
                     onClick={() => setMatchStatusFilter(s)}
-                    className={`px-2.5 py-1 text-xs font-medium rounded-full border transition-colors ${
+                    className={`px-2.5 py-1.5 sm:py-1 text-xs font-medium rounded-full border transition-colors ${
                       matchStatusFilter === s
                         ? s === 'visto' ? 'bg-emerald-500 text-white border-emerald-500'
                           : s === 'pendiente' ? 'bg-amber-400 text-white border-amber-400'
@@ -2664,7 +2668,7 @@ export function Captacion({
                           <button
                             onClick={() => handleToggleMatchStatus(m)}
                             aria-label={isVisto ? 'Marcar como pendiente' : 'Marcar como visto'}
-                            className={`inline-flex items-center justify-center w-8 h-8 rounded-full border transition-all ${
+                            className={`inline-flex items-center justify-center w-10 h-10 rounded-full border transition-all ${
                               isVisto ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 text-slate-300'
                             }`}
                           >
@@ -2672,7 +2676,7 @@ export function Captacion({
                               <polyline points="2.5,8 6,11.5 13.5,4" />
                             </svg>
                           </button>
-                          <button onClick={() => openEditMatch(m)} aria-label="Editar partido" className="p-2 text-slate-400 hover:text-blue-500">
+                          <button onClick={() => openEditMatch(m)} aria-label="Editar partido" className="p-3 -m-1 text-slate-400 hover:text-blue-500">
                             <Pencil className="w-4 h-4" />
                           </button>
                         </div>
@@ -2686,7 +2690,7 @@ export function Captacion({
                               <button
                                 onClick={() => onRemoveMatchPlayer(m.id, p.id).catch(() => showToast('Error al desvincular el jugador del partido', 'error'))}
                                 aria-label={`Desvincular a ${p.fullName}`}
-                                className="text-violet-400 hover:text-red-500 ml-0.5"
+                                className="text-violet-400 hover:text-red-500 ml-0.5 p-1.5 -m-1"
                               >
                                 <X className="w-3 h-3" />
                               </button>
@@ -3073,7 +3077,7 @@ export function Captacion({
                               <>
                                 <button
                                   onClick={() => setEditingPeticion(p)}
-                                  className="p-1 rounded text-slate-300 hover:text-blue-500 hover:bg-blue-50 transition-colors"
+                                  className="p-2 sm:p-1 rounded text-slate-300 hover:text-blue-500 hover:bg-blue-50 transition-colors"
                                   title="Editar petición"
                                   aria-label="Editar petición"
                                 >
@@ -3081,7 +3085,7 @@ export function Captacion({
                                 </button>
                                 <button
                                   onClick={() => setConfirmDeletePeticion(p.id)}
-                                  className="p-1 rounded text-slate-300 hover:text-red-400 hover:bg-red-50 transition-colors"
+                                  className="p-2 sm:p-1 rounded text-slate-300 hover:text-red-400 hover:bg-red-50 transition-colors"
                                   title="Eliminar petición"
                                   aria-label="Eliminar petición"
                                 >
@@ -3200,14 +3204,14 @@ export function Captacion({
                 {panelPlayer && !showEditPlayer && (
                   <button
                     onClick={() => setFullscreen(f => !f)}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                    className="p-2.5 sm:p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
                     title={fullscreen ? 'Minimizar' : 'Pantalla completa'}
                     aria-label={fullscreen ? 'Minimizar panel' : 'Pantalla completa'}
                   >
                     {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
                   </button>
                 )}
-                <button onClick={closePanel} aria-label="Cerrar panel" className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
+                <button onClick={closePanel} aria-label="Cerrar panel" className="p-2.5 sm:p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -3319,7 +3323,7 @@ export function Captacion({
 
               {/* ── Player detail ── */}
               {panelPlayer && !showEditPlayer && (
-                <div className={`p-4 space-y-5 ${fullscreen ? 'grid grid-cols-2 gap-6 items-start' : ''}`}>
+                <div className={`p-4 space-y-5 ${fullscreen ? 'grid grid-cols-1 sm:grid-cols-2 gap-6 items-start' : ''}`}>
                   <div className="space-y-4">
                     {/* Info grid */}
                     <div className="grid grid-cols-2 gap-2">
@@ -3353,7 +3357,7 @@ export function Captacion({
                       <div className="flex flex-wrap gap-1">
                         <button
                           onClick={() => handleQuickAssessment(panelPlayer, undefined)}
-                          className={`px-2 py-1 text-[11px] font-medium rounded border transition-colors ${
+                          className={`px-2 py-1.5 sm:py-1 text-[11px] font-medium rounded border transition-colors ${
                             !panelPlayer.assessment ? 'bg-slate-700 text-white border-slate-700' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
                           }`}
                         >
@@ -3366,7 +3370,7 @@ export function Captacion({
                             <button
                               key={a}
                               onClick={() => handleQuickAssessment(panelPlayer, a)}
-                              className={`px-2 py-1 text-[11px] font-medium rounded border transition-colors ${
+                              className={`px-2 py-1.5 sm:py-1 text-[11px] font-medium rounded border transition-colors ${
                                 active ? `${cfg.bg} ${cfg.text} ${cfg.border}` : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
                               }`}
                             >
@@ -3396,7 +3400,7 @@ export function Captacion({
                           <button
                             onClick={() => setConfirmDeletePlayer(true)}
                             aria-label="Eliminar jugador"
-                            className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 border border-red-100"
+                            className="p-2.5 sm:p-1.5 rounded-lg text-red-500 hover:bg-red-50 border border-red-100"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -3437,7 +3441,7 @@ export function Captacion({
                                   // toggle: if form already open close it
                                   setShowAddReportForm(f => !f)
                                 }}
-                                className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+                                className="flex items-center gap-1 px-2.5 py-2 sm:py-1 text-xs font-semibold bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
                               >
                                 <Plus className="w-3 h-3" /> Añadir informe
                               </button>
@@ -3452,7 +3456,7 @@ export function Captacion({
                                     <span className="text-[11px] font-mono bg-white border border-blue-200 px-1.5 py-0.5 rounded text-slate-600">
                                       {currentProfile.avatar} · {currentProfile.name.split(' ')[0]}
                                     </span>
-                                    <button onClick={() => setShowAddReportForm(false)} aria-label="Cerrar formulario de informe" className="text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>
+                                    <button onClick={() => setShowAddReportForm(false)} aria-label="Cerrar formulario de informe" className="text-slate-400 hover:text-slate-600 p-2 -m-2 sm:p-0 sm:m-0"><X className="w-3.5 h-3.5" /></button>
                                   </div>
                                 </div>
                                 <input
@@ -3472,7 +3476,7 @@ export function Captacion({
                                     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); handleAddReport() }
                                   }}
                                 />
-                                <div className="grid grid-cols-2 gap-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                   <select
                                     value={reportConclusion}
                                     onChange={e => setReportConclusion(e.target.value as ConclusionOption)}
@@ -3605,7 +3609,7 @@ export function Captacion({
                                   }
                                   <button
                                     onClick={() => onRemoveMatchPlayer(m.id, panelPlayerId).catch(() => showToast('Error al desvincular del partido', 'error'))}
-                                    className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-400 flex-shrink-0 transition-opacity"
+                                    className="sm:opacity-0 sm:group-hover:opacity-100 p-2 -m-1.5 sm:p-0 sm:m-0 text-slate-300 hover:text-red-400 flex-shrink-0 transition-opacity"
                                     title="Desvincular de este partido"
                                     aria-label="Desvincular de este partido"
                                   >

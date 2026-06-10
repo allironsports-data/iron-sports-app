@@ -125,8 +125,8 @@ export function PlayerDetail({
       {/* ── Compact header ──────────────────────────────── */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-20">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-12 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button onClick={onBack} aria-label="Volver" className="text-slate-400 hover:text-slate-600 transition-colors">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+            <button onClick={onBack} aria-label="Volver" className="p-2 -ml-2 sm:p-0 sm:ml-0 text-slate-400 hover:text-slate-600 transition-colors flex-shrink-0">
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div className="w-6 h-6 rounded overflow-hidden bg-white flex-shrink-0">
@@ -134,15 +134,15 @@ export function PlayerDetail({
             </div>
             <button onClick={onBack} className="text-xs text-slate-400 hover:text-slate-600 transition-colors hidden sm:inline">Jugadores</button>
             <span className="text-xs text-slate-300 hidden sm:inline">/</span>
-            <span className="text-sm font-semibold text-slate-800">{player.name}</span>
+            <span className="text-sm font-semibold text-slate-800 truncate min-w-0">{player.name}</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
             {onAdmin && (
-              <button onClick={onAdmin} aria-label="Admin" className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors" title="Admin">
+              <button onClick={onAdmin} aria-label="Admin" className="p-2 sm:p-1.5 text-slate-400 hover:text-slate-600 transition-colors" title="Admin">
                 <Users className="w-4 h-4" />
               </button>
             )}
-            <button onClick={onLogout} aria-label="Cerrar sesión" title="Cerrar sesión" className="text-slate-400 hover:text-slate-600 transition-colors">
+            <button onClick={onLogout} aria-label="Cerrar sesión" title="Cerrar sesión" className="p-2 sm:p-0 -mr-2 sm:mr-0 text-slate-400 hover:text-slate-600 transition-colors">
               <LogOut className="w-4 h-4" />
             </button>
           </div>
@@ -156,7 +156,7 @@ export function PlayerDetail({
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-slate-900 truncate">{player.name}</p>
-          <p className="text-xs text-slate-500">{player.positions.join(" / ")} · {calcAge(player.birthDate)} años</p>
+          <p className="text-xs text-slate-500 truncate">{player.positions.join(" / ")} · {calcAge(player.birthDate)} años</p>
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
           {contractBadgeLabel && (
@@ -167,7 +167,7 @@ export function PlayerDetail({
           <button
             onClick={() => setShowEditPlayer(true)}
             aria-label="Editar jugador"
-            className="p-1.5 text-slate-400 hover:text-slate-600 border border-slate-200 rounded-lg"
+            className="p-2 text-slate-400 hover:text-slate-600 border border-slate-200 rounded-lg"
           >
             <Edit3 className="w-3.5 h-3.5" />
           </button>
@@ -518,10 +518,10 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
             </div>
             {canEdit && (
               <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                <button onClick={() => setDetailTask(task)} aria-label="Ver detalles de la tarea" className="text-slate-300 hover:text-blue-500 transition-colors" title="Ver detalles">
+                <button onClick={() => setDetailTask(task)} aria-label="Ver detalles de la tarea" className="p-2 -m-1 sm:p-1 sm:m-0 text-slate-300 hover:text-blue-500 transition-colors" title="Ver detalles">
                   <Edit3 className="w-3.5 h-3.5" />
                 </button>
-                <button onClick={() => setTaskToDelete(task)} aria-label="Eliminar tarea" title="Eliminar tarea" className="text-slate-300 hover:text-red-400 transition-colors">
+                <button onClick={() => setTaskToDelete(task)} aria-label="Eliminar tarea" title="Eliminar tarea" className="p-2 -m-1 sm:p-1 sm:m-0 text-slate-300 hover:text-red-400 transition-colors">
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -688,10 +688,10 @@ function AddTaskModal({ profiles, tasks, playerId, player, isAdmin, onClose, onA
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-0 sm:p-4">
-      <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-md max-h-[92vh] overflow-y-auto">
+      <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-md max-h-[92vh] overflow-y-auto safe-area-bottom">
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white">
           <h2 className="text-sm font-semibold text-slate-800">Nueva tarea</h2>
-          <button onClick={onClose} aria-label="Cerrar" className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="p-2 -m-2 sm:p-1 sm:-m-1 text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
         </div>
         <form onSubmit={(e) => {
           e.preventDefault();
@@ -1079,12 +1079,12 @@ function PerformanceTab({ player, profiles, onUpdate }: { player: Player; profil
                     <div className="flex items-center gap-1">
                       <button onClick={() => setEditingNote(note)}
                         aria-label="Editar informe"
-                        className="p-1 text-slate-300 hover:text-blue-500">
+                        className="p-2 sm:p-1 text-slate-300 hover:text-blue-500">
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
                       <button onClick={() => setNoteToDelete(note)}
                         aria-label="Eliminar informe"
-                        className="p-1 text-slate-300 hover:text-red-500">
+                        className="p-2 sm:p-1 text-slate-300 hover:text-red-500">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -1131,7 +1131,7 @@ function PerformanceTab({ player, profiles, onUpdate }: { player: Player; profil
                   </div>
                   <button onClick={() => setVideoToDelete(v)}
                     aria-label="Eliminar sesión de vídeo"
-                    className="p-1 text-slate-300 hover:text-red-500 flex-shrink-0">
+                    className="p-2 sm:p-1 text-slate-300 hover:text-red-500 flex-shrink-0">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -1221,10 +1221,10 @@ function AddVideoSessionModal({ onClose, onSave }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-0 sm:p-4">
-      <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-sm">
+      <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-sm max-h-[90vh] overflow-y-auto safe-area-bottom">
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
           <h2 className="text-sm font-semibold text-slate-800">Nueva sesión de vídeoanalisis</h2>
-          <button onClick={onClose} aria-label="Cerrar" className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="p-2 -m-2 sm:p-1 sm:-m-1 text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
         </div>
         <form onSubmit={(e) => {
           e.preventDefault();
@@ -1283,7 +1283,7 @@ function AddPerformanceModal({ profiles, onClose, onAdd, initialNote }: {
       <div className="bg-white rounded-lg border border-slate-200 shadow-lg w-full max-w-md max-h-[90vh] overflow-y-auto [scrollbar-gutter:stable] overscroll-contain">
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
           <h2 className="text-sm font-semibold text-slate-800">{isEdit ? 'Editar informe' : 'Nuevo informe'}</h2>
-          <button onClick={onClose} aria-label="Cerrar" className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="p-2 -m-2 sm:p-1 sm:-m-1 text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
         </div>
         <form onSubmit={handleSubmit} className="p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
@@ -1566,7 +1566,7 @@ function LinksSection({ player, onUpdate }: { player: Player; onUpdate: (p: Play
               </a>
               <button onClick={() => removeLink(link.id)}
                 aria-label={`Eliminar enlace ${link.label}`}
-                className="p-1 text-slate-300 hover:text-red-500 flex-shrink-0">
+                className="p-2 sm:p-1 text-slate-300 hover:text-red-500 flex-shrink-0">
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -1701,7 +1701,7 @@ function EditPlayerModal({ player, profiles, onClose, onSave }: {
       <div className="bg-white rounded-lg border border-slate-200 shadow-lg w-full max-w-lg max-h-[90vh] overflow-y-auto [scrollbar-gutter:stable] overscroll-contain">
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white z-10">
           <h2 className="text-sm font-semibold text-slate-800">Editar jugador</h2>
-          <button onClick={onClose} aria-label="Cerrar" className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="p-2 -m-2 sm:p-1 sm:-m-1 text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
         </div>
         <div className="p-4 space-y-3">
           <EF label="Nombre completo" value={name} onChange={setName} />
@@ -1747,7 +1747,7 @@ function EditPlayerModal({ player, profiles, onClose, onSave }: {
 
           <div className="pt-1 border-t border-slate-100">
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Equipo</p>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <ESel label="Encargado 1" value={managed1} onChange={setManaged1} options={profiles} />
               <ESel label="Encargado 2" value={managed2} onChange={setManaged2} options={profiles} />
               <EF label="Partner" value={partner} onChange={setPartner} />
@@ -2135,10 +2135,10 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
                               </span>
                               {evt.type === 'activity' && evt.activityRef && (
                                 <>
-                                  <button onClick={() => openEdit(evt.activityRef!)} aria-label="Editar evento" className="p-0.5 text-slate-300 hover:text-blue-500 rounded transition-colors">
+                                  <button onClick={() => openEdit(evt.activityRef!)} aria-label="Editar evento" className="p-2 sm:p-0.5 text-slate-300 hover:text-blue-500 rounded transition-colors">
                                     <Edit3 className="w-3 h-3" />
                                   </button>
-                                  <button onClick={() => handleDelete(evt.activityRef!)} aria-label="Eliminar evento" className="p-0.5 text-slate-300 hover:text-red-500 rounded transition-colors">
+                                  <button onClick={() => handleDelete(evt.activityRef!)} aria-label="Eliminar evento" className="p-2 sm:p-0.5 text-slate-300 hover:text-red-500 rounded transition-colors">
                                     <Trash2 className="w-3 h-3" />
                                   </button>
                                 </>
@@ -2195,7 +2195,7 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
 
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <h4 className="text-sm font-semibold text-slate-800">
               {editing ? 'Editar evento' : 'Nuevo evento de actividad'}
             </h4>
@@ -2717,7 +2717,7 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
       </div>
 
       {/* Two-column summary */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
         {/* Pending tasks */}
         <div className="bg-white border border-slate-200 rounded-xl p-4">
@@ -2887,7 +2887,7 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
       {/* Add event modal */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <h4 className="text-sm font-semibold text-slate-800">Nuevo evento de actividad</h4>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
@@ -3060,7 +3060,7 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
       <div className="bg-white rounded-xl border border-slate-200 p-4">
         <div className="flex items-center justify-between mb-3">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Estado de distribución</span>
-          <button onClick={() => { setEditPriority(entry.priority); setEditCondition(entry.condition ?? ''); setEditFee(entry.transferFee ?? ''); setEditNotes(entry.notes ?? ''); setEditingEntry(true) }} className="p-1 text-slate-400 hover:text-slate-600">
+          <button onClick={() => { setEditPriority(entry.priority); setEditCondition(entry.condition ?? ''); setEditFee(entry.transferFee ?? ''); setEditNotes(entry.notes ?? ''); setEditingEntry(true) }} className="p-2 sm:p-1 text-slate-400 hover:text-slate-600">
             <Edit3 className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -3297,7 +3297,7 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
               onClick={() => setPanelNegId(null)}
             />
             {/* Panel */}
-            <div className="fixed right-0 top-0 h-full w-80 max-w-full z-40 bg-white border-l border-slate-200 shadow-xl flex flex-col">
+            <div className="fixed right-0 top-0 h-full w-full sm:w-80 z-40 bg-white border-l border-slate-200 shadow-xl flex flex-col">
               {/* Header */}
               <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 flex-shrink-0">
                 <div className="flex-1 min-w-0">

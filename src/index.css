@@ -59,3 +59,13 @@
     padding-bottom: max(12px, env(safe-area-inset-bottom));
   }
 }
+
+/* iOS hace zoom automático al enfocar inputs con fuente <16px.
+   En móvil forzamos 16px en los campos de formulario para evitarlo. */
+@media (max-width: 640px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
