@@ -299,18 +299,24 @@ export function Distribution({
   const [selectedClubId, setSelectedClubId] = useState<string | null>(null)
   const [openManagerDropId, setOpenManagerDropId] = useState<string | null>(null)
   const [managerDropPos, setManagerDropPos]       = useState<{ top: number; right: number } | null>(null)
+  // Encargado de hablar con el club (dropdown en ClubCard)
+  const [openClubManagerId, setOpenClubManagerId]   = useState<string | null>(null)
+  const [clubManagerDropPos, setClubManagerDropPos] = useState<{ top: number; right: number } | null>(null)
 
-  // Close manager dropdown on outside click or scroll
+  // Close manager dropdowns on outside click or scroll
   useEffect(() => {
-    if (!openManagerDropId) return
-    const handler = () => { setOpenManagerDropId(null); setManagerDropPos(null); }
+    if (!openManagerDropId && !openClubManagerId) return
+    const handler = () => {
+      setOpenManagerDropId(null); setManagerDropPos(null)
+      setOpenClubManagerId(null); setClubManagerDropPos(null)
+    }
     document.addEventListener('click', handler)
     document.addEventListener('scroll', handler, true)
     return () => {
       document.removeEventListener('click', handler)
       document.removeEventListener('scroll', handler, true)
     }
-  }, [openManagerDropId])
+  }, [openManagerDropId, openClubManagerId])
 
   // modals
   const [showAddPlayer, setShowAddPlayer] = useState(false)
@@ -1090,6 +1096,12 @@ export function Distribution({
                       }}
                       onOffer={() => setShowAddNeg({ clubId: club.id })}
                       onTogglePriority={() => onUpdateClub({ ...club, isPriority: !club.isPriority }).catch(() => showToast('No se pudo guardar. Inténtalo de nuevo.', 'error'))}
+                      managerName={profiles.find(p => p.avatar === club.aisManager)?.name}
+                      managerDropOpen={openClubManagerId === club.id}
+                      onToggleManagerDrop={(pos) => {
+                        if (!pos) { setOpenClubManagerId(null); setClubManagerDropPos(null) }
+                        else { setOpenClubManagerId(club.id); setClubManagerDropPos(pos) }
+                      }}
                     />
                   ))}
                 </div>
@@ -1120,6 +1132,12 @@ export function Distribution({
                               }}
                               onOffer={() => setShowAddNeg({ clubId: club.id })}
                               onTogglePriority={() => onUpdateClub({ ...club, isPriority: !club.isPriority }).catch(() => showToast('No se pudo guardar. Inténtalo de nuevo.', 'error'))}
+                              managerName={profiles.find(p => p.avatar === club.aisManager)?.name}
+                              managerDropOpen={openClubManagerId === club.id}
+                              onToggleManagerDrop={(pos) => {
+                                if (!pos) { setOpenClubManagerId(null); setClubManagerDropPos(null) }
+                                else { setOpenClubManagerId(club.id); setClubManagerDropPos(pos) }
+                              }}
                             />
                           ))}
                         </div>
@@ -1155,6 +1173,12 @@ export function Distribution({
                               }}
                               onOffer={() => setShowAddNeg({ clubId: club.id })}
                               onTogglePriority={() => onUpdateClub({ ...club, isPriority: !club.isPriority }).catch(() => showToast('No se pudo guardar. Inténtalo de nuevo.', 'error'))}
+                              managerName={profiles.find(p => p.avatar === club.aisManager)?.name}
+                              managerDropOpen={openClubManagerId === club.id}
+                              onToggleManagerDrop={(pos) => {
+                                if (!pos) { setOpenClubManagerId(null); setClubManagerDropPos(null) }
+                                else { setOpenClubManagerId(club.id); setClubManagerDropPos(pos) }
+                              }}
                             />
                           ))}
                         </div>
@@ -2659,6 +2683,65 @@ export function Distribution({
         )
       })()}
 
+      {/* Encargado del club — dropdown fijo (escapa del overflow de las tarjetas) */}
+      {openClubManagerId && clubManagerDropPos && (() => {
+        const club = clubs.find(c => c.id === openClubManagerId)
+        if (!club) return null
+        const closeDrop = () => { setOpenClubManagerId(null); setClubManagerDropPos(null) }
+        return (
+          <div
+            className="fixed z-[200] bg-white border border-slate-200 rounded-xl shadow-xl py-1 min-w-[180px] max-w-[calc(100vw-2rem)] max-h-[50vh] overflow-y-auto"
+            style={{ top: clubManagerDropPos.top, right: clubManagerDropPos.right }}
+            onClick={e => e.stopPropagation()}
+          >
+            <p className="px-3 pt-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              Encargado de {club.name}
+            </p>
+            {profiles.map(p => (
+              <button
+                key={p.id}
+                onClick={async () => {
+                  try {
+                    await onUpdateClub({ ...club, aisManager: p.avatar })
+                    showToast(`${p.name.split(' ')[0]} asignado a ${club.name}`)
+                  } catch {
+                    showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+                  }
+                  closeDrop()
+                }}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-slate-50 transition-colors ${
+                  club.aisManager === p.avatar ? 'font-semibold text-blue-700' : 'text-slate-700'
+                }`}
+              >
+                <span className="w-5 h-5 rounded-full bg-slate-100 text-[9px] font-bold flex items-center justify-center flex-shrink-0">
+                  {p.avatar}
+                </span>
+                {p.name.split(' ')[0]}
+              </button>
+            ))}
+            {club.aisManager && (
+              <>
+                <div className="border-t border-slate-100 my-1" />
+                <button
+                  onClick={async () => {
+                    try {
+                      await onUpdateClub({ ...club, aisManager: undefined })
+                      showToast('Encargado quitado')
+                    } catch {
+                      showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+                    }
+                    closeDrop()
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-500 hover:bg-red-50 transition-colors"
+                >
+                  Quitar encargado
+                </button>
+              </>
+            )}
+          </div>
+        )
+      })()}
+
       {/* ── Confirmaciones ── */}
       <ConfirmModal
         open={!!confirmDeleteEntryId}
@@ -2706,13 +2789,17 @@ export function Distribution({
 
 // ── CLUB CARD ────────────────────────────────────────────────
 
-function ClubCard({ club, negotiations, isSelected, onClick, onOffer, onTogglePriority }: {
+function ClubCard({ club, negotiations, isSelected, onClick, onOffer, onTogglePriority, managerName, managerDropOpen, onToggleManagerDrop }: {
   club: Club
   negotiations: ClubNegotiation[]
   isSelected: boolean
   onClick: () => void
   onOffer?: () => void
   onTogglePriority?: () => void
+  /** Nombre completo del encargado (para el tooltip) */
+  managerName?: string
+  managerDropOpen?: boolean
+  onToggleManagerDrop?: (pos: { top: number; right: number } | null) => void
 }) {
   const activeStatuses: ClubNegotiation['status'][] = ['pendiente', 'ofrecido', 'interesado', 'negociando']
   const activeNegs = negotiations.filter(n => n.clubId === club.id && n.status !== 'descartado')
@@ -2768,6 +2855,25 @@ function ClubCard({ club, negotiations, isSelected, onClick, onOffer, onTogglePr
         </div>
       </div>
       <div className="flex items-center gap-1 flex-shrink-0">
+        {onToggleManagerDrop && (
+          <button
+            onClick={e => {
+              e.stopPropagation()
+              if (managerDropOpen) { onToggleManagerDrop(null); return }
+              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+              onToggleManagerDrop({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
+            }}
+            title={club.aisManager ? `Encargado: ${managerName ?? club.aisManager}` : 'Asignar encargado'}
+            aria-label={club.aisManager ? `Encargado: ${managerName ?? club.aisManager}` : 'Asignar encargado'}
+            className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold border-2 transition-colors flex-shrink-0 ${
+              club.aisManager
+                ? 'bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-200'
+                : 'bg-slate-50 text-slate-400 border-dashed border-slate-300 hover:bg-slate-200 sm:opacity-0 sm:group-hover:opacity-100'
+            } ${managerDropOpen ? 'ring-2 ring-blue-200 sm:opacity-100' : ''}`}
+          >
+            {club.aisManager ?? '+'}
+          </button>
+        )}
         {onTogglePriority && (
           <button
             onClick={e => { e.stopPropagation(); onTogglePriority() }}
