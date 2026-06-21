@@ -577,7 +577,7 @@ export function Dashboard({
                 onClick={() => { if (n.playerId) onSelectPlayer(n.playerId); setShowNotifications(false); }}
                 className="w-full text-left px-3 py-2.5 border-b border-slate-50 hover:bg-slate-50 transition-colors flex items-start gap-2"
               >
-                <span className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${n.type === 'task_done' ? 'bg-emerald-500' : n.type === 'birthday' ? 'bg-amber-400' : 'bg-blue-500'}`} />
+                <span className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${n.type === 'task_done' ? 'bg-emerald-500' : n.type === 'birthday' ? 'bg-amber-400' : n.type === 'negotiation' ? 'bg-violet-500' : 'bg-blue-500'}`} />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-slate-700">{n.message}</p>
                   <p className="text-[11px] text-slate-400 mt-0.5">{new Date(n.ts).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}</p>

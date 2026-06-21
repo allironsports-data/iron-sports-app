@@ -23,7 +23,7 @@ const TeamMemberDetail = lazy(() => import('./views/TeamMemberDetail').then(m =>
 export interface AppNotification {
   id: string
   message: string
-  type: 'task_new' | 'task_done' | 'birthday'
+  type: 'task_new' | 'task_done' | 'birthday' | 'negotiation'
   playerId?: string
   ts: number
 }
@@ -228,6 +228,35 @@ export default function App() {
             )
           }
           return prev
+        })
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'club_negotiations' }, (payload: { new: Record<string, unknown> }) => {
+        const row = payload.new as Record<string, unknown>
+        const status = (row.status as string) ?? 'pendiente'
+        // Solo avisamos de propuestas nuevas pendientes
+        if (status !== 'pendiente') return
+        const playerId = row.player_id as string
+        const clubId = row.club_id as string
+        const clubManagerAvatar = (row.ais_manager as string) ?? undefined
+        // Refrescar negociaciones en la app
+        db.fetchNegotiations().then((ng) => setNegotiations(ng))
+        // ¿Soy responsable del jugador o del club?
+        setPlayers((prevPlayers) => {
+          const player = prevPlayers.find((pl) => pl.id === playerId)
+          const isPlayerManager = !!player && player.managedBy.includes(profile.id)
+          setClubs((prevClubs) => {
+            const club = prevClubs.find((c) => c.id === clubId)
+            const isClubManager =
+              (!!club && club.aisManager === profile.avatar) ||
+              clubManagerAvatar === profile.avatar
+            if (isPlayerManager || isClubManager) {
+              const pName = player?.name ?? 'Un jugador'
+              const cName = club?.name ?? 'un club'
+              addNotification(`Nueva propuesta pendiente: ${pName} → ${cName}`, 'negotiation', playerId)
+            }
+            return prevClubs
+          })
+          return prevPlayers
         })
       })
       .subscribe()

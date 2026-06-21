@@ -349,6 +349,8 @@ export function Distribution({
   const [priorityOnly, setPriorityOnly] = useState(false)
   const [hasNeedsOnly, setHasNeedsOnly] = useState(false)
   const [hasContactOnly, setHasContactOnly] = useState(false)
+  const [clubManagerFilter, setClubManagerFilter] = useState<string>('')   // '' = todos, '__sin__' = sin encargado, o avatar
+  const [staleOnly, setStaleOnly] = useState(false)   // bandeja: clubes con propuestas activas sin mover >7d
   const [positionFilter, setPositionFilter] = useState('')   // solicitudes tab
   const [editingNeed, setEditingNeed] = useState<{ clubId: string; index: number } | null>(null)
   const [posFilters, setPosFilters] = useState<string[]>([])   // jugadores tab
@@ -423,10 +425,22 @@ export function Distribution({
     if (priorityOnly) result = result.filter(c => c.isPriority)
     if (hasNeedsOnly) result = result.filter(c => c.needs.length > 0)
     if (hasContactOnly) result = result.filter(c => !!c.contactPerson)
+    if (clubManagerFilter === '__sin__') result = result.filter(c => !c.aisManager)
+    else if (clubManagerFilter) result = result.filter(c => c.aisManager === clubManagerFilter)
+    if (staleOnly) {
+      const ACTIVE: ClubNegotiation['status'][] = ['pendiente', 'ofrecido', 'interesado', 'negociando']
+      result = result.filter(c => {
+        const active = negotiations.filter(n => n.clubId === c.id && ACTIVE.includes(n.status))
+        if (active.length === 0) return false
+        const last = active.reduce<string | undefined>((m, n) => (!m || n.updatedAt > m ? n.updatedAt : m), undefined)
+        const days = last ? Math.floor((Date.now() - new Date(last).getTime()) / 86_400_000) : 0
+        return days > 7
+      })
+    }
     if (!search) return result
     const q = search.toLowerCase()
     return result.filter(c => c.name.toLowerCase().includes(q) || c.league?.toLowerCase().includes(q))
-  }, [clubs, search, leagueFilter, countryFilter, tierFilter, confederationFilter, priorityOnly, hasNeedsOnly, hasContactOnly])
+  }, [clubs, negotiations, search, leagueFilter, countryFilter, tierFilter, confederationFilter, priorityOnly, hasNeedsOnly, hasContactOnly, clubManagerFilter, staleOnly])
 
   const sortedLeagues = useMemo(() => {
     const map = new Map<string, { count: number; country: string }>()
@@ -1063,12 +1077,38 @@ export function Distribution({
                   <Users className="w-3.5 h-3.5" /> Con contacto
                 </button>
 
+                {/* Bandeja stale: propuestas paradas */}
+                <button
+                  onClick={() => setStaleOnly(v => !v)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
+                    staleOnly ? 'bg-orange-100 text-orange-700 border-orange-200' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                  }`}
+                >
+                  ⏰ Paradas &gt;7d
+                </button>
+
+                {/* Filtro por encargado del club */}
+                <select
+                  value={clubManagerFilter}
+                  onChange={e => setClubManagerFilter(e.target.value)}
+                  aria-label="Filtrar por encargado"
+                  className={`px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                    clubManagerFilter ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                  }`}
+                >
+                  <option value="">Encargado: todos</option>
+                  {profiles.map(p => (
+                    <option key={p.id} value={p.avatar}>{p.name.split(' ')[0]} ({p.avatar})</option>
+                  ))}
+                  <option value="__sin__">Sin encargado</option>
+                </select>
+
                 {/* Clear all */}
-                {(leagueFilter.length > 0 || countryFilter.length > 0 || tierFilter.length > 0 || confederationFilter.length > 0 || priorityOnly || hasNeedsOnly || hasContactOnly) && (() => {
-                  const count = leagueFilter.length + countryFilter.length + tierFilter.length + confederationFilter.length + (priorityOnly ? 1 : 0) + (hasNeedsOnly ? 1 : 0) + (hasContactOnly ? 1 : 0)
+                {(leagueFilter.length > 0 || countryFilter.length > 0 || tierFilter.length > 0 || confederationFilter.length > 0 || priorityOnly || hasNeedsOnly || hasContactOnly || clubManagerFilter || staleOnly) && (() => {
+                  const count = leagueFilter.length + countryFilter.length + tierFilter.length + confederationFilter.length + (priorityOnly ? 1 : 0) + (hasNeedsOnly ? 1 : 0) + (hasContactOnly ? 1 : 0) + (clubManagerFilter ? 1 : 0) + (staleOnly ? 1 : 0)
                   return (
                     <button
-                      onClick={() => { setLeagueFilter([]); setCountryFilter([]); setTierFilter([]); setConfederationFilter([]); setPriorityOnly(false); setHasNeedsOnly(false); setHasContactOnly(false) }}
+                      onClick={() => { setLeagueFilter([]); setCountryFilter([]); setTierFilter([]); setConfederationFilter([]); setPriorityOnly(false); setHasNeedsOnly(false); setHasContactOnly(false); setClubManagerFilter(''); setStaleOnly(false) }}
                       className="flex items-center gap-1.5 text-xs bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg font-medium transition-colors ml-1"
                     >
                       <SlidersHorizontal className="w-3 h-3" />
@@ -1945,24 +1985,112 @@ export function Distribution({
               </div>
             )
 
-            return (
-              <div className="max-w-5xl mx-auto">
-                {managerProfiles.length === 0 && !grouped['__sin__'] && (
-                  <EmptyState
-                    icon={<Users className="w-10 h-10" />}
-                    title="No hay jugadores con encargado asignado"
-                    subtitle="Asigna un encargado a cada jugador desde la pestaña Jugadores."
-                  />
-                )}
+            // ── Resumen por encargado (CLUBES) ──────────────────────
+            const STALE_DAYS = 7
+            const ACTIVE_ST: ClubNegotiation['status'][] = ['pendiente', 'ofrecido', 'interesado', 'negociando']
+            const daysSince = (iso?: string) => iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000) : null
+            const clubStats = profiles.map(p => {
+              const myClubIds = new Set(clubs.filter(c => c.aisManager === p.avatar).map(c => c.id))
+              const activeNegs = negotiations.filter(n => myClubIds.has(n.clubId) && ACTIVE_ST.includes(n.status))
+              const stale = activeNegs.filter(n => (daysSince(n.updatedAt) ?? 0) > STALE_DAYS)
+              return { profile: p, clubs: myClubIds.size, active: activeNegs.length, stale: stale.length }
+            }).filter(s => s.clubs > 0)
+              .sort((a, b) => b.clubs - a.clubs)
+            const sinEncargadoClubs = clubs.filter(c => !c.aisManager).length
+            const totalStale = clubStats.reduce((sum, s) => sum + s.stale, 0)
+            const goToClubs = (avatar: string) => { setClubManagerFilter(avatar); setTab('clubes') }
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
-                  {managerProfiles.map(p =>
-                    renderSection(p.avatar, p.name, grouped[p.avatar] ?? [])
+            return (
+              <div className="max-w-5xl mx-auto space-y-6">
+                {/* Resumen por encargado (clubes) */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-semibold text-slate-700">Resumen por encargado · Clubes</h3>
+                    {totalStale > 0 && (
+                      <span className="text-xs text-orange-600 font-medium flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5" /> {totalStale} propuesta{totalStale !== 1 ? 's' : ''} sin mover &gt;{STALE_DAYS}d
+                      </span>
+                    )}
+                  </div>
+                  <div className="bg-white border border-slate-200 rounded-xl overflow-hidden overflow-x-auto">
+                    <table className="w-full text-sm min-w-[460px]">
+                      <thead>
+                        <tr className="bg-slate-50 text-left text-xs text-slate-500 uppercase tracking-wider">
+                          <th className="px-4 py-2 font-semibold">Encargado</th>
+                          <th className="px-3 py-2 font-semibold text-right">Clubes</th>
+                          <th className="px-3 py-2 font-semibold text-right">Propuestas activas</th>
+                          <th className="px-4 py-2 font-semibold text-right">Sin mover &gt;{STALE_DAYS}d</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {clubStats.length === 0 && (
+                          <tr><td colSpan={4} className="px-4 py-6 text-center text-slate-400 text-xs">Aún no hay clubes con encargado asignado.</td></tr>
+                        )}
+                        {clubStats.map(s => (
+                          <tr
+                            key={s.profile.id}
+                            onClick={() => goToClubs(s.profile.avatar)}
+                            className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors"
+                            title={`Ver los clubes de ${s.profile.name}`}
+                          >
+                            <td className="px-4 py-2.5">
+                              <div className="flex items-center gap-2">
+                                <span className="w-7 h-7 rounded-full bg-primary text-white text-[11px] font-bold flex items-center justify-center flex-shrink-0">{s.profile.avatar}</span>
+                                <span className="font-medium text-slate-700 truncate">{s.profile.name.split(' ')[0]}</span>
+                              </div>
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-semibold text-slate-700">{s.clubs}</td>
+                            <td className="px-3 py-2.5 text-right text-slate-600">{s.active}</td>
+                            <td className="px-4 py-2.5 text-right">
+                              {s.stale > 0
+                                ? <span className="inline-flex items-center gap-1 text-orange-600 font-semibold">⏰ {s.stale}</span>
+                                : <span className="text-slate-300">0</span>}
+                            </td>
+                          </tr>
+                        ))}
+                        {sinEncargadoClubs > 0 && (
+                          <tr
+                            onClick={() => goToClubs('__sin__')}
+                            className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors"
+                            title="Ver clubes sin encargado"
+                          >
+                            <td className="px-4 py-2.5">
+                              <div className="flex items-center gap-2">
+                                <span className="w-7 h-7 rounded-full bg-slate-200 text-slate-400 text-[11px] font-bold flex items-center justify-center flex-shrink-0">?</span>
+                                <span className="font-medium text-slate-400">Sin encargado</span>
+                              </div>
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-semibold text-slate-400">{sinEncargadoClubs}</td>
+                            <td className="px-3 py-2.5 text-right text-slate-300">—</td>
+                            <td className="px-4 py-2.5 text-right text-slate-300">—</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1.5">Pulsa una fila para ver los clubes de esa persona.</p>
+                </div>
+
+                {/* Jugadores por encargado */}
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-700 mb-2">Jugadores por encargado</h3>
+                  {managerProfiles.length === 0 && !grouped['__sin__'] && (
+                    <EmptyState
+                      icon={<Users className="w-10 h-10" />}
+                      title="No hay jugadores con encargado asignado"
+                      subtitle="Asigna un encargado a cada jugador desde la pestaña Jugadores."
+                    />
                   )}
 
-                  {grouped['__sin__'] &&
-                    renderSection('__sin__', 'Sin encargado', grouped['__sin__'], true)
-                  }
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
+                    {managerProfiles.map(p =>
+                      renderSection(p.avatar, p.name, grouped[p.avatar] ?? [])
+                    )}
+
+                    {grouped['__sin__'] &&
+                      renderSection('__sin__', 'Sin encargado', grouped['__sin__'], true)
+                    }
+                  </div>
                 </div>
               </div>
             )
