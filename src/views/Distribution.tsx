@@ -317,7 +317,11 @@ export function Distribution({
   // Oportunidades tab
   const [oppSearch, setOppSearch] = useState('')
   const [oppPriority, setOppPriority] = useState<'A' | 'B' | 'C' | 'D' | ''>('')
+  const [oppPos, setOppPos] = useState('')          // filtro por posición del jugador
+  const [oppLeague, setOppLeague] = useState('')    // filtro por liga del club
+  const [oppMineOnly, setOppMineOnly] = useState(false)
   const [offeringOppKey, setOfferingOppKey] = useState<string | null>(null)
+  const [dismissingOppKey, setDismissingOppKey] = useState<string | null>(null)
   // Salud de datos (Encargados tab, admin)
   const [healthOpen, setHealthOpen] = useState<null | 'sin' | 'dup' | 'pos' | 'old'>(null)
   useEffect(() => { sessionStorage.setItem('nav_dist_tab', tab) }, [tab])
@@ -666,13 +670,25 @@ export function Distribution({
     return out
   }, [seasonEntries, players, clubs, negotiations])
 
+  const oppLeagues = useMemo(
+    () => Array.from(new Set(opportunities.map(o => o.club.league).filter(Boolean) as string[])).sort(),
+    [opportunities]
+  )
   const filteredOpportunities = useMemo(() => {
     const q = oppSearch.trim().toLowerCase()
-    return opportunities.filter(o =>
-      (!oppPriority || o.entry.priority === oppPriority) &&
-      (!q || o.player.name.toLowerCase().includes(q) || o.club.name.toLowerCase().includes(q) || (o.club.league ?? '').toLowerCase().includes(q))
-    )
-  }, [opportunities, oppSearch, oppPriority])
+    return opportunities.filter(o => {
+      if (oppPriority && o.entry.priority !== oppPriority) return false
+      if (oppPos && !o.player.positions.includes(oppPos)) return false
+      if (oppLeague && o.club.league !== oppLeague) return false
+      if (oppMineOnly) {
+        const mine = o.club.aisManager === currentProfile.avatar || o.player.managedBy.includes(currentProfile.id)
+        if (!mine) return false
+      }
+      if (q && !(o.player.name.toLowerCase().includes(q) || o.club.name.toLowerCase().includes(q) ||
+        (o.club.league ?? '').toLowerCase().includes(q) || (o.club.country ?? '').toLowerCase().includes(q))) return false
+      return true
+    })
+  }, [opportunities, oppSearch, oppPriority, oppPos, oppLeague, oppMineOnly, currentProfile.avatar, currentProfile.id])
 
   function closePanel() { setSelectedEntryId(null); setSelectedClubId(null); setSelectedNeed(null); setPlayerPanelGestorFilter(''); setPanelExpanded(false) }
   const hasPanel = tab !== 'encargados' && (!!selectedEntry || !!selectedClub || !!selectedNeed)
@@ -2306,6 +2322,41 @@ export function Distribution({
                       {filteredOpportunities.length} oportunidad{filteredOpportunities.length !== 1 ? 'es' : ''}
                     </span>
                   </div>
+                  {/* Segunda fila de filtros */}
+                  <div className="flex flex-wrap items-center gap-2 mt-2">
+                    <select
+                      value={oppPos}
+                      onChange={e => setOppPos(e.target.value)}
+                      aria-label="Filtrar por posición"
+                      className={`px-2.5 py-1.5 border rounded-lg text-xs font-medium cursor-pointer ${oppPos ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'}`}
+                    >
+                      <option value="">Posición: todas</option>
+                      {POSITIONS.map(p => <option key={p.code} value={p.code}>{p.code} · {p.es}</option>)}
+                    </select>
+                    <select
+                      value={oppLeague}
+                      onChange={e => setOppLeague(e.target.value)}
+                      aria-label="Filtrar por liga"
+                      className={`px-2.5 py-1.5 border rounded-lg text-xs font-medium cursor-pointer max-w-[160px] ${oppLeague ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'}`}
+                    >
+                      <option value="">Liga: todas</option>
+                      {oppLeagues.map(l => <option key={l} value={l}>{l}</option>)}
+                    </select>
+                    <button
+                      onClick={() => setOppMineOnly(v => !v)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${oppMineOnly ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'}`}
+                    >
+                      <Users className="w-3.5 h-3.5" /> Solo mías
+                    </button>
+                    {(oppPos || oppLeague || oppMineOnly || oppPriority || oppSearch) && (
+                      <button
+                        onClick={() => { setOppPos(''); setOppLeague(''); setOppMineOnly(false); setOppPriority(''); setOppSearch('') }}
+                        className="text-xs text-blue-600 hover:text-blue-700 font-medium ml-1"
+                      >
+                        Limpiar
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {filteredOpportunities.length === 0 ? (
@@ -2345,7 +2396,7 @@ export function Distribution({
                             </div>
                           </button>
                           <button
-                            disabled={offering}
+                            disabled={offering || dismissingOppKey === key}
                             onClick={async () => {
                               setOfferingOppKey(key)
                               try {
@@ -2361,6 +2412,25 @@ export function Distribution({
                           >
                             {offering ? <BtnSpinner /> : <Plus className="w-3.5 h-3.5" />}
                             Ofrecer
+                          </button>
+                          <button
+                            disabled={offering || dismissingOppKey === key}
+                            onClick={async () => {
+                              setDismissingOppKey(key)
+                              try {
+                                await onCreateNegotiation({ playerId: player.id, clubId: club.id, needPosition: need.position, status: 'descartado', aisManager: currentProfile.avatar })
+                                showToast('Oportunidad descartada')
+                              } catch {
+                                showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+                              } finally {
+                                setDismissingOppKey(null)
+                              }
+                            }}
+                            title="Descartar: no encaja"
+                            aria-label="Descartar oportunidad"
+                            className="flex-shrink-0 inline-flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-60 p-2 rounded-lg"
+                          >
+                            {dismissingOppKey === key ? <span className="inline-block w-3.5 h-3.5 border-2 border-slate-300 border-t-slate-500 rounded-full animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
                           </button>
                         </div>
                       )
