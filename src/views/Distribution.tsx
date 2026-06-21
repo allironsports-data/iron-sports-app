@@ -319,18 +319,29 @@ export function Distribution({
   const [openClubManagerId, setOpenClubManagerId]   = useState<string | null>(null)
   const [clubManagerDropPos, setClubManagerDropPos] = useState<{ top: number; right: number } | null>(null)
 
-  // Close manager dropdowns on outside click or scroll
+  // Close manager dropdowns on outside click.
+  // Se cierra también con scroll AMPLIO (el dropdown es fixed y se desalinearía),
+  // pero ignorando micro-scrolls para que no desaparezca antes de elegir.
   useEffect(() => {
     if (!openManagerDropId && !openClubManagerId) return
-    const handler = () => {
+    const close = () => {
       setOpenManagerDropId(null); setManagerDropPos(null)
       setOpenClubManagerId(null); setClubManagerDropPos(null)
     }
-    document.addEventListener('click', handler)
-    document.addEventListener('scroll', handler, true)
+    // Espera al siguiente tick para no capturar el mismo clic que lo abrió
+    let startY = window.scrollY
+    const onScroll = () => {
+      if (Math.abs(window.scrollY - startY) > 80) close()
+    }
+    const timer = setTimeout(() => {
+      startY = window.scrollY
+      document.addEventListener('click', close)
+      window.addEventListener('scroll', onScroll, true)
+    }, 0)
     return () => {
-      document.removeEventListener('click', handler)
-      document.removeEventListener('scroll', handler, true)
+      clearTimeout(timer)
+      document.removeEventListener('click', close)
+      window.removeEventListener('scroll', onScroll, true)
     }
   }, [openManagerDropId, openClubManagerId])
 
@@ -2291,9 +2302,14 @@ export function Distribution({
                 return p && playerMatchesNeedPosition(p.positions, need.position)
               })
               const offeredForNeedPlayerIds = new Set(offeredForNeed.map(n => n.playerId))
+              // Jugadores con alguna negociación ya cerrada → no sugerir
+              const closedPlayerIds = new Set(negotiations.filter(n => n.status === 'cerrado').map(n => n.playerId))
               const suggestedPlayers = players.filter(p => {
                 if (offeredForNeedPlayerIds.has(p.id)) return false
                 if (!entries.some(e => e.playerId === p.id)) return false
+                if (closedPlayerIds.has(p.id)) return false                 // ya cerrado en algún club
+                const yr = p.birthDate ? parseInt(p.birthDate.slice(0, 4), 10) : NaN
+                if (!isNaN(yr) && yr > 2009) return false                   // demasiado joven (>2009)
                 return playerMatchesNeedPosition(p.positions, need.position)
               })
               return (

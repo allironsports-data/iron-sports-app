@@ -445,11 +445,17 @@ export function ClubDetail({
 
                         {/* Matching players */}
                         {(() => {
+                          const closedPlayerIds = new Set(negotiations.filter(n => n.status === 'cerrado').map(n => n.playerId))
                           const matchingPlayers = players.filter(p => {
                             const posMatch = need.position
                               ? p.positions.some(pos => pos.toLowerCase().includes(need.position.toLowerCase()) || need.position.toLowerCase().includes(pos.toLowerCase()))
                               : false
-                            return posMatch && entries.some(e => e.playerId === p.id)
+                            if (!posMatch) return false
+                            if (!entries.some(e => e.playerId === p.id)) return false
+                            if (closedPlayerIds.has(p.id)) return false               // ya cerrado en algún club
+                            const yr = p.birthDate ? parseInt(p.birthDate.slice(0, 4), 10) : NaN
+                            if (!isNaN(yr) && yr > 2009) return false                 // demasiado joven (>2009)
+                            return true
                           })
                           if (matchingPlayers.length === 0) return null
                           return (
