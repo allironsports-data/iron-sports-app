@@ -311,9 +311,15 @@ export function Distribution({
   const clubGridCls = splitActive
     ? 'grid grid-cols-1 2xl:grid-cols-2 gap-1.5'
     : 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-1.5'
-  const [tab, setTab] = useState<'jugadores' | 'clubes' | 'solicitudes' | 'pipeline' | 'encargados'>(
-    () => (sessionStorage.getItem('nav_dist_tab') as 'jugadores' | 'clubes' | 'solicitudes' | 'pipeline' | 'encargados') ?? 'jugadores'
+  const [tab, setTab] = useState<'jugadores' | 'clubes' | 'solicitudes' | 'oportunidades' | 'pipeline' | 'encargados'>(
+    () => (sessionStorage.getItem('nav_dist_tab') as 'jugadores' | 'clubes' | 'solicitudes' | 'oportunidades' | 'pipeline' | 'encargados') ?? 'jugadores'
   )
+  // Oportunidades tab
+  const [oppSearch, setOppSearch] = useState('')
+  const [oppPriority, setOppPriority] = useState<'A' | 'B' | 'C' | 'D' | ''>('')
+  const [offeringOppKey, setOfferingOppKey] = useState<string | null>(null)
+  // Salud de datos (Encargados tab, admin)
+  const [healthOpen, setHealthOpen] = useState<null | 'sin' | 'dup' | 'pos' | 'old'>(null)
   useEffect(() => { sessionStorage.setItem('nav_dist_tab', tab) }, [tab])
   const season = CURRENT_SEASON
 
@@ -612,6 +618,62 @@ export function Distribution({
       .sort((a, b) => (b.neg.createdAt ?? '').localeCompare(a.neg.createdAt ?? ''))
   }, [negotiations, clubs, players, currentProfile.avatar, currentProfile.id])
 
+  // ── MOTOR DE OPORTUNIDADES ──────────────────────────────────
+  // Cruza tu cartera (entries) con las necesidades abiertas de los clubes,
+  // excluyendo lo ya ofrecido y respetando edad (Sub-X estricto).
+  // Orden: prioridad del jugador (A>B>C>D) → tier del club → nombre.
+  const opportunities = useMemo(() => {
+    const PR: Record<string, number> = { A: 0, B: 1, C: 2, D: 3 }
+    const TR: Record<string, number> = { A: 0, B: 1, C: 2, D: 3 }
+    const today = new Date()
+    const ageOf = (bd?: string): number | null => {
+      if (!bd) return null
+      const d = new Date(bd)
+      if (isNaN(d.getTime())) return null
+      let a = today.getFullYear() - d.getFullYear()
+      const m = today.getMonth() - d.getMonth()
+      if (m < 0 || (m === 0 && today.getDate() < d.getDate())) a--
+      return a
+    }
+    const closedPlayerIds = new Set(negotiations.filter(n => n.status === 'cerrado').map(n => n.playerId))
+    const existingPairs = new Set(negotiations.map(n => `${n.playerId}|${n.clubId}`))
+    const clubsWithNeeds = clubs.filter(c => c.needs && c.needs.length > 0)
+
+    const out: Array<{ player: Player; entry: DistributionEntry; club: Club; need: ClubNeed; tier: LeagueTier; age: number | null }> = []
+    for (const entry of seasonEntries) {
+      const player = players.find(p => p.id === entry.playerId)
+      if (!player || player.hiddenFromManagement) continue
+      if (closedPlayerIds.has(player.id)) continue
+      const age = ageOf(player.birthDate)
+      for (const club of clubsWithNeeds) {
+        if (existingPairs.has(`${player.id}|${club.id}`)) continue
+        let matched: ClubNeed | null = null
+        for (const need of club.needs) {
+          if (!needMatchesPlayer(need.position, player.positions)) continue
+          if (need.ageMax && age !== null && age > need.ageMax) continue   // edad estricta
+          matched = need; break
+        }
+        if (!matched) continue
+        out.push({ player, entry, club, need: matched, tier: getClubTier(club.league, club.country), age })
+      }
+    }
+    out.sort((a, b) =>
+      (PR[a.entry.priority] ?? 9) - (PR[b.entry.priority] ?? 9) ||
+      (TR[a.tier] ?? 9) - (TR[b.tier] ?? 9) ||
+      a.player.name.localeCompare(b.player.name) ||
+      a.club.name.localeCompare(b.club.name)
+    )
+    return out
+  }, [seasonEntries, players, clubs, negotiations])
+
+  const filteredOpportunities = useMemo(() => {
+    const q = oppSearch.trim().toLowerCase()
+    return opportunities.filter(o =>
+      (!oppPriority || o.entry.priority === oppPriority) &&
+      (!q || o.player.name.toLowerCase().includes(q) || o.club.name.toLowerCase().includes(q) || (o.club.league ?? '').toLowerCase().includes(q))
+    )
+  }, [opportunities, oppSearch, oppPriority])
+
   function closePanel() { setSelectedEntryId(null); setSelectedClubId(null); setSelectedNeed(null); setPlayerPanelGestorFilter(''); setPanelExpanded(false) }
   const hasPanel = tab !== 'encargados' && (!!selectedEntry || !!selectedClub || !!selectedNeed)
   // Panel lateral ampliable (más ancho para editar cómodamente)
@@ -707,7 +769,7 @@ export function Distribution({
 
         {/* Sub-tabs — inside header so they stay sticky */}
         <div className="max-w-6xl mx-auto px-3 sm:px-6 flex gap-1 border-t border-slate-100 overflow-x-auto scrollbar-none">
-          {(['jugadores', 'clubes', 'solicitudes', 'pipeline', 'encargados'] as const).map(t => (
+          {(['jugadores', 'clubes', 'solicitudes', 'oportunidades', 'pipeline', 'encargados'] as const).map(t => (
             <button
               key={t}
               onClick={() => switchTab(t)}
@@ -723,6 +785,15 @@ export function Distribution({
                 <>Clubes ({clubs.length})</>
               ) : t === 'solicitudes' ? (
                 <>Solicitudes{clubNeeds.length > 0 ? ` (${clubNeeds.length})` : ''}</>
+              ) : t === 'oportunidades' ? (
+                <span className="flex items-center gap-1.5">
+                  Oportunidades
+                  {opportunities.length > 0 && (
+                    <span className={`text-[11px] px-1.5 py-0.5 rounded-full font-bold leading-none ${
+                      tab === t ? 'bg-primary text-white' : 'bg-emerald-100 text-emerald-700'
+                    }`}>{opportunities.length}</span>
+                  )}
+                </span>
               ) : t === 'encargados' ? (
                 <>Encargados</>
               ) : (
@@ -2195,6 +2266,116 @@ export function Distribution({
             )
           })()}
 
+          {/* ── OPORTUNIDADES TAB ── */}
+          {tab === 'oportunidades' && (() => {
+            const CAP = 200
+            const shown = filteredOpportunities.slice(0, CAP)
+            return (
+              <div className="max-w-5xl mx-auto">
+                {/* Intro + filtros */}
+                <div className="mb-3">
+                  <p className="text-xs text-slate-500 mb-2">
+                    Cruces jugador → club con necesidad compatible (posición y edad) que <strong>aún no has ofrecido</strong>.
+                    Ordenado por prioridad del jugador y nivel del club.
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="relative flex-1 min-w-[180px]">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        value={oppSearch}
+                        onChange={e => setOppSearch(e.target.value)}
+                        placeholder="Buscar jugador o club…"
+                        className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {(['A', 'B', 'C', 'D'] as const).map(pr => (
+                        <button
+                          key={pr}
+                          onClick={() => setOppPriority(oppPriority === pr ? '' : pr)}
+                          className={`w-8 h-8 rounded-lg text-xs font-bold transition-colors ${
+                            oppPriority === pr ? `${PRIORITY_CONFIG[pr].bg} ${PRIORITY_CONFIG[pr].text} ring-2 ring-offset-1 ring-current` : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                          }`}
+                          title={`Prioridad ${pr}`}
+                        >
+                          {pr}
+                        </button>
+                      ))}
+                    </div>
+                    <span className="text-xs text-slate-400 ml-auto">
+                      {filteredOpportunities.length} oportunidad{filteredOpportunities.length !== 1 ? 'es' : ''}
+                    </span>
+                  </div>
+                </div>
+
+                {filteredOpportunities.length === 0 ? (
+                  <EmptyState
+                    icon={<TrendingUp className="w-10 h-10" />}
+                    title="Sin oportunidades nuevas"
+                    subtitle="Cuando haya jugadores de tu cartera que encajen con necesidades de clubes y no estén ofrecidos, aparecerán aquí."
+                  />
+                ) : (
+                  <div className="bg-white border border-slate-200 rounded-xl divide-y divide-slate-100 overflow-hidden">
+                    {shown.map(({ player, entry, club, need, tier, age }) => {
+                      const key = `${player.id}|${club.id}`
+                      const prCfg = PRIORITY_CONFIG[entry.priority]
+                      const tierCfg = TIER_CONFIG[tier]
+                      const offering = offeringOppKey === key
+                      return (
+                        <div key={key} className="flex items-center gap-2 px-3 py-2.5 hover:bg-slate-50 transition-colors">
+                          <button
+                            onClick={() => onSelectClub?.(club.id)}
+                            className="flex-1 min-w-0 flex items-center gap-2 text-left"
+                          >
+                            <span className={`w-6 h-6 rounded-md flex items-center justify-center text-[11px] font-bold flex-shrink-0 ${prCfg.bg} ${prCfg.text}`}>{entry.priority}</span>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="text-sm font-medium text-slate-800 truncate">{player.name}</span>
+                                <span className="text-[11px] text-slate-400 flex-shrink-0">{player.positions[0]}{age !== null ? ` · ${age}a` : ''}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 mt-0.5 text-xs text-slate-500 min-w-0">
+                                <ChevronRight className="w-3 h-3 text-slate-300 flex-shrink-0" />
+                                <span className={`text-[10px] font-bold px-1 py-0.5 rounded flex-shrink-0 ${tierCfg.bg} ${tierCfg.text}`}>{tier}</span>
+                                <span className="font-medium text-slate-700 truncate">{club.name}</span>
+                                {club.league && <span className="text-slate-400 truncate hidden sm:inline">· {club.league}</span>}
+                                <span className="text-[11px] bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded flex-shrink-0">
+                                  {need.position}{need.ageMax ? ` ·Sub-${need.ageMax}` : ''}
+                                </span>
+                              </div>
+                            </div>
+                          </button>
+                          <button
+                            disabled={offering}
+                            onClick={async () => {
+                              setOfferingOppKey(key)
+                              try {
+                                await onCreateNegotiation({ playerId: player.id, clubId: club.id, needPosition: need.position, status: 'pendiente', aisManager: currentProfile.avatar })
+                                showToast(`${player.name} ofrecido a ${club.name}`)
+                              } catch {
+                                showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+                              } finally {
+                                setOfferingOppKey(null)
+                              }
+                            }}
+                            className="flex-shrink-0 inline-flex items-center gap-1 text-xs font-medium text-white bg-primary hover:bg-primary/90 disabled:opacity-60 px-3 py-2 sm:py-1.5 rounded-lg"
+                          >
+                            {offering ? <BtnSpinner /> : <Plus className="w-3.5 h-3.5" />}
+                            Ofrecer
+                          </button>
+                        </div>
+                      )
+                    })}
+                    {filteredOpportunities.length > CAP && (
+                      <div className="px-3 py-2.5 text-center text-xs text-slate-400">
+                        Mostrando las primeras {CAP} de {filteredOpportunities.length}. Afina con la búsqueda o la prioridad.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
+
           {/* ── ENCARGADOS TAB ── */}
           {tab === 'encargados' && (() => {
             const PRIORITY_ORDER: Record<string, number> = { A: 0, B: 1, C: 2, D: 3 }
@@ -2325,8 +2506,116 @@ export function Distribution({
             const totalStale = clubStats.reduce((sum, s) => sum + s.stale, 0)
             const goToClubs = (avatar: string) => { setClubManagerFilter(avatar); setTab('clubes') }
 
+            // ── Salud de datos ──────────────────────────────────
+            const strip = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+            const clubsSinEnc = clubs.filter(c => !c.aisManager)
+            // Duplicados por nombre normalizado
+            const byName = new Map<string, Club[]>()
+            clubs.forEach(c => {
+              const k = strip(c.name)
+              if (!byName.has(k)) byName.set(k, [])
+              byName.get(k)!.push(c)
+            })
+            const dupGroups = Array.from(byName.values()).filter(g => g.length > 1)
+            // Necesidades con posición no estándar
+            const badNeeds: Array<{ club: Club; pos: string }> = []
+            clubs.forEach(c => (c.needs ?? []).forEach(n => {
+              if (n.position && !normalizePosition(n.position)) badNeeds.push({ club: c, pos: n.position })
+            }))
+            // Necesidades antiguas (>180 días)
+            const OLD_DAYS = 180
+            const oldNeeds: Array<{ club: Club; pos: string; days: number }> = []
+            clubs.forEach(c => (c.needs ?? []).forEach(n => {
+              const d = n.createdAt ? Math.floor((Date.now() - new Date(n.createdAt).getTime()) / 86_400_000) : null
+              if (d !== null && d > OLD_DAYS) oldNeeds.push({ club: c, pos: n.position, days: d })
+            }))
+            oldNeeds.sort((a, b) => b.days - a.days)
+
+            const HealthCard = ({ id, label, count, tone, onAction, actionLabel }: {
+              id: 'sin' | 'dup' | 'pos' | 'old'; label: string; count: number; tone: string; onAction?: () => void; actionLabel?: string
+            }) => (
+              <div className={`rounded-xl border ${count > 0 ? tone : 'border-slate-200 bg-white'} overflow-hidden`}>
+                <button
+                  onClick={() => setHealthOpen(healthOpen === id ? null : id)}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 text-left"
+                >
+                  <span className="text-lg font-bold tabular-nums">{count}</span>
+                  <span className="text-sm font-medium text-slate-700 flex-1 min-w-0">{label}</span>
+                  {onAction && count > 0 && (
+                    <span
+                      onClick={e => { e.stopPropagation(); onAction() }}
+                      className="text-xs font-medium text-blue-600 hover:text-blue-700 flex-shrink-0"
+                    >
+                      {actionLabel}
+                    </span>
+                  )}
+                  <ChevronDown className={`w-4 h-4 text-slate-400 flex-shrink-0 transition-transform ${healthOpen === id ? 'rotate-180' : ''}`} />
+                </button>
+              </div>
+            )
+
             return (
               <div className="max-w-5xl mx-auto space-y-6">
+                {/* Salud de datos (solo admin) */}
+                {currentProfile.is_admin && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-700 mb-2">Salud de datos</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <HealthCard id="sin" label="Clubes sin encargado" count={clubsSinEnc.length} tone="border-amber-200 bg-amber-50"
+                        onAction={() => goToClubs('__sin__')} actionLabel="Repartir →" />
+                      <HealthCard id="dup" label="Clubes posiblemente duplicados" count={dupGroups.length} tone="border-orange-200 bg-orange-50" />
+                      <HealthCard id="pos" label="Necesidades con posición no estándar" count={badNeeds.length} tone="border-red-200 bg-red-50" />
+                      <HealthCard id="old" label={`Necesidades antiguas (>${OLD_DAYS}d)`} count={oldNeeds.length} tone="border-slate-200 bg-slate-50" />
+                    </div>
+
+                    {/* Detalle desplegable */}
+                    {healthOpen === 'dup' && dupGroups.length > 0 && (
+                      <div className="mt-2 bg-white border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-[40vh] overflow-y-auto">
+                        {dupGroups.map((g, i) => (
+                          <div key={i} className="px-3 py-2">
+                            <p className="text-xs font-semibold text-slate-700 mb-1">{g[0].name} ({g.length})</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {g.map(c => (
+                                <button key={c.id} onClick={() => onSelectClub?.(c.id)}
+                                  className="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">
+                                  {c.league ?? 'sin liga'}{c.aisManager ? ` · ${c.aisManager}` : ''}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {healthOpen === 'pos' && badNeeds.length > 0 && (
+                      <div className="mt-2 bg-white border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-[40vh] overflow-y-auto">
+                        {badNeeds.slice(0, 100).map((b, i) => (
+                          <button key={i} onClick={() => onSelectClub?.(b.club.id)}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-50">
+                            <span className="text-sm text-slate-700 truncate flex-1">{b.club.name}</span>
+                            <span className="text-[11px] bg-red-50 text-red-600 border border-red-200 px-1.5 py-0.5 rounded flex-shrink-0">“{b.pos}”</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {healthOpen === 'old' && oldNeeds.length > 0 && (
+                      <div className="mt-2 bg-white border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-[40vh] overflow-y-auto">
+                        {oldNeeds.slice(0, 100).map((o, i) => (
+                          <button key={i} onClick={() => onSelectClub?.(o.club.id)}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-50">
+                            <span className="text-sm text-slate-700 truncate flex-1">{o.club.name}</span>
+                            <span className="text-[11px] text-slate-400 flex-shrink-0">{o.pos} · {Math.floor(o.days / 30)}m</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {healthOpen === 'sin' && (
+                      <p className="mt-2 text-xs text-slate-500">
+                        Pulsa “Repartir →” para ir a la lista de clubes filtrada por “Sin encargado” y asignarlos desde el círculo de siglas de cada tarjeta.
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {/* Resumen por encargado (clubes) */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
