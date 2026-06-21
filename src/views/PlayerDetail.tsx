@@ -13,6 +13,7 @@ import { uploadContractPdf, fetchNotes, createNote, updateNote, deleteNote,
   updatePlayerActivity, updateGroupActivity, deletePlayerActivity, deleteGroupActivity,
 } from "../lib/db";
 import { TaskDetailPanel } from "../components/TaskDetailPanel";
+import { ManagerSelect } from '../components/ManagerSelect';
 import { ToastStack } from "../components/ToastStack";
 import { useToast } from "../hooks/useToast";
 import { ConfirmModal } from "../components/ConfirmModal";
@@ -333,6 +334,7 @@ export function PlayerDetail({
                 negotiations={playerNegotiations}
                 clubs={clubs}
                 currentProfile={currentProfile}
+                profiles={profiles}
                 onUpdateEntry={onUpdateEntry}
                 onCreateNegotiation={onCreateNegotiation}
                 onUpdateNegotiation={onUpdateNegotiation}
@@ -2972,12 +2974,13 @@ const PRIORITY_CONFIG_D = {
 }
 const CONDITIONS_D = ['Libre', 'Traspaso', 'Cesión', 'Cesión/Traspaso', 'Traspaso (porcentaje)', 'Cesión con opción']
 
-function DistributionTab({ player, entry, negotiations, clubs, currentProfile, onUpdateEntry, onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation, onSelectClub }: {
+function DistributionTab({ player, entry, negotiations, clubs, currentProfile, profiles, onUpdateEntry, onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation, onSelectClub }: {
   player: Player
   entry?: DistributionEntry
   negotiations: ClubNegotiation[]
   clubs: Club[]
   currentProfile: Profile
+  profiles: Profile[]
   onUpdateEntry?: (e: DistributionEntry) => Promise<void>
   onCreateNegotiation?: (n: Omit<ClubNegotiation, 'id' | 'createdAt' | 'updatedAt'>) => Promise<ClubNegotiation>
   onUpdateNegotiation?: (n: ClubNegotiation) => Promise<void>
@@ -2994,7 +2997,7 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
   const [showAddNeg, setShowAddNeg] = useState(false)
   const [negClubId, setNegClubId] = useState('')
   const [negStatus, setNegStatus] = useState<ClubNegotiation['status']>('ofrecido')
-  const [negAis, setNegAis] = useState('')
+  const [negAis, setNegAis] = useState(currentProfile.avatar)
   const [negNotes, setNegNotes] = useState('')
   const [savingNeg, setSavingNeg] = useState(false)
   const [editingNeg, setEditingNeg] = useState<ClubNegotiation | null>(null)
@@ -3027,7 +3030,7 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
     try {
       await onCreateNegotiation?.({ playerId: player.id, clubId: negClubId, status: negStatus, aisManager: negAis || undefined, notes: negNotes || undefined })
       setShowAddNeg(false)
-      setNegClubId(''); setNegAis(''); setNegNotes(''); setNegStatus('ofrecido')
+      setNegClubId(''); setNegAis(currentProfile.avatar); setNegNotes(''); setNegStatus('ofrecido')
     } catch {
       showToast('No se pudo añadir el club', 'error')
     } finally { setSavingNeg(false) }
@@ -3124,7 +3127,7 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
                 return <button key={s} onClick={() => setNegStatus(s)} className={`px-2.5 py-1 rounded-full text-xs font-medium ${negStatus === s ? cfg.color + ' ring-1 ring-current' : 'bg-white border border-slate-200 text-slate-500'}`}>{cfg.label}</button>
               })}
             </div>
-            <input value={negAis} onChange={e => setNegAis(e.target.value)} placeholder="Gestor AIS (PP, BGF…)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+            <div className="w-full"><ManagerSelect value={negAis || undefined} onChange={(v) => setNegAis(v ?? '')} profiles={profiles} /></div>
             <input value={negNotes} onChange={e => setNegNotes(e.target.value)} placeholder="Notas (opcional)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
             <div className="flex gap-2">
               <button onClick={() => setShowAddNeg(false)} className="flex-1 py-1.5 text-xs border border-slate-200 rounded-lg text-slate-500">Cancelar</button>
@@ -3168,7 +3171,7 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, o
                                   return <button key={s} onClick={() => setEditingNeg({ ...editingNeg!, status: s })} className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${editingNeg!.status === s ? c2.color + ' ring-1 ring-current' : 'bg-slate-100 text-slate-500'}`}>{c2.label}</button>
                                 })}
                               </div>
-                              <input value={editingNeg!.aisManager ?? ''} onChange={e => setEditingNeg({ ...editingNeg!, aisManager: e.target.value })} placeholder="Gestor AIS" className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs" />
+                              <div className="w-full"><ManagerSelect value={editingNeg!.aisManager || undefined} onChange={(v) => setEditingNeg({ ...editingNeg!, aisManager: v ?? '' })} profiles={profiles} /></div>
                               <input value={editingNeg!.notes ?? ''} onChange={e => setEditingNeg({ ...editingNeg!, notes: e.target.value })} placeholder="Notas" className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs" />
                               <div className="flex gap-1.5">
                                 <button onClick={() => setNegToDelete(neg)} className="px-2 py-1 text-[11px] border border-red-200 text-red-500 rounded-lg">Eliminar</button>

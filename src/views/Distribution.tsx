@@ -9,6 +9,7 @@ import logoImg from '../assets/logo.jpeg'
 import type { Player, Club, ClubNeed, DistributionEntry, ClubNegotiation, ClubNegotiationUpdate } from '../types'
 import type { Profile } from '../contexts/AuthContext'
 import { ConfirmModal } from '../components/ConfirmModal'
+import { ManagerSelect } from '../components/ManagerSelect'
 import { EmptyState } from '../components/EmptyState'
 import { ToastStack } from '../components/ToastStack'
 import { useToast } from '../hooks/useToast'
@@ -1098,7 +1099,7 @@ export function Distribution({
                 >
                   <option value="">Encargado: todos</option>
                   {profiles.map(p => (
-                    <option key={p.id} value={p.avatar}>{p.name.split(' ')[0]} ({p.avatar})</option>
+                    <option key={p.id} value={p.avatar}>{p.name} ({p.avatar})</option>
                   ))}
                   <option value="__sin__">Sin encargado</option>
                 </select>
@@ -2036,7 +2037,7 @@ export function Distribution({
                             <td className="px-4 py-2.5">
                               <div className="flex items-center gap-2">
                                 <span className="w-7 h-7 rounded-full bg-primary text-white text-[11px] font-bold flex items-center justify-center flex-shrink-0">{s.profile.avatar}</span>
-                                <span className="font-medium text-slate-700 truncate">{s.profile.name.split(' ')[0]}</span>
+                                <span className="font-medium text-slate-700 truncate">{s.profile.name}</span>
                               </div>
                             </td>
                             <td className="px-3 py-2.5 text-right font-semibold text-slate-700">{s.clubs}</td>
@@ -2614,6 +2615,8 @@ export function Distribution({
       {showAddClub && (
         <AddClubModal
           leagueOptions={sortedLeagues.map(l => ({ league: l.league, country: l.country }))}
+          profiles={profiles}
+          currentProfileAvatar={currentProfile.avatar}
           onClose={() => setShowAddClub(false)}
           onSave={async (data) => {
             try {
@@ -2636,6 +2639,8 @@ export function Distribution({
           fixedPlayerId={showAddNeg.playerId}
           fixedClubId={showAddNeg.clubId}
           fixedNeedPosition={showAddNeg.needPosition}
+          profiles={profiles}
+          currentProfileAvatar={currentProfile.avatar}
           onClose={() => setShowAddNeg(null)}
           onSave={async (data) => {
             try {
@@ -2669,6 +2674,7 @@ export function Distribution({
         <EditClubModal
           club={editingClub}
           leagueOptions={sortedLeagues.map(l => l.league)}
+          profiles={profiles}
           onClose={() => setEditingClub(null)}
           onSave={async (data) => {
             try {
@@ -2688,6 +2694,7 @@ export function Distribution({
           clubs={clubs}
           players={players}
           currentProfile={currentProfile}
+          profiles={profiles}
           onClose={() => setEditingNeg(null)}
           onSave={async (data) => {
             try {
@@ -3342,10 +3349,12 @@ function NeedFormInline({ initial, onSave, onCancel }: {
 
 // ── ADD CLUB MODAL ────────────────────────────────────────────
 
-function AddClubModal({ onClose, onSave, leagueOptions }: {
+function AddClubModal({ onClose, onSave, leagueOptions, profiles, currentProfileAvatar }: {
   onClose: () => void
   onSave: (data: Omit<Club, 'id' | 'createdAt'>) => Promise<void>
   leagueOptions: { league: string; country: string }[]
+  profiles: Profile[]
+  currentProfileAvatar?: string
 }) {
   const [name, setName] = useState('')
   const [leagueSearch, setLeagueSearch] = useState('')
@@ -3353,7 +3362,7 @@ function AddClubModal({ onClose, onSave, leagueOptions }: {
   const [country, setCountry] = useState('')
   const [leagueOpen, setLeagueOpen] = useState(false)
   const [contactPerson, setContactPerson] = useState('')
-  const [aisManager, setAisManager] = useState('')
+  const [aisManager, setAisManager] = useState(currentProfileAvatar ?? '')
   const [notes, setNotes] = useState('')
   const [isPriority, setIsPriority] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -3444,9 +3453,9 @@ function AddClubModal({ onClose, onSave, leagueOptions }: {
             <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Contacto club</label>
             <input value={contactPerson} onChange={e => setContactPerson(e.target.value)} placeholder="Nombre del contacto" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
           </div>
-          <div className="w-24">
+          <div className="w-40 sm:w-44">
             <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Gestor AIS</label>
-            <input value={aisManager} onChange={e => setAisManager(e.target.value)} placeholder="PP, BGF…" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+            <ManagerSelect value={aisManager || undefined} onChange={(v) => setAisManager(v ?? '')} profiles={profiles} />
           </div>
         </div>
         <div>
@@ -3468,7 +3477,7 @@ function AddClubModal({ onClose, onSave, leagueOptions }: {
 
 // ── ADD NEGOTIATION MODAL ─────────────────────────────────────
 
-function AddNegotiationModal({ players, clubs, entries, fixedPlayerId, fixedClubId, fixedNeedPosition, onClose, onSave }: {
+function AddNegotiationModal({ players, clubs, entries, fixedPlayerId, fixedClubId, fixedNeedPosition, onClose, onSave, profiles, currentProfileAvatar }: {
   players: Player[]
   clubs: Club[]
   entries: DistributionEntry[]
@@ -3477,12 +3486,14 @@ function AddNegotiationModal({ players, clubs, entries, fixedPlayerId, fixedClub
   fixedNeedPosition?: string
   onClose: () => void
   onSave: (data: Omit<ClubNegotiation, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>
+  profiles: Profile[]
+  currentProfileAvatar?: string
 }) {
   const distributionPlayerIds = entries.map(e => e.playerId)
   const [playerId, setPlayerId] = useState(fixedPlayerId ?? '')
   const [clubId, setClubId] = useState(fixedClubId ?? '')
   const [status, setStatus] = useState<ClubNegotiation['status']>('ofrecido')
-  const [aisManager, setAisManager] = useState('')
+  const [aisManager, setAisManager] = useState(currentProfileAvatar ?? '')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -3539,7 +3550,7 @@ function AddNegotiationModal({ players, clubs, entries, fixedPlayerId, fixedClub
         </div>
         <div>
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Gestor AIS</label>
-          <input value={aisManager} onChange={e => setAisManager(e.target.value)} placeholder="PP, BGF, LT…" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+          <ManagerSelect value={aisManager || undefined} onChange={(v) => setAisManager(v ?? '')} profiles={profiles} />
         </div>
         <div>
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Notas</label>
@@ -3613,11 +3624,12 @@ function EditEntryModal({ entry, onClose, onSave }: {
 
 // ── EDIT CLUB MODAL ───────────────────────────────────────────
 
-function EditClubModal({ club, leagueOptions = [], onClose, onSave }: {
+function EditClubModal({ club, leagueOptions = [], onClose, onSave, profiles }: {
   club: Club
   leagueOptions?: string[]
   onClose: () => void
   onSave: (data: Partial<Club>) => Promise<void>
+  profiles: Profile[]
 }) {
   const [name, setName] = useState(club.name)
   const [country, setCountry] = useState(club.country ?? '')
@@ -3665,9 +3677,9 @@ function EditClubModal({ club, leagueOptions = [], onClose, onSave }: {
             <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Contacto club</label>
             <input value={contactPerson} onChange={e => setContactPerson(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
           </div>
-          <div className="w-24">
+          <div className="w-40 sm:w-44">
             <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Gestor AIS</label>
-            <input value={aisManager} onChange={e => setAisManager(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+            <ManagerSelect value={aisManager || undefined} onChange={(v) => setAisManager(v ?? '')} profiles={profiles} />
           </div>
         </div>
         <div>
@@ -3688,11 +3700,12 @@ function EditClubModal({ club, leagueOptions = [], onClose, onSave }: {
 
 // ── EDIT NEGOTIATION MODAL ────────────────────────────────────
 
-function EditNegotiationModal({ neg, clubs, players, currentProfile, onClose, onSave, onSaveUpdate, onDelete }: {
+function EditNegotiationModal({ neg, clubs, players, currentProfile, onClose, onSave, onSaveUpdate, onDelete, profiles }: {
   neg: ClubNegotiation
   clubs: Club[]
   players: Player[]
   currentProfile: Profile
+  profiles: Profile[]
   onClose: () => void
   onSave: (data: Partial<ClubNegotiation>) => Promise<void>
   onSaveUpdate: (update: ClubNegotiationUpdate) => Promise<void>
@@ -3763,7 +3776,7 @@ function EditNegotiationModal({ neg, clubs, players, currentProfile, onClose, on
         </div>
         <div>
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Gestor AIS</label>
-          <input value={aisManager} onChange={e => setAisManager(e.target.value)} placeholder="PP, BGF…" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+          <ManagerSelect value={aisManager || undefined} onChange={(v) => setAisManager(v ?? '')} profiles={profiles} />
         </div>
         <div>
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Notas</label>

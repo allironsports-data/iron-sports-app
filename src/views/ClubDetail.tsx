@@ -12,6 +12,7 @@ import { ToastStack } from '../components/ToastStack'
 import { useToast } from '../hooks/useToast'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import { isValidName } from '../lib/validate'
+import { ManagerSelect } from '../components/ManagerSelect'
 
 /** Spinner pequeño para botones de guardado */
 function BtnSpinner() {
@@ -52,6 +53,7 @@ interface Props {
   entries: DistributionEntry[]
   negotiations: ClubNegotiation[]
   currentProfile: Profile
+  profiles: Profile[]
   onBack: () => void
   onLogout: () => void
   onAdmin?: () => void
@@ -112,7 +114,7 @@ function Avatar({ name, photo, size = 'sm' }: { name: string; photo?: string; si
 // ── main component ────────────────────────────────────────────
 
 export function ClubDetail({
-  club, players, entries, negotiations, currentProfile,
+  club, players, entries, negotiations, currentProfile, profiles,
   onBack, onLogout, onAdmin, onSelectPlayer,
   onUpdateClub, onDeleteClub,
   onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation,
@@ -544,6 +546,7 @@ export function ClubDetail({
               {editingInfo ? (
                 <InfoEditForm
                   club={club}
+                  profiles={profiles}
                   onSave={async (updates) => {
                     try {
                       await onUpdateClub({ ...club, ...updates })
@@ -574,7 +577,10 @@ export function ClubDetail({
                   {club.aisManager && (
                     <div className="flex items-center gap-2 text-sm">
                       <span className="text-xs text-slate-400 w-24">Gestor AIS</span>
-                      <span className="font-mono bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-xs">{club.aisManager}</span>
+                      <span className="text-slate-700 text-sm flex items-center gap-1.5">
+                        {profiles.find(p => p.avatar === club.aisManager)?.name ?? null}
+                        <span className="font-mono bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-xs">{club.aisManager}</span>
+                      </span>
                     </div>
                   )}
                   <div className="flex items-center gap-2 text-sm">
@@ -637,6 +643,8 @@ export function ClubDetail({
           existingPlayerIds={clubNegs.map(n => n.playerId)}
           clubId={club.id}
           positionHint={addPlayerPositionHint}
+          profiles={profiles}
+          currentProfile={currentProfile}
           onClose={() => { setShowAddPlayer(false); setAddPlayerPositionHint(undefined) }}
           onSave={async (data) => {
             try {
@@ -654,6 +662,7 @@ export function ClubDetail({
       {editingNeg && (
         <EditNegModal
           neg={editingNeg}
+          profiles={profiles}
           onClose={() => setEditingNeg(null)}
           onSave={async (updates) => {
             try {
@@ -703,19 +712,21 @@ export function ClubDetail({
 
 // ── ADD PLAYER MODAL ──────────────────────────────────────────
 
-function AddPlayerToClubModal({ players, entries, existingPlayerIds, clubId, positionHint, onClose, onSave }: {
+function AddPlayerToClubModal({ players, entries, existingPlayerIds, clubId, positionHint, profiles, currentProfile, onClose, onSave }: {
   players: Player[]
   entries: DistributionEntry[]
   existingPlayerIds: string[]
   clubId: string
   positionHint?: string
+  profiles: Profile[]
+  currentProfile: Profile
   onClose: () => void
   onSave: (data: Omit<ClubNegotiation, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>
 }) {
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<Player | null>(null)
   const [status, setStatus] = useState<ClubNegotiation['status']>('ofrecido')
-  const [aisManager, setAisManager] = useState('')
+  const [aisManager, setAisManager] = useState(currentProfile.avatar)
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const [showAll, setShowAll] = useState(false)
@@ -823,8 +834,7 @@ function AddPlayerToClubModal({ players, entries, existingPlayerIds, clubId, pos
                   })}
                 </div>
               </div>
-              <input value={aisManager} onChange={e => setAisManager(e.target.value)} placeholder="Gestor AIS (PP, BGF…)"
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+              <ManagerSelect value={aisManager || undefined} onChange={(v) => setAisManager(v ?? '')} profiles={profiles} />
               <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Notas (opcional)"
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none" />
               <button onClick={handleSave} disabled={saving}
@@ -841,8 +851,9 @@ function AddPlayerToClubModal({ players, entries, existingPlayerIds, clubId, pos
 
 // ── EDIT NEG MODAL ────────────────────────────────────────────
 
-function EditNegModal({ neg, onClose, onSave, onDelete }: {
+function EditNegModal({ neg, profiles, onClose, onSave, onDelete }: {
   neg: ClubNegotiation
+  profiles: Profile[]
   onClose: () => void
   onSave: (data: Partial<ClubNegotiation>) => Promise<void>
   onDelete: () => Promise<void>
@@ -877,8 +888,7 @@ function EditNegModal({ neg, onClose, onSave, onDelete }: {
               })}
             </div>
           </div>
-          <input value={aisManager} onChange={e => setAisManager(e.target.value)} placeholder="Gestor AIS (PP, BGF…)"
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+          <ManagerSelect value={aisManager || undefined} onChange={(v) => setAisManager(v ?? '')} profiles={profiles} />
           <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Notas"
             className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none" />
           <div className="flex gap-2">
@@ -1028,8 +1038,9 @@ const KNOWN_LEAGUES = [
 
 // ── INFO EDIT FORM ────────────────────────────────────────────
 
-function InfoEditForm({ club, onSave, onCancel }: {
+function InfoEditForm({ club, profiles, onSave, onCancel }: {
   club: Club
+  profiles: Profile[]
   onSave: (updates: Partial<Club>) => Promise<void>
   onCancel: () => void
 }) {
@@ -1121,7 +1132,7 @@ function InfoEditForm({ club, onSave, onCancel }: {
         </div>
         <div>
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Gestor AIS</label>
-          <input value={aisManager} onChange={e => setAisManager(e.target.value)} placeholder="PP, BGF…" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+          <ManagerSelect value={aisManager || undefined} onChange={(v) => setAisManager(v ?? '')} profiles={profiles} />
         </div>
       </div>
       <div>

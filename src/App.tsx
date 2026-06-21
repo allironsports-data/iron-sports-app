@@ -574,6 +574,7 @@ export default function App() {
         entries={distEntries}
         negotiations={negotiations}
         currentProfile={profile}
+        profiles={profiles}
         onBack={() => setSelectedClubId(null)}
         onLogout={signOut}
         onAdmin={profile.is_admin ? () => { setSelectedClubId(null); setShowAdmin(true) } : undefined}
