@@ -747,7 +747,7 @@ export function Distribution({
 
           {/* ── BANDEJA DE PENDIENTES (propuestas que requieren tu atención) ── */}
           {myPending.length > 0 && (
-            <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 overflow-hidden">
+            <div className="mb-4 max-w-6xl mx-auto rounded-xl border border-amber-200 bg-amber-50 overflow-hidden">
               <button
                 onClick={() => setShowPendingInbox(v => !v)}
                 className="w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-amber-100/60 transition-colors"
