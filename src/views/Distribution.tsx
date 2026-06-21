@@ -3,7 +3,7 @@ import {
   Plus, Search, Star, Building2, Users,
   ChevronRight, X, Check, Pencil, Trash2, LogOut,
   TrendingUp, AlertCircle, CircleDot, Flag, ChevronDown,
-  Eye, List, LayoutGrid, SlidersHorizontal,
+  Eye, List, LayoutGrid, SlidersHorizontal, Maximize2, Minimize2,
 } from 'lucide-react'
 import logoImg from '../assets/logo.jpeg'
 import type { Player, Club, ClubNeed, DistributionEntry, ClubNegotiation, ClubNegotiationUpdate } from '../types'
@@ -569,8 +569,20 @@ export function Distribution({
     ).length
   , [negotiations, currentProfile.avatar])
 
-  function closePanel() { setSelectedEntryId(null); setSelectedClubId(null); setSelectedNeed(null); setPlayerPanelGestorFilter('') }
+  function closePanel() { setSelectedEntryId(null); setSelectedClubId(null); setSelectedNeed(null); setPlayerPanelGestorFilter(''); setPanelExpanded(false) }
   const hasPanel = tab !== 'encargados' && (!!selectedEntry || !!selectedClub || !!selectedNeed)
+  // Panel lateral ampliable (más ancho para editar cómodamente)
+  const [panelExpanded, setPanelExpanded] = useState(false)
+  const PanelExpandBtn = () => (
+    <button
+      onClick={() => setPanelExpanded(e => !e)}
+      aria-label={panelExpanded ? 'Reducir panel' : 'Ampliar panel'}
+      title={panelExpanded ? 'Reducir' : 'Ampliar'}
+      className="hidden lg:inline-flex p-1.5 rounded hover:bg-slate-100 text-slate-400 flex-shrink-0"
+    >
+      {panelExpanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+    </button>
+  )
 
   function switchTab(t: typeof tab) {
     setTab(t)
@@ -2135,7 +2147,9 @@ export function Distribution({
 
         {/* ── SIDE PANEL ── */}
         {hasPanel && (
-          <div className="w-full sm:w-[380px] flex-shrink-0 border-l border-slate-200 bg-white overflow-y-auto fixed sm:static inset-0 sm:inset-auto z-30">
+          <div className={`w-full flex-shrink-0 border-l border-slate-200 bg-white overflow-y-auto fixed sm:static inset-0 sm:inset-auto z-30 transition-[width] duration-200 ${
+            panelExpanded ? 'sm:w-[560px] lg:w-[55%] xl:w-[60%]' : 'sm:w-[380px]'
+          }`}>
             {selectedEntry && (() => {
               const player = players.find(p => p.id === selectedEntry.playerId)!
               const playerNegs = negotiations.filter(n => n.playerId === selectedEntry.playerId)
@@ -2151,6 +2165,7 @@ export function Distribution({
                       <div className="font-semibold text-slate-800 text-sm">{player.name}</div>
                       <div className="text-xs text-slate-500">{player.positions[0]}</div>
                     </div>
+                    <PanelExpandBtn />
                     <button
                       onClick={() => onSelectPlayer?.(player.id)}
                       className="text-xs text-blue-600 hover:underline flex-shrink-0"
@@ -2332,6 +2347,7 @@ export function Distribution({
                         {club.league && <span className="text-slate-400">· {club.league}</span>}
                       </div>
                     </div>
+                    <PanelExpandBtn />
                     <button
                       onClick={() => { setSelectedClubId(club.id); setSelectedNeed(null); setSelectedEntryId(null) }}
                       className="p-2 sm:p-1 text-slate-300 hover:text-slate-500 flex-shrink-0"
@@ -2475,6 +2491,7 @@ export function Distribution({
                       <div className="font-semibold text-slate-800 text-sm">{selectedClub.name}</div>
                       <div className="text-xs text-slate-500">{selectedClub.league}</div>
                     </div>
+                    <PanelExpandBtn />
                     <button onClick={() => setEditingClub(selectedClub)} aria-label="Editar club" className="p-2 sm:p-1 text-slate-400 hover:text-slate-600">
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
