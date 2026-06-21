@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo, useEffect, useCallback } from 'react'
 import {
   Plus, Search, Star, Building2, Users,
   ChevronRight, X, Check, Pencil, Trash2, LogOut,
@@ -320,8 +320,12 @@ export function Distribution({
   const [oppPos, setOppPos] = useState('')          // filtro por posición del jugador
   const [oppLeague, setOppLeague] = useState('')    // filtro por liga del club
   const [oppMineOnly, setOppMineOnly] = useState(false)
+  const [oppNoMgrOnly, setOppNoMgrOnly] = useState(false)  // solo oportunidades de clubes sin encargado
   const [offeringOppKey, setOfferingOppKey] = useState<string | null>(null)
   const [dismissingOppKey, setDismissingOppKey] = useState<string | null>(null)
+  const [oppSelected, setOppSelected] = useState<Set<string>>(new Set())
+  const [confirmBulkDismiss, setConfirmBulkDismiss] = useState(false)
+  const [bulkDismissing, setBulkDismissing] = useState(false)
   // Salud de datos (Encargados tab, admin)
   const [healthOpen, setHealthOpen] = useState<null | 'sin' | 'dup' | 'pos' | 'old'>(null)
   useEffect(() => { sessionStorage.setItem('nav_dist_tab', tab) }, [tab])
@@ -674,12 +678,52 @@ export function Distribution({
     () => Array.from(new Set(opportunities.map(o => o.club.league).filter(Boolean) as string[])).sort(),
     [opportunities]
   )
+  const oppByKey = useMemo(() => {
+    const m = new Map<string, typeof opportunities[number]>()
+    opportunities.forEach(o => m.set(`${o.player.id}|${o.club.id}`, o))
+    return m
+  }, [opportunities])
+
+  const toggleOppSelected = useCallback((key: string) => {
+    setOppSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key); else next.add(key)
+      return next
+    })
+  }, [])
+
+  async function bulkDismissOpportunities() {
+    const keys = Array.from(oppSelected)
+    setBulkDismissing(true)
+    let ok = 0
+    try {
+      // En lotes para no saturar la base de datos
+      const CHUNK = 20
+      for (let i = 0; i < keys.length; i += CHUNK) {
+        const batch = keys.slice(i, i + CHUNK)
+        await Promise.all(batch.map(async k => {
+          const o = oppByKey.get(k)
+          if (!o) return
+          await onCreateNegotiation({ playerId: o.player.id, clubId: o.club.id, needPosition: o.need.position, status: 'descartado', aisManager: currentProfile.avatar })
+          ok++
+        }))
+      }
+      showToast(`${ok} oportunidad${ok !== 1 ? 'es' : ''} descartada${ok !== 1 ? 's' : ''}`)
+    } catch {
+      showToast(`Descartadas ${ok}; algunas fallaron. Reintenta.`, 'error')
+    } finally {
+      setBulkDismissing(false)
+      setConfirmBulkDismiss(false)
+      setOppSelected(new Set())
+    }
+  }
   const filteredOpportunities = useMemo(() => {
     const q = oppSearch.trim().toLowerCase()
     return opportunities.filter(o => {
       if (oppPriority && o.entry.priority !== oppPriority) return false
       if (oppPos && !o.player.positions.includes(oppPos)) return false
       if (oppLeague && o.club.league !== oppLeague) return false
+      if (oppNoMgrOnly && o.club.aisManager) return false
       if (oppMineOnly) {
         const mine = o.club.aisManager === currentProfile.avatar || o.player.managedBy.includes(currentProfile.id)
         if (!mine) return false
@@ -688,7 +732,14 @@ export function Distribution({
         (o.club.league ?? '').toLowerCase().includes(q) || (o.club.country ?? '').toLowerCase().includes(q))) return false
       return true
     })
-  }, [opportunities, oppSearch, oppPriority, oppPos, oppLeague, oppMineOnly, currentProfile.avatar, currentProfile.id])
+  }, [opportunities, oppSearch, oppPriority, oppPos, oppLeague, oppMineOnly, oppNoMgrOnly, currentProfile.avatar, currentProfile.id])
+
+  // Clubes que tienen oportunidades pero NO tienen encargado asignado
+  const clubsWithOppNoMgr = useMemo(() => {
+    const ids = new Set<string>()
+    opportunities.forEach(o => { if (!o.club.aisManager) ids.add(o.club.id) })
+    return ids.size
+  }, [opportunities])
 
   function closePanel() { setSelectedEntryId(null); setSelectedClubId(null); setSelectedNeed(null); setPlayerPanelGestorFilter(''); setPanelExpanded(false) }
   const hasPanel = tab !== 'encargados' && (!!selectedEntry || !!selectedClub || !!selectedNeed)
@@ -2288,6 +2339,23 @@ export function Distribution({
             const shown = filteredOpportunities.slice(0, CAP)
             return (
               <div className="max-w-5xl mx-auto">
+                {/* Aviso: clubes con oportunidades pero sin encargado */}
+                {clubsWithOppNoMgr > 0 && (
+                  <button
+                    onClick={() => setOppNoMgrOnly(v => !v)}
+                    className={`w-full mb-3 flex items-center gap-2 px-4 py-2.5 rounded-xl border text-left transition-colors ${
+                      oppNoMgrOnly ? 'bg-red-100 border-red-300' : 'bg-red-50 border-red-200 hover:bg-red-100'
+                    }`}
+                  >
+                    <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
+                    <span className="text-sm font-semibold text-red-800 flex-1 min-w-0">
+                      {clubsWithOppNoMgr} club{clubsWithOppNoMgr !== 1 ? 'es' : ''} con oportunidades sin encargado asignado
+                    </span>
+                    <span className="text-xs font-medium text-red-700 flex-shrink-0">
+                      {oppNoMgrOnly ? 'Quitar filtro' : 'Ver solo estos →'}
+                    </span>
+                  </button>
+                )}
                 {/* Intro + filtros */}
                 <div className="mb-3">
                   <p className="text-xs text-slate-500 mb-2">
@@ -2348,9 +2416,9 @@ export function Distribution({
                     >
                       <Users className="w-3.5 h-3.5" /> Solo mías
                     </button>
-                    {(oppPos || oppLeague || oppMineOnly || oppPriority || oppSearch) && (
+                    {(oppPos || oppLeague || oppMineOnly || oppPriority || oppSearch || oppNoMgrOnly) && (
                       <button
-                        onClick={() => { setOppPos(''); setOppLeague(''); setOppMineOnly(false); setOppPriority(''); setOppSearch('') }}
+                        onClick={() => { setOppPos(''); setOppLeague(''); setOppMineOnly(false); setOppPriority(''); setOppSearch(''); setOppNoMgrOnly(false) }}
                         className="text-xs text-blue-600 hover:text-blue-700 font-medium ml-1"
                       >
                         Limpiar
@@ -2366,6 +2434,35 @@ export function Distribution({
                     subtitle="Cuando haya jugadores de tu cartera que encajen con necesidades de clubes y no estén ofrecidos, aparecerán aquí."
                   />
                 ) : (
+                  <>
+                  {/* Barra de selección múltiple */}
+                  <div className="flex items-center gap-3 mb-2 flex-wrap">
+                    <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 rounded"
+                        checked={shown.length > 0 && shown.every(o => oppSelected.has(`${o.player.id}|${o.club.id}`))}
+                        onChange={e => setOppSelected(prev => {
+                          const next = new Set(prev)
+                          shown.forEach(o => { const k = `${o.player.id}|${o.club.id}`; if (e.target.checked) next.add(k); else next.delete(k) })
+                          return next
+                        })}
+                      />
+                      Seleccionar visibles
+                    </label>
+                    {oppSelected.size > 0 && (
+                      <>
+                        <span className="text-xs text-slate-500">{oppSelected.size} seleccionada{oppSelected.size !== 1 ? 's' : ''}</span>
+                        <button
+                          onClick={() => setConfirmBulkDismiss(true)}
+                          className="inline-flex items-center gap-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-lg"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" /> Descartar ({oppSelected.size})
+                        </button>
+                        <button onClick={() => setOppSelected(new Set())} className="text-xs text-slate-500 hover:text-slate-700">Limpiar selección</button>
+                      </>
+                    )}
+                  </div>
                   <div className="bg-white border border-slate-200 rounded-xl divide-y divide-slate-100 overflow-hidden">
                     {shown.map(({ player, entry, club, need, tier, age }) => {
                       const key = `${player.id}|${club.id}`
@@ -2373,7 +2470,13 @@ export function Distribution({
                       const tierCfg = TIER_CONFIG[tier]
                       const offering = offeringOppKey === key
                       return (
-                        <div key={key} className="flex items-center gap-2 px-3 py-2.5 hover:bg-slate-50 transition-colors">
+                        <div key={key} className={`flex items-center gap-2 px-3 py-2.5 transition-colors ${oppSelected.has(key) ? 'bg-blue-50/60' : 'hover:bg-slate-50'}`}>
+                          <input
+                            type="checkbox"
+                            className="w-4 h-4 rounded flex-shrink-0"
+                            checked={oppSelected.has(key)}
+                            onChange={() => toggleOppSelected(key)}
+                          />
                           <button
                             onClick={() => onSelectClub?.(club.id)}
                             className="flex-1 min-w-0 flex items-center gap-2 text-left"
@@ -2441,7 +2544,17 @@ export function Distribution({
                       </div>
                     )}
                   </div>
+                  </>
                 )}
+
+                <ConfirmModal
+                  open={confirmBulkDismiss}
+                  title={`¿Descartar ${oppSelected.size} oportunidad${oppSelected.size !== 1 ? 'es' : ''}?`}
+                  message="Se marcarán como descartadas (jugador–club) y desaparecerán de Oportunidades para el equipo."
+                  confirmLabel={bulkDismissing ? 'Descartando…' : 'Descartar'}
+                  onConfirm={bulkDismissOpportunities}
+                  onCancel={() => setConfirmBulkDismiss(false)}
+                />
               </div>
             )
           })()}
