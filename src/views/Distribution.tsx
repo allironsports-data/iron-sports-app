@@ -2320,13 +2320,13 @@ export function Distribution({
                         {club.league && <span className="text-slate-400">· {club.league}</span>}
                       </div>
                     </div>
-                    <PanelExpandBtn />
                     <button
-                      onClick={() => { setSelectedClubId(club.id); setSelectedNeed(null); setSelectedEntryId(null) }}
-                      className="p-2 sm:p-1 text-slate-300 hover:text-slate-500 flex-shrink-0"
-                      title="Ver club completo"
+                      onClick={() => { onSelectClub?.(club.id); closePanel() }}
+                      className="p-2 sm:p-1 text-slate-400 hover:text-slate-600 flex-shrink-0"
+                      title="Abrir ficha del club"
+                      aria-label="Abrir ficha del club"
                     >
-                      <ChevronRight className="w-4 h-4" />
+                      <Maximize2 className="w-4 h-4" />
                     </button>
                   </div>
 
@@ -2464,7 +2464,14 @@ export function Distribution({
                       <div className="font-semibold text-slate-800 text-sm">{selectedClub.name}</div>
                       <div className="text-xs text-slate-500">{selectedClub.league}</div>
                     </div>
-                    <PanelExpandBtn />
+                    <button
+                      onClick={() => { onSelectClub?.(selectedClub.id); closePanel() }}
+                      aria-label="Abrir ficha del club"
+                      title="Abrir ficha del club"
+                      className="p-2 sm:p-1 text-slate-400 hover:text-slate-600"
+                    >
+                      <Maximize2 className="w-4 h-4" />
+                    </button>
                     <button onClick={() => setEditingClub(selectedClub)} aria-label="Editar club" className="p-2 sm:p-1 text-slate-400 hover:text-slate-600">
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
