@@ -1443,7 +1443,6 @@ export function Distribution({
                 {/* ── MOBILE CARD VIEW (hidden sm+) ── */}
                 <div className="sm:hidden space-y-2">
                   {clubNeeds.map(({ club, need }, i) => {
-                    const needIndex = club.needs.indexOf(need)
                     const tier = getClubTier(club.league, club.country)
                     const tierCfg = TIER_CONFIG[tier]
                     const offeredCount = negotiations.filter(n => {
@@ -1456,7 +1455,7 @@ export function Distribution({
                       <div
                         key={`${club.id}-mobile-${i}`}
                         className="bg-white border border-slate-200 rounded-xl p-3 cursor-pointer active:bg-slate-50"
-                        onClick={() => { setSelectedNeed({ clubId: club.id, needIndex }); setSelectedEntryId(null); setSelectedClubId(null) }}
+                        onClick={() => onSelectClub?.(club.id)}
                       >
                         <div className="flex items-start justify-between gap-2 mb-2">
                           <div className="flex-1 min-w-0">
@@ -1533,7 +1532,7 @@ export function Distribution({
                           <tr
                             key={`${club.id}-${i}`}
                             className="hover:bg-slate-50/60 transition-colors cursor-pointer"
-                            onClick={() => { setSelectedNeed({ clubId: club.id, needIndex }); setSelectedEntryId(null); setSelectedClubId(null) }}
+                            onClick={() => onSelectClub?.(club.id)}
                           >
                             {isEditing ? (
                               <td colSpan={9} className="px-3 py-3">
@@ -1567,7 +1566,7 @@ export function Distribution({
                                 </td>
                                 <td className="px-2 py-2">
                                   <button
-                                    onClick={e => { e.stopPropagation(); setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeed(null); setSelectedNeedPosition(need.position) }}
+                                    onClick={e => { e.stopPropagation(); onSelectClub?.(club.id) }}
                                     className="font-medium text-slate-800 hover:text-blue-600 text-left text-xs transition-colors w-full truncate block"
                                     title={club.name}
                                   >
