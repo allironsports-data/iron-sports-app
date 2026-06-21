@@ -52,8 +52,20 @@ export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onLogo
     },
     {
       key: "nationality", label: "Nacionalidad", width: "min-w-[120px]",
-      getValue: (p) => p.nationality,
-      setValue: (p, v) => ({ ...p, nationality: v }),
+      // La nacionalidad se guarda como "Principal / Segunda" en un solo campo.
+      getValue: (p) => p.nationality.split("/").map(s => s.trim()).filter(Boolean)[0] ?? "",
+      setValue: (p, v) => {
+        const second = p.nationality.split("/").map(s => s.trim()).filter(Boolean)[1];
+        return { ...p, nationality: [v.trim(), second].filter(Boolean).join(" / ") };
+      },
+    },
+    {
+      key: "nationality2", label: "2ª nacionalidad", width: "min-w-[120px]",
+      getValue: (p) => p.nationality.split("/").map(s => s.trim()).filter(Boolean)[1] ?? "",
+      setValue: (p, v) => {
+        const first = p.nationality.split("/").map(s => s.trim()).filter(Boolean)[0] ?? "";
+        return { ...p, nationality: [first, v.trim()].filter(Boolean).join(" / ") };
+      },
     },
     {
       key: "birthDate", label: "Nacimiento", width: "min-w-[110px]", type: "date",
