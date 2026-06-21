@@ -62,6 +62,8 @@ export default function App() {
   )
   // where to return after closing PlayerDetail
   const [playerReturnToClub, setPlayerReturnToClub] = useState(false)
+  // club en pantalla partida ampliado a pantalla completa
+  const [clubExpanded, setClubExpanded] = useState(false)
   const [showAdmin, setShowAdmin] = useState(false)
   const [showOverview, setShowOverview] = useState(false)
   const [showTable, setShowTable] = useState(false)
@@ -464,6 +466,7 @@ export default function App() {
   function navigateToClub(id: string) {
     setSelectedPlayerId(null)
     setSelectedClubId(id)
+    setClubExpanded(false)
     setMainSection('distribucion')
   }
 
@@ -566,27 +569,32 @@ export default function App() {
   }
 
   const selectedClub = clubs.find(c => c.id === selectedClubId)
-  if (selectedClub) {
-    return (
-      <ClubDetail
-        club={selectedClub}
-        players={players}
-        entries={distEntries}
-        negotiations={negotiations}
-        currentProfile={profile}
-        profiles={profiles}
-        onBack={() => setSelectedClubId(null)}
-        onLogout={signOut}
-        onAdmin={profile.is_admin ? () => { setSelectedClubId(null); setShowAdmin(true) } : undefined}
-        onSelectPlayer={(id) => navigateToPlayer(id, true)}
-        onUpdateClub={handleUpdateClub}
-        onDeleteClub={async (id) => { await handleDeleteClub(id); setSelectedClubId(null) }}
-        onCreateNegotiation={handleCreateNegotiation}
-        onUpdateNegotiation={handleUpdateNegotiation}
-        onDeleteNegotiation={handleDeleteNegotiation}
-      />
-    )
-  }
+
+  // El detalle de club se muestra en pantalla partida dentro de Distribución
+  // (ver más abajo), por lo que la lista no se desmonta y los filtros se conservan.
+  const clubDetailNode = selectedClub ? (
+    <ClubDetail
+      key={selectedClub.id}
+      club={selectedClub}
+      players={players}
+      entries={distEntries}
+      negotiations={negotiations}
+      currentProfile={profile}
+      profiles={profiles}
+      embedded
+      expanded={clubExpanded}
+      onExpand={() => setClubExpanded(e => !e)}
+      onBack={() => { setSelectedClubId(null); setClubExpanded(false) }}
+      onLogout={signOut}
+      onAdmin={profile.is_admin ? () => { setSelectedClubId(null); setClubExpanded(false); setShowAdmin(true) } : undefined}
+      onSelectPlayer={(id) => navigateToPlayer(id, true)}
+      onUpdateClub={handleUpdateClub}
+      onDeleteClub={async (id) => { await handleDeleteClub(id); setSelectedClubId(null); setClubExpanded(false) }}
+      onCreateNegotiation={handleCreateNegotiation}
+      onUpdateNegotiation={handleUpdateNegotiation}
+      onDeleteNegotiation={handleDeleteNegotiation}
+    />
+  ) : null
 
   if (mainSection === 'captacion') {
     return (
@@ -620,33 +628,56 @@ export default function App() {
     )
   }
 
-  if (mainSection === 'distribucion') {
+  if (mainSection === 'distribucion' || selectedClub) {
+    const splitOpen = !!selectedClub
     return (
-      <Distribution
-        players={players}
-        clubs={clubs}
-        entries={distEntries}
-        negotiations={negotiations}
-        currentProfile={profile}
-        profiles={profiles}
-        onBack={() => setMainSection('tareas')}
-        onGoToJugadores={() => setMainSection('jugadores')}
-        onGoToCaptacion={() => setMainSection('captacion')}
-        onLogout={signOut}
-        onAdmin={profile.is_admin ? () => { setMainSection('tareas'); setShowAdmin(true) } : undefined}
-        onSelectPlayer={(id) => navigateToPlayer(id, false)}
-        onSelectClub={navigateToClub}
-        onCreateClub={handleCreateClub}
-        onUpdateClub={handleUpdateClub}
-        onDeleteClub={handleDeleteClub}
-        onCreateEntry={handleCreateEntry}
-        onUpdateEntry={handleUpdateEntry}
-        onDeleteEntry={handleDeleteEntry}
-        onCreateNegotiation={handleCreateNegotiation}
-        onUpdateNegotiation={handleUpdateNegotiation}
-        onDeleteNegotiation={handleDeleteNegotiation}
-        onCreatePlayer={handleAddPlayer}
-      />
+      <div className="flex h-screen overflow-hidden">
+        {/* Lista (se oculta en móvil cuando hay club abierto, y al ampliar) */}
+        <div
+          className={
+            !splitOpen
+              ? 'flex-1 min-w-0 h-screen overflow-y-auto'
+              : clubExpanded
+                ? 'hidden'
+                : 'hidden lg:block lg:w-[44%] xl:w-[40%] flex-shrink-0 h-screen overflow-y-auto border-r border-slate-200'
+          }
+        >
+          <Distribution
+            players={players}
+            clubs={clubs}
+            entries={distEntries}
+            negotiations={negotiations}
+            currentProfile={profile}
+            profiles={profiles}
+            splitActive={splitOpen && !clubExpanded}
+            activeClubId={selectedClubId ?? undefined}
+            onBack={() => setMainSection('tareas')}
+            onGoToJugadores={() => setMainSection('jugadores')}
+            onGoToCaptacion={() => setMainSection('captacion')}
+            onLogout={signOut}
+            onAdmin={profile.is_admin ? () => { setMainSection('tareas'); setShowAdmin(true) } : undefined}
+            onSelectPlayer={(id) => navigateToPlayer(id, false)}
+            onSelectClub={navigateToClub}
+            onCreateClub={handleCreateClub}
+            onUpdateClub={handleUpdateClub}
+            onDeleteClub={handleDeleteClub}
+            onCreateEntry={handleCreateEntry}
+            onUpdateEntry={handleUpdateEntry}
+            onDeleteEntry={handleDeleteEntry}
+            onCreateNegotiation={handleCreateNegotiation}
+            onUpdateNegotiation={handleUpdateNegotiation}
+            onDeleteNegotiation={handleDeleteNegotiation}
+            onCreatePlayer={handleAddPlayer}
+          />
+        </div>
+
+        {/* Panel del club */}
+        {splitOpen && (
+          <div className="flex-1 min-w-0 h-screen overflow-y-auto bg-white">
+            {clubDetailNode}
+          </div>
+        )}
+      </div>
     )
   }
 

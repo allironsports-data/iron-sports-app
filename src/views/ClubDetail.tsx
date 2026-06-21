@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import {
   ArrowLeft, Building2, Star, Plus, X, Pencil,
   ChevronRight, Trash2, Check, LogOut, AlertCircle, Phone, Users,
+  Maximize2, Minimize2,
 } from 'lucide-react'
 import type { Club, ClubNegotiation, DistributionEntry, Player, ClubNeed } from '../types'
 import type { Profile } from '../contexts/AuthContext'
@@ -63,6 +64,12 @@ interface Props {
   onCreateNegotiation: (n: Omit<ClubNegotiation, 'id' | 'createdAt' | 'updatedAt'>) => Promise<ClubNegotiation>
   onUpdateNegotiation: (n: ClubNegotiation) => Promise<void>
   onDeleteNegotiation: (id: string) => Promise<void>
+  /** Modo panel (pantalla partida): cabecera compacta con cerrar/ampliar */
+  embedded?: boolean
+  /** Si el panel está ampliado a pantalla completa */
+  expanded?: boolean
+  /** Alternar ampliar/reducir el panel */
+  onExpand?: () => void
 }
 
 // ── helpers ───────────────────────────────────────────────────
@@ -118,6 +125,7 @@ export function ClubDetail({
   onBack, onLogout, onAdmin, onSelectPlayer,
   onUpdateClub, onDeleteClub,
   onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation,
+  embedded = false, expanded = false, onExpand,
 }: Props) {
   const [activeTab, setActiveTab] = useState<TabId>('jugadores')
   const [statusFilter, setStatusFilter] = useState<ClubNegotiation['status'] | 'todos'>('todos')
@@ -173,11 +181,16 @@ export function ClubDetail({
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className={`${embedded ? 'h-full' : 'min-h-screen'} bg-slate-50 flex flex-col`}>
       {/* Header */}
       <header className="bg-white border-b border-slate-200 px-4 h-11 sm:h-14 flex items-center gap-3 flex-shrink-0">
-        <button onClick={onBack} aria-label="Volver" className="p-2 sm:p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 flex-shrink-0">
-          <ArrowLeft className="w-4 h-4" />
+        <button
+          onClick={onBack}
+          aria-label={embedded ? 'Cerrar' : 'Volver'}
+          title={embedded ? 'Cerrar panel' : 'Volver'}
+          className="p-2 sm:p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 flex-shrink-0"
+        >
+          {embedded ? <X className="w-4 h-4" /> : <ArrowLeft className="w-4 h-4" />}
         </button>
         <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
           <Building2 className="w-4 h-4 text-slate-400" />
@@ -187,7 +200,7 @@ export function ClubDetail({
             <h1 className="font-semibold text-slate-800 text-sm sm:text-base truncate">{club.name}</h1>
             {club.isPriority && <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400 flex-shrink-0" />}
           </div>
-          {club.league && <p className="text-xs text-slate-500">{club.league}</p>}
+          {club.league && <p className="text-xs text-slate-500 truncate">{club.league}</p>}
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
           {activeCount > 0 && (
@@ -195,12 +208,24 @@ export function ClubDetail({
               {activeCount} activo{activeCount !== 1 ? 's' : ''}
             </span>
           )}
-          {currentProfile.is_admin && onAdmin && (
+          {embedded && onExpand && (
+            <button
+              onClick={onExpand}
+              aria-label={expanded ? 'Reducir panel' : 'Ampliar panel'}
+              title={expanded ? 'Reducir' : 'Ampliar'}
+              className="hidden lg:inline-flex p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"
+            >
+              {expanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            </button>
+          )}
+          {!embedded && currentProfile.is_admin && onAdmin && (
             <button onClick={onAdmin} className="text-xs text-slate-500 px-2 py-1 rounded hover:bg-slate-100 hidden sm:block">Admin</button>
           )}
-          <button onClick={onLogout} aria-label="Cerrar sesión" className="p-2 sm:p-1.5 rounded-lg hover:bg-slate-100 text-slate-400">
-            <LogOut className="w-4 h-4" />
-          </button>
+          {!embedded && (
+            <button onClick={onLogout} aria-label="Cerrar sesión" className="p-2 sm:p-1.5 rounded-lg hover:bg-slate-100 text-slate-400">
+              <LogOut className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </header>
 

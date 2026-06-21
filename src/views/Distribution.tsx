@@ -271,6 +271,10 @@ interface Props {
   onUpdateNegotiation: (n: ClubNegotiation) => Promise<void>
   onDeleteNegotiation: (id: string) => Promise<void>
   onCreatePlayer?: (p: Player) => Promise<Player>
+  /** Pantalla partida: la lista va en media pantalla → menos columnas */
+  splitActive?: boolean
+  /** Club abierto en el panel (para resaltarlo en la lista) */
+  activeClubId?: string
 }
 
 // ── main component ────────────────────────────────────────────
@@ -281,14 +285,25 @@ export function Distribution({
   onCreateClub, onUpdateClub, onDeleteClub,
   onCreateEntry, onUpdateEntry, onDeleteEntry,
   onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation,
-  onCreatePlayer,
+  onCreatePlayer, splitActive = false, activeClubId,
 }: Props) {
+  // Rejilla de clubes: en pantalla partida usamos menos columnas
+  const clubGridCls = splitActive
+    ? 'grid grid-cols-1 2xl:grid-cols-2 gap-1.5'
+    : 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-1.5'
   const [tab, setTab] = useState<'jugadores' | 'clubes' | 'solicitudes' | 'pipeline' | 'encargados'>(
     () => (sessionStorage.getItem('nav_dist_tab') as 'jugadores' | 'clubes' | 'solicitudes' | 'pipeline' | 'encargados') ?? 'jugadores'
   )
   useEffect(() => { sessionStorage.setItem('nav_dist_tab', tab) }, [tab])
   const season = CURRENT_SEASON
-  const [search, setSearch] = useState('')
+
+  // Filtros de la pestaña Clubes — persistidos en sessionStorage para que
+  // se conserven al navegar a fichas y volver, y entre refrescos.
+  const FILTERS_KEY = 'dist_club_filters'
+  const storedF: Record<string, unknown> = (() => {
+    try { return JSON.parse(sessionStorage.getItem(FILTERS_KEY) || '{}') } catch { return {} }
+  })()
+  const [search, setSearch] = useState<string>((storedF.search as string) ?? '')
 
   // toasts + confirmaciones
   const { toasts, showToast, dismissToast } = useToast()
@@ -340,18 +355,27 @@ export function Distribution({
   const [pipelineListView, setPipelineListView] = useState(false)
 
   // filters
-  const [leagueFilter, setLeagueFilter] = useState<string[]>([])
+  const [leagueFilter, setLeagueFilter] = useState<string[]>((storedF.leagueFilter as string[]) ?? [])
   const [leagueDropdownOpen, setLeagueDropdownOpen] = useState(false)
-  const [countryFilter, setCountryFilter] = useState<string[]>([])
+  const [countryFilter, setCountryFilter] = useState<string[]>((storedF.countryFilter as string[]) ?? [])
   const [countryDropdownOpen, setCountryDropdownOpen] = useState(false)
-  const [tierFilter, setTierFilter] = useState<LeagueTier[]>([])
-  const [confederationFilter, setConfederationFilter] = useState<Confederation[]>([])
+  const [tierFilter, setTierFilter] = useState<LeagueTier[]>((storedF.tierFilter as LeagueTier[]) ?? [])
+  const [confederationFilter, setConfederationFilter] = useState<Confederation[]>((storedF.confederationFilter as Confederation[]) ?? [])
   const [confDropdownOpen, setConfDropdownOpen] = useState(false)
-  const [priorityOnly, setPriorityOnly] = useState(false)
-  const [hasNeedsOnly, setHasNeedsOnly] = useState(false)
-  const [hasContactOnly, setHasContactOnly] = useState(false)
-  const [clubManagerFilter, setClubManagerFilter] = useState<string>('')   // '' = todos, '__sin__' = sin encargado, o avatar
-  const [staleOnly, setStaleOnly] = useState(false)   // bandeja: clubes con propuestas activas sin mover >7d
+  const [priorityOnly, setPriorityOnly] = useState<boolean>((storedF.priorityOnly as boolean) ?? false)
+  const [hasNeedsOnly, setHasNeedsOnly] = useState<boolean>((storedF.hasNeedsOnly as boolean) ?? false)
+  const [hasContactOnly, setHasContactOnly] = useState<boolean>((storedF.hasContactOnly as boolean) ?? false)
+  const [clubManagerFilter, setClubManagerFilter] = useState<string>((storedF.clubManagerFilter as string) ?? '')   // '' = todos, '__sin__' = sin encargado, o avatar
+  const [staleOnly, setStaleOnly] = useState<boolean>((storedF.staleOnly as boolean) ?? false)   // bandeja: clubes con propuestas activas sin mover >7d
+
+  // Guardar filtros de Clubes al cambiar
+  useEffect(() => {
+    sessionStorage.setItem(FILTERS_KEY, JSON.stringify({
+      search, leagueFilter, countryFilter, tierFilter, confederationFilter,
+      priorityOnly, hasNeedsOnly, hasContactOnly, clubManagerFilter, staleOnly,
+    }))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, leagueFilter, countryFilter, tierFilter, confederationFilter, priorityOnly, hasNeedsOnly, hasContactOnly, clubManagerFilter, staleOnly])
   const [positionFilter, setPositionFilter] = useState('')   // solicitudes tab
   const [editingNeed, setEditingNeed] = useState<{ clubId: string; index: number } | null>(null)
   const [posFilters, setPosFilters] = useState<string[]>([])   // jugadores tab
@@ -1124,13 +1148,13 @@ export function Distribution({
 
               {/* Clubs grid — grouped by league when no filter, flat when filtered */}
               {(leagueFilter.length > 0 || countryFilter.length > 0 || tierFilter.length > 0 || confederationFilter.length > 0 || priorityOnly || hasNeedsOnly || hasContactOnly || !!search) ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-1.5">
+                <div className={clubGridCls}>
                   {filteredClubs.map(club => (
                     <ClubCard
                       key={club.id}
                       club={club}
                       negotiations={negotiations}
-                      isSelected={selectedClubId === club.id}
+                      isSelected={selectedClubId === club.id || activeClubId === club.id}
                       onClick={() => {
                         if (onSelectClub) { onSelectClub(club.id) }
                         else { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(null) }
@@ -1160,13 +1184,13 @@ export function Distribution({
                           <span className="text-xs text-slate-400">({tierClubs.length})</span>
                           <div className="flex-1 h-px bg-slate-200" />
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-1.5">
+                        <div className={clubGridCls}>
                           {tierClubs.map(club => (
                             <ClubCard
                               key={club.id}
                               club={club}
                               negotiations={negotiations}
-                              isSelected={selectedClubId === club.id}
+                              isSelected={selectedClubId === club.id || activeClubId === club.id}
                               onClick={() => {
                                 if (onSelectClub) { onSelectClub(club.id) }
                                 else { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(null) }
@@ -1201,13 +1225,13 @@ export function Distribution({
                           <span className="text-xs text-slate-300">{CONFEDERATION_LABELS[confederation]}</span>
                           <div className="flex-1 h-px bg-slate-200" />
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-1.5">
+                        <div className={clubGridCls}>
                           {leagueClubs.map(club => (
                             <ClubCard
                               key={club.id}
                               club={club}
                               negotiations={negotiations}
-                              isSelected={selectedClubId === club.id}
+                              isSelected={selectedClubId === club.id || activeClubId === club.id}
                               onClick={() => {
                                 if (onSelectClub) { onSelectClub(club.id) }
                                 else { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(null) }
