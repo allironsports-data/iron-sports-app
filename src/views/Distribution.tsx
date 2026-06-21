@@ -217,6 +217,54 @@ function Avatar({ name, photo, size = 'sm' }: { name: string; photo?: string; si
   )
 }
 
+// ── mobile helpers ────────────────────────────────────────────
+
+/** True cuando el viewport es < 640px (breakpoint sm de Tailwind). */
+function useIsMobile() {
+  const [m, setM] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)')
+    const on = () => setM(mq.matches)
+    on()
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
+  return m
+}
+
+/** Bottom-sheet reutilizable para filtros en móvil. */
+function FilterSheet({ open, onClose, title, children }: {
+  open: boolean
+  onClose: () => void
+  title: string
+  children: React.ReactNode
+}) {
+  useEscapeKey(onClose, open)
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-[120] flex items-end sm:hidden">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-white w-full rounded-t-2xl max-h-[85vh] overflow-y-auto p-4 safe-area-bottom animate-in slide-in-from-bottom">
+        <div className="sticky -top-4 -mx-4 px-4 pt-1 pb-3 bg-white flex items-center justify-between border-b border-slate-100 mb-3 z-10">
+          <h3 className="text-sm font-semibold text-slate-700">{title}</h3>
+          <button onClick={onClose} aria-label="Cerrar filtros" className="p-2 rounded-lg hover:bg-slate-100 text-slate-400">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="flex flex-col gap-3">
+          {children}
+        </div>
+        <button
+          onClick={onClose}
+          className="mt-4 w-full py-3 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary/90 transition-colors"
+        >
+          Ver resultados
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ── props ─────────────────────────────────────────────────────
 
 interface Props {
@@ -268,6 +316,10 @@ export function Distribution({
   )
   useEffect(() => { sessionStorage.setItem('nav_dist_tab', tab) }, [tab])
   const season = CURRENT_SEASON
+
+  // Móvil: bottom-sheet de filtros + detección de viewport
+  const isMobile = useIsMobile()
+  const [filterSheet, setFilterSheet] = useState<null | 'jugadores' | 'clubes' | 'solicitudes' | 'pipeline'>(null)
 
   // Filtros de la pestaña Clubes — persistidos en sessionStorage para que
   // se conserven al navegar a fichas y volver, y entre refrescos.
@@ -541,6 +593,25 @@ export function Distribution({
     ).length
   , [negotiations, currentProfile.avatar])
 
+  // ── Bandeja de pendientes: propuestas 'pendiente' donde soy encargado
+  //    del club o del jugador. Se calcula del estado, así que aparece al entrar. ──
+  const [showPendingInbox, setShowPendingInbox] = useState(false)
+  const myPending = useMemo(() => {
+    return negotiations
+      .filter(n => n.status === 'pendiente')
+      .map(n => {
+        const club = clubs.find(c => c.id === n.clubId)
+        const player = players.find(p => p.id === n.playerId)
+        return { neg: n, club, player }
+      })
+      .filter(({ neg, club, player }) =>
+        (club?.aisManager === currentProfile.avatar) ||
+        (!!player && player.managedBy.includes(currentProfile.id)) ||
+        (neg.aisManager === currentProfile.avatar)
+      )
+      .sort((a, b) => (b.neg.createdAt ?? '').localeCompare(a.neg.createdAt ?? ''))
+  }, [negotiations, clubs, players, currentProfile.avatar, currentProfile.id])
+
   function closePanel() { setSelectedEntryId(null); setSelectedClubId(null); setSelectedNeed(null); setPlayerPanelGestorFilter(''); setPanelExpanded(false) }
   const hasPanel = tab !== 'encargados' && (!!selectedEntry || !!selectedClub || !!selectedNeed)
   // Panel lateral ampliable (más ancho para editar cómodamente)
@@ -647,11 +718,11 @@ export function Distribution({
               }`}
             >
               {t === 'jugadores' ? (
-                <><span className="hidden sm:inline">Jugadores </span>({seasonEntries.length})</>
+                <>Jugadores ({seasonEntries.length})</>
               ) : t === 'clubes' ? (
-                <><span className="hidden sm:inline">Clubes </span>({clubs.length})</>
+                <>Clubes ({clubs.length})</>
               ) : t === 'solicitudes' ? (
-                <><span className="hidden sm:inline">Solicitudes</span><span className="sm:hidden">Solic.</span>{clubNeeds.length > 0 ? ` (${clubNeeds.length})` : ''}</>
+                <>Solicitudes{clubNeeds.length > 0 ? ` (${clubNeeds.length})` : ''}</>
               ) : t === 'encargados' ? (
                 <>Encargados</>
               ) : (
@@ -674,10 +745,84 @@ export function Distribution({
       <div className="flex flex-1 overflow-hidden">
         <div className={`flex-1 overflow-y-auto p-4 pb-20 sm:pb-4 ${hasPanel ? 'hidden sm:block' : ''}`}>
 
+          {/* ── BANDEJA DE PENDIENTES (propuestas que requieren tu atención) ── */}
+          {myPending.length > 0 && (
+            <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 overflow-hidden">
+              <button
+                onClick={() => setShowPendingInbox(v => !v)}
+                className="w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-amber-100/60 transition-colors"
+              >
+                <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                <span className="text-sm font-semibold text-amber-800">
+                  {myPending.length} propuesta{myPending.length !== 1 ? 's' : ''} pendiente{myPending.length !== 1 ? 's' : ''} para ti
+                </span>
+                <ChevronDown className={`w-4 h-4 text-amber-600 ml-auto flex-shrink-0 transition-transform ${showPendingInbox ? 'rotate-180' : ''}`} />
+              </button>
+              {showPendingInbox && (
+                <div className="border-t border-amber-200 divide-y divide-amber-100 max-h-[50vh] overflow-y-auto">
+                  {myPending.map(({ neg, club, player }) => (
+                    <button
+                      key={neg.id}
+                      onClick={() => { if (club) onSelectClub?.(club.id) }}
+                      className="w-full flex items-center gap-2 px-4 py-2.5 text-left bg-white hover:bg-amber-50 transition-colors"
+                    >
+                      <span className="text-sm font-medium text-slate-800 truncate">{player?.name ?? 'Jugador'}</span>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />
+                      <span className="text-sm text-slate-600 truncate">{club?.name ?? 'Club'}</span>
+                      {neg.needPosition && (
+                        <span className="text-[11px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded flex-shrink-0">{neg.needPosition}</span>
+                      )}
+                      <span className="ml-auto text-[11px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full flex-shrink-0">Pendiente</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ── JUGADORES TAB ── */}
-          {tab === 'jugadores' && (
+          {tab === 'jugadores' && (() => {
+            const playersActiveFilters = posFilters.length + yearFilters.length + (activityFilter ? 1 : 0)
+            const playersFilterControls = (
+              <>
+                <MultiSelect
+                  label="Posición"
+                  options={POSITION_CODES}
+                  selected={posFilters}
+                  onChange={setPosFilters}
+                />
+                <MultiSelect
+                  label="Año nacimiento"
+                  options={distributionYears}
+                  selected={yearFilters}
+                  onChange={setYearFilters}
+                />
+                <button
+                  onClick={() => setActivityFilter(!activityFilter)}
+                  className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                    activityFilter
+                      ? 'bg-primary text-white border-primary'
+                      : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  Con actividad
+                </button>
+                {playersActiveFilters > 0 && (
+                  <button
+                    onClick={() => { setPosFilters([]); setYearFilters([]); setActivityFilter(false) }}
+                    className="flex items-center gap-1.5 text-xs bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg font-medium transition-colors"
+                  >
+                    <SlidersHorizontal className="w-3 h-3" />
+                    {playersActiveFilters} filtro{playersActiveFilters !== 1 ? 's' : ''} activo{playersActiveFilters !== 1 ? 's' : ''}
+                    <X className="w-3 h-3 ml-0.5 opacity-60" />
+                  </button>
+                )}
+              </>
+            )
+            return (
             <div className="max-w-5xl mx-auto">
-              <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+              {/* Desktop: filtros inline */}
+              <div className="hidden sm:flex items-center justify-between gap-2 mb-3 flex-wrap">
                 <div className="flex items-center gap-2 flex-wrap">
                   <div className="relative">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
@@ -688,49 +833,41 @@ export function Distribution({
                       className="w-36 sm:w-48 pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200"
                     />
                   </div>
-                  <MultiSelect
-                    label="Posición"
-                    options={POSITION_CODES}
-                    selected={posFilters}
-                    onChange={setPosFilters}
-                  />
-                  <MultiSelect
-                    label="Año nacimiento"
-                    options={distributionYears}
-                    selected={yearFilters}
-                    onChange={setYearFilters}
-                  />
-                  <button
-                    onClick={() => setActivityFilter(!activityFilter)}
-                    className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
-                      activityFilter
-                        ? 'bg-primary text-white border-primary'
-                        : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    Con actividad
-                  </button>
-                  {(posFilters.length > 0 || yearFilters.length > 0 || activityFilter) && (() => {
-                    const count = posFilters.length + yearFilters.length + (activityFilter ? 1 : 0)
-                    return (
-                      <button
-                        onClick={() => { setPosFilters([]); setYearFilters([]); setActivityFilter(false) }}
-                        className="flex items-center gap-1.5 text-xs bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg font-medium transition-colors"
-                      >
-                        <SlidersHorizontal className="w-3 h-3" />
-                        {count} filtro{count !== 1 ? 's' : ''} activo{count !== 1 ? 's' : ''}
-                        <X className="w-3 h-3 ml-0.5 opacity-60" />
-                      </button>
-                    )
-                  })()}
+                  {playersFilterControls}
                 </div>
                 <button
                   onClick={() => setShowAddPlayer(true)}
-                  className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-sm rounded-lg hover:bg-primary/90 transition-colors"
+                  className="hidden sm:inline-flex flex-shrink-0 items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-sm rounded-lg hover:bg-primary/90 transition-colors"
                 >
                   <Plus className="w-4 h-4" /> Añadir jugador
                 </button>
               </div>
+
+              {/* Móvil: barra compacta búsqueda + botón Filtros */}
+              <div className="flex sm:hidden items-center gap-2 mb-3">
+                <div className="relative flex-1">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                  <input
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    placeholder="Buscar jugador…"
+                    className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  />
+                </div>
+                <button
+                  onClick={() => setFilterSheet('jugadores')}
+                  className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                    playersActiveFilters > 0 ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200'
+                  }`}
+                >
+                  <SlidersHorizontal className="w-4 h-4" /> Filtros
+                  {playersActiveFilters > 0 && <span className="text-xs">({playersActiveFilters})</span>}
+                </button>
+              </div>
+
+              <FilterSheet open={filterSheet === 'jugadores'} onClose={() => setFilterSheet(null)} title="Filtros de jugadores">
+                {playersFilterControls}
+              </FilterSheet>
 
               <div className="space-y-3">
                 {(['A', 'B', 'C', 'D'] as const).map(pr => {
@@ -867,43 +1004,37 @@ export function Distribution({
                   />
                 )
               )}
+
+              {/* FAB Añadir jugador — móvil */}
+              <button
+                onClick={() => setShowAddPlayer(true)}
+                aria-label="Añadir jugador"
+                className="sm:hidden fixed bottom-5 right-4 z-40 w-14 h-14 rounded-full bg-primary text-white shadow-lg flex items-center justify-center safe-area-bottom"
+              >
+                <Plus className="w-6 h-6" />
+              </button>
             </div>
-          )}
+            )
+          })()}
 
           {/* ── CLUBES TAB ── */}
-          {tab === 'clubes' && (
-            <div className="max-w-5xl mx-auto">
-              <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
-                <div className="flex items-center gap-2">
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
-                    <input
-                      value={search}
-                      onChange={e => setSearch(e.target.value)}
-                      placeholder="Buscar club…"
-                      className="w-36 sm:w-48 pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                    />
-                  </div>
-                  <button
-                    onClick={() => setGroupByTier(v => !v)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
-                      groupByTier
-                        ? 'bg-slate-800 text-white border-slate-800'
-                        : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-                    }`}
-                  >
-                    <CircleDot className="w-3.5 h-3.5" />
-                    {groupByTier ? 'Por nivel' : 'Por liga'}
-                  </button>
-                </div>
-                <button
-                  onClick={() => setShowAddClub(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-sm rounded-lg hover:bg-primary/90 transition-colors"
-                >
-                  <Plus className="w-4 h-4" /> Añadir club
-                </button>
-              </div>
-
+          {tab === 'clubes' && (() => {
+            const clubsActiveFilters = leagueFilter.length + countryFilter.length + tierFilter.length + confederationFilter.length + (priorityOnly ? 1 : 0) + (hasNeedsOnly ? 1 : 0) + (hasContactOnly ? 1 : 0) + (clubManagerFilter ? 1 : 0) + (staleOnly ? 1 : 0) + (groupByTier ? 1 : 0)
+            const clubsGroupToggle = (
+              <button
+                onClick={() => setGroupByTier(v => !v)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
+                  groupByTier
+                    ? 'bg-slate-800 text-white border-slate-800'
+                    : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                }`}
+              >
+                <CircleDot className="w-3.5 h-3.5" />
+                {groupByTier ? 'Por nivel' : 'Por liga'}
+              </button>
+            )
+            const clubsFilterControls = (
+              <>
               {/* ── Filter row 1: Tier chips + Confederation dropdown ── */}
               <div className="flex flex-wrap items-center gap-2 mb-2">
                 {/* Tier chips */}
@@ -1140,6 +1271,63 @@ export function Distribution({
 
                 <span className="ml-auto text-xs text-slate-400">{filteredClubs.length} club{filteredClubs.length !== 1 ? 's' : ''}</span>
               </div>
+              </>
+            )
+            return (
+            <div className="max-w-5xl mx-auto">
+              {/* Desktop: barra superior búsqueda + agrupar + añadir */}
+              <div className="hidden sm:flex items-center justify-between mb-2 gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                    <input
+                      value={search}
+                      onChange={e => setSearch(e.target.value)}
+                      placeholder="Buscar club…"
+                      className="w-36 sm:w-48 pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                    />
+                  </div>
+                  {clubsGroupToggle}
+                </div>
+                <button
+                  onClick={() => setShowAddClub(true)}
+                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-sm rounded-lg hover:bg-primary/90 transition-colors"
+                >
+                  <Plus className="w-4 h-4" /> Añadir club
+                </button>
+              </div>
+
+              {/* Desktop: filtros inline */}
+              <div className="hidden sm:block">
+                {clubsFilterControls}
+              </div>
+
+              {/* Móvil: barra compacta búsqueda + botón Filtros */}
+              <div className="flex sm:hidden items-center gap-2 mb-3">
+                <div className="relative flex-1">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                  <input
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    placeholder="Buscar club…"
+                    className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  />
+                </div>
+                <button
+                  onClick={() => setFilterSheet('clubes')}
+                  className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                    clubsActiveFilters > 0 ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200'
+                  }`}
+                >
+                  <SlidersHorizontal className="w-4 h-4" /> Filtros
+                  {clubsActiveFilters > 0 && <span className="text-xs">({clubsActiveFilters})</span>}
+                </button>
+              </div>
+
+              <FilterSheet open={filterSheet === 'clubes'} onClose={() => setFilterSheet(null)} title="Filtros de clubes">
+                <div className="flex items-center gap-2">{clubsGroupToggle}</div>
+                {clubsFilterControls}
+              </FilterSheet>
 
               {/* Clubs grid — grouped by league when no filter, flat when filtered */}
               {(leagueFilter.length > 0 || countryFilter.length > 0 || tierFilter.length > 0 || confederationFilter.length > 0 || priorityOnly || hasNeedsOnly || hasContactOnly || !!search) ? (
@@ -1279,16 +1467,124 @@ export function Distribution({
                   />
                 )
               )}
+
+              {/* FAB Añadir club — móvil */}
+              <button
+                onClick={() => setShowAddClub(true)}
+                aria-label="Añadir club"
+                className="sm:hidden fixed bottom-5 right-4 z-40 w-14 h-14 rounded-full bg-primary text-white shadow-lg flex items-center justify-center safe-area-bottom"
+              >
+                <Plus className="w-6 h-6" />
+              </button>
             </div>
-          )}
+            )
+          })()}
 
           {/* ── SOLICITUDES TAB ── */}
           {tab === 'solicitudes' && (() => {
             const hasNeedsFilters = needsTierFilter.length > 0 || !!needsLeagueFilter || !!needsAgeFilter || !!positionFilter
+            const needsActiveFilters = needsTierFilter.length + (needsLeagueFilter ? 1 : 0) + (needsAgeFilter ? 1 : 0) + (positionFilter ? 1 : 0)
+            const needsFilterControls = (
+              <>
+              {/* Row 1: Tier chips + League select + Age select + clear */}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Tier chips */}
+                {(['A', 'B', 'C', 'D'] as LeagueTier[]).map(t => {
+                  const cfg = TIER_CONFIG[t]
+                  const active = needsTierFilter.includes(t)
+                  return (
+                    <button
+                      key={t}
+                      onClick={() => setNeedsTierFilter(prev => active ? prev.filter(x => x !== t) : [...prev, t])}
+                      title={cfg.title}
+                      className={`flex items-center gap-1 px-2.5 py-1.5 border rounded-lg text-xs font-bold transition-colors ${
+                        active
+                          ? `${cfg.bg} ${cfg.text} ${cfg.border}`
+                          : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                      }`}
+                    >
+                      Tier {t}
+                    </button>
+                  )
+                })}
+
+                {/* League select */}
+                <select
+                  value={needsLeagueFilter}
+                  onChange={e => setNeedsLeagueFilter(e.target.value)}
+                  className="text-xs rounded-lg border border-slate-200 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-200 text-slate-600 bg-white"
+                >
+                  <option value="">Todas las ligas</option>
+                  {needsLeagues.map(([league, count]) => (
+                    <option key={league} value={league}>{league} ({count})</option>
+                  ))}
+                </select>
+
+                {/* Age filter */}
+                <select
+                  value={needsAgeFilter}
+                  onChange={e => setNeedsAgeFilter(e.target.value)}
+                  className="text-xs rounded-lg border border-slate-200 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-200 text-slate-600 bg-white"
+                >
+                  <option value="">Cualquier edad</option>
+                  <option value="18">Sub-18</option>
+                  <option value="21">Sub-21</option>
+                  <option value="23">Sub-23</option>
+                  <option value="25">Sub-25</option>
+                  <option value="28">Sub-28</option>
+                </select>
+
+                {/* Clear filters */}
+                {needsActiveFilters > 0 && (
+                  <button
+                    onClick={() => { setNeedsTierFilter([]); setNeedsLeagueFilter(''); setNeedsAgeFilter(''); setPositionFilter('') }}
+                    className="flex items-center gap-1.5 text-xs bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg font-medium transition-colors"
+                  >
+                    <SlidersHorizontal className="w-3 h-3" />
+                    {needsActiveFilters} filtro{needsActiveFilters !== 1 ? 's' : ''}
+                    <X className="w-3 h-3 ml-0.5 opacity-60" />
+                  </button>
+                )}
+              </div>
+
+              {/* Row 2: Position chips */}
+              <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0">
+                <button
+                  onClick={() => setPositionFilter('')}
+                  className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                    !positionFilter ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  Todas las posiciones
+                </button>
+                {allNeedsPositions.map(pos => (
+                  <button
+                    key={pos}
+                    onClick={() => setPositionFilter(positionFilter === pos ? '' : pos)}
+                    title={positionEs(pos) || undefined}
+                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                      positionFilter === pos ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    {pos}
+                  </button>
+                ))}
+              </div>
+              </>
+            )
+            const needsSortToggle = (
+              <button
+                onClick={() => setNeedsSort(s => s === 'recent' ? 'club' : 'recent')}
+                title={needsSort === 'recent' ? 'Ordenado por más reciente' : 'Ordenado por club'}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 border rounded-lg text-xs font-medium bg-white border-slate-200 text-slate-600 hover:border-slate-300 transition-colors"
+              >
+                {needsSort === 'recent' ? '↓ Reciente' : 'A–Z Club'}
+              </button>
+            )
             return (
             <div className="max-w-5xl mx-auto">
-              {/* Top row: search + sort + add button */}
-              <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+              {/* Desktop: top row search + sort + add button */}
+              <div className="hidden sm:flex items-center justify-between mb-3 gap-2 flex-wrap">
                 <div className="flex items-center gap-2">
                   <div className="relative">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
@@ -1299,21 +1595,42 @@ export function Distribution({
                       className="w-36 sm:w-48 pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200"
                     />
                   </div>
-                  <button
-                    onClick={() => setNeedsSort(s => s === 'recent' ? 'club' : 'recent')}
-                    title={needsSort === 'recent' ? 'Ordenado por más reciente' : 'Ordenado por club'}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 border rounded-lg text-xs font-medium bg-white border-slate-200 text-slate-600 hover:border-slate-300 transition-colors"
-                  >
-                    {needsSort === 'recent' ? '↓ Reciente' : 'A–Z Club'}
-                  </button>
+                  {needsSortToggle}
                 </div>
                 <button
                   onClick={() => setShowAddNeed(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-sm rounded-lg hover:bg-primary/90 transition-colors"
+                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-sm rounded-lg hover:bg-primary/90 transition-colors"
                 >
                   <Plus className="w-4 h-4" /> Añadir solicitud
                 </button>
               </div>
+
+              {/* Móvil: barra compacta búsqueda + orden + filtros */}
+              <div className="flex sm:hidden items-center gap-2 mb-3">
+                <div className="relative flex-1">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                  <input
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    placeholder="Buscar solicitud…"
+                    className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  />
+                </div>
+                <button
+                  onClick={() => setFilterSheet('solicitudes')}
+                  className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                    needsActiveFilters > 0 ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200'
+                  }`}
+                >
+                  <SlidersHorizontal className="w-4 h-4" /> Filtros
+                  {needsActiveFilters > 0 && <span className="text-xs">({needsActiveFilters})</span>}
+                </button>
+              </div>
+
+              <FilterSheet open={filterSheet === 'solicitudes'} onClose={() => setFilterSheet(null)} title="Filtros de solicitudes">
+                <div className="flex items-center gap-2">{needsSortToggle}</div>
+                {needsFilterControls}
+              </FilterSheet>
 
               {/* Stats summary */}
               {clubs.some(c => c.needs.length > 0) && (
@@ -1325,95 +1642,9 @@ export function Distribution({
                 </div>
               )}
 
-              {/* Filter bar */}
-              <div className="space-y-2 mb-3">
-                {/* Row 1: Tier chips + League select + Age select + clear */}
-                <div className="flex flex-wrap items-center gap-2">
-                  {/* Tier chips */}
-                  {(['A', 'B', 'C', 'D'] as LeagueTier[]).map(t => {
-                    const cfg = TIER_CONFIG[t]
-                    const active = needsTierFilter.includes(t)
-                    return (
-                      <button
-                        key={t}
-                        onClick={() => setNeedsTierFilter(prev => active ? prev.filter(x => x !== t) : [...prev, t])}
-                        title={cfg.title}
-                        className={`flex items-center gap-1 px-2.5 py-1.5 border rounded-lg text-xs font-bold transition-colors ${
-                          active
-                            ? `${cfg.bg} ${cfg.text} ${cfg.border}`
-                            : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
-                        }`}
-                      >
-                        Tier {t}
-                      </button>
-                    )
-                  })}
-
-                  {/* League select */}
-                  <select
-                    value={needsLeagueFilter}
-                    onChange={e => setNeedsLeagueFilter(e.target.value)}
-                    className="text-xs rounded-lg border border-slate-200 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-200 text-slate-600 bg-white"
-                  >
-                    <option value="">Todas las ligas</option>
-                    {needsLeagues.map(([league, count]) => (
-                      <option key={league} value={league}>{league} ({count})</option>
-                    ))}
-                  </select>
-
-                  {/* Age filter */}
-                  <select
-                    value={needsAgeFilter}
-                    onChange={e => setNeedsAgeFilter(e.target.value)}
-                    className="text-xs rounded-lg border border-slate-200 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-200 text-slate-600 bg-white"
-                  >
-                    <option value="">Cualquier edad</option>
-                    <option value="18">Sub-18</option>
-                    <option value="21">Sub-21</option>
-                    <option value="23">Sub-23</option>
-                    <option value="25">Sub-25</option>
-                    <option value="28">Sub-28</option>
-                  </select>
-
-                  {/* Clear filters */}
-                  {hasNeedsFilters && (() => {
-                    const count = needsTierFilter.length + (needsLeagueFilter ? 1 : 0) + (needsAgeFilter ? 1 : 0) + (positionFilter ? 1 : 0)
-                    return (
-                      <button
-                        onClick={() => { setNeedsTierFilter([]); setNeedsLeagueFilter(''); setNeedsAgeFilter(''); setPositionFilter('') }}
-                        className="flex items-center gap-1.5 text-xs bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg font-medium transition-colors"
-                      >
-                        <SlidersHorizontal className="w-3 h-3" />
-                        {count} filtro{count !== 1 ? 's' : ''}
-                        <X className="w-3 h-3 ml-0.5 opacity-60" />
-                      </button>
-                    )
-                  })()}
-                </div>
-
-                {/* Row 2: Position chips */}
-                <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-4 px-4">
-                  <button
-                    onClick={() => setPositionFilter('')}
-                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                      !positionFilter ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    Todas las posiciones
-                  </button>
-                  {allNeedsPositions.map(pos => (
-                    <button
-                      key={pos}
-                      onClick={() => setPositionFilter(positionFilter === pos ? '' : pos)}
-                      title={positionEs(pos) || undefined}
-                      className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                        positionFilter === pos ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      {pos}
-                    </button>
-                  ))}
-                </div>
+              {/* Desktop: Filter bar inline */}
+              <div className="hidden sm:block space-y-2 mb-3">
+                {needsFilterControls}
               </div>
 
               {clubNeeds.length === 0 ? (
@@ -1640,6 +1871,15 @@ export function Distribution({
                 </div>
                 </>
               )}
+
+              {/* FAB Añadir solicitud — móvil */}
+              <button
+                onClick={() => setShowAddNeed(true)}
+                aria-label="Añadir solicitud"
+                className="sm:hidden fixed bottom-5 right-4 z-40 w-14 h-14 rounded-full bg-primary text-white shadow-lg flex items-center justify-center safe-area-bottom"
+              >
+                <Plus className="w-6 h-6" />
+              </button>
             </div>
             )
           })()}
@@ -1682,21 +1922,59 @@ export function Distribution({
             const totalActive = deals.filter(d => activeStatuses.includes(d.neg.status)).length
             const totalClosed = deals.filter(d => closedStatuses.includes(d.neg.status)).length
 
+            const pipelineActiveFilters = (pipelineMyOnly ? 1 : 0) + (pipelinePosFilter ? 1 : 0) + (pipelineGestorFilter ? 1 : 0) + (showClosedDeals ? 1 : 0)
+            const pipelineMiCola = (
+              <button
+                onClick={() => { setPipelineMyOnly(v => !v); setPipelineGestorFilter('') }}
+                className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors ${
+                  pipelineMyOnly
+                    ? 'bg-primary text-white border-primary'
+                    : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                }`}
+              >
+                👤 {pipelineMyOnly ? `Mis negs (${deals.length})` : 'Mis negs'}
+              </button>
+            )
+            const pipelineFilterControls = (
+              <>
+                {pipelineMiCola}
+                <select
+                  value={pipelinePosFilter}
+                  onChange={e => setPipelinePosFilter(e.target.value)}
+                  className="text-xs rounded-lg border border-slate-200 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-200 text-slate-600"
+                >
+                  <option value="">Todas las posiciones</option>
+                  {allPositions.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+                {!pipelineMyOnly && allGestores.length > 0 && (
+                  <select
+                    value={pipelineGestorFilter}
+                    onChange={e => setPipelineGestorFilter(e.target.value)}
+                    className="text-xs rounded-lg border border-slate-200 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-200 text-slate-600"
+                  >
+                    <option value="">Todos los gestores</option>
+                    {allGestores.map(g => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                )}
+                <button
+                  onClick={() => setShowClosedDeals(v => !v)}
+                  className={`text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
+                    showClosedDeals
+                      ? 'bg-slate-800 text-white border-slate-800'
+                      : 'border-slate-200 text-slate-500 hover:border-slate-400'
+                  }`}
+                >
+                  {showClosedDeals ? 'Ocultar cerrados' : 'Ver cerrados'}
+                </button>
+              </>
+            )
+            // En móvil siempre vista lista; el kanban es inusable a 375px
+            const usingListView = isMobile || pipelineListView
             return (
               <div className="-mx-4 -mb-4">
-                {/* Filter bar */}
-                <div className="flex items-center gap-2 flex-wrap px-4 py-3 bg-white border-b border-slate-100">
-                  {/* Mi Cola toggle */}
-                  <button
-                    onClick={() => { setPipelineMyOnly(v => !v); setPipelineGestorFilter('') }}
-                    className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors ${
-                      pipelineMyOnly
-                        ? 'bg-primary text-white border-primary'
-                        : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-                    }`}
-                  >
-                    👤 {pipelineMyOnly ? `Mis negs (${deals.length})` : 'Mis negs'}
-                  </button>
+                {/* Desktop: Filter bar inline */}
+                <div className="hidden sm:flex items-center gap-2 flex-wrap px-4 py-3 bg-white border-b border-slate-100">
+                  {pipelineMiCola}
 
                   <div className="w-px h-5 bg-slate-200" />
 
@@ -1729,11 +2007,11 @@ export function Distribution({
                   )}
                   <div className="ml-auto flex items-center gap-2">
                     <span className="text-xs text-slate-400">{totalActive} activos · {totalClosed} cerrados</span>
-                    {/* Lista / Kanban toggle */}
+                    {/* Lista / Kanban toggle — oculto en móvil */}
                     <button
                       onClick={() => setPipelineListView(v => !v)}
                       title={pipelineListView ? 'Ver kanban' : 'Ver lista'}
-                      className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
+                      className={`hidden sm:flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
                         pipelineListView
                           ? 'bg-slate-800 text-white border-slate-800'
                           : 'border-slate-200 text-slate-500 hover:border-slate-400'
@@ -1756,8 +2034,35 @@ export function Distribution({
                   </div>
                 </div>
 
+                {/* Móvil: barra compacta búsqueda + Filtros */}
+                <div className="flex sm:hidden items-center gap-2 px-4 py-3 bg-white border-b border-slate-100">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                    <input
+                      value={pipelineSearch}
+                      onChange={e => setPipelineSearch(e.target.value)}
+                      placeholder="Jugador…"
+                      className="w-full pl-8 pr-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                    />
+                  </div>
+                  <button
+                    onClick={() => setFilterSheet('pipeline')}
+                    className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                      pipelineActiveFilters > 0 ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200'
+                    }`}
+                  >
+                    <SlidersHorizontal className="w-4 h-4" /> Filtros
+                    {pipelineActiveFilters > 0 && <span className="text-xs">({pipelineActiveFilters})</span>}
+                  </button>
+                </div>
+
+                <FilterSheet open={filterSheet === 'pipeline'} onClose={() => setFilterSheet(null)} title="Filtros de pipeline">
+                  {pipelineFilterControls}
+                  <p className="text-xs text-slate-400">{totalActive} activos · {totalClosed} cerrados</p>
+                </FilterSheet>
+
                 {/* ── VISTA LISTA ── */}
-                {pipelineListView ? (
+                {usingListView ? (
                   <div className="max-w-5xl mx-auto p-4">
                     {visibleStatuses.map(status => {
                       const col = deals.filter(d => d.neg.status === status)
@@ -2032,7 +2337,7 @@ export function Distribution({
                       </span>
                     )}
                   </div>
-                  <div className="bg-white border border-slate-200 rounded-xl overflow-hidden overflow-x-auto">
+                  <div className="hidden sm:block bg-white border border-slate-200 rounded-xl overflow-hidden overflow-x-auto">
                     <table className="w-full text-sm min-w-[460px]">
                       <thead>
                         <tr className="bg-slate-50 text-left text-xs text-slate-500 uppercase tracking-wider">
@@ -2088,6 +2393,43 @@ export function Distribution({
                       </tbody>
                     </table>
                   </div>
+
+                  {/* Móvil: tarjetas por encargado */}
+                  <div className="sm:hidden space-y-2">
+                    {clubStats.length === 0 && (
+                      <div className="bg-white border border-slate-200 rounded-xl p-4 text-center text-slate-400 text-xs">Aún no hay clubes con encargado asignado.</div>
+                    )}
+                    {clubStats.map(s => (
+                      <div
+                        key={s.profile.id}
+                        onClick={() => goToClubs(s.profile.avatar)}
+                        className="bg-white border border-slate-200 rounded-xl p-3 flex items-center gap-3 cursor-pointer active:bg-slate-50"
+                      >
+                        <span className="w-9 h-9 rounded-full bg-primary text-white text-xs font-bold flex items-center justify-center flex-shrink-0">{s.profile.avatar}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-slate-700 truncate">{s.profile.name}</div>
+                          <div className="text-xs text-slate-500 mt-0.5">
+                            Clubes: {s.clubs} · Activas: {s.active} · {s.stale > 0 ? <span className="text-orange-600 font-medium">Paradas: {s.stale}</span> : <>Paradas: 0</>}
+                          </div>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
+                      </div>
+                    ))}
+                    {sinEncargadoClubs > 0 && (
+                      <div
+                        onClick={() => goToClubs('__sin__')}
+                        className="bg-white border border-slate-200 rounded-xl p-3 flex items-center gap-3 cursor-pointer active:bg-slate-50"
+                      >
+                        <span className="w-9 h-9 rounded-full bg-slate-200 text-slate-400 text-xs font-bold flex items-center justify-center flex-shrink-0">?</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-slate-400">Sin encargado</div>
+                          <div className="text-xs text-slate-400 mt-0.5">Clubes: {sinEncargadoClubs} · Activas: — · Paradas: —</div>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
+                      </div>
+                    )}
+                  </div>
+
                   <p className="text-[11px] text-slate-400 mt-1.5">Pulsa una fila para ver los clubes de esa persona.</p>
                 </div>
 
@@ -2255,7 +2597,7 @@ export function Distribution({
                     </>)})()}
                   </div>
 
-                  <div className="px-4 py-3 border-t border-slate-100 flex-shrink-0 space-y-2">
+                  <div className="px-4 py-3 border-t border-slate-100 flex-shrink-0 space-y-2 sticky bottom-0 bg-white safe-area-bottom">
                     {/* Close — mobile only */}
                     <button
                       onClick={closePanel}
@@ -2413,7 +2755,7 @@ export function Distribution({
                                       showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
                                     }
                                   }}
-                                  className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium px-2 py-1 rounded hover:bg-blue-50 transition-colors flex-shrink-0"
+                                  className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium px-2 py-2 sm:py-1 rounded hover:bg-blue-50 transition-colors flex-shrink-0"
                                 >
                                   <Plus className="w-3 h-3" /> Ofrecer
                                 </button>
@@ -2431,7 +2773,7 @@ export function Distribution({
                     )}
                   </div>
                   {/* Close — mobile only */}
-                  <div className="sm:hidden flex-shrink-0 px-4 py-3 border-t border-slate-100 safe-area-bottom">
+                  <div className="sm:hidden flex-shrink-0 px-4 py-3 border-t border-slate-100 safe-area-bottom sticky bottom-0 bg-white">
                     <button onClick={closePanel} className="w-full py-2.5 text-sm font-medium text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50">
                       Cerrar
                     </button>
@@ -2614,7 +2956,7 @@ export function Distribution({
                     </div>
                   )}
                   {/* Close — mobile only */}
-                  <div className="sm:hidden flex-shrink-0 px-4 py-3 border-t border-slate-100 safe-area-bottom">
+                  <div className="sm:hidden flex-shrink-0 px-4 py-3 border-t border-slate-100 safe-area-bottom sticky bottom-0 bg-white">
                     <button onClick={closePanel} className="w-full py-2.5 text-sm font-medium text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50">
                       Cerrar
                     </button>
@@ -3061,7 +3403,7 @@ function ClubCard({ club, negotiations, isSelected, onClick, onOffer, onTogglePr
         {onOffer ? (
           <button
             onClick={e => { e.stopPropagation(); onOffer() }}
-            className="sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium px-1.5 py-1 rounded hover:bg-blue-50"
+            className="sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium px-1.5 py-2 sm:py-1 rounded hover:bg-blue-50"
           >
             <Plus className="w-3 h-3" /> Ofrecer
           </button>

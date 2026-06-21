@@ -471,7 +471,7 @@ export function ClubDetail({
                                         className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border bg-blue-50 border-blue-200 text-blue-700"
                                       >
                                         <Check className="w-3 h-3" />
-                                        {p.name.split(' ')[0]}
+                                        {p.name}
                                       </span>
                                     )
                                   }
@@ -493,7 +493,7 @@ export function ClubDetail({
                                       className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border bg-slate-50 border-slate-200 text-slate-600 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 disabled:opacity-50 transition-colors"
                                     >
                                       {isOffering ? '…' : <Plus className="w-3 h-3" />}
-                                      {p.name.split(' ')[0]}
+                                      {p.name}
                                     </button>
                                   )
                                 })}
