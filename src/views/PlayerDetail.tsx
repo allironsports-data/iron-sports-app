@@ -27,6 +27,7 @@ import {
   Video, BarChart2, BookOpen, Pencil, ChevronDown,
   Activity,
 } from "lucide-react";
+import { POSITIONS, positionLabel } from "../lib/positions";
 
 const PRIMARY = "hsl(220,72%,26%)";
 
@@ -1712,8 +1713,22 @@ function EditPlayerModal({ player, profiles, onClose, onSave }: {
             <EF label="Nacionalidad" value={nationality} onChange={setNationality} />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <EF label="Posición principal" value={pos1} onChange={setPos1} />
-            <EF label="Posición secundaria" value={pos2} onChange={setPos2} />
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Posición principal</label>
+              <select value={pos1} onChange={(e) => setPos1(e.target.value)}
+                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
+                <option value="">Seleccionar…</option>
+                {POSITIONS.map((p) => <option key={p.code} value={p.code}>{positionLabel(p.code)}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Posición secundaria</label>
+              <select value={pos2} onChange={(e) => setPos2(e.target.value)}
+                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
+                <option value="">Seleccionar…</option>
+                {POSITIONS.map((p) => <option key={p.code} value={p.code}>{positionLabel(p.code)}</option>)}
+              </select>
+            </div>
           </div>
           <EF label="Teléfono" value={phone} onChange={setPhone} type="tel" />
 

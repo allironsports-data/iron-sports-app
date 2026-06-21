@@ -15,6 +15,7 @@ import { ToastStack } from '../components/ToastStack'
 import { useToast } from '../hooks/useToast'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import { isValidName, isValidDate } from '../lib/validate'
+import { POSITIONS, POSITION_CODES, positionLabel, needMatchesPlayer } from '../lib/positions'
 
 /** Spinner pequeño para botones de guardado */
 function BtnSpinner() {
@@ -25,35 +26,6 @@ function BtnSpinner() {
 
 const CURRENT_SEASON = '2025-26'
 
-// Canonical position list (Spanish labels used for needs)
-const FOOTBALL_POSITIONS = [
-  'Portero',
-  'Central', 'Lateral derecho', 'Lateral izquierdo',
-  'Pivote', 'Mediocentro', 'Mediapunta',
-  'Extremo derecho', 'Extremo izquierdo',
-  'Delantero',
-]
-
-// Maps need position label → player position abbreviations used in player profiles
-const POSITION_ABBRS: Record<string, string[]> = {
-  'Portero':           ['GK', 'POR', 'Portero'],
-  'Central':           ['CB', 'CT', 'DFC', 'Central'],
-  'Lateral derecho':   ['RB', 'RWB', 'LD', 'Lateral derecho'],
-  'Lateral izquierdo': ['LB', 'LWB', 'LI', 'Lateral izquierdo'],
-  'Pivote':            ['DM', 'CDM', 'MCD', 'Pivote'],
-  'Mediocentro':       ['CM', 'MC', 'Mediocentro'],
-  'Mediapunta':        ['AM', 'CAM', 'MP', 'Mediapunta'],
-  'Extremo derecho':   ['RW', 'RM', 'ED', 'Extremo derecho'],
-  'Extremo izquierdo': ['LW', 'LM', 'EI', 'Extremo izquierdo'],
-  'Delantero':         ['FW', 'ST', 'CF', 'AT', 'SS', 'Delantero', 'Delantero centro'],
-}
-
-function playerMatchesNeedPosition(playerPositions: string[], needPosition: string): boolean {
-  const abbrs = POSITION_ABBRS[needPosition] ?? [needPosition]
-  return playerPositions.some(p =>
-    abbrs.some(a => p.toLowerCase() === a.toLowerCase() || p.toLowerCase().includes(needPosition.toLowerCase()))
-  )
-}
 const CONDITIONS = ['Libre', 'Traspaso', 'Cesión', 'Cesión/Traspaso', 'Traspaso (porcentaje)', 'Cesión con opción']
 const NEG_STATUSES: ClubNegotiation['status'][] = ['pendiente', 'ofrecido', 'interesado', 'negociando', 'cerrado', 'descartado']
 
@@ -433,15 +405,6 @@ export function Distribution({
     return result
   }, [seasonEntries, search, players, posFilters, yearFilters, activityFilter, negotiations])
 
-  const distributionPositions = useMemo(() => {
-    const pos = new Set<string>()
-    seasonEntries.forEach(e => {
-      const p = players.find(pl => pl.id === e.playerId)
-      if (p?.positions[0]) pos.add(p.positions[0])
-    })
-    return Array.from(pos).sort()
-  }, [seasonEntries, players])
-
   const distributionYears = useMemo(() => {
     const years = new Set<string>()
     seasonEntries.forEach(e => {
@@ -718,7 +681,7 @@ export function Distribution({
                   </div>
                   <MultiSelect
                     label="Posición"
-                    options={distributionPositions}
+                    options={POSITION_CODES}
                     selected={posFilters}
                     onChange={setPosFilters}
                   />
@@ -1477,7 +1440,7 @@ export function Distribution({
                       if (n.clubId !== club.id || n.status === 'descartado') return false
                       if (n.needPosition) return n.needPosition === need.position
                       const p = players.find(pl => pl.id === n.playerId)
-                      return p ? playerMatchesNeedPosition(p.positions, need.position) : false
+                      return p ? needMatchesPlayer(need.position, p.positions) : false
                     }).length
                     return (
                       <div
@@ -1554,7 +1517,7 @@ export function Distribution({
                           if (n.clubId !== club.id || n.status === 'descartado') return false
                           if (n.needPosition) return n.needPosition === need.position
                           const p = players.find(pl => pl.id === n.playerId)
-                          return p ? playerMatchesNeedPosition(p.positions, need.position) : false
+                          return p ? needMatchesPlayer(need.position, p.positions) : false
                         }).length
                         return (
                           <tr
@@ -2314,7 +2277,7 @@ export function Distribution({
               const offeredForNeed = offeredToClub.filter(neg => {
                 if (neg.needPosition) return neg.needPosition === need.position
                 const p = players.find(pl => pl.id === neg.playerId)
-                return p && playerMatchesNeedPosition(p.positions, need.position)
+                return p && needMatchesPlayer(need.position, p.positions)
               })
               const offeredForNeedPlayerIds = new Set(offeredForNeed.map(n => n.playerId))
               // Jugadores con alguna negociación ya cerrada → no sugerir
@@ -2325,7 +2288,7 @@ export function Distribution({
                 if (closedPlayerIds.has(p.id)) return false                 // ya cerrado en algún club
                 const yr = p.birthDate ? parseInt(p.birthDate.slice(0, 4), 10) : NaN
                 if (!isNaN(yr) && yr > 2009) return false                   // demasiado joven (>2009)
-                return playerMatchesNeedPosition(p.positions, need.position)
+                return needMatchesPlayer(need.position, p.positions)
               })
               return (
                 <div className="h-full flex flex-col">
@@ -2337,7 +2300,7 @@ export function Distribution({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-md text-xs font-semibold">
-                          <AlertCircle className="w-3 h-3" />{need.position}
+                          <AlertCircle className="w-3 h-3" />{positionLabel(need.position)}
                         </span>
                         {need.ageMax && <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">Sub-{need.ageMax}</span>}
                       </div>
@@ -2372,7 +2335,7 @@ export function Distribution({
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                          Ofrecidos · {need.position} ({offeredForNeed.length})
+                          Ofrecidos · {positionLabel(need.position)} ({offeredForNeed.length})
                         </span>
                         <button
                           onClick={() => setShowAddNeg({ clubId: club.id, needPosition: need.position })}
@@ -2435,7 +2398,7 @@ export function Distribution({
                                 <button
                                   onClick={async () => {
                                     try {
-                                      await onCreateNegotiation({ playerId: p.id, clubId: club.id, needPosition: need.position, status: 'ofrecido' })
+                                      await onCreateNegotiation({ playerId: p.id, clubId: club.id, needPosition: need.position, status: 'pendiente' })
                                       showToast(`${p.name} ofrecido a ${club.name}`)
                                     } catch {
                                       showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
@@ -2475,7 +2438,7 @@ export function Distribution({
                 ? clubNegsPanel.filter(neg => {
                     if (neg.needPosition) return neg.needPosition === selectedNeedPosition
                     const p = players.find(pl => pl.id === neg.playerId)
-                    return p && playerMatchesNeedPosition(p.positions, selectedNeedPosition)
+                    return p && needMatchesPlayer(selectedNeedPosition, p.positions)
                   })
                 : clubNegsPanel
               return (
@@ -2529,7 +2492,7 @@ export function Distribution({
                         {selectedClub.needs.map((need, i) => (
                           <div key={i} className="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 rounded-lg px-3 py-1.5">
                             <AlertCircle className="w-3 h-3 text-amber-500 flex-shrink-0" />
-                            <span className="font-medium">{need.position}</span>
+                            <span className="font-medium">{positionLabel(need.position)}</span>
                             {need.ageMax && <span>· sub-{need.ageMax}</span>}
                             {need.transferBudget && <span>· {need.transferBudget}</span>}
                             {need.notes && <span className="text-slate-400">· {need.notes}</span>}
@@ -3306,7 +3269,7 @@ function AddPlayerModal({ players, existingPlayerIds, season, onClose, onSave, o
           <select value={newPosition} onChange={e => setNewPosition(e.target.value)}
             className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 text-slate-700">
             <option value="">Posición *</option>
-            {FOOTBALL_POSITIONS.map(p => <option key={p} value={p}>{p}</option>)}
+            {POSITIONS.map(p => <option key={p.code} value={p.code}>{positionLabel(p.code)}</option>)}
           </select>
           <div className="flex gap-2">
             <input value={newNationality} onChange={e => setNewNationality(e.target.value)}
@@ -3369,10 +3332,10 @@ function NeedFormInline({ initial, onSave, onCancel }: {
       <div>
         <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-2">Posición *</label>
         <div className="flex flex-wrap gap-1.5">
-          {FOOTBALL_POSITIONS.map(pos => (
-            <button key={pos} type="button" onClick={() => setPosition(pos)}
-              className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${position === pos ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}
-            >{pos}</button>
+          {POSITIONS.map(p => (
+            <button key={p.code} type="button" onClick={() => setPosition(p.code)} title={p.es}
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${position === p.code ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}
+            >{p.code}</button>
           ))}
         </div>
       </div>
@@ -3549,7 +3512,7 @@ function AddNegotiationModal({ players, clubs, entries, fixedPlayerId, fixedClub
   const distributionPlayerIds = entries.map(e => e.playerId)
   const [playerId, setPlayerId] = useState(fixedPlayerId ?? '')
   const [clubId, setClubId] = useState(fixedClubId ?? '')
-  const [status, setStatus] = useState<ClubNegotiation['status']>('ofrecido')
+  const [status, setStatus] = useState<ClubNegotiation['status']>('pendiente')
   const [aisManager, setAisManager] = useState(currentProfileAvatar ?? '')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
@@ -4256,18 +4219,19 @@ function AddNeedModal({ clubs, onClose, onSave }: {
             <div>
               <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-2">Posición *</label>
               <div className="flex flex-wrap gap-1.5">
-                {FOOTBALL_POSITIONS.map(pos => (
+                {POSITIONS.map(p => (
                   <button
-                    key={pos}
+                    key={p.code}
                     type="button"
-                    onClick={() => setPosition(pos)}
+                    onClick={() => setPosition(p.code)}
+                    title={p.es}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                      position === pos
+                      position === p.code
                         ? 'bg-primary text-white border-primary'
                         : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:text-slate-800'
                     }`}
                   >
-                    {pos}
+                    {positionLabel(p.code)}
                   </button>
                 ))}
               </div>

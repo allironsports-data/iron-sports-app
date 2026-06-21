@@ -39,6 +39,7 @@ import {
   Eye,
   Activity,
 } from "lucide-react";
+import { POSITIONS, POSITION_CODES, positionLabel } from "../lib/positions";
 
 const PRIMARY = "hsl(220,72%,26%)";
 
@@ -334,7 +335,7 @@ export function Dashboard({
   const birthdaysSoon = visiblePlayers.filter((p) => isBirthdaySoon(p.birthDate, 7));
 
   // Available options for multi-filters (derived from visible players)
-  const positionOptions = Array.from(new Set(visiblePlayers.map(p => p.positions[0]).filter(Boolean))).sort() as string[];
+  const positionOptions = POSITION_CODES;
   const yearOptions = Array.from(new Set(visiblePlayers.map(p => p.birthDate?.slice(0, 4)).filter(Boolean))).sort((a, b) => Number(b) - Number(a)) as string[];
 
   const filtered = visiblePlayers.filter((p) => {
@@ -1232,6 +1233,7 @@ export function Dashboard({
             options={positionOptions}
             selected={posFilters}
             onChange={setPosFilters}
+            optionLabel={positionLabel}
           />
           <MultiSelectFilter
             label="Año nacimiento"
@@ -2073,11 +2075,12 @@ export function Dashboard({
 }
 
 /* ── MultiSelectFilter: dropdown checkbox filter ── */
-function MultiSelectFilter({ label, options, selected, onChange }: {
+function MultiSelectFilter({ label, options, selected, onChange, optionLabel }: {
   label: string;
   options: string[];
   selected: string[];
   onChange: (v: string[]) => void;
+  optionLabel?: (v: string) => string;
 }) {
   const [open, setOpen] = useState(false);
   const isActive = selected.length > 0;
@@ -2110,7 +2113,7 @@ function MultiSelectFilter({ label, options, selected, onChange }: {
                   onClick={e => e.stopPropagation()}
                   className="w-3.5 h-3.5 rounded"
                 />
-                <span className="text-sm text-slate-700">{opt}</span>
+                <span className="text-sm text-slate-700">{optionLabel ? optionLabel(opt) : opt}</span>
               </label>
             ))}
           </div>
@@ -2655,8 +2658,22 @@ function AddPlayerModal({ profiles, onClose, onAdd }: {
             <F label="Nacionalidad" value={nationality} onChange={setNationality} required />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <F label="Posición principal" value={pos1} onChange={setPos1} required />
-            <F label="Posición secundaria" value={pos2} onChange={setPos2} />
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Posición principal</label>
+              <select value={pos1} onChange={(e) => setPos1(e.target.value)} required
+                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
+                <option value="">Seleccionar…</option>
+                {POSITIONS.map((p) => <option key={p.code} value={p.code}>{positionLabel(p.code)}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Posición secundaria</label>
+              <select value={pos2} onChange={(e) => setPos2(e.target.value)}
+                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
+                <option value="">Seleccionar…</option>
+                {POSITIONS.map((p) => <option key={p.code} value={p.code}>{positionLabel(p.code)}</option>)}
+              </select>
+            </div>
           </div>
           <div className="pt-1 border-t border-slate-100">
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Club(s)</p>

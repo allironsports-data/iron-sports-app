@@ -14,6 +14,7 @@ import { useToast } from '../hooks/useToast'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import { isValidName } from '../lib/validate'
 import { ManagerSelect } from '../components/ManagerSelect'
+import { POSITIONS, positionLabel, needMatchesPlayer } from '../lib/positions'
 
 /** Spinner pequeño para botones de guardado */
 function BtnSpinner() {
@@ -426,7 +427,7 @@ export function ClubDetail({
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-medium text-slate-800 text-sm">{need.position}</span>
+                          <span className="font-medium text-slate-800 text-sm">{positionLabel(need.position)}</span>
                           {need.ageMax && <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">Sub-{need.ageMax}</span>}
                           {need.transferBudget && <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full">Traspaso: {need.transferBudget}</span>}
                           {need.salaryBudget && <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">Salario: {need.salaryBudget}</span>}
@@ -447,9 +448,7 @@ export function ClubDetail({
                         {(() => {
                           const closedPlayerIds = new Set(negotiations.filter(n => n.status === 'cerrado').map(n => n.playerId))
                           const matchingPlayers = players.filter(p => {
-                            const posMatch = need.position
-                              ? p.positions.some(pos => pos.toLowerCase().includes(need.position.toLowerCase()) || need.position.toLowerCase().includes(pos.toLowerCase()))
-                              : false
+                            const posMatch = needMatchesPlayer(need.position, p.positions)
                             if (!posMatch) return false
                             if (!entries.some(e => e.playerId === p.id)) return false
                             if (closedPlayerIds.has(p.id)) return false               // ya cerrado en algún club
@@ -483,7 +482,7 @@ export function ClubDetail({
                                       onClick={async () => {
                                         setOfferingPlayerId(p.id)
                                         try {
-                                          await onCreateNegotiation({ playerId: p.id, clubId: club.id, status: 'ofrecido' })
+                                          await onCreateNegotiation({ playerId: p.id, clubId: club.id, status: 'pendiente' })
                                           showToast(`${p.name.split(' ')[0]} ofrecido a ${club.name}`)
                                         } catch {
                                           showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
@@ -719,7 +718,7 @@ export function ClubDetail({
       {/* Confirmación de borrado de necesidad */}
       <ConfirmModal
         open={confirmDeleteNeedIdx !== null}
-        title={`¿Eliminar la necesidad${confirmDeleteNeedIdx !== null && club.needs[confirmDeleteNeedIdx] ? ` de ${club.needs[confirmDeleteNeedIdx].position}` : ''}?`}
+        title={`¿Eliminar la necesidad${confirmDeleteNeedIdx !== null && club.needs[confirmDeleteNeedIdx] ? ` de ${positionLabel(club.needs[confirmDeleteNeedIdx].position)}` : ''}?`}
         message="Esta acción no se puede deshacer."
         confirmLabel="Eliminar"
         onConfirm={async () => {
@@ -756,7 +755,7 @@ function AddPlayerToClubModal({ players, entries, existingPlayerIds, clubId, pos
 }) {
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<Player | null>(null)
-  const [status, setStatus] = useState<ClubNegotiation['status']>('ofrecido')
+  const [status, setStatus] = useState<ClubNegotiation['status']>('pendiente')
   const [aisManager, setAisManager] = useState(currentProfile.avatar)
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
@@ -766,8 +765,7 @@ function AddPlayerToClubModal({ players, entries, existingPlayerIds, clubId, pos
 
   // Position matching helper
   function matchesPosition(playerPositions: string[], hint: string): boolean {
-    const h = hint.toLowerCase()
-    return playerPositions.some(p => p.toLowerCase().includes(h) || h.includes(p.toLowerCase()))
+    return needMatchesPlayer(hint, playerPositions)
   }
 
   const baseAvailable = players.filter(p => {
@@ -802,7 +800,7 @@ function AddPlayerToClubModal({ players, entries, existingPlayerIds, clubId, pos
           <div>
             <h2 className="font-semibold text-slate-800 text-sm">Ofrecer jugador</h2>
             {positionHint && (
-              <p className="text-xs text-blue-600 mt-0.5">Buscando: <span className="font-semibold">{positionHint}</span></p>
+              <p className="text-xs text-blue-600 mt-0.5">Buscando: <span className="font-semibold">{positionLabel(positionHint)}</span></p>
             )}
           </div>
           <button onClick={onClose} aria-label="Cerrar" className="p-2 sm:p-1 rounded hover:bg-slate-100"><X className="w-4 h-4 text-slate-400" /></button>
@@ -958,14 +956,6 @@ function EditNegModal({ neg, profiles, onClose, onSave, onDelete }: {
 
 // ── NEED FORM ─────────────────────────────────────────────────
 
-const POSITIONS = [
-  'Portero',
-  'Central', 'Lateral derecho', 'Lateral izquierdo',
-  'Pivote', 'Mediocentro', 'Mediapunta',
-  'Extremo derecho', 'Extremo izquierdo',
-  'Delantero',
-]
-
 function NeedForm({ initial, onSave, onCancel }: {
   initial?: ClubNeed
   onSave: (need: ClubNeed) => Promise<void>
@@ -999,16 +989,17 @@ function NeedForm({ initial, onSave, onCancel }: {
         <div className="flex flex-wrap gap-1.5">
           {POSITIONS.map(pos => (
             <button
-              key={pos}
+              key={pos.code}
               type="button"
-              onClick={() => setPosition(pos)}
+              title={pos.es}
+              onClick={() => setPosition(pos.code)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                position === pos
+                position === pos.code
                   ? 'bg-primary text-white border-primary'
                   : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
               }`}
             >
-              {pos}
+              {pos.code}
             </button>
           ))}
         </div>
