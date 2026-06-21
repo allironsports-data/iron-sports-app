@@ -15,7 +15,7 @@ import { ToastStack } from '../components/ToastStack'
 import { useToast } from '../hooks/useToast'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import { isValidName, isValidDate } from '../lib/validate'
-import { POSITIONS, POSITION_CODES, positionLabel, needMatchesPlayer } from '../lib/positions'
+import { POSITIONS, POSITION_CODES, positionLabel, positionEs, needMatchesPlayer, normalizePosition } from '../lib/positions'
 
 /** Spinner pequeño para botones de guardado */
 function BtnSpinner() {
@@ -480,18 +480,27 @@ export function Distribution({
   }, [clubs])
 
   const allNeedsPositions = useMemo(() => {
-    const positions = new Set<string>()
-    clubs.forEach(c => c.needs.forEach(n => positions.add(n.position)))
-    return Array.from(positions).sort()
+    // Normaliza a código estándar (p.ej. "Centrocampista" → CM) para que no
+    // aparezcan duplicados con valores antiguos. Ordena según POSITIONS.
+    const codes = new Set<string>()
+    clubs.forEach(c => c.needs.forEach(n => codes.add(normalizePosition(n.position) ?? n.position)))
+    const order = POSITION_CODES
+    return Array.from(codes).sort((a, b) => {
+      const ia = order.indexOf(a), ib = order.indexOf(b)
+      if (ia === -1 && ib === -1) return a.localeCompare(b)
+      if (ia === -1) return 1
+      if (ib === -1) return -1
+      return ia - ib
+    })
   }, [clubs])
 
   const clubNeeds = useMemo(() => {
     const results: Array<{ club: Club; need: ClubNeed }> = []
     clubs.forEach(club => club.needs.forEach(need => results.push({ club, need })))
-    const pf = positionFilter.toLowerCase()
+    const pf = positionFilter   // código estándar seleccionado (o '')
     const q = search.toLowerCase()
     const filtered = results.filter(r =>
-      (!pf || r.need.position.toLowerCase().includes(pf)) &&
+      (!pf || (normalizePosition(r.need.position) ?? r.need.position) === pf) &&
       (!q || r.club.name.toLowerCase().includes(q) || r.club.league?.toLowerCase().includes(q) || r.need.position.toLowerCase().includes(q)) &&
       (needsTierFilter.length === 0 || needsTierFilter.includes(getClubTier(r.club.league, r.club.country))) &&
       (!needsLeagueFilter || r.club.league === needsLeagueFilter) &&
@@ -1396,6 +1405,7 @@ export function Distribution({
                     <button
                       key={pos}
                       onClick={() => setPositionFilter(positionFilter === pos ? '' : pos)}
+                      title={positionEs(pos) || undefined}
                       className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
                         positionFilter === pos ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                       }`}

@@ -58,11 +58,11 @@ const ALIASES: Record<string, string> = {
   // LB
   'lb': 'LB', 'lwb': 'LB', 'li': 'LB', 'lateral izquierdo': 'LB', 'left back': 'LB', 'leftback': 'LB', 'carrilero izquierdo': 'LB',
   // DM
-  'dm': 'DM', 'cdm': 'DM', 'mcd': 'DM', 'pivote': 'DM', 'defensive midfielder': 'DM', 'mediocentro defensivo': 'DM', 'medio centro defensivo': 'DM',
+  'dm': 'DM', 'cdm': 'DM', 'mcd': 'DM', 'pivote': 'DM', 'defensive midfielder': 'DM', 'mediocentro defensivo': 'DM', 'medio centro defensivo': 'DM', 'centrocampista defensivo': 'DM', 'contencion': 'DM',
   // CM
-  'cm': 'CM', 'mc': 'CM', 'mediocentro': 'CM', 'medio centro': 'CM', 'centre midfielder': 'CM', 'center midfielder': 'CM', 'interior': 'CM',
+  'cm': 'CM', 'mc': 'CM', 'mediocentro': 'CM', 'medio centro': 'CM', 'centre midfielder': 'CM', 'center midfielder': 'CM', 'interior': 'CM', 'centrocampista': 'CM', 'mediocampista': 'CM', 'medio': 'CM', 'volante': 'CM', 'centrocampista mixto': 'CM',
   // AM
-  'am': 'AM', 'cam': 'AM', 'mp': 'AM', 'mco': 'AM', 'mediapunta': 'AM', 'media punta': 'AM', 'attacking midfielder': 'AM', 'mediocentro ofensivo': 'AM', 'medio centro ofensivo': 'AM', 'enganche': 'AM',
+  'am': 'AM', 'cam': 'AM', 'mp': 'AM', 'mco': 'AM', 'mediapunta': 'AM', 'media punta': 'AM', 'attacking midfielder': 'AM', 'mediocentro ofensivo': 'AM', 'medio centro ofensivo': 'AM', 'centrocampista ofensivo': 'AM', 'enganche': 'AM',
   // RW
   'rw': 'RW', 'rm': 'RW', 'ed': 'RW', 'extremo derecho': 'RW', 'right winger': 'RW', 'banda derecha': 'RW',
   // LW
