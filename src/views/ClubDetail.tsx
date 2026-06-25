@@ -477,7 +477,7 @@ export function ClubDetail({
                                       onClick={async () => {
                                         setOfferingPlayerId(p.id)
                                         try {
-                                          await onCreateNegotiation({ playerId: p.id, clubId: club.id, status: 'pendiente' })
+                                          await onCreateNegotiation({ playerId: p.id, clubId: club.id, status: 'pendiente', aisManager: club.aisManager || currentProfile.avatar })
                                           showToast(`${p.name.split(' ')[0]} ofrecido a ${club.name}`)
                                         } catch {
                                           showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
@@ -667,6 +667,7 @@ export function ClubDetail({
           entries={entries}
           existingPlayerIds={clubNegs.map(n => n.playerId)}
           clubId={club.id}
+          defaultManager={club.aisManager || currentProfile.avatar}
           positionHint={addPlayerPositionHint}
           profiles={profiles}
           currentProfile={currentProfile}
@@ -737,11 +738,12 @@ export function ClubDetail({
 
 // ── ADD PLAYER MODAL ──────────────────────────────────────────
 
-function AddPlayerToClubModal({ players, entries, existingPlayerIds, clubId, positionHint, profiles, currentProfile, onClose, onSave }: {
+function AddPlayerToClubModal({ players, entries, existingPlayerIds, clubId, defaultManager, positionHint, profiles, currentProfile, onClose, onSave }: {
   players: Player[]
   entries: DistributionEntry[]
   existingPlayerIds: string[]
   clubId: string
+  defaultManager?: string
   positionHint?: string
   profiles: Profile[]
   currentProfile: Profile
@@ -751,7 +753,8 @@ function AddPlayerToClubModal({ players, entries, existingPlayerIds, clubId, pos
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<Player | null>(null)
   const [status, setStatus] = useState<ClubNegotiation['status']>('pendiente')
-  const [aisManager, setAisManager] = useState(currentProfile.avatar)
+  // Gestor por defecto: encargado del club; si no hay, quien crea. Editable.
+  const [aisManager, setAisManager] = useState(defaultManager || currentProfile.avatar)
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const [showAll, setShowAll] = useState(false)

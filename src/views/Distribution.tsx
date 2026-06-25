@@ -618,13 +618,10 @@ export function Distribution({
         const player = players.find(p => p.id === n.playerId)
         return { neg: n, club, player }
       })
-      .filter(({ neg, club, player }) =>
-        (club?.aisManager === currentProfile.avatar) ||
-        (!!player && player.managedBy.includes(currentProfile.id)) ||
-        (neg.aisManager === currentProfile.avatar)
-      )
+      // Solo las de los clubes de los que soy encargado: es quien debe mover la propuesta
+      .filter(({ club }) => club?.aisManager === currentProfile.avatar)
       .sort((a, b) => (b.neg.createdAt ?? '').localeCompare(a.neg.createdAt ?? ''))
-  }, [negotiations, clubs, players, currentProfile.avatar, currentProfile.id])
+  }, [negotiations, clubs, players, currentProfile.avatar])
 
   // ── MOTOR DE OPORTUNIDADES ──────────────────────────────────
   // Cruza tu cartera (entries) con las necesidades abiertas de los clubes,
@@ -704,7 +701,7 @@ export function Distribution({
         await Promise.all(batch.map(async k => {
           const o = oppByKey.get(k)
           if (!o) return
-          await onCreateNegotiation({ playerId: o.player.id, clubId: o.club.id, needPosition: o.need.position, status: 'descartado', aisManager: currentProfile.avatar })
+          await onCreateNegotiation({ playerId: o.player.id, clubId: o.club.id, needPosition: o.need.position, status: 'descartado', aisManager: o.club.aisManager || currentProfile.avatar })
           ok++
         }))
       }
@@ -2503,7 +2500,7 @@ export function Distribution({
                             onClick={async () => {
                               setOfferingOppKey(key)
                               try {
-                                await onCreateNegotiation({ playerId: player.id, clubId: club.id, needPosition: need.position, status: 'pendiente', aisManager: currentProfile.avatar })
+                                await onCreateNegotiation({ playerId: player.id, clubId: club.id, needPosition: need.position, status: 'pendiente', aisManager: club.aisManager || currentProfile.avatar })
                                 showToast(`${player.name} ofrecido a ${club.name}`)
                               } catch {
                                 showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
@@ -2521,7 +2518,7 @@ export function Distribution({
                             onClick={async () => {
                               setDismissingOppKey(key)
                               try {
-                                await onCreateNegotiation({ playerId: player.id, clubId: club.id, needPosition: need.position, status: 'descartado', aisManager: currentProfile.avatar })
+                                await onCreateNegotiation({ playerId: player.id, clubId: club.id, needPosition: need.position, status: 'descartado', aisManager: club.aisManager || currentProfile.avatar })
                                 showToast('Oportunidad descartada')
                               } catch {
                                 showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
@@ -3221,7 +3218,7 @@ export function Distribution({
                                 <button
                                   onClick={async () => {
                                     try {
-                                      await onCreateNegotiation({ playerId: p.id, clubId: club.id, needPosition: need.position, status: 'pendiente' })
+                                      await onCreateNegotiation({ playerId: p.id, clubId: club.id, needPosition: need.position, status: 'pendiente', aisManager: club.aisManager || currentProfile.avatar })
                                       showToast(`${p.name} ofrecido a ${club.name}`)
                                     } catch {
                                       showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
@@ -3604,7 +3601,7 @@ export function Distribution({
           onSave={async (clubIds) => {
             try {
               await Promise.all(
-                clubIds.map(clubId => onCreateNegotiation({ playerId: bulkAssignPlayerId, clubId, status: 'pendiente' }))
+                clubIds.map(clubId => onCreateNegotiation({ playerId: bulkAssignPlayerId, clubId, status: 'pendiente', aisManager: clubs.find(c => c.id === clubId)?.aisManager || currentProfile.avatar }))
               )
               setBulkAssignPlayerId(null)
               showToast(`${clubIds.length} club${clubIds.length !== 1 ? 's' : ''} asignado${clubIds.length !== 1 ? 's' : ''}`)
@@ -4343,7 +4340,18 @@ function AddNegotiationModal({ players, clubs, entries, fixedPlayerId, fixedClub
   const [playerId, setPlayerId] = useState(fixedPlayerId ?? '')
   const [clubId, setClubId] = useState(fixedClubId ?? '')
   const [status, setStatus] = useState<ClubNegotiation['status']>('pendiente')
-  const [aisManager, setAisManager] = useState(currentProfileAvatar ?? '')
+  // Gestor por defecto: encargado del club; si no hay, quien crea. Editable.
+  const [aisManager, setAisManager] = useState(() => {
+    const c = clubs.find(cl => cl.id === (fixedClubId ?? ''))
+    return c?.aisManager || currentProfileAvatar || ''
+  })
+  const [mgrTouched, setMgrTouched] = useState(false)
+  useEffect(() => {
+    if (mgrTouched) return
+    const c = clubs.find(cl => cl.id === clubId)
+    setAisManager(c?.aisManager || currentProfileAvatar || '')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clubId])
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -4400,7 +4408,7 @@ function AddNegotiationModal({ players, clubs, entries, fixedPlayerId, fixedClub
         </div>
         <div>
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Gestor AIS</label>
-          <ManagerSelect value={aisManager || undefined} onChange={(v) => setAisManager(v ?? '')} profiles={profiles} />
+          <ManagerSelect value={aisManager || undefined} onChange={(v) => { setMgrTouched(true); setAisManager(v ?? '') }} profiles={profiles} />
         </div>
         <div>
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Notas</label>
