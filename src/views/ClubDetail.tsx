@@ -300,7 +300,9 @@ export function ClubDetail({
                 const scfg = STATUS_CONFIG[neg.status]
                 return (
                   <div key={neg.id} className="bg-white rounded-xl border border-slate-200 p-3 flex items-center gap-3">
-                    <Avatar name={player.name} photo={player.photo} size="md" />
+                    <button onClick={() => onSelectPlayer(player.id)} title="Ver ficha del jugador" aria-label="Ver ficha del jugador" className="flex-shrink-0">
+                      <Avatar name={player.name} photo={player.photo} size="md" />
+                    </button>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap min-w-0">
                         <span className="font-medium text-slate-800 text-sm truncate max-w-full">{player.name}</span>
@@ -335,16 +337,9 @@ export function ClubDetail({
                       <div className="flex items-center gap-1 sm:gap-2">
                         <button
                           onClick={() => setEditingNeg(neg)}
-                          aria-label="Editar negociación"
-                          className="p-2 sm:p-1 text-slate-300 hover:text-slate-500"
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => onSelectPlayer(player.id)}
                           className="p-2 sm:p-1 text-slate-300 hover:text-blue-500"
-                          title="Ver ficha"
-                          aria-label="Ver ficha del jugador"
+                          title="Abrir esta negociación"
+                          aria-label="Abrir esta negociación"
                         >
                           <ChevronRight className="w-4 h-4" />
                         </button>
