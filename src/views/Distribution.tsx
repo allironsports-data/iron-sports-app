@@ -738,10 +738,15 @@ export function Distribution({
     return ids.size
   }, [opportunities])
 
-  function closePanel() { setSelectedEntryId(null); setSelectedClubId(null); setSelectedNeed(null); setPlayerPanelGestorFilter(''); setPanelExpanded(false) }
+  function closePanel() { setSelectedEntryId(null); setSelectedClubId(null); setSelectedNeed(null); setPlayerPanelGestorFilter(''); setPanelExpanded(false); setPanelClubSearch(''); setPanelStatusFilter(''); setPanelSort('status'); setPanelGroupBy('none') }
   const hasPanel = tab !== 'encargados' && (!!selectedEntry || !!selectedClub || !!selectedNeed)
   // Panel lateral ampliable (más ancho para editar cómodamente)
   const [panelExpanded, setPanelExpanded] = useState(false)
+  // Controles avanzados del panel de jugador (solo visibles al expandir)
+  const [panelClubSearch, setPanelClubSearch] = useState('')
+  const [panelStatusFilter, setPanelStatusFilter] = useState<ClubNegotiation['status'] | ''>('')
+  const [panelSort, setPanelSort] = useState<'status' | 'league' | 'alpha' | 'updated'>('status')
+  const [panelGroupBy, setPanelGroupBy] = useState<'none' | 'league' | 'tier'>('none')
   const PanelExpandBtn = () => (
     <button
       onClick={() => setPanelExpanded(e => !e)}
@@ -3002,12 +3007,90 @@ export function Distribution({
                   <div className="flex-1 overflow-y-auto px-4 py-3">
                     {(() => {
                       const panelGestores = Array.from(new Set(playerNegs.map(n => n.aisManager).filter(Boolean))) as string[]
-                      const visibleNegs = playerPanelGestorFilter
+                      // Paso 1 — filtro por gestor (disponible siempre)
+                      const gestorNegs = playerPanelGestorFilter
                         ? playerNegs.filter(n => n.aisManager === playerPanelGestorFilter)
                         : playerNegs
+                      // Resumen de estados (sobre el conjunto filtrado por gestor)
+                      const statusSummary = NEG_STATUSES
+                        .map(s => ({ s, count: gestorNegs.filter(n => n.status === s).length }))
+                        .filter(x => x.count > 0)
+                      // Paso 2 — filtros avanzados (solo con panel expandido)
+                      let visibleNegs = gestorNegs
+                      if (panelExpanded) {
+                        if (panelStatusFilter) visibleNegs = visibleNegs.filter(n => n.status === panelStatusFilter)
+                        const q = panelClubSearch.trim().toLowerCase()
+                        if (q) {
+                          visibleNegs = visibleNegs.filter(n => {
+                            const c = clubs.find(cl => cl.id === n.clubId)
+                            return c && (c.name.toLowerCase().includes(q) || (c.league ?? '').toLowerCase().includes(q))
+                          })
+                        }
+                        const clubOf = (n: ClubNegotiation) => clubs.find(cl => cl.id === n.clubId)
+                        visibleNegs = [...visibleNegs].sort((a, b) => {
+                          if (panelSort === 'status') return NEG_STATUSES.indexOf(a.status) - NEG_STATUSES.indexOf(b.status)
+                          if (panelSort === 'alpha') return (clubOf(a)?.name ?? '').localeCompare(clubOf(b)?.name ?? '')
+                          if (panelSort === 'league') return (clubOf(a)?.league ?? 'zzz').localeCompare(clubOf(b)?.league ?? 'zzz')
+                          if (panelSort === 'updated') return (b.updatedAt ?? '').localeCompare(a.updatedAt ?? '')
+                          return 0
+                        })
+                      }
+                      // Tarjeta de club reutilizable
+                      const renderNeg = (neg: ClubNegotiation) => {
+                        const club = clubs.find(c => c.id === neg.clubId)
+                        if (!club) return null
+                        const scfg = STATUS_CONFIG[neg.status]
+                        return (
+                          <div key={neg.id} className="bg-slate-50 rounded-lg p-3 flex items-start gap-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <span className="text-sm font-medium text-slate-700 truncate">{club.name}</span>
+                                {club.league && <span className="text-xs text-slate-400 truncate">{club.league}</span>}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className={`text-xs px-2 py-0.5 rounded-full ${scfg.color}`}>{scfg.label}</span>
+                                {neg.aisManager && <span className="text-xs font-mono text-slate-500">{neg.aisManager}</span>}
+                              </div>
+                              {neg.notes && <p className="text-xs text-slate-500 mt-1 line-clamp-2">{neg.notes}</p>}
+                            </div>
+                            <button
+                              onClick={() => setEditingNeg(neg)}
+                              aria-label="Editar negociación"
+                              className="ml-auto p-2 sm:p-1 text-slate-300 hover:text-slate-500 flex-shrink-0"
+                            >
+                              <Pencil className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )
+                      }
+                      const listClass = panelExpanded ? 'grid grid-cols-2 gap-2' : 'space-y-2'
+                      // Agrupación (solo con panel expandido)
+                      const groups: { key: string; label: string; negs: ClubNegotiation[] }[] = []
+                      if (panelExpanded && panelGroupBy !== 'none') {
+                        const map = new Map<string, ClubNegotiation[]>()
+                        for (const n of visibleNegs) {
+                          const c = clubs.find(cl => cl.id === n.clubId)
+                          const key = panelGroupBy === 'league'
+                            ? (c?.league ?? 'Sin liga')
+                            : getClubTier(c?.league, c?.country)
+                          if (!map.has(key)) map.set(key, [])
+                          map.get(key)!.push(n)
+                        }
+                        const keys = Array.from(map.keys()).sort((a, b) =>
+                          panelGroupBy === 'tier' ? a.localeCompare(b) : a.localeCompare(b))
+                        for (const k of keys) {
+                          groups.push({
+                            key: k,
+                            label: panelGroupBy === 'tier' ? `Nivel ${k}` : k,
+                            negs: map.get(k)!,
+                          })
+                        }
+                      }
                       return (<>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Clubes ({playerNegs.length})</span>
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        Clubes ({visibleNegs.length !== playerNegs.length ? `${visibleNegs.length}/${playerNegs.length}` : playerNegs.length})
+                      </span>
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => setBulkAssignPlayerId(selectedEntry.playerId)}
@@ -3032,40 +3115,102 @@ export function Distribution({
                         ))}
                       </div>
                     )}
-                    <div className="space-y-2">
-                      {visibleNegs.map(neg => {
-                        const club = clubs.find(c => c.id === neg.clubId)
-                        if (!club) return null
-                        const scfg = STATUS_CONFIG[neg.status]
-                        return (
-                          <div key={neg.id} className="bg-slate-50 rounded-lg p-3 flex items-start gap-3">
-                            <div>
-                              <div className="flex items-center gap-2 mb-0.5">
-                                <span className="text-sm font-medium text-slate-700">{club.name}</span>
-                                {club.league && <span className="text-xs text-slate-400">{club.league}</span>}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className={`text-xs px-2 py-0.5 rounded-full ${scfg.color}`}>{scfg.label}</span>
-                                {neg.aisManager && <span className="text-xs font-mono text-slate-500">{neg.aisManager}</span>}
-                              </div>
-                              {neg.notes && <p className="text-xs text-slate-500 mt-1">{neg.notes}</p>}
-                            </div>
+
+                    {/* ── Controles avanzados — solo al expandir el panel ── */}
+                    {panelExpanded && playerNegs.length > 0 && (
+                      <div className="mb-3 space-y-2">
+                        {/* Resumen de estados */}
+                        {statusSummary.length > 0 && (
+                          <div className="flex gap-1.5 flex-wrap">
                             <button
-                              onClick={() => setEditingNeg(neg)}
-                              aria-label="Editar negociación"
-                              className="ml-auto p-2 sm:p-1 text-slate-300 hover:text-slate-500 flex-shrink-0"
+                              onClick={() => setPanelStatusFilter('')}
+                              className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium border transition-colors ${!panelStatusFilter ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-400'}`}
                             >
-                              <Pencil className="w-3 h-3" />
+                              Todos <span className="font-bold">{gestorNegs.length}</span>
                             </button>
+                            {statusSummary.map(({ s, count }) => {
+                              const active = panelStatusFilter === s
+                              return (
+                                <button
+                                  key={s}
+                                  onClick={() => setPanelStatusFilter(active ? '' : s)}
+                                  className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium border transition-colors ${active ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-400'}`}
+                                >
+                                  <span className={`w-1.5 h-1.5 rounded-full ${STATUS_CONFIG[s].dot}`} />
+                                  {STATUS_CONFIG[s].label} <span className="font-bold">{count}</span>
+                                </button>
+                              )
+                            })}
                           </div>
-                        )
-                      })}
-                      {playerNegs.length === 0 && (
-                        <div className="text-center py-6 text-slate-400 text-xs">
-                          Aún no se ha ofrecido a ningún club
+                        )}
+                        {/* Buscar + ordenar + agrupar */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <div className="relative flex-1 min-w-[140px]">
+                            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                            <input
+                              value={panelClubSearch}
+                              onChange={e => setPanelClubSearch(e.target.value)}
+                              placeholder="Buscar club o liga…"
+                              className="w-full pl-8 pr-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300"
+                            />
+                          </div>
+                          <label className="inline-flex items-center gap-1 text-[11px] text-slate-500">
+                            <SlidersHorizontal className="w-3.5 h-3.5" />
+                            <select
+                              value={panelSort}
+                              onChange={e => setPanelSort(e.target.value as typeof panelSort)}
+                              className="text-xs border border-slate-200 rounded-lg py-1.5 pl-1.5 pr-6 bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+                            >
+                              <option value="status">Estado</option>
+                              <option value="league">Liga</option>
+                              <option value="alpha">A–Z</option>
+                              <option value="updated">Actualizado</option>
+                            </select>
+                          </label>
+                          <select
+                            value={panelGroupBy}
+                            onChange={e => setPanelGroupBy(e.target.value as typeof panelGroupBy)}
+                            className="text-xs border border-slate-200 rounded-lg py-1.5 pl-1.5 pr-6 bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+                            title="Agrupar"
+                          >
+                            <option value="none">Sin agrupar</option>
+                            <option value="league">Por liga</option>
+                            <option value="tier">Por nivel</option>
+                          </select>
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
+
+                    {panelExpanded && panelGroupBy !== 'none' && groups.length > 0 ? (
+                      <div className="space-y-4">
+                        {groups.map(g => (
+                          <div key={g.key}>
+                            <div className="flex items-center gap-2 mb-1.5">
+                              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">{g.label}</span>
+                              <span className="text-[11px] text-slate-400">{g.negs.length}</span>
+                              <div className="flex-1 h-px bg-slate-100" />
+                            </div>
+                            <div className={listClass}>
+                              {g.negs.map(renderNeg)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className={listClass}>
+                        {visibleNegs.map(renderNeg)}
+                      </div>
+                    )}
+                    {playerNegs.length === 0 && (
+                      <div className="text-center py-6 text-slate-400 text-xs">
+                        Aún no se ha ofrecido a ningún club
+                      </div>
+                    )}
+                    {playerNegs.length > 0 && visibleNegs.length === 0 && (
+                      <div className="text-center py-6 text-slate-400 text-xs">
+                        Ningún club coincide con el filtro
+                      </div>
+                    )}
                     </>)})()}
                   </div>
 
