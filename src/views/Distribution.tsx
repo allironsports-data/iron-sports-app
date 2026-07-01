@@ -1020,6 +1020,7 @@ export function Distribution({
                           if (!player) return null
                           const negCount = negotiations.filter(n => n.playerId === entry.playerId).length
                           const activeNegs = negotiations.filter(n => n.playerId === entry.playerId && !['descartado'].includes(n.status))
+                          const hasClosed = negotiations.some(n => n.playerId === entry.playerId && n.status === 'cerrado')
                           const topStatus = activeNegs.find(n => n.status === 'negociando')?.status
                             ?? activeNegs.find(n => n.status === 'interesado')?.status
                             ?? activeNegs.find(n => n.status === 'ofrecido')?.status
@@ -1029,8 +1030,10 @@ export function Distribution({
                             <div
                               key={entry.id}
                               onClick={() => { setSelectedEntryId(entry.id); setSelectedClubId(null) }}
-                              className={`bg-white rounded-lg border cursor-pointer hover:shadow-sm transition-all flex items-center gap-2.5 px-3 py-2 overflow-hidden relative ${
-                                selectedEntryId === entry.id ? 'border-blue-300 ring-1 ring-blue-200' : 'border-slate-200'
+                              className={`rounded-lg border cursor-pointer hover:shadow-sm transition-all flex items-center gap-2.5 px-3 py-2 overflow-hidden relative ${
+                                selectedEntryId === entry.id ? 'border-blue-300 ring-1 ring-blue-200 bg-white'
+                                  : hasClosed ? 'bg-emerald-50 border-emerald-300'
+                                  : 'bg-white border-slate-200'
                               }`}
                             >
                               {/* Negotiation status bar */}
