@@ -4730,7 +4730,20 @@ function EditNegotiationModal({ neg, clubs, players, currentProfile, onClose, on
 
   async function handleSave() {
     setSaving(true)
-    try { await onSave({ status, aisManager: aisManager || undefined, notes: notes || undefined }) }
+    try {
+      const data: Partial<ClubNegotiation> = { status, aisManager: aisManager || undefined, notes: notes || undefined }
+      // No perder la nota de seguimiento en curso: se guarda junto con el resto.
+      const pending = updateText.trim()
+      if (pending) {
+        data.updates = [...(neg.updates ?? []), {
+          id: crypto.randomUUID(),
+          text: pending,
+          date: new Date().toISOString(),
+          author: currentProfile.avatar,
+        }]
+      }
+      await onSave(data)
+    }
     finally { setSaving(false) }
   }
 
@@ -4824,9 +4837,16 @@ function EditNegotiationModal({ neg, clubs, players, currentProfile, onClose, on
             onClick={handleAddUpdate}
             disabled={!updateText.trim() || savingUpdate}
             className="mt-1.5 w-full py-1.5 text-xs bg-slate-100 text-slate-600 rounded-lg disabled:opacity-40 hover:bg-slate-200 transition-colors font-medium"
+            title="Guarda esta nota ahora y deja el diálogo abierto para añadir más"
           >
-            {savingUpdate ? 'Guardando…' : 'Guardar nota'}
+            {savingUpdate ? 'Guardando…' : 'Añadir otra nota'}
           </button>
+          {updateText.trim() && (
+            <p className="mt-1.5 text-[11px] text-amber-600 flex items-center gap-1">
+              <AlertCircle className="w-3 h-3 flex-shrink-0" />
+              Esta nota se guardará al pulsar «Guardar».
+            </p>
+          )}
         </div>
 
         <div className="flex gap-2 pt-1">
