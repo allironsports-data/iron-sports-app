@@ -4072,6 +4072,7 @@ function DistributionDashboard({
   const [statusFilter, setStatusFilter] = useState<ClubNegotiation['status'] | ''>('')
   const [alertCat, setAlertCat] = useState<'all' | 'sin_ofertas' | 'sin_seguimiento' | 'contrato'>('all')
   const [showAllAlerts, setShowAllAlerts] = useState(false)
+  const [activityAuthor, setActivityAuthor] = useState('')
 
   const playerById = useMemo(() => new Map(players.map(p => [p.id, p])), [players])
   const clubById = useMemo(() => new Map(clubs.map(c => [c.id, c])), [clubs])
@@ -4121,9 +4122,9 @@ function DistributionDashboard({
   negs.filter(n => (n.status === 'interesado' || n.status === 'negociando') && !placedPlayerIds.has(n.playerId)).forEach(n => {
     const la = lastActivity(n)
     const days = la ? Math.floor((now - new Date(la).getTime()) / DAY) : 999
-    if (days >= 10) {
+    if (days >= 7) {
       const club = clubById.get(n.clubId)
-      alerts.push({ key: 'S-' + n.id, playerId: n.playerId, cat: 'sin_seguimiento', reason: `${STATUS_CONFIG[n.status].label} sin seguimiento`, tone: days >= 21 ? 'red' : 'amber', days, sub: `${club?.name ?? ''} · hace ${days}d`, neg: n })
+      alerts.push({ key: 'S-' + n.id, playerId: n.playerId, cat: 'sin_seguimiento', reason: `${STATUS_CONFIG[n.status].label} sin seguimiento`, tone: days >= 10 ? 'red' : 'amber', days, sub: `${club?.name ?? ''} · hace ${days}d`, neg: n })
     }
   })
   seasonEntries.filter(e => !placedPlayerIds.has(e.playerId)).forEach(e => {
@@ -4153,7 +4154,19 @@ function DistributionDashboard({
   const activity: Act[] = []
   negs.forEach(n => (n.updates ?? []).forEach(u => activity.push({ negId: n.id, playerId: n.playerId, clubId: n.clubId, status: n.status, date: u.date, text: u.text, author: u.author, neg: n })))
   activity.sort((a, b) => b.date.localeCompare(a.date))
-  const filteredActivity = (statusFilter ? activity.filter(a => a.status === statusFilter) : activity).slice(0, 15)
+  const activityAuthors = Array.from(new Set(activity.map(a => a.author).filter(Boolean))) as string[]
+  const filteredActivity = (activityAuthor ? activity.filter(a => a.author === activityAuthor) : activity).slice(0, 20)
+
+  // Negociaciones del estado seleccionado (al pulsar el embudo o un KPI)
+  const statusNegs = useMemo(() => {
+    if (!statusFilter) return [] as ClubNegotiation[]
+    return negs.filter(n => n.status === statusFilter)
+      .map(n => ({ n, la: lastActivity(n) }))
+      .sort((a, b) => (b.la ?? '').localeCompare(a.la ?? ''))
+      .map(x => x.n)
+  }, [negs, statusFilter])
+  const [showAllStatus, setShowAllStatus] = useState(false)
+  const shownStatusNegs = showAllStatus ? statusNegs : statusNegs.slice(0, 20)
 
   const kpis: { k: string; label: string; value: number; tone: string; icon: React.ReactNode; onClick?: () => void }[] = [
     { k: 'act', label: 'Negoc. activas', value: activeCount, tone: 'bg-blue-50 text-blue-700', icon: <Activity className="w-4 h-4" />, onClick: onGoToStatus },
@@ -4212,7 +4225,7 @@ function DistributionDashboard({
               )
             })}
           </div>
-          <p className="text-[11px] text-slate-400 mt-2">Pulsa un estado para filtrar la actividad reciente.</p>
+          <p className="text-[11px] text-slate-400 mt-2">Pulsa un estado para ver sus negociaciones.</p>
         </div>
 
         {/* Carga por gestor */}
@@ -4292,15 +4305,69 @@ function DistributionDashboard({
         </>)}
       </div>
 
+      {/* Negociaciones del estado seleccionado (embudo / KPI) */}
+      {statusFilter && (
+        <div className="bg-white border border-slate-200 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <TrendingUp className="w-4 h-4 text-slate-400" />
+            <h3 className="text-sm font-semibold text-slate-800">Negociaciones</h3>
+            <span className={`text-[11px] px-2 py-0.5 rounded-full ${STATUS_CONFIG[statusFilter].color}`}>{STATUS_CONFIG[statusFilter].label}</span>
+            <span className="text-[11px] text-slate-400">{statusNegs.length}</span>
+            <button onClick={() => { setStatusFilter(''); setShowAllStatus(false) }} className="ml-auto text-[11px] text-blue-600 hover:underline">Quitar filtro</button>
+          </div>
+          {statusNegs.length === 0 ? (
+            <p className="text-xs text-slate-400 py-4 text-center">Ninguna negociación en este estado.</p>
+          ) : (<>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {shownStatusNegs.map(n => {
+                const p = playerById.get(n.playerId); const c = clubById.get(n.clubId)
+                const la = lastActivity(n)
+                const days = la ? Math.floor((now - new Date(la).getTime()) / DAY) : null
+                return (
+                  <button key={n.id} onClick={() => onOpenNeg(n)}
+                    className="text-left flex items-center gap-2.5 rounded-lg border border-slate-100 hover:border-slate-300 hover:shadow-sm p-2.5 transition-all">
+                    <Avatar name={p?.name ?? '?'} photo={p?.photo} size="sm" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-medium text-slate-700 truncate">{p?.name ?? 'Jugador'}</span>
+                        <span className="text-slate-300">→</span>
+                        <span className="text-xs text-slate-500 truncate">{c?.name ?? 'Club'}</span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {n.aisManager && <span className="text-[10px] font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{n.aisManager}</span>}
+                        <span className="text-[11px] text-slate-400">{days === null ? 'sin actividad' : days === 0 ? 'hoy' : `hace ${days}d`}</span>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
+                  </button>
+                )
+              })}
+            </div>
+            {statusNegs.length > 20 && (
+              <button onClick={() => setShowAllStatus(v => !v)}
+                className="mt-3 w-full py-2 text-xs font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+                {showAllStatus ? 'Ver menos' : `Ver todas (${statusNegs.length})`}
+              </button>
+            )}
+          </>)}
+        </div>
+      )}
+
       {/* Actividad reciente */}
       <div className="bg-white border border-slate-200 rounded-xl p-4">
         <div className="flex items-center gap-2 mb-3">
           <Activity className="w-4 h-4 text-slate-400" />
           <h3 className="text-sm font-semibold text-slate-800">Actividad reciente</h3>
-          {statusFilter && <span className={`text-[11px] px-2 py-0.5 rounded-full ${STATUS_CONFIG[statusFilter].color}`}>{STATUS_CONFIG[statusFilter].label}</span>}
+          {activityAuthors.length > 0 && (
+            <select value={activityAuthor} onChange={e => setActivityAuthor(e.target.value)}
+              className="ml-auto text-xs border border-slate-200 rounded-lg py-1.5 pl-2 pr-7 bg-white focus:outline-none focus:ring-2 focus:ring-blue-100">
+              <option value="">Todas las personas</option>
+              {activityAuthors.map(au => <option key={au} value={au}>{profileName(au)}</option>)}
+            </select>
+          )}
         </div>
         {filteredActivity.length === 0 ? (
-          <p className="text-xs text-slate-400 py-4 text-center">{statusFilter ? 'Sin actividad para este estado.' : 'Aún no hay notas de seguimiento.'}</p>
+          <p className="text-xs text-slate-400 py-4 text-center">{activityAuthor ? 'Sin actividad de esta persona.' : 'Aún no hay notas de seguimiento.'}</p>
         ) : (
           <div className="divide-y divide-slate-50">
             {filteredActivity.map((a, i) => {
