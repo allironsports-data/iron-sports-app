@@ -4,7 +4,7 @@ import {
   ChevronRight, X, Check, Pencil, Trash2, LogOut,
   TrendingUp, AlertCircle, CircleDot, Flag, ChevronDown,
   Eye, List, LayoutGrid, SlidersHorizontal, Maximize2, Minimize2,
-  LayoutDashboard, Activity, Clock,
+  LayoutDashboard, Activity,
 } from 'lucide-react'
 import logoImg from '../assets/logo.jpeg'
 import type { Player, Club, ClubNeed, DistributionEntry, ClubNegotiation, ClubNegotiationUpdate } from '../types'
@@ -4070,6 +4070,8 @@ function DistributionDashboard({
   onGoToStatus: () => void
 }) {
   const [statusFilter, setStatusFilter] = useState<ClubNegotiation['status'] | ''>('')
+  const [alertCat, setAlertCat] = useState<'all' | 'sin_ofertas' | 'sin_seguimiento' | 'contrato'>('all')
+  const [showAllAlerts, setShowAllAlerts] = useState(false)
 
   const playerById = useMemo(() => new Map(players.map(p => [p.id, p])), [players])
   const clubById = useMemo(() => new Map(clubs.map(c => [c.id, c])), [clubs])
@@ -4107,32 +4109,44 @@ function DistributionDashboard({
 
   // Necesitan atención
   const now = Date.now(); const DAY = 86_400_000
-  type Alert = { key: string; playerId: string; reason: string; tone: 'red' | 'amber'; sub?: string; neg?: ClubNegotiation }
+  type AlertCat = 'sin_ofertas' | 'sin_seguimiento' | 'contrato'
+  type Alert = { key: string; playerId: string; cat: AlertCat; reason: string; tone: 'red' | 'amber'; days: number; sub?: string; neg?: ClubNegotiation }
+  // Un jugador con cualquier negociación CERRADA ya está colocado → no necesita atención.
+  const placedPlayerIds = useMemo(() => new Set(negs.filter(n => n.status === 'cerrado').map(n => n.playerId)), [negs])
   const alerts: Alert[] = []
-  seasonEntries.filter(e => e.priority === 'A').forEach(e => {
+  seasonEntries.filter(e => e.priority === 'A' && !placedPlayerIds.has(e.playerId)).forEach(e => {
     const hasActive = negs.some(n => n.playerId === e.playerId && isActive(n.status))
-    if (!hasActive) alerts.push({ key: 'A-' + e.id, playerId: e.playerId, reason: 'Prioridad A sin ofertas activas', tone: 'red' })
+    if (!hasActive) alerts.push({ key: 'A-' + e.id, playerId: e.playerId, cat: 'sin_ofertas', reason: 'Prioridad A sin ofertas activas', tone: 'red', days: 9999 })
   })
-  negs.filter(n => n.status === 'interesado' || n.status === 'negociando').forEach(n => {
+  negs.filter(n => (n.status === 'interesado' || n.status === 'negociando') && !placedPlayerIds.has(n.playerId)).forEach(n => {
     const la = lastActivity(n)
     const days = la ? Math.floor((now - new Date(la).getTime()) / DAY) : 999
     if (days >= 10) {
       const club = clubById.get(n.clubId)
-      alerts.push({ key: 'S-' + n.id, playerId: n.playerId, reason: `${STATUS_CONFIG[n.status].label} sin seguimiento`, tone: days >= 21 ? 'red' : 'amber', sub: `${club?.name ?? ''} · hace ${days}d`, neg: n })
+      alerts.push({ key: 'S-' + n.id, playerId: n.playerId, cat: 'sin_seguimiento', reason: `${STATUS_CONFIG[n.status].label} sin seguimiento`, tone: days >= 21 ? 'red' : 'amber', days, sub: `${club?.name ?? ''} · hace ${days}d`, neg: n })
     }
   })
-  seasonEntries.forEach(e => {
+  seasonEntries.filter(e => !placedPlayerIds.has(e.playerId)).forEach(e => {
     const p = playerById.get(e.playerId); if (!p) return
     const ends: { label: string; date: string }[] = []
     if (p.representationContract?.end) ends.push({ label: 'representación', date: p.representationContract.end })
     if (p.clubContract?.endDate) ends.push({ label: 'club', date: p.clubContract.endDate })
     ends.forEach(en => {
       const days = Math.floor((new Date(en.date).getTime() - now) / DAY)
-      if (days > 0 && days < 183) alerts.push({ key: 'C-' + e.id + en.label, playerId: e.playerId, reason: `Contrato ${en.label} < 6 meses`, tone: days < 90 ? 'red' : 'amber', sub: `vence ${fmtMonth(en.date)}` })
+      if (days > 0 && days < 183) alerts.push({ key: 'C-' + e.id + en.label, playerId: e.playerId, cat: 'contrato', reason: `Contrato ${en.label} < 6 meses`, tone: days < 90 ? 'red' : 'amber', days, sub: `vence ${fmtMonth(en.date)}` })
     })
   })
   const alertOrder = { red: 0, amber: 1 }
-  alerts.sort((a, b) => alertOrder[a.tone] - alertOrder[b.tone])
+  // Rojo primero; dentro del mismo tono, lo más urgente (menos días) arriba.
+  alerts.sort((a, b) => alertOrder[a.tone] - alertOrder[b.tone] || a.days - b.days)
+  const alertCounts = {
+    all: alerts.length,
+    sin_ofertas: alerts.filter(a => a.cat === 'sin_ofertas').length,
+    sin_seguimiento: alerts.filter(a => a.cat === 'sin_seguimiento').length,
+    contrato: alerts.filter(a => a.cat === 'contrato').length,
+  }
+  const visibleAlerts = alertCat === 'all' ? alerts : alerts.filter(a => a.cat === alertCat)
+  const shownAlerts = showAllAlerts ? visibleAlerts : visibleAlerts.slice(0, 10)
 
   // Actividad reciente (a partir de notas de seguimiento)
   type Act = { negId: string; playerId: string; clubId: string; status: ClubNegotiation['status']; date: string; text?: string; author?: string; neg: ClubNegotiation }
@@ -4141,11 +4155,11 @@ function DistributionDashboard({
   activity.sort((a, b) => b.date.localeCompare(a.date))
   const filteredActivity = (statusFilter ? activity.filter(a => a.status === statusFilter) : activity).slice(0, 15)
 
-  const kpis: { k: string; label: string; value: number; tone: string; onClick?: () => void }[] = [
-    { k: 'act', label: 'Negoc. activas', value: activeCount, tone: 'bg-blue-50 text-blue-700', onClick: onGoToStatus },
-    { k: 'clo', label: 'Cerradas', value: closedCount, tone: 'bg-emerald-50 text-emerald-700', onClick: () => setStatusFilter('cerrado') },
-    { k: 'dist', label: 'En distribución', value: seasonEntries.length, tone: 'bg-slate-100 text-slate-700' },
-    { k: 'att', label: 'Necesitan atención', value: alerts.length, tone: 'bg-red-50 text-red-600' },
+  const kpis: { k: string; label: string; value: number; tone: string; icon: React.ReactNode; onClick?: () => void }[] = [
+    { k: 'act', label: 'Negoc. activas', value: activeCount, tone: 'bg-blue-50 text-blue-700', icon: <Activity className="w-4 h-4" />, onClick: onGoToStatus },
+    { k: 'clo', label: 'Cerradas', value: closedCount, tone: 'bg-emerald-50 text-emerald-700', icon: <Check className="w-4 h-4" />, onClick: () => setStatusFilter('cerrado') },
+    { k: 'dist', label: 'En distribución', value: seasonEntries.length, tone: 'bg-slate-100 text-slate-700', icon: <Users className="w-4 h-4" /> },
+    { k: 'att', label: 'Necesitan atención', value: alerts.length, tone: 'bg-red-50 text-red-600', icon: <AlertCircle className="w-4 h-4" />, onClick: () => { setAlertCat('all'); document.getElementById('dash-atencion')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) } },
   ]
 
   if (seasonEntries.length === 0) {
@@ -4163,7 +4177,10 @@ function DistributionDashboard({
         {kpis.map(k => (
           <button key={k.k} onClick={k.onClick} disabled={!k.onClick}
             className={`text-left rounded-xl p-3 transition-all ${k.tone} ${k.onClick ? 'hover:brightness-95 cursor-pointer' : 'cursor-default'}`}>
-            <div className="text-2xl font-bold leading-none">{k.value}</div>
+            <div className="flex items-center justify-between">
+              <div className="text-2xl font-bold leading-none">{k.value}</div>
+              <span className="opacity-50">{k.icon}</span>
+            </div>
             <div className="text-[11px] font-medium opacity-70 uppercase tracking-wide mt-1">{k.label}</div>
           </button>
         ))}
@@ -4222,7 +4239,7 @@ function DistributionDashboard({
       </div>
 
       {/* Necesitan atención */}
-      <div className="bg-white border border-slate-200 rounded-xl p-4">
+      <div id="dash-atencion" className="bg-white border border-slate-200 rounded-xl p-4 scroll-mt-24">
         <div className="flex items-center gap-2 mb-3">
           <AlertCircle className="w-4 h-4 text-red-500" />
           <h3 className="text-sm font-semibold text-slate-800">Necesitan atención</h3>
@@ -4230,15 +4247,33 @@ function DistributionDashboard({
         </div>
         {alerts.length === 0 ? (
           <p className="text-xs text-slate-400 py-4 text-center">Todo al día. Nada pendiente de revisar.</p>
-        ) : (
+        ) : (<>
+          {/* Chips de categoría */}
+          <div className="flex gap-1.5 flex-wrap mb-3">
+            {([
+              ['all', 'Todas', alertCounts.all],
+              ['sin_ofertas', 'Sin ofertas', alertCounts.sin_ofertas],
+              ['sin_seguimiento', 'Sin seguimiento', alertCounts.sin_seguimiento],
+              ['contrato', 'Contrato', alertCounts.contrato],
+            ] as const).map(([cat, label, n]) => {
+              const active = alertCat === cat
+              return (
+                <button key={cat} onClick={() => { setAlertCat(cat); setShowAllAlerts(false) }}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium border transition-colors ${active ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-400'}`}>
+                  {label} <span className="font-bold">{n}</span>
+                </button>
+              )
+            })}
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {alerts.slice(0, 12).map(a => {
+            {shownAlerts.map(a => {
               const p = playerById.get(a.playerId)
               return (
                 <button key={a.key} onClick={() => a.neg ? onOpenNeg(a.neg) : onOpenPlayer(a.playerId)}
-                  className="text-left flex items-start gap-2.5 rounded-lg border border-slate-100 hover:border-slate-300 p-2.5 transition-colors">
-                  <span className={`w-1.5 self-stretch rounded-full flex-shrink-0 ${a.tone === 'red' ? 'bg-red-400' : 'bg-amber-400'}`} />
-                  <div className="min-w-0 flex-1">
+                  className="text-left flex items-stretch gap-2.5 rounded-lg border border-slate-100 hover:border-slate-300 hover:shadow-sm p-2.5 transition-all">
+                  <span className={`w-1 self-stretch rounded-full flex-shrink-0 ${a.tone === 'red' ? 'bg-red-400' : 'bg-amber-400'}`} />
+                  <Avatar name={p?.name ?? '?'} photo={p?.photo} size="sm" />
+                  <div className="min-w-0 flex-1 self-center">
                     <div className="text-sm font-medium text-slate-700 truncate">{p?.name ?? 'Jugador'}</div>
                     <div className="text-[11px] text-slate-500">{a.reason}</div>
                     {a.sub && <div className="text-[11px] text-slate-400 truncate">{a.sub}</div>}
@@ -4248,7 +4283,13 @@ function DistributionDashboard({
               )
             })}
           </div>
-        )}
+          {visibleAlerts.length > 10 && (
+            <button onClick={() => setShowAllAlerts(v => !v)}
+              className="mt-3 w-full py-2 text-xs font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+              {showAllAlerts ? 'Ver menos' : `Ver todas (${visibleAlerts.length})`}
+            </button>
+          )}
+        </>)}
       </div>
 
       {/* Actividad reciente */}
@@ -4267,7 +4308,7 @@ function DistributionDashboard({
               return (
                 <button key={a.negId + i} onClick={() => onOpenNeg(a.neg)}
                   className="w-full text-left flex items-start gap-3 py-2.5 hover:bg-slate-50 -mx-2 px-2 rounded-lg transition-colors">
-                  <Clock className="w-3.5 h-3.5 text-slate-300 mt-0.5 flex-shrink-0" />
+                  <Avatar name={p?.name ?? '?'} photo={p?.photo} size="sm" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-sm font-medium text-slate-700">{p?.name ?? 'Jugador'}</span>
