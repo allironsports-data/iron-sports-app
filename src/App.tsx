@@ -266,6 +266,35 @@ export default function App() {
     return () => { supabase.removeChannel(channel) }
   }, [user, profile, addNotification])
 
+  // Supabase realtime: sincronización de datos entre usuarios.
+  // Cualquier cambio (insert/update/delete) en las tablas clave hace un refetch
+  // con debounce, así todos ven los cambios sin recargar la página.
+  useEffect(() => {
+    if (!user) return
+    const timers: Record<string, ReturnType<typeof setTimeout>> = {}
+    const debouncedRefetch = (table: string, fn: () => void) => {
+      clearTimeout(timers[table])
+      timers[table] = setTimeout(fn, 800)
+    }
+    const channel = supabase.channel('data-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'club_negotiations' }, () =>
+        debouncedRefetch('club_negotiations', () => db.fetchNegotiations().then((d) => setNegotiations(d as ClubNegotiation[])).catch(() => {})))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'distribution_entries' }, () =>
+        debouncedRefetch('distribution_entries', () => db.fetchDistributionEntries().then((d) => setDistEntries(d as DistributionEntry[])).catch(() => {})))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'clubs' }, () =>
+        debouncedRefetch('clubs', () => db.fetchClubs().then((d) => setClubs(d as Club[])).catch(() => {})))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'players' }, () =>
+        debouncedRefetch('players', () => db.fetchPlayers().then((d) => setPlayers(d)).catch(() => {})))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () =>
+        debouncedRefetch('tasks', () => db.fetchTasks().then((d) => setTasks(d)).catch(() => {})))
+      .subscribe()
+    return () => {
+      Object.values(timers).forEach(clearTimeout)
+      supabase.removeChannel(channel)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id])
+
   // Listen for hash changes so navigating to #contactos opens the panel
   useEffect(() => {
     const onHashChange = () => setShowContacts(window.location.hash === '#contactos')

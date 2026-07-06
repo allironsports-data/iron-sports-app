@@ -71,7 +71,14 @@ export function PlayerDetail({
   onUpdateEntry, onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation,
   onSelectClub,
 }: Props) {
-  const [activeTab, setActiveTab] = useState<TabId>("resumen");
+  // Pestaña persistida: recargar la página no te saca de donde estabas
+  const [activeTab, setActiveTabState] = useState<TabId>(
+    () => (sessionStorage.getItem('nav_player_tab') as TabId) ?? "resumen"
+  );
+  const setActiveTab = (t: TabId) => {
+    sessionStorage.setItem('nav_player_tab', t);
+    setActiveTabState(t);
+  };
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEditPlayer, setShowEditPlayer] = useState(false);
   const { toasts, showToast, dismissToast } = useToast();
