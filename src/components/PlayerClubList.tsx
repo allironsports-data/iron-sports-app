@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Search, Edit3, ExternalLink, Trash2, Users, X, CheckSquare } from 'lucide-react'
+import { Plus, Search, Edit3, ExternalLink, Trash2, Users, X, CheckSquare, ChevronDown, Check } from 'lucide-react'
 import type { Club, ClubNegotiation } from '../types'
 import type { Profile } from '../contexts/AuthContext'
 import type { ToastVariant } from '../hooks/useToast'
@@ -35,10 +35,16 @@ const STALE_DAYS = 7
 /** Días desde la última actualización; null si no hay fecha */
 const daysSince = (iso?: string) => iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000) : null
 
-/** Negociación activa sin tocar en más de STALE_DAYS días */
+/** Fecha de la última actividad: cambios O notas de seguimiento, lo más reciente */
+const lastActivity = (n: ClubNegotiation): string | undefined => {
+  const dates = [n.updatedAt ?? n.createdAt, ...(n.updates ?? []).map(u => u.date)].filter(Boolean) as string[]
+  return dates.sort().pop()
+}
+
+/** Negociación activa sin actividad en más de STALE_DAYS días */
 const isStale = (n: ClubNegotiation) => {
   if (!ACTIVE_STATUSES.includes(n.status)) return false
-  const d = daysSince(n.updatedAt ?? n.createdAt)
+  const d = daysSince(lastActivity(n))
   return d !== null && d > STALE_DAYS
 }
 
@@ -290,6 +296,8 @@ export function PlayerClubList({
   const [statusFilter, setStatusFilter] = useState<ClubNegotiation['status'] | ''>('')
   const [gestorFilter, setGestorFilter] = useState('')
   const [staleOnly, setStaleOnly] = useState(false)
+  const [leagueFilter, setLeagueFilter] = useState<string[]>([])
+  const [leagueOpen, setLeagueOpen] = useState(false)
   const [clubSearch, setClubSearch] = useState('')
   const [sortBy, setSortBy] = useState<'estado' | 'nombre' | 'liga' | 'actualizado'>('estado')
   const [groupBy, setGroupBy] = useState<'none' | 'estado' | 'liga' | 'nivel'>('none')
@@ -369,11 +377,19 @@ export function PlayerClubList({
 
   const staleCount = withClub.filter(x => isStale(x.neg)).length
 
+  // Ligas presentes en la lista, con contador
+  const leagueCounts = new Map<string, number>()
+  withClub.forEach(x => { const l = x.club.league ?? 'Sin liga'; leagueCounts.set(l, (leagueCounts.get(l) ?? 0) + 1) })
+  const allLeagues = Array.from(leagueCounts.entries())
+    .map(([league, count]) => ({ league, count }))
+    .sort((a, b) => a.league === 'Sin liga' ? 1 : b.league === 'Sin liga' ? -1 : a.league.localeCompare(b.league))
+
   const q = clubSearch.trim().toLowerCase()
   const visible = withClub
     .filter(x => !statusFilter || x.neg.status === statusFilter)
     .filter(x => !gestorFilter || parseGestores(x.neg.aisManager).includes(gestorFilter))
     .filter(x => !staleOnly || isStale(x.neg))
+    .filter(x => leagueFilter.length === 0 || leagueFilter.includes(x.club.league ?? 'Sin liga'))
     .filter(x => !q || x.club.name.toLowerCase().includes(q) || (x.club.league ?? '').toLowerCase().includes(q) || (x.neg.notes ?? '').toLowerCase().includes(q))
     .sort((a, b) => {
       if (sortBy === 'nombre') return a.club.name.localeCompare(b.club.name)
@@ -450,15 +466,15 @@ export function PlayerClubList({
             {club.league && <span className="text-[11px] text-slate-400 flex-shrink-0 hidden sm:inline">· {club.league}</span>}
             {neg.updates && neg.updates.length > 0 && <span className="text-[11px] text-slate-400 flex-shrink-0">📝 {neg.updates.length}</span>}
             {isStale(neg) && (
-              <span title={`Sin actualizar en ${daysSince(neg.updatedAt ?? neg.createdAt)} días`} className="text-[11px] font-medium text-amber-600 flex-shrink-0">
-                ⏰ {daysSince(neg.updatedAt ?? neg.createdAt)}d
+              <span title={`Sin actividad en ${daysSince(lastActivity(neg))} días`} className="text-[11px] font-medium text-amber-600 flex-shrink-0">
+                ⏰ {daysSince(lastActivity(neg))}d
               </span>
             )}
           </div>
           {neg.notes && <p className="text-[11px] text-slate-400 truncate mt-0.5">{neg.notes}</p>}
-          {expanded && (neg.updatedAt || lastUpdate) && (
+          {expanded && (lastActivity(neg) || lastUpdate) && (
             <p className="text-[11px] text-slate-400 truncate mt-0.5">
-              {neg.updatedAt && <span className="text-slate-300">Actualizado {fmtShort(neg.updatedAt)}</span>}
+              {lastActivity(neg) && <span className="text-slate-300">Actualizado {fmtShort(lastActivity(neg))}</span>}
               {lastUpdate && <span> · 📝 {lastUpdate.text}</span>}
             </p>
           )}
@@ -574,6 +590,45 @@ export function PlayerClubList({
                 placeholder="Buscar club, liga o nota…"
                 className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
               />
+            </div>
+            {/* Filtro de ligas (multiselección) */}
+            <div className="relative">
+              <button
+                onClick={() => setLeagueOpen(o => !o)}
+                className={`flex items-center gap-1 px-2.5 py-1.5 border rounded-lg text-xs font-medium transition-colors ${leagueFilter.length > 0 ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'}`}
+              >
+                Ligas{leagueFilter.length > 0 ? ` (${leagueFilter.length})` : ''}
+                <ChevronDown className={`w-3 h-3 transition-transform ${leagueOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {leagueOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setLeagueOpen(false)} />
+                  <div className="absolute right-0 z-50 mt-1 w-60 bg-white border border-slate-200 rounded-xl shadow-xl max-h-64 overflow-y-auto p-1">
+                    <button
+                      onClick={() => setLeagueFilter([])}
+                      className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium ${leagueFilter.length === 0 ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                    >
+                      Todas las ligas
+                    </button>
+                    {allLeagues.map(({ league, count }) => {
+                      const sel = leagueFilter.includes(league)
+                      return (
+                        <button
+                          key={league}
+                          onClick={() => setLeagueFilter(prev => sel ? prev.filter(l => l !== league) : [...prev, league])}
+                          className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center gap-2 hover:bg-slate-50"
+                        >
+                          <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0 ${sel ? 'bg-primary border-primary' : 'border-slate-300'}`}>
+                            {sel && <Check className="w-2.5 h-2.5 text-white" />}
+                          </span>
+                          <span className="flex-1 truncate text-slate-700">{league}</span>
+                          <span className="text-slate-400 font-mono">{count}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
             </div>
             <select value={sortBy} onChange={e => setSortBy(e.target.value as typeof sortBy)} aria-label="Ordenar" className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white text-slate-600">
               <option value="estado">Orden: estado</option>
