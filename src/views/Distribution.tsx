@@ -49,6 +49,15 @@ const PRIORITY_CONFIG = {
 function genId() { return 'tmp_' + Math.random().toString(36).slice(2) }
 function now() { return new Date().toISOString() }
 
+/** Posición de dropdown fijo que nunca se sale de la pantalla.
+ *  Si no cabe por abajo, sube el dropdown lo necesario; siempre con scroll interno. */
+function clampDropPos(top: number, itemCount: number): { top: number; maxHeight: number } {
+  const estimated = itemCount * 36 + 70
+  const maxHeight = Math.min(estimated, Math.floor(window.innerHeight * 0.6), window.innerHeight - 16)
+  const clampedTop = Math.max(8, Math.min(top, window.innerHeight - maxHeight - 8))
+  return { top: clampedTop, maxHeight }
+}
+
 
 /** Short month+year: "jun 2025". Empty string if no date. */
 function fmtMonth(dateStr?: string): string {
@@ -3442,10 +3451,11 @@ export function Distribution({
       {openManagerDropId && managerDropPos && (() => {
         const entry = entries.find(e => e.id === openManagerDropId)
         if (!entry) return null
+        const pos = clampDropPos(managerDropPos.top, profiles.length + (entry.aisManager ? 1 : 0))
         return (
           <div
-            className="fixed z-[200] bg-white border border-slate-200 rounded-xl shadow-xl py-1 min-w-[160px] max-w-[calc(100vw-2rem)] max-h-[50vh] overflow-y-auto"
-            style={{ top: managerDropPos.top, right: managerDropPos.right }}
+            className="fixed z-[200] bg-white border border-slate-200 rounded-xl shadow-xl py-1 min-w-[160px] max-w-[calc(100vw-2rem)] overflow-y-auto"
+            style={{ top: pos.top, right: managerDropPos.right, maxHeight: pos.maxHeight }}
             onClick={e => e.stopPropagation()}
           >
             {profiles.map(p => (
@@ -3496,10 +3506,11 @@ export function Distribution({
         const club = clubs.find(c => c.id === openClubManagerId)
         if (!club) return null
         const closeDrop = () => { setOpenClubManagerId(null); setClubManagerDropPos(null) }
+        const pos = clampDropPos(clubManagerDropPos.top, profiles.length + (club.aisManager ? 1 : 0) + 1)
         return (
           <div
-            className="fixed z-[200] bg-white border border-slate-200 rounded-xl shadow-xl py-1 min-w-[180px] max-w-[calc(100vw-2rem)] max-h-[50vh] overflow-y-auto"
-            style={{ top: clubManagerDropPos.top, right: clubManagerDropPos.right }}
+            className="fixed z-[200] bg-white border border-slate-200 rounded-xl shadow-xl py-1 min-w-[180px] max-w-[calc(100vw-2rem)] overflow-y-auto"
+            style={{ top: pos.top, right: clubManagerDropPos.right, maxHeight: pos.maxHeight }}
             onClick={e => e.stopPropagation()}
           >
             <p className="px-3 pt-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
