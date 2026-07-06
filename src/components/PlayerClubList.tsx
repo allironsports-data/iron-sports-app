@@ -28,9 +28,23 @@ export const NEG_STATUS_ORDER: Record<ClubNegotiation['status'], number> = {
 /** "LT / AV / PP" → ['LT','AV','PP']; normaliza espacios y mayúsculas para evitar dupes */
 export const parseGestores = (s?: string) => (s ?? '').split(/[/,+&]/).map(t => t.trim().toUpperCase()).filter(Boolean)
 
+/** Estados con negociación viva (cuentan para "estancada") */
+const ACTIVE_STATUSES: ClubNegotiation['status'][] = ['pendiente', 'ofrecido', 'interesado', 'negociando']
+const STALE_DAYS = 7
+
+/** Días desde la última actualización; null si no hay fecha */
+const daysSince = (iso?: string) => iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000) : null
+
+/** Negociación activa sin tocar en más de STALE_DAYS días */
+const isStale = (n: ClubNegotiation) => {
+  if (!ACTIVE_STATUSES.includes(n.status)) return false
+  const d = daysSince(n.updatedAt ?? n.createdAt)
+  return d !== null && d > STALE_DAYS
+}
+
 // ── Detalle de una negociación (contenido compartido overlay / lado) ──
 
-function NegDetail({ neg, club, profiles, currentProfile, onUpdateNegotiation, onSelectClub, onRequestDelete, onClose, showToast, variant }: {
+export function NegDetail({ neg, club, profiles, currentProfile, onUpdateNegotiation, onSelectClub, onRequestDelete, onClose, showToast, variant, heading, subheading }: {
   neg: ClubNegotiation
   club: Club
   profiles: Profile[]
@@ -41,6 +55,9 @@ function NegDetail({ neg, club, profiles, currentProfile, onUpdateNegotiation, o
   onClose: () => void
   showToast: (message: string, variant?: ToastVariant) => void
   variant: 'overlay' | 'side'
+  /** Cabecera alternativa (p. ej. nombre del jugador cuando se abre desde la ficha de un club) */
+  heading?: string
+  subheading?: string
 }) {
   const [notesDraft, setNotesDraft] = useState(neg.notes ?? '')
   const [savingNotes, setSavingNotes] = useState(false)
@@ -101,9 +118,9 @@ function NegDetail({ neg, club, profiles, currentProfile, onUpdateNegotiation, o
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 flex-shrink-0">
         <div className="flex-1 min-w-0">
-          <div className="font-semibold text-slate-800 text-sm truncate">{club.name}</div>
+          <div className="font-semibold text-slate-800 text-sm truncate">{heading ?? club.name}</div>
           <div className="flex items-center gap-1.5">
-            {club.league && <span className="text-xs text-slate-400">{club.league}</span>}
+            {(subheading ?? club.league) && <span className="text-xs text-slate-400">{subheading ?? club.league}</span>}
             <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded-full ${scfg.color}`}>{scfg.label}</span>
           </div>
         </div>
@@ -272,6 +289,7 @@ export function PlayerClubList({
 }) {
   const [statusFilter, setStatusFilter] = useState<ClubNegotiation['status'] | ''>('')
   const [gestorFilter, setGestorFilter] = useState('')
+  const [staleOnly, setStaleOnly] = useState(false)
   const [clubSearch, setClubSearch] = useState('')
   const [sortBy, setSortBy] = useState<'estado' | 'nombre' | 'liga' | 'actualizado'>('estado')
   const [groupBy, setGroupBy] = useState<'none' | 'estado' | 'liga' | 'nivel'>('none')
@@ -349,10 +367,13 @@ export function PlayerClubList({
   withClub.forEach(({ neg }) => { statusCounts[neg.status] = (statusCounts[neg.status] ?? 0) + 1 })
   const gestores = Array.from(new Set(withClub.flatMap(x => parseGestores(x.neg.aisManager)))).sort()
 
+  const staleCount = withClub.filter(x => isStale(x.neg)).length
+
   const q = clubSearch.trim().toLowerCase()
   const visible = withClub
     .filter(x => !statusFilter || x.neg.status === statusFilter)
     .filter(x => !gestorFilter || parseGestores(x.neg.aisManager).includes(gestorFilter))
+    .filter(x => !staleOnly || isStale(x.neg))
     .filter(x => !q || x.club.name.toLowerCase().includes(q) || (x.club.league ?? '').toLowerCase().includes(q) || (x.neg.notes ?? '').toLowerCase().includes(q))
     .sort((a, b) => {
       if (sortBy === 'nombre') return a.club.name.localeCompare(b.club.name)
@@ -428,6 +449,11 @@ export function PlayerClubList({
             <span className={`text-sm font-medium truncate ${neg.status === 'descartado' ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{club.name}</span>
             {club.league && <span className="text-[11px] text-slate-400 flex-shrink-0 hidden sm:inline">· {club.league}</span>}
             {neg.updates && neg.updates.length > 0 && <span className="text-[11px] text-slate-400 flex-shrink-0">📝 {neg.updates.length}</span>}
+            {isStale(neg) && (
+              <span title={`Sin actualizar en ${daysSince(neg.updatedAt ?? neg.createdAt)} días`} className="text-[11px] font-medium text-amber-600 flex-shrink-0">
+                ⏰ {daysSince(neg.updatedAt ?? neg.createdAt)}d
+              </span>
+            )}
           </div>
           {neg.notes && <p className="text-[11px] text-slate-400 truncate mt-0.5">{neg.notes}</p>}
           {expanded && (neg.updatedAt || lastUpdate) && (
@@ -517,6 +543,15 @@ export function PlayerClubList({
                 </button>
               )
             })}
+            {staleCount > 0 && (
+              <button
+                onClick={() => setStaleOnly(v => !v)}
+                title={`Activas sin actualizar en más de ${STALE_DAYS} días`}
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${staleOnly ? 'bg-amber-100 text-amber-700 ring-1 ring-amber-400' : 'bg-slate-100 text-amber-600 hover:bg-amber-50'}`}
+              >
+                ⏰ Estancadas <span className="font-mono opacity-70">{staleCount}</span>
+              </button>
+            )}
           </div>
 
           {/* Chips de gestor */}
@@ -639,15 +674,15 @@ export function PlayerClubList({
   )
 
   return (
-    <div className={detailMode === 'side' ? 'flex gap-4 items-start' : undefined}>
-      <div className={detailMode === 'side' ? 'flex-1 min-w-0' : undefined}>
+    <div className={detailMode === 'side' ? 'flex flex-col sm:flex-row gap-4 items-stretch sm:items-start' : undefined}>
+      <div className={detailMode === 'side' ? 'flex-1 min-w-0 order-2 sm:order-1' : undefined}>
         {listContent}
       </div>
 
       {detailMode === 'side' && (
-        <div className="w-80 flex-shrink-0 sticky top-3">
+        <div className="w-full sm:w-80 flex-shrink-0 sm:sticky sm:top-3 order-1 sm:order-2">
           {detailNode ?? (
-            <div className="border-2 border-dashed border-slate-200 rounded-xl py-16 px-6 text-center">
+            <div className="hidden sm:block border-2 border-dashed border-slate-200 rounded-xl py-16 px-6 text-center">
               <p className="text-xs text-slate-400">Haz clic en un club para ver y editar la oportunidad: estado, encargado, información y notas de seguimiento.</p>
             </div>
           )}

@@ -740,7 +740,7 @@ export function Dashboard({
                   <TaskTableView
                     tasks={[...myTasks, ...myTasksCompleted]}
                     players={players} profiles={profiles}
-                    onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
+                    onOpenDetail={setDetailTask} onCycleStatus={cycleTaskStatus} detailTaskId={detailTask?.id}
                     sortCol={taskSortCol} sortDir={taskSortDir}
                     onSort={(col) => { if (col === taskSortCol) setTaskSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setTaskSortCol(col); setTaskSortDir('asc'); } }}
                   />
@@ -1113,7 +1113,7 @@ export function Dashboard({
                     <TaskTableView
                       tasks={teamAllTasks}
                       players={players} profiles={profiles}
-                      onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
+                      onOpenDetail={setDetailTask} onCycleStatus={cycleTaskStatus} detailTaskId={detailTask?.id}
                       sortCol={taskSortCol} sortDir={taskSortDir}
                       onSort={(col) => { if (col === taskSortCol) setTaskSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setTaskSortCol(col); setTaskSortDir('asc'); } }}
                     />
@@ -2308,11 +2308,12 @@ function CompactTaskList({ tasks, completedTasks, players, profiles, onCycleStat
 /* ── TaskTableView: sortable table view ── */
 type TaskSortCol = 'title' | 'player' | 'priority' | 'dueDate' | 'status';
 
-function TaskTableView({ tasks, players, profiles, onOpenDetail, detailTaskId, sortCol, sortDir, onSort }: {
+function TaskTableView({ tasks, players, profiles, onOpenDetail, onCycleStatus, detailTaskId, sortCol, sortDir, onSort }: {
   tasks: Task[];
   players: Player[];
   profiles: Profile[];
   onOpenDetail: (t: Task) => void;
+  onCycleStatus?: (t: Task) => void;
   detailTaskId?: string;
   sortCol: TaskSortCol;
   sortDir: 'asc' | 'desc';
@@ -2367,6 +2368,7 @@ function TaskTableView({ tasks, players, profiles, onOpenDetail, detailTaskId, s
       <table className="w-full text-xs border-collapse">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50/80">
+            {onCycleStatus && <th style={{ width: '32px' }} />}
             <th className={thCls} style={{ width: '34%' }} onClick={() => onSort('title')}>Tarea<SortIndicator col="title" /></th>
             <th className={thCls} style={{ width: '16%' }} onClick={() => onSort('player')}>Jugador<SortIndicator col="player" /></th>
             <th className={thCls} style={{ width: '13%' }}>Responsable</th>
@@ -2377,7 +2379,7 @@ function TaskTableView({ tasks, players, profiles, onOpenDetail, detailTaskId, s
         </thead>
         <tbody>
           {sorted.length === 0 && (
-            <tr><td colSpan={6} className="py-8 text-center text-sm text-slate-400">Sin tareas</td></tr>
+            <tr><td colSpan={onCycleStatus ? 7 : 6} className="py-8 text-center text-sm text-slate-400">Sin tareas</td></tr>
           )}
           {sorted.map((t, i) => {
             const player   = players.find(p => p.id === t.playerId);
@@ -2390,6 +2392,20 @@ function TaskTableView({ tasks, players, profiles, onOpenDetail, detailTaskId, s
                 onClick={() => onOpenDetail(t)}
                 className={`border-b border-slate-100 cursor-pointer hover:bg-slate-50 transition-colors ${isSelected ? 'bg-blue-50' : i % 2 === 1 ? 'bg-slate-50/40' : ''}`}
               >
+                {onCycleStatus && (
+                  <td className="pl-3 py-2">
+                    <button
+                      onClick={e => { e.stopPropagation(); onCycleStatus(t); }}
+                      aria-label="Cambiar estado de la tarea"
+                      title="Pendiente → En progreso → Completada"
+                      className="w-3.5 h-3.5 rounded-full border-2 transition-colors block"
+                      style={{
+                        background: t.status === 'completada' ? '#10b981' : t.status === 'en_progreso' ? '#3b82f6' : 'transparent',
+                        borderColor: t.status === 'completada' ? '#10b981' : t.status === 'en_progreso' ? '#3b82f6' : '#94a3b8',
+                      }}
+                    />
+                  </td>
+                )}
                 <td className="px-3 py-2">
                   <p className={`font-medium truncate ${t.status === 'completada' ? 'line-through text-slate-400' : 'text-slate-800'}`}>{t.title}</p>
                 </td>
@@ -2737,6 +2753,7 @@ function AddGeneralTaskModal({ profiles, players, currentProfileId, onClose, onA
   const [label, setLabel] = useState<TaskLabel | "">("");
   const [dueDate, setDueDate] = useState("");
   const [adminOnly, setAdminOnly] = useState(false);
+  const [showMore, setShowMore] = useState(false);
 
   useEscapeKey(onClose);
 
@@ -2778,11 +2795,6 @@ function AddGeneralTaskModal({ profiles, players, currentProfileId, onClose, onA
           </div>
           <F label="Título" value={title} onChange={setTitle} required />
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Descripción</label>
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)}
-              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none h-20" />
-          </div>
-          <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Asignado a</label>
             <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}
               className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
@@ -2790,24 +2802,43 @@ function AddGeneralTaskModal({ profiles, players, currentProfileId, onClose, onA
               {profiles.map((m) => <option key={m.id} value={m.id}>{m.avatar} {m.name}</option>)}
             </select>
           </div>
+
+          {/* Más opciones — plegado por defecto */}
+          <button
+            type="button"
+            onClick={() => setShowMore(v => !v)}
+            className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 font-medium"
+          >
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showMore ? 'rotate-180' : ''}`} />
+            Más opciones {!showMore && '(descripción, prioridad, tipo, fecha…)'}
+          </button>
+
+          {showMore && (<>
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Prioridad</label>
-            <select value={priority} onChange={(e) => setPriority(e.target.value as "alta" | "media" | "baja")}
-              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
-              <option value="baja">Baja</option>
-              <option value="media">Media</option>
-              <option value="alta">Alta</option>
-            </select>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Descripción</label>
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)}
+              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none h-20" />
           </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Tipo</label>
-            <select value={label} onChange={(e) => setLabel(e.target.value as TaskLabel | "")}
-              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
-              <option value="">— Sin tipo —</option>
-              {(['General','Scouting','Distribución','Negociación','Reunión/Comida','Administrativa','Seguimiento','Informe','Marketing','Comunicación'] as const).map(l => (
-                <option key={l} value={l}>{l}</option>
-              ))}
-            </select>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Prioridad</label>
+              <select value={priority} onChange={(e) => setPriority(e.target.value as "alta" | "media" | "baja")}
+                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
+                <option value="baja">Baja</option>
+                <option value="media">Media</option>
+                <option value="alta">Alta</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Tipo</label>
+              <select value={label} onChange={(e) => setLabel(e.target.value as TaskLabel | "")}
+                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
+                <option value="">— Sin tipo —</option>
+                {(['General','Scouting','Distribución','Negociación','Reunión/Comida','Administrativa','Seguimiento','Informe','Marketing','Comunicación'] as const).map(l => (
+                  <option key={l} value={l}>{l}</option>
+                ))}
+              </select>
+            </div>
           </div>
           <F label="Fecha de vencimiento" value={dueDate} onChange={setDueDate} type="date" />
           {/* Admin-only toggle */}
@@ -2825,6 +2856,7 @@ function AddGeneralTaskModal({ profiles, players, currentProfileId, onClose, onA
               </span>
             )}
           </label>
+          </>)}
           <div className="pt-2">
             <button type="submit" disabled={!title}
               className="w-full rounded-md text-white text-sm font-medium py-2.5 disabled:opacity-40 transition-colors bg-primary hover:bg-primary/90">

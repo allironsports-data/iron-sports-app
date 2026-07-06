@@ -18,7 +18,7 @@ import { isValidName, isValidDate } from '../lib/validate'
 import { POSITIONS, POSITION_CODES, positionLabel, positionEs, needMatchesPlayer, normalizePosition } from '../lib/positions'
 import { TIER_CONFIG, CONFEDERATION_LABELS, getClubTier, getClubConfederation } from '../lib/clubTiers'
 import type { LeagueTier, Confederation } from '../lib/clubTiers'
-import { PlayerClubList } from '../components/PlayerClubList'
+import { PlayerClubList, NEG_STATUSES as SHARED_NEG_STATUSES, NEG_STATUS_CONFIG } from '../components/PlayerClubList'
 import { BulkAssignModal } from '../components/BulkAssignModal'
 
 /** Spinner pequeño para botones de guardado */
@@ -31,16 +31,9 @@ function BtnSpinner() {
 const CURRENT_SEASON = '2025-26'
 
 const CONDITIONS = ['Libre', 'Traspaso', 'Cesión', 'Cesión/Traspaso', 'Traspaso (porcentaje)', 'Cesión con opción']
-const NEG_STATUSES: ClubNegotiation['status'][] = ['pendiente', 'ofrecido', 'interesado', 'negociando', 'cerrado', 'descartado']
-
-const STATUS_CONFIG: Record<ClubNegotiation['status'], { label: string; color: string; dot: string }> = {
-  pendiente:   { label: 'Pendiente',   color: 'bg-purple-100 text-purple-700', dot: 'bg-purple-400' },
-  ofrecido:    { label: 'Ofrecido',    color: 'bg-slate-100 text-slate-600',   dot: 'bg-slate-400' },
-  interesado:  { label: 'Interesado',  color: 'bg-blue-100 text-blue-700',     dot: 'bg-blue-500' },
-  negociando:  { label: 'Negociando',  color: 'bg-amber-100 text-amber-700',   dot: 'bg-amber-500' },
-  cerrado:     { label: 'Cerrado',     color: 'bg-green-100 text-green-700',   dot: 'bg-green-500' },
-  descartado:  { label: 'Descartado',  color: 'bg-red-100 text-red-600',       dot: 'bg-red-400' },
-}
+// Estados de negociación: config compartida (ver PlayerClubList)
+const NEG_STATUSES = SHARED_NEG_STATUSES
+const STATUS_CONFIG = NEG_STATUS_CONFIG
 
 const PRIORITY_CONFIG = {
   A: { label: 'A', bg: 'bg-red-100',    text: 'text-red-700',    border: 'border-red-200',    ring: 'ring-red-400' },
@@ -4071,7 +4064,7 @@ function AddClubModal({ onClose, onSave, leagueOptions, profiles, currentProfile
     try {
       await onSave({
         name: name.trim(),
-        league: league || undefined,
+        league: (league || leagueSearch).trim() || undefined,
         country: country || '',
         contactPerson: contactPerson || undefined,
         aisManager: aisManager || undefined,
@@ -4103,7 +4096,7 @@ function AddClubModal({ onClose, onSave, leagueOptions, profiles, currentProfile
             placeholder="Buscar liga…"
             className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
           />
-          {leagueOpen && filteredLeagues.length > 0 && (
+          {leagueOpen && (filteredLeagues.length > 0 || leagueSearch.trim() !== '') && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setLeagueOpen(false)} />
               <div className="absolute z-50 mt-1 w-full max-w-[calc(100vw-2rem)] bg-white border border-slate-200 rounded-xl shadow-xl max-h-[50vh] overflow-y-auto">
@@ -4118,6 +4111,15 @@ function AddClubModal({ onClose, onSave, leagueOptions, profiles, currentProfile
                     {l.country && <span className="text-xs text-slate-400 flex-shrink-0">{l.country}</span>}
                   </button>
                 ))}
+                {leagueSearch.trim() !== '' && !leagueOptions.some(l => l.league.toLowerCase() === leagueSearch.trim().toLowerCase()) && (
+                  <button
+                    type="button"
+                    onClick={() => { setLeague(leagueSearch.trim()); setLeagueOpen(false) }}
+                    className="w-full text-left px-3 py-2 hover:bg-blue-50 text-sm text-blue-600 font-medium border-t border-slate-100"
+                  >
+                    + Crear liga «{leagueSearch.trim()}»
+                  </button>
+                )}
               </div>
             </>
           )}

@@ -15,6 +15,7 @@ import { useEscapeKey } from '../hooks/useEscapeKey'
 import { isValidName } from '../lib/validate'
 import { ManagerSelect } from '../components/ManagerSelect'
 import { POSITIONS, positionLabel, needMatchesPlayer } from '../lib/positions'
+import { NEG_STATUSES as SHARED_NEG_STATUSES, NEG_STATUS_CONFIG, NegDetail } from '../components/PlayerClubList'
 
 /** Spinner pequeño para botones de guardado */
 function BtnSpinner() {
@@ -23,18 +24,9 @@ function BtnSpinner() {
 
 // ── constants ─────────────────────────────────────────────────
 
-const NEG_STATUSES: ClubNegotiation['status'][] = [
-  'pendiente', 'ofrecido', 'interesado', 'negociando', 'cerrado', 'descartado',
-]
-
-const STATUS_CONFIG: Record<ClubNegotiation['status'], { label: string; color: string; dot: string }> = {
-  pendiente:   { label: 'Pendiente',   color: 'bg-purple-100 text-purple-700',  dot: 'bg-purple-400' },
-  ofrecido:    { label: 'Ofrecido',    color: 'bg-slate-100 text-slate-600',    dot: 'bg-slate-400' },
-  interesado:  { label: 'Interesado',  color: 'bg-blue-100 text-blue-700',      dot: 'bg-blue-500' },
-  negociando:  { label: 'Negociando',  color: 'bg-amber-100 text-amber-700',    dot: 'bg-amber-500' },
-  cerrado:     { label: 'Cerrado',     color: 'bg-green-100 text-green-700',    dot: 'bg-green-500' },
-  descartado:  { label: 'Descartado',  color: 'bg-red-100 text-red-600',        dot: 'bg-red-400' },
-}
+// Estados de negociación: config compartida (ver PlayerClubList)
+const NEG_STATUSES = SHARED_NEG_STATUSES
+const STATUS_CONFIG = NEG_STATUS_CONFIG
 
 const PRIORITY_CONFIG = {
   A: { bg: 'bg-red-100',    text: 'text-red-700',    label: 'A' },
@@ -135,6 +127,7 @@ export function ClubDetail({
   const [showAddPlayer, setShowAddPlayer] = useState(false)
   const [editingInfo, setEditingInfo] = useState(false)
   const [editingNeg, setEditingNeg] = useState<ClubNegotiation | null>(null)
+  const [negToDelete, setNegToDelete] = useState<ClubNegotiation | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showAddNeed, setShowAddNeed] = useState(false)
   const [editingNeed, setEditingNeed] = useState<{ index: number; need: ClubNeed } | null>(null)
@@ -299,8 +292,8 @@ export function ClubDetail({
                 const entry = entries.find(e => e.playerId === neg.playerId)
                 const scfg = STATUS_CONFIG[neg.status]
                 return (
-                  <div key={neg.id} className="bg-white rounded-xl border border-slate-200 p-3 flex items-center gap-3">
-                    <button onClick={() => onSelectPlayer(player.id)} title="Ver ficha del jugador" aria-label="Ver ficha del jugador" className="flex-shrink-0">
+                  <div key={neg.id} onClick={() => setEditingNeg(neg)} className="bg-white rounded-xl border border-slate-200 p-3 flex items-center gap-3 cursor-pointer hover:border-slate-300 transition-colors">
+                    <button onClick={e => { e.stopPropagation(); onSelectPlayer(player.id) }} title="Ver ficha del jugador" aria-label="Ver ficha del jugador" className="flex-shrink-0">
                       <Avatar name={player.name} photo={player.photo} size="md" />
                     </button>
                     <div className="flex-1 min-w-0">
@@ -326,6 +319,7 @@ export function ClubDetail({
                       <select
                         value={neg.status}
                         disabled={updatingNegId === neg.id}
+                        onClick={e => e.stopPropagation()}
                         onChange={e => handleStatusChange(neg, e.target.value as ClubNegotiation['status'])}
                         aria-label="Cambiar estado de la negociación"
                         className={`text-xs px-2 py-1 rounded-full border-0 font-medium cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-300 disabled:opacity-50 disabled:cursor-wait ${scfg.color}`}
@@ -336,7 +330,7 @@ export function ClubDetail({
                       </select>
                       <div className="flex items-center gap-1 sm:gap-2">
                         <button
-                          onClick={() => setEditingNeg(neg)}
+                          onClick={e => { e.stopPropagation(); setEditingNeg(neg) }}
                           className="p-2 sm:p-1 text-slate-300 hover:text-blue-500"
                           title="Abrir esta negociación"
                           aria-label="Abrir esta negociación"
@@ -685,31 +679,48 @@ export function ClubDetail({
         />
       )}
 
-      {editingNeg && (
-        <EditNegModal
-          neg={editingNeg}
-          profiles={profiles}
-          onClose={() => setEditingNeg(null)}
-          onSave={async (updates) => {
-            try {
-              await onUpdateNegotiation({ ...editingNeg, ...updates })
-              setEditingNeg(null)
-              showToast('Cambios guardados')
-            } catch {
-              showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
-            }
-          }}
-          onDelete={async () => {
-            try {
-              await onDeleteNegotiation(editingNeg.id)
-              setEditingNeg(null)
-              showToast('Negociación eliminada')
-            } catch {
-              showToast('No se pudo eliminar. Inténtalo de nuevo.', 'error')
-            }
-          }}
-        />
-      )}
+      {editingNeg && (() => {
+        const negPlayer = players.find(p => p.id === editingNeg.playerId)
+        // La negociación puede cambiar por fuera; usamos siempre la versión fresca
+        const freshNeg = negotiations.find(n => n.id === editingNeg.id) ?? editingNeg
+        return (
+          <NegDetail
+            key={freshNeg.id}
+            neg={freshNeg}
+            club={club}
+            profiles={profiles}
+            currentProfile={currentProfile}
+            onUpdateNegotiation={onUpdateNegotiation}
+            onRequestDelete={() => setNegToDelete(freshNeg)}
+            onClose={() => setEditingNeg(null)}
+            showToast={showToast}
+            variant="overlay"
+            heading={negPlayer?.name ?? club.name}
+            subheading={negPlayer ? `${negPlayer.positions[0]} · ${club.name}` : club.league}
+          />
+        )
+      })()}
+
+      {/* Confirmación de borrado de negociación */}
+      <ConfirmModal
+        open={!!negToDelete}
+        title="¿Eliminar esta negociación?"
+        message="Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        variant="danger"
+        onConfirm={async () => {
+          if (!negToDelete) return
+          try {
+            await onDeleteNegotiation(negToDelete.id)
+            setEditingNeg(null)
+            setNegToDelete(null)
+            showToast('Negociación eliminada')
+          } catch {
+            showToast('No se pudo eliminar. Inténtalo de nuevo.', 'error')
+          }
+        }}
+        onCancel={() => setNegToDelete(null)}
+      />
 
       {/* Confirmación de borrado de necesidad */}
       <ConfirmModal
@@ -871,82 +882,6 @@ function AddPlayerToClubModal({ players, entries, existingPlayerIds, clubId, def
             </>
           )}
         </div>
-      </div>
-    </div>
-  )
-}
-
-// ── EDIT NEG MODAL ────────────────────────────────────────────
-
-function EditNegModal({ neg, profiles, onClose, onSave, onDelete }: {
-  neg: ClubNegotiation
-  profiles: Profile[]
-  onClose: () => void
-  onSave: (data: Partial<ClubNegotiation>) => Promise<void>
-  onDelete: () => Promise<void>
-}) {
-  const [status, setStatus] = useState(neg.status)
-  const [aisManager, setAisManager] = useState(neg.aisManager ?? '')
-  const [notes, setNotes] = useState(neg.notes ?? '')
-  const [saving, setSaving] = useState(false)
-  const [confirmingDelete, setConfirmingDelete] = useState(false)
-
-  useEscapeKey(onClose, !confirmingDelete)
-
-  return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
-      <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white">
-          <h2 className="font-semibold text-slate-800 text-sm">Editar negociación</h2>
-          <button onClick={onClose} aria-label="Cerrar" className="p-2 sm:p-1 rounded hover:bg-slate-100"><X className="w-4 h-4 text-slate-400" /></button>
-        </div>
-        <div className="p-4 space-y-3 safe-area-bottom">
-          <div>
-            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1.5">Estado</label>
-            <div className="flex flex-wrap gap-1.5">
-              {NEG_STATUSES.map(s => {
-                const cfg = STATUS_CONFIG[s]
-                return (
-                  <button key={s} onClick={() => setStatus(s)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${status === s ? cfg.color + ' ring-2 ring-offset-1 ring-current' : 'bg-slate-100 text-slate-500'}`}>
-                    {cfg.label}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-          <ManagerSelect value={aisManager || undefined} onChange={(v) => setAisManager(v ?? '')} profiles={profiles} />
-          <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Notas"
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none" />
-          <div className="flex gap-2">
-            <button onClick={() => setConfirmingDelete(true)}
-              aria-label="Eliminar negociación"
-              className="px-3 py-2 text-sm border border-red-200 text-red-500 rounded-lg hover:bg-red-50">
-              <Trash2 className="w-4 h-4" />
-            </button>
-            <button onClick={onClose} className="flex-1 py-2 text-sm border border-slate-200 rounded-lg text-slate-500">Cancelar</button>
-            <button
-              onClick={async () => { if (saving) return; setSaving(true); try { await onSave({ status, aisManager: aisManager || undefined, notes: notes || undefined }) } finally { setSaving(false) } }}
-              disabled={saving}
-              className="flex-1 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-60 flex items-center justify-center gap-1"
-            >
-              {saving ? <><BtnSpinner /> Guardando…</> : <><Check className="w-4 h-4" /> Guardar</>}
-            </button>
-          </div>
-        </div>
-      </div>
-      <div onClick={e => e.stopPropagation()}>
-        <ConfirmModal
-          open={confirmingDelete}
-          title="¿Eliminar esta negociación?"
-          message="Esta acción no se puede deshacer."
-          confirmLabel="Eliminar"
-          onConfirm={async () => {
-            await onDelete()
-            setConfirmingDelete(false)
-          }}
-          onCancel={() => setConfirmingDelete(false)}
-        />
       </div>
     </div>
   )

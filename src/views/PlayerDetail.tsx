@@ -686,6 +686,7 @@ function AddTaskModal({ profiles, tasks, playerId, player, isAdmin, onClose, onA
   const [dueDate, setDueDate] = useState("");
   const [depends, setDepends] = useState("");
   const [adminOnly, setAdminOnly] = useState(false);
+  const [showMore, setShowMore] = useState(false);
 
   useEscapeKey(onClose);
 
@@ -709,19 +710,32 @@ function AddTaskModal({ profiles, tasks, playerId, player, isAdmin, onClose, onA
         }} className="p-4 space-y-3 pb-8">
           <TF label="Título" value={title} onChange={setTitle} required />
           <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Responsable</label>
+            <select value={assignee} onChange={(e) => setAssignee(e.target.value)} required
+              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
+              <option value="">—</option>
+              {profiles.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+          </div>
+
+          {/* Más opciones — plegado por defecto */}
+          <button
+            type="button"
+            onClick={() => setShowMore(v => !v)}
+            className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 font-medium"
+          >
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showMore ? 'rotate-180' : ''}`} />
+            Más opciones {!showMore && '(descripción, prioridad, fecha…)'}
+          </button>
+
+          {showMore && (<>
+          <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Descripción</label>
             <textarea value={desc} onChange={(e) => setDesc(e.target.value)} rows={2}
               className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 resize-none" />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Responsable</label>
-              <select value={assignee} onChange={(e) => setAssignee(e.target.value)} required
-                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
-                <option value="">—</option>
-                {profiles.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </select>
-            </div>
+            <TF label="Fecha límite (opcional)" value={dueDate} onChange={setDueDate} type="date" />
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Prioridad</label>
               <select value={priority} onChange={(e) => setPriority(e.target.value as any)}
@@ -753,16 +767,13 @@ function AddTaskModal({ profiles, tasks, playerId, player, isAdmin, onClose, onA
               ))}
             </select>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <TF label="Fecha límite (opcional)" value={dueDate} onChange={setDueDate} type="date" />
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Depende de</label>
-              <select value={depends} onChange={(e) => setDepends(e.target.value)}
-                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
-                <option value="">Ninguna</option>
-                {tasks.filter((t) => t.status !== "completada").map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
-              </select>
-            </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Depende de</label>
+            <select value={depends} onChange={(e) => setDepends(e.target.value)}
+              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
+              <option value="">Ninguna</option>
+              {tasks.filter((t) => t.status !== "completada").map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
+            </select>
           </div>
           {isAdmin && (
             <label className="flex items-center gap-2.5 cursor-pointer select-none py-1">
@@ -780,6 +791,7 @@ function AddTaskModal({ profiles, tasks, playerId, player, isAdmin, onClose, onA
               )}
             </label>
           )}
+          </>)}
           <div className="pt-2">
             <button type="submit" disabled={!title || !assignee}
               className="w-full rounded-md text-white text-sm font-medium py-2 disabled:opacity-40 transition-colors bg-primary hover:bg-primary/90">
