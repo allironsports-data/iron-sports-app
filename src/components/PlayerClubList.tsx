@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { Plus, Search, Edit3, ExternalLink, Trash2, Users } from 'lucide-react'
+import { Plus, Search, Edit3, ExternalLink, Trash2, Users, X, CheckSquare } from 'lucide-react'
 import type { Club, ClubNegotiation } from '../types'
 import type { Profile } from '../contexts/AuthContext'
 import type { ToastVariant } from '../hooks/useToast'
 import { ManagerSelect } from './ManagerSelect'
 import { ConfirmModal } from './ConfirmModal'
+import { useEscapeKey } from '../hooks/useEscapeKey'
 import { getClubTier } from '../lib/clubTiers'
 
 // ── Config compartida de estados de negociación ────────────────
@@ -27,39 +28,270 @@ export const NEG_STATUS_ORDER: Record<ClubNegotiation['status'], number> = {
 /** "LT / AV / PP" → ['LT','AV','PP']; normaliza espacios y mayúsculas para evitar dupes */
 export const parseGestores = (s?: string) => (s ?? '').split(/[/,+&]/).map(t => t.trim().toUpperCase()).filter(Boolean)
 
+// ── Detalle de una negociación (contenido compartido overlay / lado) ──
+
+function NegDetail({ neg, club, profiles, currentProfile, onUpdateNegotiation, onSelectClub, onRequestDelete, onClose, showToast, variant }: {
+  neg: ClubNegotiation
+  club: Club
+  profiles: Profile[]
+  currentProfile: Profile
+  onUpdateNegotiation?: (n: ClubNegotiation) => Promise<void>
+  onSelectClub?: (id: string) => void
+  onRequestDelete?: () => void
+  onClose: () => void
+  showToast: (message: string, variant?: ToastVariant) => void
+  variant: 'overlay' | 'side'
+}) {
+  const [notesDraft, setNotesDraft] = useState(neg.notes ?? '')
+  const [savingNotes, setSavingNotes] = useState(false)
+  const [updateText, setUpdateText] = useState('')
+  const [savingUpdate, setSavingUpdate] = useState(false)
+
+  const scfg = NEG_STATUS_CONFIG[neg.status]
+  const sortedUpdates = [...(neg.updates ?? [])].sort((a, b) => b.date.localeCompare(a.date))
+
+  async function changeStatus(s: ClubNegotiation['status']) {
+    if (!onUpdateNegotiation) return
+    try {
+      await onUpdateNegotiation({ ...neg, status: s })
+    } catch {
+      showToast('No se pudo cambiar el estado', 'error')
+    }
+  }
+
+  async function changeManager(v: string | undefined) {
+    if (!onUpdateNegotiation) return
+    try {
+      await onUpdateNegotiation({ ...neg, aisManager: v ?? '' })
+    } catch {
+      showToast('No se pudo cambiar el encargado', 'error')
+    }
+  }
+
+  async function saveNotes() {
+    if (!onUpdateNegotiation) return
+    setSavingNotes(true)
+    try {
+      await onUpdateNegotiation({ ...neg, notes: notesDraft.trim() || undefined })
+      showToast('Información guardada')
+    } catch {
+      showToast('No se pudo guardar la información', 'error')
+    } finally { setSavingNotes(false) }
+  }
+
+  async function addUpdate() {
+    if (!updateText.trim() || !onUpdateNegotiation) return
+    setSavingUpdate(true)
+    try {
+      const newUpdate = {
+        id: crypto.randomUUID(),
+        text: updateText.trim(),
+        date: new Date().toISOString(),
+        author: currentProfile.avatar,
+      }
+      await onUpdateNegotiation({ ...neg, updates: [...(neg.updates ?? []), newUpdate] })
+      setUpdateText('')
+    } catch {
+      showToast('No se pudo guardar la nota', 'error')
+    } finally { setSavingUpdate(false) }
+  }
+
+  const body = (
+    <>
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 flex-shrink-0">
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold text-slate-800 text-sm truncate">{club.name}</div>
+          <div className="flex items-center gap-1.5">
+            {club.league && <span className="text-xs text-slate-400">{club.league}</span>}
+            <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded-full ${scfg.color}`}>{scfg.label}</span>
+          </div>
+        </div>
+        <button onClick={onClose} aria-label="Cerrar detalle" className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Estado + encargado + info */}
+      <div className="px-4 py-3 border-b border-slate-100 flex-shrink-0 space-y-3">
+        <div>
+          <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Estado</div>
+          <div className="flex flex-wrap gap-1">
+            {NEG_STATUSES.map(s => {
+              const cfg = NEG_STATUS_CONFIG[s]
+              return (
+                <button
+                  key={s}
+                  onClick={() => changeStatus(s)}
+                  className={`px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${neg.status === s ? cfg.color + ' ring-1 ring-current' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                >
+                  {cfg.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        <div>
+          <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Encargado</div>
+          <ManagerSelect value={neg.aisManager || undefined} onChange={changeManager} profiles={profiles} />
+        </div>
+
+        <div>
+          <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Información</div>
+          <textarea
+            value={notesDraft}
+            onChange={e => setNotesDraft(e.target.value)}
+            placeholder="Condiciones, contexto, contacto…"
+            rows={2}
+            className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-blue-200"
+          />
+          {notesDraft !== (neg.notes ?? '') && (
+            <button
+              onClick={saveNotes}
+              disabled={savingNotes}
+              className="mt-1 w-full py-1.5 text-xs bg-primary text-white rounded-lg disabled:opacity-50 hover:bg-primary/90 transition-colors inline-flex items-center justify-center gap-2"
+            >
+              {savingNotes && <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
+              {savingNotes ? 'Guardando…' : 'Guardar información'}
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3 text-xs text-slate-500">
+          <span className="text-slate-400">{new Date(neg.createdAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+          {onSelectClub && (
+            <button
+              onClick={() => { onClose(); onSelectClub(club.id) }}
+              className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
+            >
+              <ExternalLink className="w-3 h-3" /> Ver ficha del club
+            </button>
+          )}
+          {onRequestDelete && (
+            <button
+              onClick={onRequestDelete}
+              className="flex items-center gap-1 text-xs text-red-500 hover:text-red-600 ml-auto"
+            >
+              <Trash2 className="w-3 h-3" /> Eliminar
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Notas de seguimiento */}
+      <div className={`flex-1 overflow-y-auto px-4 py-3 space-y-2.5 ${variant === 'side' ? 'max-h-72' : ''}`}>
+        <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Notas de seguimiento</div>
+        {sortedUpdates.length === 0 && (
+          <p className="text-xs text-slate-400 py-4 text-center">Sin notas aún</p>
+        )}
+        {sortedUpdates.map(u => (
+          <div key={u.id} className="bg-slate-50 rounded-lg px-3 py-2.5">
+            <div className="flex items-center gap-2 mb-1">
+              {u.author && <span className="text-[11px] font-mono bg-white border border-slate-200 text-slate-500 px-1.5 py-0.5 rounded">{u.author}</span>}
+              <span className="text-[11px] text-slate-400 ml-auto">
+                {new Date(u.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
+                {' '}
+                {new Date(u.date).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </div>
+            <p className="text-xs text-slate-700">{u.text}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Añadir nota */}
+      {onUpdateNegotiation && (
+        <div className="px-4 py-3 border-t border-slate-100 flex-shrink-0 space-y-2">
+          <textarea
+            value={updateText}
+            onChange={e => setUpdateText(e.target.value)}
+            placeholder="Añadir nota de seguimiento…"
+            rows={2}
+            className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-blue-200"
+            onKeyDown={e => { if (e.key === 'Enter' && e.metaKey) { e.preventDefault(); addUpdate() } }}
+          />
+          <button
+            onClick={addUpdate}
+            disabled={!updateText.trim() || savingUpdate}
+            className="w-full py-1.5 text-xs bg-primary text-white rounded-lg disabled:opacity-50 hover:bg-primary/90 transition-colors inline-flex items-center justify-center gap-2"
+          >
+            {savingUpdate && <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
+            {savingUpdate ? 'Guardando…' : 'Guardar nota'}
+          </button>
+        </div>
+      )}
+    </>
+  )
+
+  if (variant === 'side') {
+    return (
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden flex flex-col">
+        {body}
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose} />
+      <div className="fixed right-0 top-0 h-full w-full sm:w-80 z-50 bg-white border-l border-slate-200 shadow-xl flex flex-col">
+        {body}
+      </div>
+    </>
+  )
+}
+
 // ── Lista unificada de clubes contactados de un jugador ────────
 // Se usa en: ficha del jugador (pestaña Distribución) y panel lateral de Distribución.
+// Clic en fila → detalle completo (estado, gestor, info, notas de seguimiento).
+// Lápiz → edición rápida inline. "Seleccionar varios" activa las acciones en grupo.
+// detailMode 'side' (doble vista): el detalle queda fijo a la derecha de la lista.
 
 export function PlayerClubList({
-  negotiations, clubs, profiles,
-  onUpdateNegotiation, onDeleteNegotiation, onSelectClub, onRowClick, activeNegId,
+  negotiations, clubs, profiles, currentProfile,
+  onUpdateNegotiation, onDeleteNegotiation, onSelectClub,
   onAddClub, onAssignLeague, showToast,
-  title = 'Clubes contactados',
+  title = 'Clubes contactados', expanded = false, detailMode = 'overlay',
 }: {
   negotiations: ClubNegotiation[]
   clubs: Club[]
   profiles: Profile[]
+  currentProfile: Profile
   onUpdateNegotiation?: (n: ClubNegotiation) => Promise<void>
   onDeleteNegotiation?: (id: string) => Promise<void>
   onSelectClub?: (id: string) => void
-  /** Clic en una fila. Si no se pasa, el clic abre la edición inline. */
-  onRowClick?: (neg: ClubNegotiation) => void
-  activeNegId?: string | null
   onAddClub?: () => void
   onAssignLeague?: () => void
   showToast: (message: string, variant?: ToastVariant) => void
   title?: string
+  /** Muestra información extra en cada fila (última actualización y último seguimiento) */
+  expanded?: boolean
+  /** 'overlay': detalle en slide-over. 'side': detalle fijo a la derecha (doble vista). */
+  detailMode?: 'overlay' | 'side'
 }) {
   const [statusFilter, setStatusFilter] = useState<ClubNegotiation['status'] | ''>('')
   const [gestorFilter, setGestorFilter] = useState('')
   const [clubSearch, setClubSearch] = useState('')
   const [sortBy, setSortBy] = useState<'estado' | 'nombre' | 'liga' | 'actualizado'>('estado')
   const [groupBy, setGroupBy] = useState<'none' | 'estado' | 'liga' | 'nivel'>('none')
+  const [selectMode, setSelectMode] = useState(false)
   const [selectedNegIds, setSelectedNegIds] = useState<Set<string>>(new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
   const [editingNeg, setEditingNeg] = useState<ClubNegotiation | null>(null)
   const [negToDelete, setNegToDelete] = useState<ClubNegotiation | null>(null)
+  const [panelNegId, setPanelNegId] = useState<string | null>(null)
+
+  const panelNeg = negotiations.find(n => n.id === panelNegId) ?? null
+  const panelClub = panelNeg ? clubs.find(c => c.id === panelNeg.clubId) ?? null : null
+
+  useEscapeKey(() => setPanelNegId(null), !!panelNegId && detailMode === 'overlay')
+
+  function exitSelectMode() {
+    setSelectMode(false)
+    setSelectedNegIds(new Set())
+  }
 
   function toggleNegSelected(id: string) {
     setSelectedNegIds(prev => {
@@ -147,6 +379,8 @@ export function PlayerClubList({
     groups = [{ key: 'all', label: '', items: visible }]
   }
 
+  const fmtShort = (iso?: string) => iso ? new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }) : ''
+
   const renderRow = ({ neg, club }: { neg: ClubNegotiation; club: Club }) => {
     const cfg = NEG_STATUS_CONFIG[neg.status]
     if (editingNeg?.id === neg.id) {
@@ -170,20 +404,25 @@ export function PlayerClubList({
       )
     }
     const isSelected = selectedNegIds.has(neg.id)
+    const lastUpdate = neg.updates && neg.updates.length > 0
+      ? [...neg.updates].sort((a, b) => b.date.localeCompare(a.date))[0]
+      : null
     return (
       <div
         key={neg.id}
-        onClick={() => onRowClick ? onRowClick(neg) : setEditingNeg(neg)}
-        className={`flex items-center gap-2.5 px-3 py-2.5 cursor-pointer transition-all border-l-[3px] ${cfg.rowBorder} ${isSelected ? 'bg-blue-100/60' : activeNegId === neg.id ? 'bg-blue-50/70' : `${cfg.rowBg} hover:brightness-[0.97]`} ${neg.status === 'descartado' ? 'opacity-60' : ''}`}
+        onClick={() => selectMode ? toggleNegSelected(neg.id) : setPanelNegId(neg.id)}
+        className={`flex items-center gap-2.5 px-3 py-2.5 cursor-pointer transition-all border-l-[3px] ${cfg.rowBorder} ${isSelected ? 'bg-blue-100/60' : panelNegId === neg.id ? 'bg-blue-50/70' : `${cfg.rowBg} hover:brightness-[0.97]`} ${neg.status === 'descartado' ? 'opacity-60' : ''}`}
       >
-        <input
-          type="checkbox"
-          className="w-4 h-4 rounded flex-shrink-0"
-          checked={isSelected}
-          onClick={e => e.stopPropagation()}
-          onChange={() => toggleNegSelected(neg.id)}
-          aria-label={`Seleccionar ${club.name}`}
-        />
+        {selectMode && (
+          <input
+            type="checkbox"
+            className="w-4 h-4 rounded flex-shrink-0"
+            checked={isSelected}
+            onClick={e => e.stopPropagation()}
+            onChange={() => toggleNegSelected(neg.id)}
+            aria-label={`Seleccionar ${club.name}`}
+          />
+        )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
             <span className={`text-sm font-medium truncate ${neg.status === 'descartado' ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{club.name}</span>
@@ -191,17 +430,26 @@ export function PlayerClubList({
             {neg.updates && neg.updates.length > 0 && <span className="text-[11px] text-slate-400 flex-shrink-0">📝 {neg.updates.length}</span>}
           </div>
           {neg.notes && <p className="text-[11px] text-slate-400 truncate mt-0.5">{neg.notes}</p>}
+          {expanded && (neg.updatedAt || lastUpdate) && (
+            <p className="text-[11px] text-slate-400 truncate mt-0.5">
+              {neg.updatedAt && <span className="text-slate-300">Actualizado {fmtShort(neg.updatedAt)}</span>}
+              {lastUpdate && <span> · 📝 {lastUpdate.text}</span>}
+            </p>
+          )}
         </div>
         {neg.aisManager && <span className="text-[11px] font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded flex-shrink-0 hidden sm:inline">{neg.aisManager}</span>}
         <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${cfg.color}`}>{cfg.label}</span>
-        <button
-          onClick={e => { e.stopPropagation(); setEditingNeg(neg) }}
-          aria-label="Editar negociación"
-          className="p-1 text-slate-300 hover:text-slate-600 flex-shrink-0"
-        >
-          <Edit3 className="w-3.5 h-3.5" />
-        </button>
-        {onSelectClub && (
+        {!selectMode && (
+          <button
+            onClick={e => { e.stopPropagation(); setEditingNeg(neg) }}
+            aria-label="Edición rápida"
+            title="Edición rápida"
+            className="p-1 text-slate-300 hover:text-slate-600 flex-shrink-0"
+          >
+            <Edit3 className="w-3.5 h-3.5" />
+          </button>
+        )}
+        {!selectMode && onSelectClub && (
           <button
             onClick={e => { e.stopPropagation(); onSelectClub(club.id) }}
             title="Ver ficha del club"
@@ -214,7 +462,23 @@ export function PlayerClubList({
     )
   }
 
-  return (
+  const detailNode = panelNeg && panelClub ? (
+    <NegDetail
+      key={panelNeg.id}
+      neg={panelNeg}
+      club={panelClub}
+      profiles={profiles}
+      currentProfile={currentProfile}
+      onUpdateNegotiation={onUpdateNegotiation}
+      onSelectClub={onSelectClub}
+      onRequestDelete={onDeleteNegotiation ? () => setNegToDelete(panelNeg) : undefined}
+      onClose={() => setPanelNegId(null)}
+      showToast={showToast}
+      variant={detailMode}
+    />
+  ) : null
+
+  const listContent = (
     <div className="space-y-2">
       {/* Cabecera: título + acciones */}
       <div className="flex items-center justify-between">
@@ -290,25 +554,37 @@ export function PlayerClubList({
             </select>
           </div>
 
-          {/* Barra de selección múltiple */}
+          {/* Selección múltiple (opt-in) */}
           <div className="flex items-center gap-3 flex-wrap">
-            <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer">
-              <input
-                type="checkbox"
-                className="w-4 h-4 rounded"
-                checked={allVisibleSelected}
-                onChange={e => setSelectedNegIds(prev => {
-                  const next = new Set(prev)
-                  visible.forEach(x => { if (e.target.checked) next.add(x.neg.id); else next.delete(x.neg.id) })
-                  return next
-                })}
-              />
-              Seleccionar visibles
-            </label>
+            {!selectMode ? (
+              <button
+                onClick={() => setSelectMode(true)}
+                className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-700"
+              >
+                <CheckSquare className="w-3.5 h-3.5" /> Seleccionar varios
+              </button>
+            ) : (
+              <>
+                <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="w-4 h-4 rounded"
+                    checked={allVisibleSelected}
+                    onChange={e => setSelectedNegIds(prev => {
+                      const next = new Set(prev)
+                      visible.forEach(x => { if (e.target.checked) next.add(x.neg.id); else next.delete(x.neg.id) })
+                      return next
+                    })}
+                  />
+                  Seleccionar visibles
+                </label>
+                <button onClick={exitSelectMode} className="text-xs text-slate-500 hover:text-slate-700">Salir de selección</button>
+              </>
+            )}
             <span className="text-xs text-slate-400 ml-auto">{visible.length} de {withClub.length} club{withClub.length !== 1 ? 'es' : ''}</span>
           </div>
 
-          {selectedNegIds.size > 0 && (
+          {selectMode && selectedNegIds.size > 0 && (
             <div className="flex items-center gap-2 flex-wrap bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
               <span className="text-xs font-semibold text-slate-700">{selectedNegIds.size} seleccionado{selectedNegIds.size !== 1 ? 's' : ''}</span>
               {onUpdateNegotiation && (
@@ -359,6 +635,26 @@ export function PlayerClubList({
           )}
         </>
       )}
+    </div>
+  )
+
+  return (
+    <div className={detailMode === 'side' ? 'flex gap-4 items-start' : undefined}>
+      <div className={detailMode === 'side' ? 'flex-1 min-w-0' : undefined}>
+        {listContent}
+      </div>
+
+      {detailMode === 'side' && (
+        <div className="w-80 flex-shrink-0 sticky top-3">
+          {detailNode ?? (
+            <div className="border-2 border-dashed border-slate-200 rounded-xl py-16 px-6 text-center">
+              <p className="text-xs text-slate-400">Haz clic en un club para ver y editar la oportunidad: estado, encargado, información y notas de seguimiento.</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {detailMode === 'overlay' && detailNode}
 
       {/* Confirmación de borrado individual */}
       <ConfirmModal
@@ -372,6 +668,7 @@ export function PlayerClubList({
           try {
             await onDeleteNegotiation?.(negToDelete.id)
             setEditingNeg(null)
+            if (panelNegId === negToDelete.id) setPanelNegId(null)
             setNegToDelete(null)
             showToast('Negociación eliminada', 'info')
           } catch {

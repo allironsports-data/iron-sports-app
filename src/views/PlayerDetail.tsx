@@ -3011,15 +3011,6 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, p
   const { toasts, showToast, dismissToast } = useToast()
   const [showBulkAssign, setShowBulkAssign] = useState(false)
 
-  // Side panel state
-  const [panelNegId, setPanelNegId] = useState<string | null>(null)
-  const [panelUpdateText, setPanelUpdateText] = useState('')
-  const [savingUpdate, setSavingUpdate] = useState(false)
-  const panelNeg = negotiations.find(n => n.id === panelNegId) ?? null
-  const panelClub = panelNeg ? clubs.find(c => c.id === panelNeg.clubId) ?? null : null
-
-  useEscapeKey(() => setPanelNegId(null), !!panelNegId)
-
   async function saveEntry() {
     if (!entry) return
     setSavingEntry(true)
@@ -3128,157 +3119,16 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, p
           negotiations={negotiations}
           clubs={clubs}
           profiles={profiles}
+          currentProfile={currentProfile}
           onUpdateNegotiation={onUpdateNegotiation}
           onDeleteNegotiation={onDeleteNegotiation}
           onSelectClub={onSelectClub}
-          onRowClick={n => setPanelNegId(n.id)}
-          activeNegId={panelNegId}
           onAddClub={onCreateNegotiation ? () => setShowAddNeg(true) : undefined}
           onAssignLeague={onCreateNegotiation ? () => setShowBulkAssign(true) : undefined}
           showToast={showToast}
+          expanded
         />
       </div>
-
-      {/* ── SIDE PANEL (slide-over) ── */}
-      {panelNeg && panelClub && (() => {
-        // capture as non-null locals so TypeScript is happy inside closures
-        const neg = panelNeg!
-        const club = panelClub!
-        const sortedUpdates = [...(neg.updates ?? [])].sort((a, b) => b.date.localeCompare(a.date))
-
-        async function addUpdate() {
-          if (!panelUpdateText.trim() || !onUpdateNegotiation) return
-          setSavingUpdate(true)
-          try {
-            const newUpdate = {
-              id: crypto.randomUUID(),
-              text: panelUpdateText.trim(),
-              date: new Date().toISOString(),
-              author: currentProfile.avatar,
-            }
-            await onUpdateNegotiation({ ...neg, updates: [...(neg.updates ?? []), newUpdate] })
-            setPanelUpdateText('')
-          } catch {
-            showToast('No se pudo guardar la nota', 'error')
-          } finally { setSavingUpdate(false) }
-        }
-
-        async function changeStatus(s: ClubNegotiation['status']) {
-          if (!onUpdateNegotiation) return
-          try {
-            await onUpdateNegotiation({ ...neg, status: s })
-          } catch {
-            showToast('No se pudo cambiar el estado', 'error')
-          }
-        }
-
-        return (
-          <>
-            {/* Backdrop */}
-            <div
-              className="fixed inset-0 z-30 bg-black/20"
-              onClick={() => setPanelNegId(null)}
-            />
-            {/* Panel */}
-            <div className="fixed right-0 top-0 h-full w-full sm:w-80 z-40 bg-white border-l border-slate-200 shadow-xl flex flex-col">
-              {/* Header */}
-              <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 flex-shrink-0">
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-slate-800 text-sm truncate">{club.name}</div>
-                  {club.league && <div className="text-xs text-slate-400">{club.league}</div>}
-                </div>
-                <button onClick={() => setPanelNegId(null)} aria-label="Cerrar panel" className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Status + info */}
-              <div className="px-4 py-3 border-b border-slate-100 flex-shrink-0 space-y-3">
-                {/* Status chips */}
-                <div>
-                  <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Estado</div>
-                  <div className="flex flex-wrap gap-1">
-                    {NEG_STATUSES_D.map(s => {
-                      const cfg = STATUS_CONFIG_D[s]
-                      return (
-                        <button
-                          key={s}
-                          onClick={() => changeStatus(s)}
-                          className={`px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${neg.status === s ? cfg.color + ' ring-1 ring-current' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
-                        >
-                          {cfg.label}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-                {/* Meta */}
-                <div className="flex items-center gap-3 text-xs text-slate-500">
-                  {neg.aisManager && (
-                    <span className="font-mono bg-slate-100 px-2 py-1 rounded">{neg.aisManager}</span>
-                  )}
-                  <span className="text-slate-400">{new Date(neg.createdAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-                </div>
-                {neg.notes && (
-                  <p className="text-xs text-slate-600 bg-slate-50 rounded-lg px-3 py-2">{neg.notes}</p>
-                )}
-                {/* Go to club link */}
-                {onSelectClub && (
-                  <button
-                    onClick={() => { setPanelNegId(null); onSelectClub(club.id) }}
-                    className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
-                  >
-                    <ExternalLink className="w-3 h-3" /> Ver ficha del club
-                  </button>
-                )}
-              </div>
-
-              {/* Updates/notes thread */}
-              <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2.5">
-                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Notas de seguimiento</div>
-                {sortedUpdates.length === 0 && (
-                  <p className="text-xs text-slate-400 py-4 text-center">Sin notas aún</p>
-                )}
-                {sortedUpdates.map(u => (
-                  <div key={u.id} className="bg-slate-50 rounded-lg px-3 py-2.5">
-                    <div className="flex items-center gap-2 mb-1">
-                      {u.author && <span className="text-[11px] font-mono bg-white border border-slate-200 text-slate-500 px-1.5 py-0.5 rounded">{u.author}</span>}
-                      <span className="text-[11px] text-slate-400 ml-auto">
-                        {new Date(u.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
-                        {' '}
-                        {new Date(u.date).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-700">{u.text}</p>
-                  </div>
-                ))}
-              </div>
-
-              {/* Add update */}
-              {onUpdateNegotiation && (
-                <div className="px-4 py-3 border-t border-slate-100 flex-shrink-0 space-y-2">
-                  <textarea
-                    value={panelUpdateText}
-                    onChange={e => setPanelUpdateText(e.target.value)}
-                    placeholder="Añadir nota de seguimiento…"
-                    rows={2}
-                    className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-blue-200"
-                    onKeyDown={e => { if (e.key === 'Enter' && e.metaKey) { e.preventDefault(); addUpdate() } }}
-                  />
-                  <button
-                    onClick={addUpdate}
-                    disabled={!panelUpdateText.trim() || savingUpdate}
-                    className="w-full py-1.5 text-xs bg-primary text-white rounded-lg disabled:opacity-50 hover:bg-primary/90 transition-colors inline-flex items-center justify-center gap-2"
-                  >
-                    {savingUpdate && <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
-                    {savingUpdate ? 'Guardando…' : 'Guardar nota'}
-                  </button>
-                </div>
-              )}
-            </div>
-          </>
-        )
-      })()}
 
       {/* Asignar ligas completas */}
       {showBulkAssign && onCreateNegotiation && (
