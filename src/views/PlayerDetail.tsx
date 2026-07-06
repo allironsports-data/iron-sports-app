@@ -3215,12 +3215,14 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, p
 
           const statusCounts: Record<string, number> = {}
           withClub.forEach(({ neg }) => { statusCounts[neg.status] = (statusCounts[neg.status] ?? 0) + 1 })
-          const gestores = Array.from(new Set(withClub.map(x => x.neg.aisManager).filter(Boolean) as string[])).sort()
+          // "LT / AV / PP" → ['LT','AV','PP']; normaliza espacios y mayúsculas para evitar dupes
+          const parseGestores = (s?: string) => (s ?? '').split(/[/,+&]/).map(t => t.trim().toUpperCase()).filter(Boolean)
+          const gestores = Array.from(new Set(withClub.flatMap(x => parseGestores(x.neg.aisManager)))).sort()
 
           const q = clubSearch.trim().toLowerCase()
           const visible = withClub
             .filter(x => !statusFilter || x.neg.status === statusFilter)
-            .filter(x => !gestorFilter || x.neg.aisManager === gestorFilter)
+            .filter(x => !gestorFilter || parseGestores(x.neg.aisManager).includes(gestorFilter))
             .filter(x => !q || x.club.name.toLowerCase().includes(q) || (x.club.league ?? '').toLowerCase().includes(q) || (x.neg.notes ?? '').toLowerCase().includes(q))
             .sort((a, b) => {
               if (sortBy === 'nombre') return a.club.name.localeCompare(b.club.name)
