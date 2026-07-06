@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { X, ChevronDown } from 'lucide-react'
 import type { Club, ClubNegotiation } from '../types'
 import { useEscapeKey } from '../hooks/useEscapeKey'
+import { leagueLabel } from '../lib/clubTiers'
 
 /** Modal "Asignar por liga": marca ligas enteras o clubes sueltos para crear negociaciones en Pendiente. */
 export function BulkAssignModal({ clubs, existingNegotiations, onClose, onSave }: {
@@ -11,9 +12,10 @@ export function BulkAssignModal({ clubs, existingNegotiations, onClose, onSave }
   onSave: (clubIds: string[]) => Promise<void>
 }) {
   const leagues = useMemo(() => {
+    // Agrupa por liga+país: "Serie A · ITA" y "Serie A · BRA" son grupos distintos
     const map = new Map<string, Club[]>()
     clubs.forEach(c => {
-      const key = c.league ?? 'Sin liga'
+      const key = leagueLabel(c.league, c.country)
       if (!map.has(key)) map.set(key, [])
       map.get(key)!.push(c)
     })

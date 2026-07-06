@@ -6,7 +6,7 @@ import type { ToastVariant } from '../hooks/useToast'
 import { ManagerSelect } from './ManagerSelect'
 import { ConfirmModal } from './ConfirmModal'
 import { useEscapeKey } from '../hooks/useEscapeKey'
-import { getClubTier } from '../lib/clubTiers'
+import { getClubTier, leagueLabel } from '../lib/clubTiers'
 
 // ── Config compartida de estados de negociación ────────────────
 
@@ -377,19 +377,24 @@ export function PlayerClubList({
 
   const staleCount = withClub.filter(x => isStale(x.neg)).length
 
-  // Ligas presentes en la lista, con contador
-  const leagueCounts = new Map<string, number>()
-  withClub.forEach(x => { const l = x.club.league ?? 'Sin liga'; leagueCounts.set(l, (leagueCounts.get(l) ?? 0) + 1) })
+  // Ligas presentes en la lista (clave liga+país para no mezclar p. ej. Serie A ITA y BRA)
+  const leagueKey = (c: Club) => `${c.league ?? 'Sin liga'}|${c.country ?? ''}`
+  const leagueCounts = new Map<string, { label: string; count: number }>()
+  withClub.forEach(x => {
+    const k = leagueKey(x.club)
+    const existing = leagueCounts.get(k)
+    leagueCounts.set(k, { label: leagueLabel(x.club.league, x.club.country), count: (existing?.count ?? 0) + 1 })
+  })
   const allLeagues = Array.from(leagueCounts.entries())
-    .map(([league, count]) => ({ league, count }))
-    .sort((a, b) => a.league === 'Sin liga' ? 1 : b.league === 'Sin liga' ? -1 : a.league.localeCompare(b.league))
+    .map(([key, { label, count }]) => ({ key, label, count }))
+    .sort((a, b) => a.label.startsWith('Sin liga') ? 1 : b.label.startsWith('Sin liga') ? -1 : a.label.localeCompare(b.label))
 
   const q = clubSearch.trim().toLowerCase()
   const visible = withClub
     .filter(x => !statusFilter || x.neg.status === statusFilter)
     .filter(x => !gestorFilter || parseGestores(x.neg.aisManager).includes(gestorFilter))
     .filter(x => !staleOnly || isStale(x.neg))
-    .filter(x => leagueFilter.length === 0 || leagueFilter.includes(x.club.league ?? 'Sin liga'))
+    .filter(x => leagueFilter.length === 0 || leagueFilter.includes(leagueKey(x.club)))
     .filter(x => !q || x.club.name.toLowerCase().includes(q) || (x.club.league ?? '').toLowerCase().includes(q) || (x.neg.notes ?? '').toLowerCase().includes(q))
     .sort((a, b) => {
       if (sortBy === 'nombre') return a.club.name.localeCompare(b.club.name)
@@ -406,9 +411,11 @@ export function PlayerClubList({
       .map(s => ({ key: s, label: NEG_STATUS_CONFIG[s].label, items: visible.filter(x => x.neg.status === s) }))
       .filter(g => g.items.length > 0)
   } else if (groupBy === 'liga') {
-    const leagues = Array.from(new Set(visible.map(x => x.club.league ?? 'Sin liga')))
-      .sort((a, b) => a === 'Sin liga' ? 1 : b === 'Sin liga' ? -1 : a.localeCompare(b))
-    groups = leagues.map(l => ({ key: l, label: l, items: visible.filter(x => (x.club.league ?? 'Sin liga') === l) }))
+    const leagueGroups = new Map<string, string>()
+    visible.forEach(x => leagueGroups.set(leagueKey(x.club), leagueLabel(x.club.league, x.club.country)))
+    groups = Array.from(leagueGroups.entries())
+      .sort((a, b) => a[1].startsWith('Sin liga') ? 1 : b[1].startsWith('Sin liga') ? -1 : a[1].localeCompare(b[1]))
+      .map(([k, label]) => ({ key: k, label, items: visible.filter(x => leagueKey(x.club) === k) }))
   } else if (groupBy === 'nivel') {
     const tiers = Array.from(new Set(visible.map(x => getClubTier(x.club.league, x.club.country)))).sort()
     groups = tiers.map(t => ({ key: t, label: `Nivel ${t}`, items: visible.filter(x => getClubTier(x.club.league, x.club.country) === t) }))
@@ -463,7 +470,7 @@ export function PlayerClubList({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
             <span className={`text-sm font-medium truncate ${neg.status === 'descartado' ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{club.name}</span>
-            {club.league && <span className="text-[11px] text-slate-400 flex-shrink-0 hidden sm:inline">· {club.league}</span>}
+            {club.league && <span className="text-[11px] text-slate-400 flex-shrink-0 hidden sm:inline">· {leagueLabel(club.league, club.country)}</span>}
             {neg.updates && neg.updates.length > 0 && <span className="text-[11px] text-slate-400 flex-shrink-0">📝 {neg.updates.length}</span>}
             {isStale(neg) && (
               <span title={`Sin actividad en ${daysSince(lastActivity(neg))} días`} className="text-[11px] font-medium text-amber-600 flex-shrink-0">
@@ -610,18 +617,18 @@ export function PlayerClubList({
                     >
                       Todas las ligas
                     </button>
-                    {allLeagues.map(({ league, count }) => {
-                      const sel = leagueFilter.includes(league)
+                    {allLeagues.map(({ key, label, count }) => {
+                      const sel = leagueFilter.includes(key)
                       return (
                         <button
-                          key={league}
-                          onClick={() => setLeagueFilter(prev => sel ? prev.filter(l => l !== league) : [...prev, league])}
+                          key={key}
+                          onClick={() => setLeagueFilter(prev => sel ? prev.filter(l => l !== key) : [...prev, key])}
                           className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center gap-2 hover:bg-slate-50"
                         >
                           <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0 ${sel ? 'bg-primary border-primary' : 'border-slate-300'}`}>
                             {sel && <Check className="w-2.5 h-2.5 text-white" />}
                           </span>
-                          <span className="flex-1 truncate text-slate-700">{league}</span>
+                          <span className="flex-1 truncate text-slate-700">{label}</span>
                           <span className="text-slate-400 font-mono">{count}</span>
                         </button>
                       )

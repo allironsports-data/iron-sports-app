@@ -1,7 +1,7 @@
 // ── League / Club metadata (compartido entre vistas) ──────────
 
 export type LeagueTier = 'A' | 'B' | 'C' | 'D'
-export type Confederation = 'UEFA' | 'CONMEBOL' | 'CONCACAF' | 'AFC' | 'CAF'
+export type Confederation = 'UEFA' | 'CONMEBOL' | 'CONCACAF' | 'AFC' | 'CAF' | 'OFC'
 
 export const TIER_CONFIG: Record<LeagueTier, { label: string; bg: string; text: string; border: string; title: string }> = {
   A: { label: 'A', bg: 'bg-violet-100',  text: 'text-violet-700',  border: 'border-violet-200', title: 'Elite (Top 5 EU + equivalentes)' },
@@ -78,6 +78,10 @@ const LEAGUE_TIERS: Record<string, LeagueTier> = {
   // (no CAF leagues in current DB)
   // ── Misc ──
   'Baltic Leagues':           'D',
+  // ── Variantes de nombre presentes en datos antiguos ──
+  'Bundesliga Austria':       'B',
+  'Czech 1. Liga':            'B',
+  'Fortuna Liga':             'C', // Eslovaquia (los checos usan 'Czech First League')
 }
 
 // Country → confederation
@@ -94,9 +98,14 @@ const COUNTRY_CONFEDERATION: Record<string, Confederation> = {
   Brazil: 'CONMEBOL', Argentina: 'CONMEBOL', Colombia: 'CONMEBOL',
   Chile: 'CONMEBOL', Peru: 'CONMEBOL', Ecuador: 'CONMEBOL', Uruguay: 'CONMEBOL',
   // CONCACAF
-  USA: 'CONCACAF', Mexico: 'CONCACAF',
+  USA: 'CONCACAF', Mexico: 'CONCACAF', Canada: 'CONCACAF',
   // AFC
   'Saudi Arabia': 'AFC', Qatar: 'AFC', UAE: 'AFC', India: 'AFC', Kazakhstan: 'AFC',
+  Japan: 'AFC', 'South Korea': 'AFC', China: 'AFC', Australia: 'AFC',
+  // CAF
+  'South Africa': 'CAF', Morocco: 'CAF', Egypt: 'CAF',
+  // OFC
+  'New Zealand': 'OFC',
 }
 
 export const CONFEDERATION_LABELS: Record<Confederation, string> = {
@@ -105,6 +114,7 @@ export const CONFEDERATION_LABELS: Record<Confederation, string> = {
   CONCACAF: '🌎 CONCACAF',
   AFC:      '🌏 AFC',
   CAF:      '🌍 CAF',
+  OFC:      '🌏 OFC',
 }
 
 export function getClubTier(league: string | undefined, country: string | undefined): LeagueTier {
@@ -123,4 +133,46 @@ export function getClubTier(league: string | undefined, country: string | undefi
 
 export function getClubConfederation(country: string | undefined): Confederation {
   return COUNTRY_CONFEDERATION[country ?? ''] ?? 'UEFA'
+}
+
+// ── Códigos de país (3 letras, estilo FIFA) ────────────────────
+// Incluye alias en español por si hay datos escritos así.
+const COUNTRY_CODE3: Record<string, string> = {
+  England: 'ENG', Inglaterra: 'ENG', Scotland: 'SCO', Escocia: 'SCO', Wales: 'WAL', Gales: 'WAL',
+  Ireland: 'IRL', Irlanda: 'IRL', 'Northern Ireland': 'NIR',
+  Spain: 'ESP', 'España': 'ESP', Germany: 'GER', Alemania: 'GER', France: 'FRA', Francia: 'FRA',
+  Italy: 'ITA', Italia: 'ITA', Netherlands: 'NED', 'Países Bajos': 'NED', Holanda: 'NED',
+  Portugal: 'POR', Belgium: 'BEL', 'Bélgica': 'BEL', Switzerland: 'SUI', Suiza: 'SUI',
+  Austria: 'AUT', Poland: 'POL', Polonia: 'POL', 'Czech Republic': 'CZE', Chequia: 'CZE', Czechia: 'CZE',
+  Hungary: 'HUN', 'Hungría': 'HUN', Turkey: 'TUR', 'Turquía': 'TUR',
+  Sweden: 'SWE', Suecia: 'SWE', Norway: 'NOR', Noruega: 'NOR', Denmark: 'DEN', Dinamarca: 'DEN',
+  Finland: 'FIN', Finlandia: 'FIN', Iceland: 'ISL', Islandia: 'ISL',
+  Bulgaria: 'BUL', Romania: 'ROU', 'Rumanía': 'ROU', Serbia: 'SRB', Croatia: 'CRO', Croacia: 'CRO',
+  Slovenia: 'SVN', Eslovenia: 'SVN', Slovakia: 'SVK', Eslovaquia: 'SVK',
+  Cyprus: 'CYP', Chipre: 'CYP', Greece: 'GRE', Grecia: 'GRE', Israel: 'ISR',
+  Ukraine: 'UKR', Ucrania: 'UKR', Georgia: 'GEO', Russia: 'RUS', Rusia: 'RUS',
+  Estonia: 'EST', Latvia: 'LVA', Letonia: 'LVA', Lithuania: 'LTU', Lituania: 'LTU', Baltics: 'BAL',
+  Brazil: 'BRA', Brasil: 'BRA', Argentina: 'ARG', Colombia: 'COL', Chile: 'CHI',
+  Peru: 'PER', 'Perú': 'PER', Ecuador: 'ECU', Uruguay: 'URU',
+  USA: 'USA', 'United States': 'USA', 'Estados Unidos': 'USA', Mexico: 'MEX', 'México': 'MEX',
+  'Saudi Arabia': 'KSA', 'Arabia Saudí': 'KSA', Qatar: 'QAT', Catar: 'QAT', UAE: 'UAE',
+  India: 'IND', Kazakhstan: 'KAZ', 'Kazajistán': 'KAZ', Japan: 'JPN', 'Japón': 'JPN',
+  'South Korea': 'KOR', 'Corea del Sur': 'KOR', China: 'CHN', Australia: 'AUS',
+  Morocco: 'MAR', Marruecos: 'MAR', Egypt: 'EGY', Egipto: 'EGY',
+  'South Africa': 'RSA', 'Sudáfrica': 'RSA', Canada: 'CAN', 'Canadá': 'CAN',
+  'New Zealand': 'NZL', 'Nueva Zelanda': 'NZL',
+}
+
+/** Código de 3 letras del país ('' si no hay país) */
+export function countryCode3(country: string | undefined): string {
+  const c = (country ?? '').trim()
+  if (!c) return ''
+  return COUNTRY_CODE3[c] ?? c.slice(0, 3).toUpperCase()
+}
+
+/** Etiqueta "Liga · PAÍS" para desplegables (evita mezclar Serie A italiana y brasileña) */
+export function leagueLabel(league: string | undefined, country: string | undefined): string {
+  const l = league ?? 'Sin liga'
+  const code = countryCode3(country)
+  return code ? `${l} · ${code}` : l
 }

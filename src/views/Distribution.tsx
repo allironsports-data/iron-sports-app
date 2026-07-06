@@ -16,7 +16,7 @@ import { useToast } from '../hooks/useToast'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import { isValidName, isValidDate } from '../lib/validate'
 import { POSITIONS, POSITION_CODES, positionLabel, positionEs, needMatchesPlayer, normalizePosition } from '../lib/positions'
-import { TIER_CONFIG, CONFEDERATION_LABELS, getClubTier, getClubConfederation } from '../lib/clubTiers'
+import { TIER_CONFIG, CONFEDERATION_LABELS, getClubTier, getClubConfederation, countryCode3 } from '../lib/clubTiers'
 import type { LeagueTier, Confederation } from '../lib/clubTiers'
 import { PlayerClubList, NEG_STATUSES as SHARED_NEG_STATUSES, NEG_STATUS_CONFIG } from '../components/PlayerClubList'
 import { BulkAssignModal } from '../components/BulkAssignModal'
@@ -366,7 +366,7 @@ export function Distribution({
 
   const filteredClubs = useMemo(() => {
     let result = clubs
-    if (leagueFilter.length > 0) result = result.filter(c => leagueFilter.includes(c.league ?? 'Sin liga'))
+    if (leagueFilter.length > 0) result = result.filter(c => leagueFilter.includes(`${c.league ?? 'Sin liga'}|${c.country ?? ''}`))
     if (countryFilter.length > 0) result = result.filter(c => countryFilter.includes(c.country ?? ''))
     if (tierFilter.length > 0) result = result.filter(c => tierFilter.includes(getClubTier(c.league, c.country)))
     if (confederationFilter.length > 0) result = result.filter(c => confederationFilter.includes(getClubConfederation(c.country)))
@@ -391,15 +391,18 @@ export function Distribution({
   }, [clubs, negotiations, search, leagueFilter, countryFilter, tierFilter, confederationFilter, priorityOnly, hasNeedsOnly, hasContactOnly, clubManagerFilter, staleOnly])
 
   const sortedLeagues = useMemo(() => {
-    const map = new Map<string, { count: number; country: string }>()
+    // Clave liga+país: "Serie A" de Italia y la de Brasil son entradas distintas
+    const map = new Map<string, { league: string; country: string; count: number }>()
     clubs.forEach(c => {
-      const key = c.league ?? 'Sin liga'
+      const league = c.league ?? 'Sin liga'
+      const country = c.country ?? ''
+      const key = `${league}|${country}`
       const existing = map.get(key)
-      map.set(key, { count: (existing?.count ?? 0) + 1, country: existing?.country || c.country || '' })
+      map.set(key, { league, country, count: (existing?.count ?? 0) + 1 })
     })
     return Array.from(map.entries())
-      .map(([league, { count, country }]) => ({
-        league, count, country,
+      .map(([key, { league, country, count }]) => ({
+        key, league, count, country,
         tier: getClubTier(league, country),
         confederation: getClubConfederation(country),
       }))
@@ -1148,12 +1151,12 @@ export function Distribution({
                             </button>
                           </div>
                           <div className="p-2 space-y-0.5">
-                            {sortedLeagues.map(({ league, count, country, tier }) => {
-                              const selected = leagueFilter.includes(league)
+                            {sortedLeagues.map(({ key, league, count, country, tier }) => {
+                              const selected = leagueFilter.includes(key)
                               const tierCfg = TIER_CONFIG[tier]
                               return (
-                                <button key={league}
-                                  onClick={() => setLeagueFilter(prev => prev.includes(league) ? prev.filter(l => l !== league) : [...prev, league])}
+                                <button key={key}
+                                  onClick={() => setLeagueFilter(prev => prev.includes(key) ? prev.filter(l => l !== key) : [...prev, key])}
                                   className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors ${selected ? 'bg-blue-50 text-primary' : 'hover:bg-slate-50 text-slate-700'}`}
                                 >
                                   <div className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${selected ? 'bg-primary border-primary' : 'border-slate-300'}`}>
@@ -1161,7 +1164,7 @@ export function Distribution({
                                   </div>
                                   <span className={`text-[11px] font-bold px-1 py-0.5 rounded ${tierCfg.bg} ${tierCfg.text} flex-shrink-0`}>{tier}</span>
                                   <span className="flex-1 min-w-0">
-                                    <span className="font-medium truncate block">{league}</span>
+                                    <span className="font-medium truncate block">{league}{country && <span className="text-slate-400 font-normal"> · {countryCode3(country)}</span>}</span>
                                     {country && <span className="text-xs text-slate-400">{country}</span>}
                                   </span>
                                   <span className="text-xs text-slate-400 flex-shrink-0">{count}</span>
@@ -1417,15 +1420,15 @@ export function Distribution({
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {sortedLeagues.map(({ league, tier, confederation }) => {
-                    const leagueClubs = filteredClubs.filter(c => (c.league ?? 'Sin liga') === league)
+                  {sortedLeagues.map(({ key, league, country, tier, confederation }) => {
+                    const leagueClubs = filteredClubs.filter(c => (c.league ?? 'Sin liga') === league && (c.country ?? '') === country)
                     if (leagueClubs.length === 0) return null
                     const tierCfg = TIER_CONFIG[tier]
                     return (
-                      <div key={league}>
+                      <div key={key}>
                         <div className="flex items-center gap-2 mb-1.5">
                           <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${tierCfg.bg} ${tierCfg.text}`}>{tier}</span>
-                          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{league}</span>
+                          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{league}{country && ` · ${countryCode3(country)}`}</span>
                           <span className="text-xs text-slate-400">({leagueClubs.length})</span>
                           <span className="text-xs text-slate-300">{CONFEDERATION_LABELS[confederation]}</span>
                           <div className="flex-1 h-px bg-slate-200" />
@@ -3355,7 +3358,7 @@ export function Distribution({
       {editingClub && (
         <EditClubModal
           club={editingClub}
-          leagueOptions={sortedLeagues.map(l => l.league)}
+          leagueOptions={Array.from(new Set(sortedLeagues.map(l => l.league)))}
           profiles={profiles}
           onClose={() => setEditingClub(null)}
           onSave={async (data) => {
@@ -4113,12 +4116,12 @@ function AddClubModal({ onClose, onSave, leagueOptions, profiles, currentProfile
               <div className="absolute z-50 mt-1 w-full max-w-[calc(100vw-2rem)] bg-white border border-slate-200 rounded-xl shadow-xl max-h-[50vh] overflow-y-auto">
                 {filteredLeagues.slice(0, 60).map(l => (
                   <button
-                    key={l.league}
+                    key={`${l.league}|${l.country}`}
                     type="button"
                     onClick={() => selectLeague(l)}
                     className="w-full text-left px-3 py-2 hover:bg-slate-50 text-sm flex items-center justify-between gap-2"
                   >
-                    <span className="font-medium truncate">{l.league}</span>
+                    <span className="font-medium truncate">{l.league}{l.country && <span className="text-slate-400 font-normal"> · {countryCode3(l.country)}</span>}</span>
                     {l.country && <span className="text-xs text-slate-400 flex-shrink-0">{l.country}</span>}
                   </button>
                 ))}
