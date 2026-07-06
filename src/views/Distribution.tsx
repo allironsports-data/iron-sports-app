@@ -17,6 +17,10 @@ import { useToast } from '../hooks/useToast'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import { isValidName, isValidDate } from '../lib/validate'
 import { POSITIONS, POSITION_CODES, positionLabel, positionEs, needMatchesPlayer, normalizePosition } from '../lib/positions'
+import { TIER_CONFIG, CONFEDERATION_LABELS, getClubTier, getClubConfederation } from '../lib/clubTiers'
+import type { LeagueTier, Confederation } from '../lib/clubTiers'
+import { PlayerClubList } from '../components/PlayerClubList'
+import { BulkAssignModal } from '../components/BulkAssignModal'
 
 /** Spinner pequeño para botones de guardado */
 function BtnSpinner() {
@@ -46,132 +50,7 @@ const PRIORITY_CONFIG = {
   D: { label: 'D', bg: 'bg-orange-50',  text: 'text-orange-600', border: 'border-orange-200', ring: 'ring-orange-300' },
 }
 
-// ── League / Club metadata ─────────────────────────────────────
-
-export type LeagueTier = 'A' | 'B' | 'C' | 'D'
-export type Confederation = 'UEFA' | 'CONMEBOL' | 'CONCACAF' | 'AFC' | 'CAF'
-
-const TIER_CONFIG: Record<LeagueTier, { label: string; bg: string; text: string; border: string; title: string }> = {
-  A: { label: 'A', bg: 'bg-violet-100',  text: 'text-violet-700',  border: 'border-violet-200', title: 'Elite (Top 5 EU + equivalentes)' },
-  B: { label: 'B', bg: 'bg-blue-100',    text: 'text-blue-700',    border: 'border-blue-200',   title: 'Fuerte (ligas de nivel alto)' },
-  C: { label: 'C', bg: 'bg-teal-100',    text: 'text-teal-700',    border: 'border-teal-200',   title: 'Medio (ligas competitivas)' },
-  D: { label: 'D', bg: 'bg-slate-100',   text: 'text-slate-500',   border: 'border-slate-200',  title: 'Otros / menor nivel' },
-}
-
-// Tier assigned per league name. Conflicts resolved in getClubTier().
-const LEAGUE_TIERS: Record<string, LeagueTier> = {
-  // ── UEFA Tier A ──
-  'Premier League':           'A',
-  'La Liga':                  'A',
-  'Bundesliga':               'A',
-  'Serie A':                  'A', // Italy (Brazil handled via country)
-  'Ligue 1':                  'A',
-  'Eredivisie':               'A',
-  'Primeira Liga':            'A',
-  'Pro League':               'A',
-  'Süper Lig':                'A',
-  // ── UEFA Tier B ──
-  'Championship':             'B',
-  'La Liga 2':                'B',
-  '2. Bundesliga':            'B',
-  'Serie B':                  'B',
-  'Ligue 2':                  'B',
-  'Swiss Super League':       'B',
-  'Scottish Premiership':     'B',
-  'Austrian Bundesliga':      'B',
-  'Ekstraklasa':              'B',
-  'Czech First League':       'B',
-  'NB I':                     'B',
-  'Allsvenskan':              'B',
-  'Eliteserien':              'B',
-  'Superliga':                'B',
-  '1. Lig':                   'B',
-  'Primera RFEF':             'B',
-  'Segunda RFEF':             'C',
-  '1B Pro League':            'B',
-  'EFL League One':           'B',
-  'Liga Portugal 2':          'B',
-  'HNL':                      'B',
-  'Super liga':               'B',
-  'First Professional League':'B',
-  'Super League Greece':      'B',
-  'Israeli Premier League':   'B',
-  // ── UEFA Tier C ──
-  'EFL League Two':           'C',
-  '3. Liga':                  'C',
-  'Austrian 2. Liga':         'C',
-  'Slovak Super Liga':        'C',
-  'PrvaLiga':                 'C',
-  'Eerste Divisie':           'C',
-  'First Division Cyprus':    'C',
-  'Veikkausliiga':            'C',
-  'Erovnuli Liga':            'C',
-  'Ukrainian Premier League': 'C',
-  'Challenge League':         'C',
-  'Premier League Russia':    'C',
-  'Liga 1':                   'C', // Romania / Peru — same name, resolved by country
-  // ── CONMEBOL ──
-  'Liga Betplay':             'B',
-  'LigaPro':                  'C',
-  // ── CONCACAF ──
-  'MLS':                      'A',
-  'Liga MX':                  'A',
-  // ── AFC ──
-  'Saudi Pro League':         'A',
-  'Qatar Stars League':       'B',
-  'Arabian Gulf League':      'B',
-  'Indian Super League':      'C',
-  'Premier League Kazakhstan':'D',
-  // ── CAF ──
-  // (no CAF leagues in current DB)
-  // ── Misc ──
-  'Baltic Leagues':           'D',
-}
-
-// Country → confederation
-const COUNTRY_CONFEDERATION: Record<string, Confederation> = {
-  // UEFA
-  Spain: 'UEFA', England: 'UEFA', Germany: 'UEFA', France: 'UEFA', Italy: 'UEFA',
-  Netherlands: 'UEFA', Portugal: 'UEFA', Belgium: 'UEFA', Switzerland: 'UEFA',
-  Austria: 'UEFA', Scotland: 'UEFA', Poland: 'UEFA', 'Czech Republic': 'UEFA',
-  Hungary: 'UEFA', Turkey: 'UEFA', Sweden: 'UEFA', Norway: 'UEFA', Denmark: 'UEFA',
-  Finland: 'UEFA', Bulgaria: 'UEFA', Romania: 'UEFA', Serbia: 'UEFA', Croatia: 'UEFA',
-  Slovenia: 'UEFA', Slovakia: 'UEFA', Cyprus: 'UEFA', Greece: 'UEFA', Israel: 'UEFA',
-  Ukraine: 'UEFA', Georgia: 'UEFA', Russia: 'UEFA', Baltics: 'UEFA',
-  // CONMEBOL
-  Brazil: 'CONMEBOL', Argentina: 'CONMEBOL', Colombia: 'CONMEBOL',
-  Chile: 'CONMEBOL', Peru: 'CONMEBOL', Ecuador: 'CONMEBOL', Uruguay: 'CONMEBOL',
-  // CONCACAF
-  USA: 'CONCACAF', Mexico: 'CONCACAF',
-  // AFC
-  'Saudi Arabia': 'AFC', Qatar: 'AFC', UAE: 'AFC', India: 'AFC', Kazakhstan: 'AFC',
-}
-
-const CONFEDERATION_LABELS: Record<Confederation, string> = {
-  UEFA:     '🌍 UEFA',
-  CONMEBOL: '🌎 CONMEBOL',
-  CONCACAF: '🌎 CONCACAF',
-  AFC:      '🌏 AFC',
-  CAF:      '🌍 CAF',
-}
-
-function getClubTier(league: string | undefined, country: string | undefined): LeagueTier {
-  if (!league) return 'D'
-  // Resolve name conflicts using country
-  if (league === 'Primera Division') {
-    if (country === 'Argentina') return 'A'
-    if (country === 'Brazil') return 'A'    // just in case
-    return 'C'                              // Uruguay, Chile, etc.
-  }
-  if (league === 'Serie A' && country === 'Brazil') return 'A'
-  if (league === 'Liga 1' && country === 'Romania') return 'B'
-  if (league === 'Super League' && country === 'Switzerland') return 'B'
-  return LEAGUE_TIERS[league] ?? 'D'
-}
-
-function getClubConfederation(country: string | undefined): Confederation {
-  return COUNTRY_CONFEDERATION[country ?? ''] ?? 'UEFA'
-}
+// ── League / Club metadata ── movido a ../lib/clubTiers.ts ────
 
 // ── helpers ───────────────────────────────────────────────────
 
@@ -433,7 +312,6 @@ export function Distribution({
   const [activityFilter, setActivityFilter] = useState(false)
   const [showAddNeed, setShowAddNeed] = useState(false)
   const [groupByTier, setGroupByTier] = useState(false)
-  const [playerPanelGestorFilter, setPlayerPanelGestorFilter] = useState('')
   // solicitudes filters
   const [needsTierFilter, setNeedsTierFilter] = useState<LeagueTier[]>([])
   const [needsLeagueFilter, setNeedsLeagueFilter] = useState('')
@@ -739,15 +617,11 @@ export function Distribution({
     return ids.size
   }, [opportunities])
 
-  function closePanel() { setSelectedEntryId(null); setSelectedClubId(null); setSelectedNeed(null); setPlayerPanelGestorFilter(''); setPanelExpanded(false); setPanelClubSearch(''); setPanelStatusFilter(''); setPanelSort('status'); setPanelGroupBy('none') }
+  function closePanel() { setSelectedEntryId(null); setSelectedClubId(null); setSelectedNeed(null); setPanelExpanded(false) }
   const hasPanel = tab !== 'encargados' && (!!selectedEntry || !!selectedClub || !!selectedNeed)
   // Panel lateral ampliable (más ancho para editar cómodamente)
   const [panelExpanded, setPanelExpanded] = useState(false)
   // Controles avanzados del panel de jugador (solo visibles al expandir)
-  const [panelClubSearch, setPanelClubSearch] = useState('')
-  const [panelStatusFilter, setPanelStatusFilter] = useState<ClubNegotiation['status'] | ''>('')
-  const [panelSort, setPanelSort] = useState<'status' | 'league' | 'alpha' | 'updated'>('status')
-  const [panelGroupBy, setPanelGroupBy] = useState<'none' | 'league' | 'tier'>('none')
   const PanelExpandBtn = () => (
     <button
       onClick={() => setPanelExpanded(e => !e)}
@@ -3025,213 +2899,18 @@ export function Distribution({
                   </div>
 
                   <div className="flex-1 overflow-y-auto px-4 py-3">
-                    {(() => {
-                      const panelGestores = Array.from(new Set(playerNegs.map(n => n.aisManager).filter(Boolean))) as string[]
-                      // Paso 1 — filtro por gestor (disponible siempre)
-                      const gestorNegs = playerPanelGestorFilter
-                        ? playerNegs.filter(n => n.aisManager === playerPanelGestorFilter)
-                        : playerNegs
-                      // Resumen de estados (sobre el conjunto filtrado por gestor)
-                      const statusSummary = NEG_STATUSES
-                        .map(s => ({ s, count: gestorNegs.filter(n => n.status === s).length }))
-                        .filter(x => x.count > 0)
-                      // Paso 2 — filtros avanzados (solo con panel expandido)
-                      let visibleNegs = gestorNegs
-                      if (panelExpanded) {
-                        if (panelStatusFilter) visibleNegs = visibleNegs.filter(n => n.status === panelStatusFilter)
-                        const q = panelClubSearch.trim().toLowerCase()
-                        if (q) {
-                          visibleNegs = visibleNegs.filter(n => {
-                            const c = clubs.find(cl => cl.id === n.clubId)
-                            return c && (c.name.toLowerCase().includes(q) || (c.league ?? '').toLowerCase().includes(q))
-                          })
-                        }
-                        const clubOf = (n: ClubNegotiation) => clubs.find(cl => cl.id === n.clubId)
-                        visibleNegs = [...visibleNegs].sort((a, b) => {
-                          if (panelSort === 'status') return NEG_STATUSES.indexOf(a.status) - NEG_STATUSES.indexOf(b.status)
-                          if (panelSort === 'alpha') return (clubOf(a)?.name ?? '').localeCompare(clubOf(b)?.name ?? '')
-                          if (panelSort === 'league') return (clubOf(a)?.league ?? 'zzz').localeCompare(clubOf(b)?.league ?? 'zzz')
-                          if (panelSort === 'updated') return (b.updatedAt ?? '').localeCompare(a.updatedAt ?? '')
-                          return 0
-                        })
-                      }
-                      // Tarjeta de club reutilizable
-                      const renderNeg = (neg: ClubNegotiation) => {
-                        const club = clubs.find(c => c.id === neg.clubId)
-                        if (!club) return null
-                        const scfg = STATUS_CONFIG[neg.status]
-                        return (
-                          <div key={neg.id} className="bg-slate-50 rounded-lg p-3 flex items-start gap-3">
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2 mb-0.5">
-                                <span className="text-sm font-medium text-slate-700 truncate">{club.name}</span>
-                                {club.league && <span className="text-xs text-slate-400 truncate">{club.league}</span>}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className={`text-xs px-2 py-0.5 rounded-full ${scfg.color}`}>{scfg.label}</span>
-                                {neg.aisManager && <span className="text-xs font-mono text-slate-500">{neg.aisManager}</span>}
-                              </div>
-                              {neg.notes && <p className="text-xs text-slate-500 mt-1 line-clamp-2">{neg.notes}</p>}
-                            </div>
-                            <button
-                              onClick={() => setEditingNeg(neg)}
-                              aria-label="Editar negociación"
-                              className="ml-auto p-2 sm:p-1 text-slate-300 hover:text-slate-500 flex-shrink-0"
-                            >
-                              <Pencil className="w-3 h-3" />
-                            </button>
-                          </div>
-                        )
-                      }
-                      const listClass = panelExpanded ? 'grid grid-cols-2 gap-2' : 'space-y-2'
-                      // Agrupación (solo con panel expandido)
-                      const groups: { key: string; label: string; negs: ClubNegotiation[] }[] = []
-                      if (panelExpanded && panelGroupBy !== 'none') {
-                        const map = new Map<string, ClubNegotiation[]>()
-                        for (const n of visibleNegs) {
-                          const c = clubs.find(cl => cl.id === n.clubId)
-                          const key = panelGroupBy === 'league'
-                            ? (c?.league ?? 'Sin liga')
-                            : getClubTier(c?.league, c?.country)
-                          if (!map.has(key)) map.set(key, [])
-                          map.get(key)!.push(n)
-                        }
-                        const keys = Array.from(map.keys()).sort((a, b) =>
-                          panelGroupBy === 'tier' ? a.localeCompare(b) : a.localeCompare(b))
-                        for (const k of keys) {
-                          groups.push({
-                            key: k,
-                            label: panelGroupBy === 'tier' ? `Nivel ${k}` : k,
-                            negs: map.get(k)!,
-                          })
-                        }
-                      }
-                      return (<>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                        Clubes ({visibleNegs.length !== playerNegs.length ? `${visibleNegs.length}/${playerNegs.length}` : playerNegs.length})
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setBulkAssignPlayerId(selectedEntry.playerId)}
-                          className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-700 font-medium"
-                          title="Asignar por liga"
-                        >
-                          <Users className="w-3.5 h-3.5" /> Por liga
-                        </button>
-                        <button
-                          onClick={() => setShowAddNeg({ playerId: selectedEntry.playerId })}
-                          className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
-                        >
-                          <Plus className="w-3.5 h-3.5" /> Añadir
-                        </button>
-                      </div>
-                    </div>
-                    {panelGestores.length > 1 && (
-                      <div className="flex gap-1.5 flex-wrap mb-2">
-                        <button onClick={() => setPlayerPanelGestorFilter('')} className={`px-2 py-1 rounded text-[11px] font-medium border transition-colors ${!playerPanelGestorFilter ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'}`}>Todos</button>
-                        {panelGestores.map(g => (
-                          <button key={g} onClick={() => setPlayerPanelGestorFilter(playerPanelGestorFilter === g ? '' : g)} className={`px-2 py-1 rounded text-[11px] font-medium border transition-colors ${playerPanelGestorFilter === g ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'}`}>{g}</button>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* ── Controles avanzados — solo al expandir el panel ── */}
-                    {panelExpanded && playerNegs.length > 0 && (
-                      <div className="mb-3 space-y-2">
-                        {/* Resumen de estados */}
-                        {statusSummary.length > 0 && (
-                          <div className="flex gap-1.5 flex-wrap">
-                            <button
-                              onClick={() => setPanelStatusFilter('')}
-                              className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium border transition-colors ${!panelStatusFilter ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-400'}`}
-                            >
-                              Todos <span className="font-bold">{gestorNegs.length}</span>
-                            </button>
-                            {statusSummary.map(({ s, count }) => {
-                              const active = panelStatusFilter === s
-                              return (
-                                <button
-                                  key={s}
-                                  onClick={() => setPanelStatusFilter(active ? '' : s)}
-                                  className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium border transition-colors ${active ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-400'}`}
-                                >
-                                  <span className={`w-1.5 h-1.5 rounded-full ${STATUS_CONFIG[s].dot}`} />
-                                  {STATUS_CONFIG[s].label} <span className="font-bold">{count}</span>
-                                </button>
-                              )
-                            })}
-                          </div>
-                        )}
-                        {/* Buscar + ordenar + agrupar */}
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <div className="relative flex-1 min-w-[140px]">
-                            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                            <input
-                              value={panelClubSearch}
-                              onChange={e => setPanelClubSearch(e.target.value)}
-                              placeholder="Buscar club o liga…"
-                              className="w-full pl-8 pr-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300"
-                            />
-                          </div>
-                          <label className="inline-flex items-center gap-1 text-[11px] text-slate-500">
-                            <SlidersHorizontal className="w-3.5 h-3.5" />
-                            <select
-                              value={panelSort}
-                              onChange={e => setPanelSort(e.target.value as typeof panelSort)}
-                              className="text-xs border border-slate-200 rounded-lg py-1.5 pl-1.5 pr-6 bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
-                            >
-                              <option value="status">Estado</option>
-                              <option value="league">Liga</option>
-                              <option value="alpha">A–Z</option>
-                              <option value="updated">Actualizado</option>
-                            </select>
-                          </label>
-                          <select
-                            value={panelGroupBy}
-                            onChange={e => setPanelGroupBy(e.target.value as typeof panelGroupBy)}
-                            className="text-xs border border-slate-200 rounded-lg py-1.5 pl-1.5 pr-6 bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
-                            title="Agrupar"
-                          >
-                            <option value="none">Sin agrupar</option>
-                            <option value="league">Por liga</option>
-                            <option value="tier">Por nivel</option>
-                          </select>
-                        </div>
-                      </div>
-                    )}
-
-                    {panelExpanded && panelGroupBy !== 'none' && groups.length > 0 ? (
-                      <div className="space-y-4">
-                        {groups.map(g => (
-                          <div key={g.key}>
-                            <div className="flex items-center gap-2 mb-1.5">
-                              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">{g.label}</span>
-                              <span className="text-[11px] text-slate-400">{g.negs.length}</span>
-                              <div className="flex-1 h-px bg-slate-100" />
-                            </div>
-                            <div className={listClass}>
-                              {g.negs.map(renderNeg)}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className={listClass}>
-                        {visibleNegs.map(renderNeg)}
-                      </div>
-                    )}
-                    {playerNegs.length === 0 && (
-                      <div className="text-center py-6 text-slate-400 text-xs">
-                        Aún no se ha ofrecido a ningún club
-                      </div>
-                    )}
-                    {playerNegs.length > 0 && visibleNegs.length === 0 && (
-                      <div className="text-center py-6 text-slate-400 text-xs">
-                        Ningún club coincide con el filtro
-                      </div>
-                    )}
-                    </>)})()}
+                    <PlayerClubList
+                      negotiations={playerNegs}
+                      clubs={clubs}
+                      profiles={profiles}
+                      onUpdateNegotiation={onUpdateNegotiation}
+                      onDeleteNegotiation={onDeleteNegotiation}
+                      onSelectClub={id => { onSelectClub?.(id); closePanel() }}
+                      onAddClub={() => setShowAddNeg({ playerId: selectedEntry.playerId })}
+                      onAssignLeague={() => setBulkAssignPlayerId(selectedEntry.playerId)}
+                      showToast={showToast}
+                      title="Clubes"
+                    />
                   </div>
 
                   <div className="px-4 py-3 border-t border-slate-100 flex-shrink-0 space-y-2 sticky bottom-0 bg-white safe-area-bottom">
@@ -5269,191 +4948,6 @@ function ModalShell({ title, onClose, children, escDisabled = false }: { title: 
 // ── BULK ASSIGN MODAL ─────────────────────────────────────────
 // Accordion-style: shows all leagues with select-all checkbox per league.
 // Multiple leagues can be expanded and selected simultaneously.
-
-function BulkAssignModal({ clubs, existingNegotiations, onClose, onSave }: {
-  clubs: Club[]
-  existingNegotiations: ClubNegotiation[]
-  onClose: () => void
-  onSave: (clubIds: string[]) => Promise<void>
-}) {
-  const leagues = useMemo(() => {
-    const map = new Map<string, Club[]>()
-    clubs.forEach(c => {
-      const key = c.league ?? 'Sin liga'
-      if (!map.has(key)) map.set(key, [])
-      map.get(key)!.push(c)
-    })
-    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b))
-  }, [clubs])
-
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [saving, setSaving] = useState(false)
-
-  const existingIds = new Set(existingNegotiations.map(n => n.clubId))
-  const newIds = Array.from(selected).filter(id => !existingIds.has(id))
-
-  function toggleExpand(league: string) {
-    setExpanded(prev => {
-      const next = new Set(prev)
-      if (next.has(league)) next.delete(league); else next.add(league)
-      return next
-    })
-  }
-
-  function getLeagueState(league: string): 'all' | 'partial' | 'none' {
-    const available = (leagues.find(([l]) => l === league)?.[1] ?? []).filter(c => !existingIds.has(c.id))
-    if (available.length === 0) return 'all'
-    const count = available.filter(c => selected.has(c.id)).length
-    if (count === 0) return 'none'
-    if (count === available.length) return 'all'
-    return 'partial'
-  }
-
-  function toggleLeague(league: string) {
-    const available = (leagues.find(([l]) => l === league)?.[1] ?? [])
-      .filter(c => !existingIds.has(c.id))
-      .map(c => c.id)
-    const state = getLeagueState(league)
-    setSelected(prev => {
-      const next = new Set(prev)
-      if (state === 'all') {
-        available.forEach(id => next.delete(id))
-      } else {
-        available.forEach(id => next.add(id))
-      }
-      return next
-    })
-  }
-
-  function toggleClub(id: string) {
-    setSelected(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id); else next.add(id)
-      return next
-    })
-  }
-
-  async function handleSave() {
-    if (newIds.length === 0) return
-    setSaving(true)
-    try { await onSave(newIds) } finally { setSaving(false) }
-  }
-
-  useEscapeKey(onClose)
-
-  return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
-      <div className="bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
-        {/* Header */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 flex-shrink-0">
-          <h2 className="font-semibold text-slate-800 text-sm flex-1">Asignar por liga</h2>
-          {newIds.length > 0 && (
-            <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full font-medium">
-              {newIds.length} seleccionado{newIds.length !== 1 ? 's' : ''}
-            </span>
-          )}
-          <button onClick={onClose} aria-label="Cerrar" className="p-2 sm:p-1 rounded hover:bg-slate-100 text-slate-400">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        <p className="px-4 py-2 text-xs text-slate-500 border-b border-slate-100 flex-shrink-0">
-          Marca ligas enteras o clubes individuales. Se crearán como <span className="font-semibold text-purple-700">Pendiente</span>.
-        </p>
-
-        {/* Leagues accordion */}
-        <div className="overflow-y-auto flex-1">
-          {leagues.map(([league, leagueClubs]) => {
-            const isExpanded = expanded.has(league)
-            const state = getLeagueState(league)
-            const available = leagueClubs.filter(c => !existingIds.has(c.id))
-            const allAlreadyAssigned = available.length === 0
-
-            return (
-              <div key={league} className="border-b border-slate-100 last:border-0">
-                <div className="flex items-center px-4 py-2.5 gap-3 hover:bg-slate-50">
-                  {/* League-level checkbox */}
-                  <input
-                    type="checkbox"
-                    checked={state !== 'none'}
-                    disabled={allAlreadyAssigned}
-                    ref={el => { if (el) el.indeterminate = state === 'partial' }}
-                    onChange={() => toggleLeague(league)}
-                    className="w-4 h-4 rounded text-purple-600 cursor-pointer flex-shrink-0"
-                  />
-                  {/* League name — click to expand */}
-                  <button
-                    onClick={() => toggleExpand(league)}
-                    className="flex-1 flex items-center gap-2 text-left min-w-0"
-                  >
-                    <span className="font-medium text-slate-800 text-sm truncate">{league}</span>
-                    <span className="text-xs text-slate-400 flex-shrink-0">{leagueClubs.length}</span>
-                    {state === 'all' && !allAlreadyAssigned && (
-                      <span className="text-xs text-purple-600 font-medium flex-shrink-0">✓ todos</span>
-                    )}
-                    {allAlreadyAssigned && (
-                      <span className="text-xs text-green-600 flex-shrink-0">ya asignados</span>
-                    )}
-                    <ChevronDown className={`w-3.5 h-3.5 text-slate-400 ml-auto flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                  </button>
-                </div>
-
-                {isExpanded && (
-                  <div className="px-4 pb-2 space-y-1 bg-slate-50">
-                    {leagueClubs.map(club => {
-                      const alreadyExists = existingIds.has(club.id)
-                      const isSelected = selected.has(club.id)
-                      return (
-                        <label
-                          key={club.id}
-                          className={`flex items-center gap-3 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${
-                            alreadyExists
-                              ? 'border-green-200 bg-green-50 cursor-not-allowed opacity-60'
-                              : isSelected
-                                ? 'border-purple-300 bg-purple-50'
-                                : 'border-slate-200 bg-white hover:bg-slate-50'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isSelected || alreadyExists}
-                            disabled={alreadyExists}
-                            onChange={() => !alreadyExists && toggleClub(club.id)}
-                            className="w-4 h-4 rounded text-purple-600"
-                          />
-                          <span className="flex-1 text-sm text-slate-800 truncate">{club.name}</span>
-                          {club.aisManager && (
-                            <span className="text-xs font-mono text-slate-400 flex-shrink-0">{club.aisManager}</span>
-                          )}
-                          {alreadyExists && <span className="text-xs text-green-600 flex-shrink-0">asignado</span>}
-                        </label>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-
-        {/* Footer */}
-        <div className="px-4 py-3 border-t border-slate-100 flex gap-2 flex-shrink-0 safe-area-bottom">
-          <button onClick={onClose} className="flex-1 py-2 text-sm border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50">
-            Cancelar
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={newIds.length === 0 || saving}
-            className="flex-1 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 font-medium"
-          >
-            {saving ? <span className="flex items-center justify-center gap-2"><BtnSpinner /> Asignando…</span> : `Asignar ${newIds.length} club${newIds.length !== 1 ? 's' : ''}`}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 // ── MULTI-SELECT DROPDOWN ─────────────────────────────────────
 
