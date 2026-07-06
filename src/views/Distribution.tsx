@@ -783,10 +783,10 @@ export function Distribution({
               {showPendingInbox && (
                 <div className="border-t border-amber-200 divide-y divide-amber-100 max-h-[50vh] overflow-y-auto">
                   {myPending.map(({ neg, club, player }) => (
-                    <button
+                    <div
                       key={neg.id}
                       onClick={() => { if (club) onSelectClub?.(club.id) }}
-                      className="w-full flex items-center gap-2 px-4 py-2.5 text-left bg-white hover:bg-amber-50 transition-colors"
+                      className="w-full flex items-center gap-2 px-4 py-2.5 text-left bg-white hover:bg-amber-50 transition-colors cursor-pointer"
                     >
                       <span className="text-sm font-medium text-slate-800 truncate">{player?.name ?? 'Jugador'}</span>
                       <ChevronRight className="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />
@@ -795,7 +795,23 @@ export function Distribution({
                         <span className="text-[11px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded flex-shrink-0">{neg.needPosition}</span>
                       )}
                       <span className="ml-auto text-[11px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full flex-shrink-0">Pendiente</span>
-                    </button>
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation()
+                          try {
+                            await onUpdateNegotiation({ ...neg, status: 'descartado' })
+                            showToast(`${player?.name ?? 'Propuesta'} → ${club?.name ?? 'club'} descartada`, 'info')
+                          } catch {
+                            showToast('No se pudo descartar. Inténtalo de nuevo.', 'error')
+                          }
+                        }}
+                        title="Descartar propuesta"
+                        aria-label="Descartar propuesta"
+                        className="p-1.5 rounded-lg text-slate-300 hover:text-red-600 hover:bg-red-50 flex-shrink-0 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}
