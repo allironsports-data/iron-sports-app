@@ -3,7 +3,7 @@ import {
   Plus, Search, Star, Building2, Users,
   ChevronRight, X, Check, Pencil, Trash2, LogOut,
   TrendingUp, AlertCircle, CircleDot, Flag, ChevronDown,
-  Eye, List, LayoutGrid, SlidersHorizontal, Maximize2, Minimize2,
+  Eye, List, LayoutGrid, SlidersHorizontal, Maximize2, Minimize2, CheckSquare,
 } from 'lucide-react'
 import logoImg from '../assets/logo.jpeg'
 import type { Player, Club, ClubNeed, DistributionEntry, ClubNegotiation, ClubNegotiationUpdate } from '../types'
@@ -241,14 +241,28 @@ export function Distribution({
   const [openClubManagerId, setOpenClubManagerId]   = useState<string | null>(null)
   const [clubManagerDropPos, setClubManagerDropPos] = useState<{ top: number; right: number } | null>(null)
 
+  // Bulk: asignar encargado a varios clubes a la vez (pestaña Clubes)
+  const [clubBulkMode, setClubBulkMode] = useState(false)
+  const [clubSelected, setClubSelected] = useState<Set<string>>(new Set())
+  const [bulkClubManagerPos, setBulkClubManagerPos] = useState<{ top: number; right: number } | null>(null)
+  const [bulkClubAssigning, setBulkClubAssigning] = useState(false)
+  function toggleClubSelected(id: string) {
+    setClubSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
   // Close manager dropdowns on outside click.
   // Se cierra también con scroll AMPLIO (el dropdown es fixed y se desalinearía),
   // pero ignorando micro-scrolls para que no desaparezca antes de elegir.
   useEffect(() => {
-    if (!openManagerDropId && !openClubManagerId) return
+    if (!openManagerDropId && !openClubManagerId && !bulkClubManagerPos) return
     const close = () => {
       setOpenManagerDropId(null); setManagerDropPos(null)
       setOpenClubManagerId(null); setClubManagerDropPos(null)
+      setBulkClubManagerPos(null)
     }
     // Espera al siguiente tick para no capturar el mismo clic que lo abrió
     let startY = window.scrollY
@@ -265,7 +279,7 @@ export function Distribution({
       document.removeEventListener('click', close)
       window.removeEventListener('scroll', onScroll, true)
     }
-  }, [openManagerDropId, openClubManagerId])
+  }, [openManagerDropId, openClubManagerId, bulkClubManagerPos])
 
   // modals
   const [showAddPlayer, setShowAddPlayer] = useState(false)
@@ -1330,18 +1344,62 @@ export function Distribution({
                   </div>
                   {clubsGroupToggle}
                 </div>
-                <button
-                  onClick={() => setShowAddClub(true)}
-                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-sm rounded-lg hover:bg-primary/90 transition-colors"
-                >
-                  <Plus className="w-4 h-4" /> Añadir club
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => { setClubBulkMode(v => !v); if (clubBulkMode) setClubSelected(new Set()) }}
+                    className={`hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 border text-sm rounded-lg font-medium transition-colors ${
+                      clubBulkMode ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                    }`}
+                  >
+                    <CheckSquare className="w-4 h-4" /> {clubBulkMode ? 'Cancelar selección' : 'Seleccionar'}
+                  </button>
+                  <button
+                    onClick={() => setShowAddClub(true)}
+                    className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-sm rounded-lg hover:bg-primary/90 transition-colors"
+                  >
+                    <Plus className="w-4 h-4" /> Añadir club
+                  </button>
+                </div>
               </div>
 
               {/* Desktop: filtros inline */}
               <div className="hidden sm:block">
                 {clubsFilterControls}
               </div>
+
+              {/* Barra de selección múltiple — asignar encargado en bulk */}
+              {clubBulkMode && (
+                <div className="flex items-center gap-3 mb-2 flex-wrap bg-blue-50/50 border border-blue-100 rounded-lg px-3 py-2">
+                  <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4 rounded"
+                      checked={filteredClubs.length > 0 && filteredClubs.every(c => clubSelected.has(c.id))}
+                      onChange={e => setClubSelected(prev => {
+                        const next = new Set(prev)
+                        filteredClubs.forEach(c => { if (e.target.checked) next.add(c.id); else next.delete(c.id) })
+                        return next
+                      })}
+                    />
+                    Seleccionar visibles
+                  </label>
+                  {clubSelected.size > 0 && (
+                    <>
+                      <span className="text-xs text-slate-500">{clubSelected.size} club{clubSelected.size !== 1 ? 'es' : ''} seleccionado{clubSelected.size !== 1 ? 's' : ''}</span>
+                      <button
+                        onClick={e => {
+                          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                          setBulkClubManagerPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
+                        }}
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-white bg-primary hover:bg-primary/90 px-3 py-1.5 rounded-lg"
+                      >
+                        <Users className="w-3.5 h-3.5" /> Asignar encargado ({clubSelected.size})
+                      </button>
+                      <button onClick={() => setClubSelected(new Set())} className="text-xs text-slate-500 hover:text-slate-700">Limpiar selección</button>
+                    </>
+                  )}
+                </div>
+              )}
 
               {/* Móvil: barra compacta búsqueda + botón Filtros */}
               <div className="flex sm:hidden items-center gap-2 mb-3">
@@ -1362,6 +1420,14 @@ export function Distribution({
                 >
                   <SlidersHorizontal className="w-4 h-4" /> Filtros
                   {clubsActiveFilters > 0 && <span className="text-xs">({clubsActiveFilters})</span>}
+                </button>
+                <button
+                  onClick={() => { setClubBulkMode(v => !v); if (clubBulkMode) setClubSelected(new Set()) }}
+                  className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                    clubBulkMode ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-white text-slate-600 border-slate-200'
+                  }`}
+                >
+                  <CheckSquare className="w-4 h-4" />
                 </button>
               </div>
 
@@ -1387,6 +1453,9 @@ export function Distribution({
                       onTogglePriority={() => onUpdateClub({ ...club, isPriority: !club.isPriority }).catch(() => showToast('No se pudo guardar. Inténtalo de nuevo.', 'error'))}
                       managerName={profiles.find(p => p.avatar === club.aisManager)?.name}
                       managerDropOpen={openClubManagerId === club.id}
+                              selectMode={clubBulkMode}
+                              bulkSelected={clubSelected.has(club.id)}
+                              onToggleBulkSelect={() => toggleClubSelected(club.id)}
                       onToggleManagerDrop={(pos) => {
                         if (!pos) { setOpenClubManagerId(null); setClubManagerDropPos(null) }
                         else { setOpenClubManagerId(club.id); setClubManagerDropPos(pos) }
@@ -1423,6 +1492,9 @@ export function Distribution({
                               onTogglePriority={() => onUpdateClub({ ...club, isPriority: !club.isPriority }).catch(() => showToast('No se pudo guardar. Inténtalo de nuevo.', 'error'))}
                               managerName={profiles.find(p => p.avatar === club.aisManager)?.name}
                               managerDropOpen={openClubManagerId === club.id}
+                              selectMode={clubBulkMode}
+                              bulkSelected={clubSelected.has(club.id)}
+                              onToggleBulkSelect={() => toggleClubSelected(club.id)}
                               onToggleManagerDrop={(pos) => {
                                 if (!pos) { setOpenClubManagerId(null); setClubManagerDropPos(null) }
                                 else { setOpenClubManagerId(club.id); setClubManagerDropPos(pos) }
@@ -1464,6 +1536,9 @@ export function Distribution({
                               onTogglePriority={() => onUpdateClub({ ...club, isPriority: !club.isPriority }).catch(() => showToast('No se pudo guardar. Inténtalo de nuevo.', 'error'))}
                               managerName={profiles.find(p => p.avatar === club.aisManager)?.name}
                               managerDropOpen={openClubManagerId === club.id}
+                              selectMode={clubBulkMode}
+                              bulkSelected={clubSelected.has(club.id)}
+                              onToggleBulkSelect={() => toggleClubSelected(club.id)}
                               onToggleManagerDrop={(pos) => {
                                 if (!pos) { setOpenClubManagerId(null); setClubManagerDropPos(null) }
                                 else { setOpenClubManagerId(club.id); setClubManagerDropPos(pos) }
@@ -3582,6 +3657,60 @@ export function Distribution({
         )
       })()}
 
+      {/* Asignar encargado en bulk — a todos los clubes seleccionados en pestaña Clubes */}
+      {bulkClubManagerPos && (() => {
+        const closeDrop = () => setBulkClubManagerPos(null)
+        const ids = Array.from(clubSelected)
+        const pos = clampDropPos(bulkClubManagerPos.top, profiles.length + 2)
+        async function assignBulk(avatar: string | undefined) {
+          setBulkClubAssigning(true)
+          try {
+            const targets = ids.map(id => clubs.find(c => c.id === id)).filter((c): c is Club => !!c)
+            await Promise.all(targets.map(c => onUpdateClub({ ...c, aisManager: avatar })))
+            showToast(avatar ? `Encargado asignado a ${targets.length} club${targets.length !== 1 ? 'es' : ''}` : `Encargado quitado de ${targets.length} club${targets.length !== 1 ? 'es' : ''}`)
+            setClubSelected(new Set())
+            setClubBulkMode(false)
+          } catch {
+            showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+          } finally {
+            setBulkClubAssigning(false)
+            closeDrop()
+          }
+        }
+        return (
+          <div
+            className="fixed z-[200] bg-white border border-slate-200 rounded-xl shadow-xl py-1 min-w-[200px] max-w-[calc(100vw-2rem)] overflow-y-auto"
+            style={{ top: pos.top, right: bulkClubManagerPos.right, maxHeight: pos.maxHeight }}
+            onClick={e => e.stopPropagation()}
+          >
+            <p className="px-3 pt-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              Asignar a {ids.length} club{ids.length !== 1 ? 'es' : ''}
+            </p>
+            {profiles.map(p => (
+              <button
+                key={p.id}
+                disabled={bulkClubAssigning}
+                onClick={() => assignBulk(p.avatar)}
+                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50"
+              >
+                <span className="w-5 h-5 rounded-full bg-slate-100 text-[9px] font-bold flex items-center justify-center flex-shrink-0">
+                  {p.avatar}
+                </span>
+                {p.name.split(' ')[0]}
+              </button>
+            ))}
+            <div className="border-t border-slate-100 my-1" />
+            <button
+              disabled={bulkClubAssigning}
+              onClick={() => assignBulk(undefined)}
+              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
+            >
+              Quitar encargado
+            </button>
+          </div>
+        )
+      })()}
+
       {/* ── Confirmaciones ── */}
       <ConfirmModal
         open={!!confirmDeleteEntryId}
@@ -3629,7 +3758,7 @@ export function Distribution({
 
 // ── CLUB CARD ────────────────────────────────────────────────
 
-function ClubCard({ club, negotiations, isSelected, onClick, onOffer, onTogglePriority, managerName, managerDropOpen, onToggleManagerDrop }: {
+function ClubCard({ club, negotiations, isSelected, onClick, onOffer, onTogglePriority, managerName, managerDropOpen, onToggleManagerDrop, selectMode, bulkSelected, onToggleBulkSelect }: {
   club: Club
   negotiations: ClubNegotiation[]
   isSelected: boolean
@@ -3640,6 +3769,10 @@ function ClubCard({ club, negotiations, isSelected, onClick, onOffer, onTogglePr
   managerName?: string
   managerDropOpen?: boolean
   onToggleManagerDrop?: (pos: { top: number; right: number } | null) => void
+  /** Selección múltiple para asignar encargado en bulk */
+  selectMode?: boolean
+  bulkSelected?: boolean
+  onToggleBulkSelect?: () => void
 }) {
   const activeStatuses: ClubNegotiation['status'][] = ['pendiente', 'ofrecido', 'interesado', 'negociando']
   const activeNegs = negotiations.filter(n => n.clubId === club.id && n.status !== 'descartado')
@@ -3668,8 +3801,18 @@ function ClubCard({ club, negotiations, isSelected, onClick, onOffer, onTogglePr
       onClick={onClick}
       className={`bg-white rounded-lg border cursor-pointer hover:shadow-sm transition-all group flex items-center gap-2.5 px-3 py-2 ${
         isSelected ? 'border-blue-300 ring-1 ring-blue-200' : isStale ? 'border-orange-300' : 'border-slate-200'
-      } ${club.isPriority ? 'border-l-4 border-l-green-400' : isStale ? 'border-l-4 border-l-orange-400' : ''}`}
+      } ${bulkSelected ? 'bg-blue-50/60' : ''} ${club.isPriority ? 'border-l-4 border-l-green-400' : isStale ? 'border-l-4 border-l-orange-400' : ''}`}
     >
+      {selectMode && (
+        <input
+          type="checkbox"
+          className="w-4 h-4 rounded flex-shrink-0"
+          checked={!!bulkSelected}
+          onClick={e => e.stopPropagation()}
+          onChange={() => onToggleBulkSelect?.()}
+          aria-label={`Seleccionar ${club.name}`}
+        />
+      )}
       <div className={`w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0 text-[11px] font-bold ${tierCfg.bg} ${tierCfg.text}`}>
         {tier}
       </div>
