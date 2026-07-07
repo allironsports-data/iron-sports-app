@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import { Plus, Search, Edit3, ExternalLink, Trash2, Users, X, CheckSquare, ChevronDown, Check } from 'lucide-react'
 import type { Club, ClubNegotiation } from '../types'
 import type { Profile } from '../contexts/AuthContext'
@@ -46,6 +47,53 @@ const isStale = (n: ClubNegotiation) => {
   if (!ACTIVE_STATUSES.includes(n.status)) return false
   const d = daysSince(lastActivity(n))
   return d !== null && d > STALE_DAYS
+}
+
+// ── Desplegable de filtro multiselección (compacto) ────────────
+
+function FilterDropdown({ label, active, children, widthClass = 'w-60' }: {
+  label: string
+  active?: number
+  children: ReactNode
+  widthClass?: string
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className={`flex items-center gap-1 px-2.5 py-1.5 border rounded-lg text-xs font-medium transition-colors ${active ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'}`}
+      >
+        {label}{active ? ` (${active})` : ''}
+        <ChevronDown className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className={`absolute left-0 z-50 mt-1 ${widthClass} max-w-[calc(100vw-2rem)] bg-white border border-slate-200 rounded-xl shadow-xl max-h-64 overflow-y-auto p-1`}>
+            {children}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function CheckItem({ selected, onToggle, count, children }: {
+  selected: boolean
+  onToggle: () => void
+  count?: number
+  children: ReactNode
+}) {
+  return (
+    <button onClick={onToggle} className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center gap-2 hover:bg-slate-50">
+      <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0 ${selected ? 'bg-primary border-primary' : 'border-slate-300'}`}>
+        {selected && <Check className="w-2.5 h-2.5 text-white" />}
+      </span>
+      <span className="flex-1 truncate text-slate-700 flex items-center gap-1.5">{children}</span>
+      {count !== undefined && <span className="text-slate-400 font-mono">{count}</span>}
+    </button>
+  )
 }
 
 // ── Detalle de una negociación (contenido compartido overlay / lado) ──
@@ -293,11 +341,10 @@ export function PlayerClubList({
   /** 'overlay': detalle en slide-over. 'side': detalle fijo a la derecha (doble vista). */
   detailMode?: 'overlay' | 'side'
 }) {
-  const [statusFilter, setStatusFilter] = useState<ClubNegotiation['status'] | ''>('')
-  const [gestorFilter, setGestorFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState<ClubNegotiation['status'][]>([])
+  const [gestorFilter, setGestorFilter] = useState<string[]>([])
   const [staleOnly, setStaleOnly] = useState(false)
   const [leagueFilter, setLeagueFilter] = useState<string[]>([])
-  const [leagueOpen, setLeagueOpen] = useState(false)
   const [clubSearch, setClubSearch] = useState('')
   const [sortBy, setSortBy] = useState<'estado' | 'nombre' | 'liga' | 'actualizado'>('estado')
   const [groupBy, setGroupBy] = useState<'none' | 'estado' | 'liga' | 'nivel'>('none')
@@ -391,8 +438,8 @@ export function PlayerClubList({
 
   const q = clubSearch.trim().toLowerCase()
   const visible = withClub
-    .filter(x => !statusFilter || x.neg.status === statusFilter)
-    .filter(x => !gestorFilter || parseGestores(x.neg.aisManager).includes(gestorFilter))
+    .filter(x => statusFilter.length === 0 || statusFilter.includes(x.neg.status))
+    .filter(x => gestorFilter.length === 0 || parseGestores(x.neg.aisManager).some(g => gestorFilter.includes(g)))
     .filter(x => !staleOnly || isStale(x.neg))
     .filter(x => leagueFilter.length === 0 || leagueFilter.includes(leagueKey(x.club)))
     .filter(x => !q || x.club.name.toLowerCase().includes(q) || (x.club.league ?? '').toLowerCase().includes(q) || (x.neg.notes ?? '').toLowerCase().includes(q))
@@ -552,44 +599,9 @@ export function PlayerClubList({
         <p className="text-center text-slate-400 text-xs py-6">Sin clubes contactados aún</p>
       ) : (
         <>
-          {/* Chips de estado */}
-          <div className="flex flex-wrap gap-1.5">
-            <button onClick={() => setStatusFilter('')} className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${!statusFilter ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
-              Todos <span className="font-mono opacity-70">{withClub.length}</span>
-            </button>
-            {NEG_STATUSES.filter(s => (statusCounts[s] ?? 0) > 0).map(s => {
-              const cfg = NEG_STATUS_CONFIG[s]
-              return (
-                <button key={s} onClick={() => setStatusFilter(statusFilter === s ? '' : s)} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${statusFilter === s ? cfg.color + ' ring-1 ring-current' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
-                  {cfg.label} <span className="font-mono opacity-60">{statusCounts[s]}</span>
-                </button>
-              )
-            })}
-            {staleCount > 0 && (
-              <button
-                onClick={() => setStaleOnly(v => !v)}
-                title={`Activas sin actualizar en más de ${STALE_DAYS} días`}
-                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${staleOnly ? 'bg-amber-100 text-amber-700 ring-1 ring-amber-400' : 'bg-slate-100 text-amber-600 hover:bg-amber-50'}`}
-              >
-                ⏰ Estancadas <span className="font-mono opacity-70">{staleCount}</span>
-              </button>
-            )}
-          </div>
-
-          {/* Chips de gestor */}
-          {gestores.length > 1 && (
-            <div className="flex flex-wrap gap-1.5">
-              <button onClick={() => setGestorFilter('')} className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${!gestorFilter ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>Gestor: todos</button>
-              {gestores.map(g => (
-                <button key={g} onClick={() => setGestorFilter(gestorFilter === g ? '' : g)} className={`px-2.5 py-1 rounded-full text-xs font-mono font-medium transition-colors ${gestorFilter === g ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-300' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>{g}</button>
-              ))}
-            </div>
-          )}
-
-          {/* Búsqueda + orden + agrupación */}
+          {/* Barra de filtros compacta */}
           <div className="flex flex-wrap items-center gap-2">
-            <div className="relative flex-1 min-w-[160px]">
+            <div className="relative flex-1 min-w-[140px]">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
               <input
                 value={clubSearch}
@@ -598,45 +610,72 @@ export function PlayerClubList({
                 className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
               />
             </div>
-            {/* Filtro de ligas (multiselección) */}
-            <div className="relative">
+
+            {/* Estado (multiselección + estancadas) */}
+            <FilterDropdown label="Estado" active={statusFilter.length + (staleOnly ? 1 : 0)} widthClass="w-56">
               <button
-                onClick={() => setLeagueOpen(o => !o)}
-                className={`flex items-center gap-1 px-2.5 py-1.5 border rounded-lg text-xs font-medium transition-colors ${leagueFilter.length > 0 ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'}`}
+                onClick={() => { setStatusFilter([]); setStaleOnly(false) }}
+                className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium ${statusFilter.length === 0 && !staleOnly ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
               >
-                Ligas{leagueFilter.length > 0 ? ` (${leagueFilter.length})` : ''}
-                <ChevronDown className={`w-3 h-3 transition-transform ${leagueOpen ? 'rotate-180' : ''}`} />
+                Todos <span className="font-mono opacity-70">{withClub.length}</span>
               </button>
-              {leagueOpen && (
+              {NEG_STATUSES.filter(st => (statusCounts[st] ?? 0) > 0).map(st => {
+                const cfg = NEG_STATUS_CONFIG[st]
+                const sel = statusFilter.includes(st)
+                return (
+                  <CheckItem key={st} selected={sel} count={statusCounts[st]} onToggle={() => setStatusFilter(prev => sel ? prev.filter(x => x !== st) : [...prev, st])}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />{cfg.label}
+                  </CheckItem>
+                )
+              })}
+              {staleCount > 0 && (
                 <>
-                  <div className="fixed inset-0 z-40" onClick={() => setLeagueOpen(false)} />
-                  <div className="absolute right-0 z-50 mt-1 w-60 bg-white border border-slate-200 rounded-xl shadow-xl max-h-64 overflow-y-auto p-1">
-                    <button
-                      onClick={() => setLeagueFilter([])}
-                      className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium ${leagueFilter.length === 0 ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-                    >
-                      Todas las ligas
-                    </button>
-                    {allLeagues.map(({ key, label, count }) => {
-                      const sel = leagueFilter.includes(key)
-                      return (
-                        <button
-                          key={key}
-                          onClick={() => setLeagueFilter(prev => sel ? prev.filter(l => l !== key) : [...prev, key])}
-                          className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center gap-2 hover:bg-slate-50"
-                        >
-                          <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0 ${sel ? 'bg-primary border-primary' : 'border-slate-300'}`}>
-                            {sel && <Check className="w-2.5 h-2.5 text-white" />}
-                          </span>
-                          <span className="flex-1 truncate text-slate-700">{label}</span>
-                          <span className="text-slate-400 font-mono">{count}</span>
-                        </button>
-                      )
-                    })}
-                  </div>
+                  <div className="border-t border-slate-100 my-1" />
+                  <CheckItem selected={staleOnly} count={staleCount} onToggle={() => setStaleOnly(v => !v)}>
+                    <span className="text-amber-600">⏰ Estancadas</span>
+                  </CheckItem>
                 </>
               )}
-            </div>
+            </FilterDropdown>
+
+            {/* Gestor (multiselección) */}
+            {gestores.length > 1 && (
+              <FilterDropdown label="Gestor" active={gestorFilter.length} widthClass="w-44">
+                <button
+                  onClick={() => setGestorFilter([])}
+                  className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium ${gestorFilter.length === 0 ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                >
+                  Todos
+                </button>
+                {gestores.map(g => {
+                  const sel = gestorFilter.includes(g)
+                  return (
+                    <CheckItem key={g} selected={sel} onToggle={() => setGestorFilter(prev => sel ? prev.filter(x => x !== g) : [...prev, g])}>
+                      <span className="font-mono">{g}</span>
+                    </CheckItem>
+                  )
+                })}
+              </FilterDropdown>
+            )}
+
+            {/* Ligas (multiselección) */}
+            <FilterDropdown label="Ligas" active={leagueFilter.length} widthClass="w-64">
+              <button
+                onClick={() => setLeagueFilter([])}
+                className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium ${leagueFilter.length === 0 ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+              >
+                Todas las ligas
+              </button>
+              {allLeagues.map(({ key, label, count }) => {
+                const sel = leagueFilter.includes(key)
+                return (
+                  <CheckItem key={key} selected={sel} count={count} onToggle={() => setLeagueFilter(prev => sel ? prev.filter(l => l !== key) : [...prev, key])}>
+                    {label}
+                  </CheckItem>
+                )
+              })}
+            </FilterDropdown>
+
             <select value={sortBy} onChange={e => setSortBy(e.target.value as typeof sortBy)} aria-label="Ordenar" className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white text-slate-600">
               <option value="estado">Orden: estado</option>
               <option value="nombre">Orden: nombre</option>
@@ -649,6 +688,14 @@ export function PlayerClubList({
               <option value="liga">Agrupar: liga</option>
               <option value="nivel">Agrupar: nivel</option>
             </select>
+            {(statusFilter.length > 0 || gestorFilter.length > 0 || leagueFilter.length > 0 || staleOnly || clubSearch) && (
+              <button
+                onClick={() => { setStatusFilter([]); setGestorFilter([]); setLeagueFilter([]); setStaleOnly(false); setClubSearch('') }}
+                className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+              >
+                Limpiar
+              </button>
+            )}
           </div>
 
           {/* Selección múltiple (opt-in) */}
