@@ -516,8 +516,8 @@ export function PlayerClubList({
         )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
-            <span className={`text-sm font-medium truncate ${neg.status === 'descartado' ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{club.name}</span>
-            {club.league && <span className="text-[11px] text-slate-400 flex-shrink-0 hidden sm:inline">· {leagueLabel(club.league, club.country)}</span>}
+            <span className={`text-sm font-medium flex-shrink-0 max-w-[60%] truncate ${neg.status === 'descartado' ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{club.name}</span>
+            {club.league && <span className="text-[11px] text-slate-400 truncate min-w-0 hidden sm:inline">· {leagueLabel(club.league, club.country)}</span>}
             {neg.updates && neg.updates.length > 0 && <span className="text-[11px] text-slate-400 flex-shrink-0">📝 {neg.updates.length}</span>}
             {isStale(neg) && (
               <span title={`Sin actividad en ${daysSince(lastActivity(neg))} días`} className="text-[11px] font-medium text-amber-600 flex-shrink-0">
