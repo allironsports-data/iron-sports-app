@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { Plus, Search, Edit3, ExternalLink, Trash2, Users, X, CheckSquare, ChevronDown, Check } from 'lucide-react'
+import { Plus, Search, Edit3, ExternalLink, Trash2, Users, X, CheckSquare, ChevronDown, Check, ArrowLeft } from 'lucide-react'
 import type { Club, ClubNegotiation } from '../types'
 import type { Profile } from '../contexts/AuthContext'
 import type { ToastVariant } from '../hooks/useToast'
@@ -323,7 +323,7 @@ export function PlayerClubList({
   negotiations, clubs, profiles, currentProfile,
   onUpdateNegotiation, onDeleteNegotiation, onSelectClub,
   onAddClub, onAssignLeague, showToast,
-  title = 'Clubes contactados', expanded = false, detailMode = 'overlay',
+  title = 'Clubes contactados', expanded = false, detailMode = 'push',
 }: {
   negotiations: ClubNegotiation[]
   clubs: Club[]
@@ -338,8 +338,9 @@ export function PlayerClubList({
   title?: string
   /** Muestra información extra en cada fila (última actualización y último seguimiento) */
   expanded?: boolean
-  /** 'overlay': detalle en slide-over. 'side': detalle fijo a la derecha (doble vista). */
-  detailMode?: 'overlay' | 'side'
+  /** 'push': el detalle sustituye a la lista con "volver" (paneles estrechos).
+   *  'side': detalle fijo a la derecha (doble vista). */
+  detailMode?: 'push' | 'side'
 }) {
   const [statusFilter, setStatusFilter] = useState<ClubNegotiation['status'][]>([])
   const [gestorFilter, setGestorFilter] = useState<string[]>([])
@@ -359,7 +360,7 @@ export function PlayerClubList({
   const panelNeg = negotiations.find(n => n.id === panelNegId) ?? null
   const panelClub = panelNeg ? clubs.find(c => c.id === panelNeg.clubId) ?? null : null
 
-  useEscapeKey(() => setPanelNegId(null), !!panelNegId && detailMode === 'overlay')
+  useEscapeKey(() => setPanelNegId(null), !!panelNegId && detailMode === 'push')
 
   function exitSelectMode() {
     setSelectMode(false)
@@ -572,7 +573,7 @@ export function PlayerClubList({
       onRequestDelete={onDeleteNegotiation ? () => setNegToDelete(panelNeg) : undefined}
       onClose={() => setPanelNegId(null)}
       showToast={showToast}
-      variant={detailMode}
+      variant="side"
     />
   ) : null
 
@@ -784,26 +785,58 @@ export function PlayerClubList({
     </div>
   )
 
+  // ── Modo push: el detalle ocupa el panel entero, con "volver a la lista" ──
+  if (detailMode === 'push' && detailNode) {
+    return (
+      <div className="space-y-2">
+        <button
+          onClick={() => setPanelNegId(null)}
+          className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" /> Volver a la lista ({withClub.length})
+        </button>
+        {detailNode}
+
+        {/* Confirmación de borrado individual */}
+        <ConfirmModal
+          open={!!negToDelete}
+          title="¿Eliminar negociación?"
+          message={negToDelete ? `Se eliminará la negociación con ${clubs.find(c => c.id === negToDelete.clubId)?.name ?? 'este club'}. Esta acción no se puede deshacer.` : undefined}
+          confirmLabel="Eliminar"
+          variant="danger"
+          onConfirm={async () => {
+            if (!negToDelete) return
+            try {
+              await onDeleteNegotiation?.(negToDelete.id)
+              if (panelNegId === negToDelete.id) setPanelNegId(null)
+              setNegToDelete(null)
+              showToast('Negociación eliminada', 'info')
+            } catch {
+              showToast('No se pudo eliminar la negociación', 'error')
+            }
+          }}
+          onCancel={() => setNegToDelete(null)}
+        />
+      </div>
+    )
+  }
+
   return (
-    <div className={detailMode === 'side' ? 'flex flex-col sm:flex-row gap-4 items-stretch' : undefined}>
-      <div className={detailMode === 'side' ? 'flex-1 min-w-0 order-2 sm:order-1' : undefined}>
+    <div className={detailMode === 'side' ? 'sm:h-full sm:min-h-0 flex flex-col sm:flex-row gap-4 items-stretch' : undefined}>
+      {/* Doble vista: cada columna scrollea por separado; el detalle siempre queda visible */}
+      <div className={detailMode === 'side' ? 'flex-1 min-w-0 order-2 sm:order-1 sm:min-h-0 sm:overflow-y-auto sm:pr-1' : undefined}>
         {listContent}
       </div>
 
-      {/* La columna estira a toda la altura de la lista; el detalle va pegado (sticky) al hacer scroll */}
       {detailMode === 'side' && (
-        <div className="w-full sm:w-80 flex-shrink-0 order-1 sm:order-2">
-          <div className="sm:sticky sm:top-3 sm:max-h-[calc(100vh-120px)] sm:overflow-y-auto">
-            {detailNode ?? (
-              <div className="hidden sm:block border-2 border-dashed border-slate-200 rounded-xl py-16 px-6 text-center">
-                <p className="text-xs text-slate-400">Haz clic en un club para ver y editar la oportunidad: estado, encargado, información y notas de seguimiento.</p>
-              </div>
-            )}
-          </div>
+        <div className="w-full sm:w-80 flex-shrink-0 order-1 sm:order-2 sm:min-h-0 sm:overflow-y-auto">
+          {detailNode ?? (
+            <div className="hidden sm:block border-2 border-dashed border-slate-200 rounded-xl py-16 px-6 text-center">
+              <p className="text-xs text-slate-400">Haz clic en un club para ver y editar la oportunidad: estado, encargado, información y notas de seguimiento.</p>
+            </div>
+          )}
         </div>
       )}
-
-      {detailMode === 'overlay' && detailNode}
 
       {/* Confirmación de borrado individual */}
       <ConfirmModal

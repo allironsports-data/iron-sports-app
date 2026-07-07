@@ -2902,7 +2902,7 @@ export function Distribution({
                     )}
                   </div>
 
-                  <div className="flex-1 overflow-y-auto px-4 py-3">
+                  <div className={panelExpanded ? 'flex-1 min-h-0 px-4 py-3 overflow-y-auto sm:overflow-hidden' : 'flex-1 overflow-y-auto px-4 py-3'}>
                     <PlayerClubList
                       negotiations={playerNegs}
                       clubs={clubs}
@@ -2916,7 +2916,7 @@ export function Distribution({
                       showToast={showToast}
                       title="Clubes"
                       expanded={panelExpanded}
-                      detailMode={panelExpanded ? 'side' : 'overlay'}
+                      detailMode={panelExpanded ? 'side' : 'push'}
                     />
                   </div>
 
