@@ -2836,7 +2836,9 @@ export function Distribution({
 
         {/* ── SIDE PANEL ── */}
         {hasPanel && (
-          <div className={`w-full flex-shrink-0 border-l border-slate-200 bg-white overflow-y-auto fixed sm:static inset-0 sm:inset-auto z-30 transition-[width] duration-200 ${
+          <div className={`w-full flex-shrink-0 border-l border-slate-200 bg-white fixed sm:static inset-0 sm:inset-auto z-30 transition-[width] duration-200 ${
+            panelExpanded && selectedEntry ? 'overflow-y-auto sm:overflow-hidden' : 'overflow-y-auto'
+          } ${
             panelExpanded ? 'sm:w-[560px] lg:w-[55%] xl:w-[60%]' : 'sm:w-[380px]'
           }`}>
             {selectedEntry && (() => {
