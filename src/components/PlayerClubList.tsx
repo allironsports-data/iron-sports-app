@@ -454,7 +454,9 @@ export function PlayerClubList({
 
   let groups: { key: string; label: string; items: typeof visible }[]
   if (groupBy === 'estado') {
-    groups = NEG_STATUSES
+    // Orden: negociando → interesado → ofrecido → pendiente → cerrado → descartado
+    groups = [...NEG_STATUSES]
+      .sort((a, b) => NEG_STATUS_ORDER[a] - NEG_STATUS_ORDER[b])
       .map(s => ({ key: s, label: NEG_STATUS_CONFIG[s].label, items: visible.filter(x => x.neg.status === s) }))
       .filter(g => g.items.length > 0)
   } else if (groupBy === 'liga') {
@@ -783,18 +785,21 @@ export function PlayerClubList({
   )
 
   return (
-    <div className={detailMode === 'side' ? 'flex flex-col sm:flex-row gap-4 items-stretch sm:items-start' : undefined}>
+    <div className={detailMode === 'side' ? 'flex flex-col sm:flex-row gap-4 items-stretch' : undefined}>
       <div className={detailMode === 'side' ? 'flex-1 min-w-0 order-2 sm:order-1' : undefined}>
         {listContent}
       </div>
 
+      {/* La columna estira a toda la altura de la lista; el detalle va pegado (sticky) al hacer scroll */}
       {detailMode === 'side' && (
-        <div className="w-full sm:w-80 flex-shrink-0 sm:sticky sm:top-3 order-1 sm:order-2">
-          {detailNode ?? (
-            <div className="hidden sm:block border-2 border-dashed border-slate-200 rounded-xl py-16 px-6 text-center">
-              <p className="text-xs text-slate-400">Haz clic en un club para ver y editar la oportunidad: estado, encargado, información y notas de seguimiento.</p>
-            </div>
-          )}
+        <div className="w-full sm:w-80 flex-shrink-0 order-1 sm:order-2">
+          <div className="sm:sticky sm:top-3 sm:max-h-[calc(100vh-120px)] sm:overflow-y-auto">
+            {detailNode ?? (
+              <div className="hidden sm:block border-2 border-dashed border-slate-200 rounded-xl py-16 px-6 text-center">
+                <p className="text-xs text-slate-400">Haz clic en un club para ver y editar la oportunidad: estado, encargado, información y notas de seguimiento.</p>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
