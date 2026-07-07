@@ -675,7 +675,7 @@ export function Distribution({
 
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="h-screen bg-slate-50 flex flex-col overflow-hidden">
       {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10 flex-shrink-0">
         {/* Top bar */}
