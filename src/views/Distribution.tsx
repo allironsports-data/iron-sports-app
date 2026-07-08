@@ -249,6 +249,11 @@ export function Distribution({
   const [openClubManagerId, setOpenClubManagerId]   = useState<string | null>(null)
   const [clubManagerDropPos, setClubManagerDropPos] = useState<{ top: number; right: number } | null>(null)
 
+  // "Contactado" — un primer clic marca automáticamente a quien lo pulsa; si ya está
+  // contactado, el clic abre un menú para reasignar a otra persona o quitar la marca.
+  const [openClubContactedId, setOpenClubContactedId]   = useState<string | null>(null)
+  const [clubContactedDropPos, setClubContactedDropPos] = useState<{ top: number; right: number } | null>(null)
+
   // Bulk: asignar encargado a varios clubes a la vez (pestaña Clubes)
   const [clubBulkMode, setClubBulkMode] = useState(false)
   const [clubSelected, setClubSelected] = useState<Set<string>>(new Set())
@@ -263,19 +268,32 @@ export function Distribution({
     })
   }
 
-  // Tick "contactado" — registra quién y cuándo, independiente de negociaciones/solicitudes
-  async function toggleClubContacted(club: Club) {
-    const wasContacted = club.contacted
+  // Tick "contactado" — el primer clic marca automáticamente a quien lo pulsa (quién y cuándo),
+  // independiente de negociaciones/solicitudes. Si ya está contactado, se abre un menú
+  // (openClubContactedId) para reasignar a otra persona o quitar la marca.
+  async function markClubContacted(club: Club) {
     try {
-      if (wasContacted) {
+      await onUpdateClub({ ...club, contacted: true, contactedBy: currentProfile.avatar, contactedAt: new Date().toISOString() })
+      showToast(`${club.name} marcado como contactado`)
+    } catch {
+      showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+    }
+  }
+
+  // Reasignar manualmente quién contactó (o quitar la marca)
+  async function reassignClubContacted(club: Club, avatar: string | undefined) {
+    try {
+      if (avatar) {
+        await onUpdateClub({ ...club, contacted: true, contactedBy: avatar, contactedAt: new Date().toISOString() })
+        showToast(`Contacto reasignado a ${profiles.find(p => p.avatar === avatar)?.name.split(' ')[0] ?? avatar}`)
+      } else {
         await onUpdateClub({ ...club, contacted: false, contactedBy: undefined, contactedAt: undefined })
         showToast('Contacto desmarcado')
-      } else {
-        await onUpdateClub({ ...club, contacted: true, contactedBy: currentProfile.avatar, contactedAt: new Date().toISOString() })
-        showToast(`${club.name} marcado como contactado`)
       }
     } catch {
       showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+    } finally {
+      setOpenClubContactedId(null); setClubContactedDropPos(null)
     }
   }
 
@@ -283,11 +301,12 @@ export function Distribution({
   // Se cierra también con scroll AMPLIO (el dropdown es fixed y se desalinearía),
   // pero ignorando micro-scrolls para que no desaparezca antes de elegir.
   useEffect(() => {
-    if (!openManagerDropId && !openClubManagerId && !bulkClubManagerPos) return
+    if (!openManagerDropId && !openClubManagerId && !bulkClubManagerPos && !openClubContactedId) return
     const close = () => {
       setOpenManagerDropId(null); setManagerDropPos(null)
       setOpenClubManagerId(null); setClubManagerDropPos(null)
       setBulkClubManagerPos(null)
+      setOpenClubContactedId(null); setClubContactedDropPos(null)
     }
     // Espera al siguiente tick para no capturar el mismo clic que lo abrió
     let startY = window.scrollY
@@ -304,7 +323,7 @@ export function Distribution({
       document.removeEventListener('click', close)
       window.removeEventListener('scroll', onScroll, true)
     }
-  }, [openManagerDropId, openClubManagerId, bulkClubManagerPos])
+  }, [openManagerDropId, openClubManagerId, bulkClubManagerPos, openClubContactedId])
 
   // modals
   const [showAddPlayer, setShowAddPlayer] = useState(false)
@@ -1519,7 +1538,12 @@ export function Distribution({
                               bulkSelected={clubSelected.has(club.id)}
                               onToggleBulkSelect={() => toggleClubSelected(club.id)}
                               contactedByName={profiles.find(p => p.avatar === club.contactedBy)?.name}
-                              onToggleContacted={() => toggleClubContacted(club)}
+                              onMarkContacted={() => markClubContacted(club)}
+                              onOpenContactedMenu={(pos) => {
+                                if (!pos) { setOpenClubContactedId(null); setClubContactedDropPos(null) }
+                                else { setOpenClubContactedId(club.id); setClubContactedDropPos(pos) }
+                              }}
+                              contactedDropOpen={openClubContactedId === club.id}
                       onToggleManagerDrop={(pos) => {
                         if (!pos) { setOpenClubManagerId(null); setClubManagerDropPos(null) }
                         else { setOpenClubManagerId(club.id); setClubManagerDropPos(pos) }
@@ -1560,7 +1584,12 @@ export function Distribution({
                               bulkSelected={clubSelected.has(club.id)}
                               onToggleBulkSelect={() => toggleClubSelected(club.id)}
                               contactedByName={profiles.find(p => p.avatar === club.contactedBy)?.name}
-                              onToggleContacted={() => toggleClubContacted(club)}
+                              onMarkContacted={() => markClubContacted(club)}
+                              onOpenContactedMenu={(pos) => {
+                                if (!pos) { setOpenClubContactedId(null); setClubContactedDropPos(null) }
+                                else { setOpenClubContactedId(club.id); setClubContactedDropPos(pos) }
+                              }}
+                              contactedDropOpen={openClubContactedId === club.id}
                               onToggleManagerDrop={(pos) => {
                                 if (!pos) { setOpenClubManagerId(null); setClubManagerDropPos(null) }
                                 else { setOpenClubManagerId(club.id); setClubManagerDropPos(pos) }
@@ -1606,7 +1635,12 @@ export function Distribution({
                               bulkSelected={clubSelected.has(club.id)}
                               onToggleBulkSelect={() => toggleClubSelected(club.id)}
                               contactedByName={profiles.find(p => p.avatar === club.contactedBy)?.name}
-                              onToggleContacted={() => toggleClubContacted(club)}
+                              onMarkContacted={() => markClubContacted(club)}
+                              onOpenContactedMenu={(pos) => {
+                                if (!pos) { setOpenClubContactedId(null); setClubContactedDropPos(null) }
+                                else { setOpenClubContactedId(club.id); setClubContactedDropPos(pos) }
+                              }}
+                              contactedDropOpen={openClubContactedId === club.id}
                               onToggleManagerDrop={(pos) => {
                                 if (!pos) { setOpenClubManagerId(null); setClubManagerDropPos(null) }
                                 else { setOpenClubManagerId(club.id); setClubManagerDropPos(pos) }
@@ -3779,6 +3813,48 @@ export function Distribution({
         )
       })()}
 
+      {/* Reasignar/quitar "contactado" — el primer clic ya marcó automáticamente a quien lo pulsó; esto es solo para corregirlo */}
+      {openClubContactedId && clubContactedDropPos && (() => {
+        const club = clubs.find(c => c.id === openClubContactedId)
+        if (!club) return null
+        const pos = clampDropPos(clubContactedDropPos.top, profiles.length + 2)
+        return (
+          <div
+            className="fixed z-[200] bg-white border border-slate-200 rounded-xl shadow-xl py-1 min-w-[200px] max-w-[calc(100vw-2rem)] overflow-y-auto"
+            style={{ top: pos.top, right: clubContactedDropPos.right, maxHeight: pos.maxHeight }}
+            onClick={e => e.stopPropagation()}
+          >
+            <p className="px-3 pt-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              Contactado por {profiles.find(p => p.avatar === club.contactedBy)?.name.split(' ')[0] ?? club.contactedBy}
+            </p>
+            <p className="px-3 pb-1.5 text-[11px] text-slate-400">{fmtDateTime(club.contactedAt)}</p>
+            <div className="border-t border-slate-100 my-1" />
+            <p className="px-3 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Reasignar a</p>
+            {profiles.map(p => (
+              <button
+                key={p.id}
+                onClick={() => reassignClubContacted(club, p.avatar)}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-slate-50 transition-colors ${
+                  club.contactedBy === p.avatar ? 'font-semibold text-green-700' : 'text-slate-700'
+                }`}
+              >
+                <span className="w-5 h-5 rounded-full bg-slate-100 text-[9px] font-bold flex items-center justify-center flex-shrink-0">
+                  {p.avatar}
+                </span>
+                {p.name.split(' ')[0]}
+              </button>
+            ))}
+            <div className="border-t border-slate-100 my-1" />
+            <button
+              onClick={() => reassignClubContacted(club, undefined)}
+              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-500 hover:bg-red-50 transition-colors"
+            >
+              Quitar contacto
+            </button>
+          </div>
+        )
+      })()}
+
       {/* ── Confirmaciones ── */}
       <ConfirmModal
         open={!!confirmDeleteEntryId}
@@ -3826,7 +3902,7 @@ export function Distribution({
 
 // ── CLUB CARD ────────────────────────────────────────────────
 
-function ClubCard({ club, negotiations, isSelected, onClick, onOffer, onTogglePriority, managerName, managerDropOpen, onToggleManagerDrop, selectMode, bulkSelected, onToggleBulkSelect, onToggleContacted, contactedByName }: {
+function ClubCard({ club, negotiations, isSelected, onClick, onOffer, onTogglePriority, managerName, managerDropOpen, onToggleManagerDrop, selectMode, bulkSelected, onToggleBulkSelect, onMarkContacted, onOpenContactedMenu, contactedDropOpen, contactedByName }: {
   club: Club
   negotiations: ClubNegotiation[]
   isSelected: boolean
@@ -3841,8 +3917,11 @@ function ClubCard({ club, negotiations, isSelected, onClick, onOffer, onTogglePr
   selectMode?: boolean
   bulkSelected?: boolean
   onToggleBulkSelect?: () => void
-  /** Tick "contactado", independiente de negociaciones */
-  onToggleContacted?: () => void
+  /** Tick "contactado": primer clic marca automáticamente a quien lo pulsa */
+  onMarkContacted?: () => void
+  /** Ya contactado: el clic abre un menú para reasignar a otra persona o quitar la marca */
+  onOpenContactedMenu?: (pos: { top: number; right: number } | null) => void
+  contactedDropOpen?: boolean
   /** Nombre completo de quien marcó el contacto (para el tooltip) */
   contactedByName?: string
 }) {
@@ -3859,6 +3938,7 @@ function ClubCard({ club, negotiations, isSelected, onClick, onOffer, onTogglePr
   }, undefined)
   const daysAgo = lastUpdated ? Math.floor((Date.now() - new Date(lastUpdated).getTime()) / 86_400_000) : null
   const isStale = activeOnlyNegs.length > 0 && daysAgo !== null && daysAgo > 7
+  const contactedDaysAgo = club.contacted && club.contactedAt ? Math.floor((Date.now() - new Date(club.contactedAt).getTime()) / 86_400_000) : null
 
   function fmtDays(d: number) {
     if (d === 0) return 'hoy'
@@ -3903,11 +3983,15 @@ function ClubCard({ club, negotiations, isSelected, onClick, onOffer, onTogglePr
           {activeNegs.length > 0 && (
             <span className="text-blue-600 flex-shrink-0">{activeNegs.length} ofrecido{activeNegs.length !== 1 ? 's' : ''}</span>
           )}
-          {daysAgo !== null && (
+          {daysAgo !== null ? (
             <span className={`flex-shrink-0 ml-auto ${isStale ? 'text-orange-500 font-semibold' : 'text-slate-400'}`}>
               {isStale ? `⏰ ${fmtDays(daysAgo)}` : fmtDays(daysAgo)}
             </span>
-          )}
+          ) : contactedDaysAgo !== null ? (
+            <span className="flex-shrink-0 ml-auto text-green-600">
+              ✓ {contactedByName?.split(' ')[0] ?? club.contactedBy} · {fmtDays(contactedDaysAgo)}
+            </span>
+          ) : null}
         </div>
       </div>
       <div className="flex items-center gap-1 flex-shrink-0">
@@ -3930,18 +4014,24 @@ function ClubCard({ club, negotiations, isSelected, onClick, onOffer, onTogglePr
             {club.aisManager ?? '+'}
           </button>
         )}
-        {onToggleContacted && (
+        {(onMarkContacted || onOpenContactedMenu) && (
           <button
-            onClick={e => { e.stopPropagation(); onToggleContacted() }}
-            title={club.contacted ? `Contactado por ${contactedByName ?? club.contactedBy ?? '?'} · ${fmtDateTime(club.contactedAt)}` : 'Marcar como contactado'}
+            onClick={e => {
+              e.stopPropagation()
+              if (!club.contacted) { onMarkContacted?.(); return }
+              if (contactedDropOpen) { onOpenContactedMenu?.(null); return }
+              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+              onOpenContactedMenu?.({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
+            }}
+            title={club.contacted ? `Contactado por ${contactedByName ?? club.contactedBy ?? '?'} · ${fmtDateTime(club.contactedAt)} (clic para reasignar/quitar)` : 'Marcar como contactado'}
             aria-label={club.contacted ? `Contactado por ${contactedByName ?? club.contactedBy ?? '?'}` : 'Marcar como contactado'}
-            className={`w-7 h-7 rounded-full flex items-center justify-center border-2 transition-colors flex-shrink-0 ${
+            className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold border-2 transition-colors flex-shrink-0 ${
               club.contacted
                 ? 'bg-green-100 text-green-700 border-green-300 hover:bg-green-200'
                 : 'bg-slate-50 text-slate-300 border-dashed border-slate-300 hover:bg-slate-200 sm:opacity-0 sm:group-hover:opacity-100'
-            }`}
+            } ${contactedDropOpen ? 'ring-2 ring-green-200 sm:opacity-100' : ''}`}
           >
-            <Check className="w-3.5 h-3.5" />
+            {club.contacted ? (club.contactedBy ?? <Check className="w-3.5 h-3.5" />) : <Check className="w-3.5 h-3.5" />}
           </button>
         )}
         {onTogglePriority && (
