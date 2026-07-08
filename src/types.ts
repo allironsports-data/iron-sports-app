@@ -217,6 +217,10 @@ export interface Club {
   isPriority: boolean
   needs: ClubNeed[]
   createdAt: string
+  /** Tick "contactado": independiente de negociaciones/solicitudes */
+  contacted?: boolean
+  contactedBy?: string      // avatar de quien lo marcó
+  contactedAt?: string      // ISO timestamp
 }
 
 export interface DistributionEntry {

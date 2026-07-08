@@ -67,6 +67,14 @@ function fmtMonth(dateStr?: string): string {
   return d.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' })
 }
 
+/** "8 jul 2026" — para tooltips de "contactado el ..." */
+function fmtDateTime(dateStr?: string): string {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
 /** Days from today to a date (negative = past) */
 function daysUntil(dateStr?: string): number | null {
   if (!dateStr) return null
@@ -246,12 +254,29 @@ export function Distribution({
   const [clubSelected, setClubSelected] = useState<Set<string>>(new Set())
   const [bulkClubManagerPos, setBulkClubManagerPos] = useState<{ top: number; right: number } | null>(null)
   const [bulkClubAssigning, setBulkClubAssigning] = useState(false)
+  const [bulkContactedAssigning, setBulkContactedAssigning] = useState(false)
   function toggleClubSelected(id: string) {
     setClubSelected(prev => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id); else next.add(id)
       return next
     })
+  }
+
+  // Tick "contactado" — registra quién y cuándo, independiente de negociaciones/solicitudes
+  async function toggleClubContacted(club: Club) {
+    const wasContacted = club.contacted
+    try {
+      if (wasContacted) {
+        await onUpdateClub({ ...club, contacted: false, contactedBy: undefined, contactedAt: undefined })
+        showToast('Contacto desmarcado')
+      } else {
+        await onUpdateClub({ ...club, contacted: true, contactedBy: currentProfile.avatar, contactedAt: new Date().toISOString() })
+        showToast(`${club.name} marcado como contactado`)
+      }
+    } catch {
+      showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+    }
   }
 
   // Close manager dropdowns on outside click.
@@ -314,15 +339,16 @@ export function Distribution({
   const [hasContactOnly, setHasContactOnly] = useState<boolean>((storedF.hasContactOnly as boolean) ?? false)
   const [clubManagerFilter, setClubManagerFilter] = useState<string>((storedF.clubManagerFilter as string) ?? '')   // '' = todos, '__sin__' = sin encargado, o avatar
   const [staleOnly, setStaleOnly] = useState<boolean>((storedF.staleOnly as boolean) ?? false)   // bandeja: clubes con propuestas activas sin mover >7d
+  const [contactedFilter, setContactedFilter] = useState<string>((storedF.contactedFilter as string) ?? '')   // '' = todos, 'yes' = contactados, 'no' = sin contactar
 
   // Guardar filtros de Clubes al cambiar
   useEffect(() => {
     sessionStorage.setItem(FILTERS_KEY, JSON.stringify({
       search, leagueFilter, countryFilter, tierFilter, confederationFilter,
-      priorityOnly, hasNeedsOnly, hasContactOnly, clubManagerFilter, staleOnly,
+      priorityOnly, hasNeedsOnly, hasContactOnly, clubManagerFilter, staleOnly, contactedFilter,
     }))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, leagueFilter, countryFilter, tierFilter, confederationFilter, priorityOnly, hasNeedsOnly, hasContactOnly, clubManagerFilter, staleOnly])
+  }, [search, leagueFilter, countryFilter, tierFilter, confederationFilter, priorityOnly, hasNeedsOnly, hasContactOnly, clubManagerFilter, staleOnly, contactedFilter])
   const [positionFilter, setPositionFilter] = useState('')   // solicitudes tab
   const [editingNeed, setEditingNeed] = useState<{ clubId: string; index: number } | null>(null)
   const [posFilters, setPosFilters] = useState<string[]>([])   // jugadores tab
@@ -389,6 +415,8 @@ export function Distribution({
     if (hasContactOnly) result = result.filter(c => !!c.contactPerson)
     if (clubManagerFilter === '__sin__') result = result.filter(c => !c.aisManager)
     else if (clubManagerFilter) result = result.filter(c => c.aisManager === clubManagerFilter)
+    if (contactedFilter === 'yes') result = result.filter(c => !!c.contacted)
+    else if (contactedFilter === 'no') result = result.filter(c => !c.contacted)
     if (staleOnly) {
       const ACTIVE: ClubNegotiation['status'][] = ['pendiente', 'ofrecido', 'interesado', 'negociando']
       result = result.filter(c => {
@@ -402,7 +430,7 @@ export function Distribution({
     if (!search) return result
     const q = search.toLowerCase()
     return result.filter(c => c.name.toLowerCase().includes(q) || c.league?.toLowerCase().includes(q))
-  }, [clubs, negotiations, search, leagueFilter, countryFilter, tierFilter, confederationFilter, priorityOnly, hasNeedsOnly, hasContactOnly, clubManagerFilter, staleOnly])
+  }, [clubs, negotiations, search, leagueFilter, countryFilter, tierFilter, confederationFilter, priorityOnly, hasNeedsOnly, hasContactOnly, clubManagerFilter, staleOnly, contactedFilter])
 
   const sortedLeagues = useMemo(() => {
     // Clave liga+país: "Serie A" de Italia y la de Brasil son entradas distintas
@@ -1074,7 +1102,7 @@ export function Distribution({
 
           {/* ── CLUBES TAB ── */}
           {tab === 'clubes' && (() => {
-            const clubsActiveFilters = leagueFilter.length + countryFilter.length + tierFilter.length + confederationFilter.length + (priorityOnly ? 1 : 0) + (hasNeedsOnly ? 1 : 0) + (hasContactOnly ? 1 : 0) + (clubManagerFilter ? 1 : 0) + (staleOnly ? 1 : 0) + (groupByTier ? 1 : 0)
+            const clubsActiveFilters = leagueFilter.length + countryFilter.length + tierFilter.length + confederationFilter.length + (priorityOnly ? 1 : 0) + (hasNeedsOnly ? 1 : 0) + (hasContactOnly ? 1 : 0) + (clubManagerFilter ? 1 : 0) + (staleOnly ? 1 : 0) + (contactedFilter ? 1 : 0) + (groupByTier ? 1 : 0)
             const clubsGroupToggle = (
               <button
                 onClick={() => setGroupByTier(v => !v)}
@@ -1309,12 +1337,26 @@ export function Distribution({
                   <option value="__sin__">Sin encargado</option>
                 </select>
 
+                {/* Filtro por contactado */}
+                <select
+                  value={contactedFilter}
+                  onChange={e => setContactedFilter(e.target.value)}
+                  aria-label="Filtrar por contactado"
+                  className={`px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                    contactedFilter ? 'bg-green-100 text-green-700 border-green-200' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                  }`}
+                >
+                  <option value="">Contactado: todos</option>
+                  <option value="yes">Contactados</option>
+                  <option value="no">Sin contactar</option>
+                </select>
+
                 {/* Clear all */}
-                {(leagueFilter.length > 0 || countryFilter.length > 0 || tierFilter.length > 0 || confederationFilter.length > 0 || priorityOnly || hasNeedsOnly || hasContactOnly || clubManagerFilter || staleOnly) && (() => {
-                  const count = leagueFilter.length + countryFilter.length + tierFilter.length + confederationFilter.length + (priorityOnly ? 1 : 0) + (hasNeedsOnly ? 1 : 0) + (hasContactOnly ? 1 : 0) + (clubManagerFilter ? 1 : 0) + (staleOnly ? 1 : 0)
+                {(leagueFilter.length > 0 || countryFilter.length > 0 || tierFilter.length > 0 || confederationFilter.length > 0 || priorityOnly || hasNeedsOnly || hasContactOnly || clubManagerFilter || staleOnly || contactedFilter) && (() => {
+                  const count = leagueFilter.length + countryFilter.length + tierFilter.length + confederationFilter.length + (priorityOnly ? 1 : 0) + (hasNeedsOnly ? 1 : 0) + (hasContactOnly ? 1 : 0) + (clubManagerFilter ? 1 : 0) + (staleOnly ? 1 : 0) + (contactedFilter ? 1 : 0)
                   return (
                     <button
-                      onClick={() => { setLeagueFilter([]); setCountryFilter([]); setTierFilter([]); setConfederationFilter([]); setPriorityOnly(false); setHasNeedsOnly(false); setHasContactOnly(false); setClubManagerFilter(''); setStaleOnly(false) }}
+                      onClick={() => { setLeagueFilter([]); setCountryFilter([]); setTierFilter([]); setConfederationFilter([]); setPriorityOnly(false); setHasNeedsOnly(false); setHasContactOnly(false); setClubManagerFilter(''); setStaleOnly(false); setContactedFilter('') }}
                       className="flex items-center gap-1.5 text-xs bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg font-medium transition-colors ml-1"
                     >
                       <SlidersHorizontal className="w-3 h-3" />
@@ -1395,6 +1437,26 @@ export function Distribution({
                       >
                         <Users className="w-3.5 h-3.5" /> Asignar encargado ({clubSelected.size})
                       </button>
+                      <button
+                        disabled={bulkContactedAssigning}
+                        onClick={async () => {
+                          setBulkContactedAssigning(true)
+                          try {
+                            const targets = Array.from(clubSelected).map(id => clubs.find(c => c.id === id)).filter((c): c is Club => !!c)
+                            await Promise.all(targets.map(c => onUpdateClub({ ...c, contacted: true, contactedBy: currentProfile.avatar, contactedAt: new Date().toISOString() })))
+                            showToast(`${targets.length} club${targets.length !== 1 ? 'es' : ''} marcado${targets.length !== 1 ? 's' : ''} como contactado${targets.length !== 1 ? 's' : ''}`)
+                            setClubSelected(new Set())
+                            setClubBulkMode(false)
+                          } catch {
+                            showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+                          } finally {
+                            setBulkContactedAssigning(false)
+                          }
+                        }}
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-60 px-3 py-1.5 rounded-lg"
+                      >
+                        <Check className="w-3.5 h-3.5" /> Marcar contactado ({clubSelected.size})
+                      </button>
                       <button onClick={() => setClubSelected(new Set())} className="text-xs text-slate-500 hover:text-slate-700">Limpiar selección</button>
                     </>
                   )}
@@ -1456,6 +1518,8 @@ export function Distribution({
                               selectMode={clubBulkMode}
                               bulkSelected={clubSelected.has(club.id)}
                               onToggleBulkSelect={() => toggleClubSelected(club.id)}
+                              contactedByName={profiles.find(p => p.avatar === club.contactedBy)?.name}
+                              onToggleContacted={() => toggleClubContacted(club)}
                       onToggleManagerDrop={(pos) => {
                         if (!pos) { setOpenClubManagerId(null); setClubManagerDropPos(null) }
                         else { setOpenClubManagerId(club.id); setClubManagerDropPos(pos) }
@@ -1495,6 +1559,8 @@ export function Distribution({
                               selectMode={clubBulkMode}
                               bulkSelected={clubSelected.has(club.id)}
                               onToggleBulkSelect={() => toggleClubSelected(club.id)}
+                              contactedByName={profiles.find(p => p.avatar === club.contactedBy)?.name}
+                              onToggleContacted={() => toggleClubContacted(club)}
                               onToggleManagerDrop={(pos) => {
                                 if (!pos) { setOpenClubManagerId(null); setClubManagerDropPos(null) }
                                 else { setOpenClubManagerId(club.id); setClubManagerDropPos(pos) }
@@ -1539,6 +1605,8 @@ export function Distribution({
                               selectMode={clubBulkMode}
                               bulkSelected={clubSelected.has(club.id)}
                               onToggleBulkSelect={() => toggleClubSelected(club.id)}
+                              contactedByName={profiles.find(p => p.avatar === club.contactedBy)?.name}
+                              onToggleContacted={() => toggleClubContacted(club)}
                               onToggleManagerDrop={(pos) => {
                                 if (!pos) { setOpenClubManagerId(null); setClubManagerDropPos(null) }
                                 else { setOpenClubManagerId(club.id); setClubManagerDropPos(pos) }
@@ -3758,7 +3826,7 @@ export function Distribution({
 
 // ── CLUB CARD ────────────────────────────────────────────────
 
-function ClubCard({ club, negotiations, isSelected, onClick, onOffer, onTogglePriority, managerName, managerDropOpen, onToggleManagerDrop, selectMode, bulkSelected, onToggleBulkSelect }: {
+function ClubCard({ club, negotiations, isSelected, onClick, onOffer, onTogglePriority, managerName, managerDropOpen, onToggleManagerDrop, selectMode, bulkSelected, onToggleBulkSelect, onToggleContacted, contactedByName }: {
   club: Club
   negotiations: ClubNegotiation[]
   isSelected: boolean
@@ -3773,6 +3841,10 @@ function ClubCard({ club, negotiations, isSelected, onClick, onOffer, onTogglePr
   selectMode?: boolean
   bulkSelected?: boolean
   onToggleBulkSelect?: () => void
+  /** Tick "contactado", independiente de negociaciones */
+  onToggleContacted?: () => void
+  /** Nombre completo de quien marcó el contacto (para el tooltip) */
+  contactedByName?: string
 }) {
   const activeStatuses: ClubNegotiation['status'][] = ['pendiente', 'ofrecido', 'interesado', 'negociando']
   const activeNegs = negotiations.filter(n => n.clubId === club.id && n.status !== 'descartado')
@@ -3826,6 +3898,7 @@ function ClubCard({ club, negotiations, isSelected, onClick, onOffer, onTogglePr
           )}
         </div>
         <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-500">
+          {club.league && <span className="text-slate-400 truncate flex-shrink-0 max-w-[45%]">{club.league}</span>}
           {club.contactPerson && <span className="truncate">{club.contactPerson}</span>}
           {activeNegs.length > 0 && (
             <span className="text-blue-600 flex-shrink-0">{activeNegs.length} ofrecido{activeNegs.length !== 1 ? 's' : ''}</span>
@@ -3855,6 +3928,20 @@ function ClubCard({ club, negotiations, isSelected, onClick, onOffer, onTogglePr
             } ${managerDropOpen ? 'ring-2 ring-blue-200 sm:opacity-100' : ''}`}
           >
             {club.aisManager ?? '+'}
+          </button>
+        )}
+        {onToggleContacted && (
+          <button
+            onClick={e => { e.stopPropagation(); onToggleContacted() }}
+            title={club.contacted ? `Contactado por ${contactedByName ?? club.contactedBy ?? '?'} · ${fmtDateTime(club.contactedAt)}` : 'Marcar como contactado'}
+            aria-label={club.contacted ? `Contactado por ${contactedByName ?? club.contactedBy ?? '?'}` : 'Marcar como contactado'}
+            className={`w-7 h-7 rounded-full flex items-center justify-center border-2 transition-colors flex-shrink-0 ${
+              club.contacted
+                ? 'bg-green-100 text-green-700 border-green-300 hover:bg-green-200'
+                : 'bg-slate-50 text-slate-300 border-dashed border-slate-300 hover:bg-slate-200 sm:opacity-0 sm:group-hover:opacity-100'
+            }`}
+          >
+            <Check className="w-3.5 h-3.5" />
           </button>
         )}
         {onTogglePriority && (

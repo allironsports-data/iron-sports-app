@@ -363,6 +363,9 @@ function dbToClub(row: Record<string, unknown>): Club {
     isPriority: (row.is_priority as boolean) ?? false,
     needs: (row.needs as Club['needs']) ?? [],
     createdAt: row.created_at as string,
+    contacted: (row.contacted as boolean) ?? false,
+    contactedBy: (row.contacted_by as string) ?? undefined,
+    contactedAt: (row.contacted_at as string) ?? undefined,
   }
 }
 
@@ -408,6 +411,9 @@ export async function updateClub(c: Club): Promise<void> {
     notes: c.notes ?? null,
     is_priority: c.isPriority,
     needs: c.needs ?? [],
+    contacted: c.contacted ?? false,
+    contacted_by: c.contactedBy ?? null,
+    contacted_at: c.contactedAt ?? null,
   }).eq('id', c.id)
   if (error) throw error
 }
