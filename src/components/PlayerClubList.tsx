@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { Plus, Search, Edit3, ExternalLink, Trash2, Users, X, CheckSquare, ChevronDown, Check, ArrowLeft } from 'lucide-react'
+import { Plus, Search, Edit3, ExternalLink, Trash2, Users, X, CheckSquare, ChevronDown, Check, ArrowLeft, List, LayoutGrid } from 'lucide-react'
 import type { Club, ClubNegotiation } from '../types'
 import type { Profile } from '../contexts/AuthContext'
 import type { ToastVariant } from '../hooks/useToast'
@@ -349,6 +349,7 @@ export function PlayerClubList({
   const [clubSearch, setClubSearch] = useState('')
   const [sortBy, setSortBy] = useState<'estado' | 'nombre' | 'liga' | 'actualizado'>('estado')
   const [groupBy, setGroupBy] = useState<'none' | 'estado' | 'liga' | 'nivel'>('none')
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list')
   const [selectMode, setSelectMode] = useState(false)
   const [selectedNegIds, setSelectedNegIds] = useState<Set<string>>(new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
@@ -585,6 +586,25 @@ export function PlayerClubList({
           {title} <span>({withClub.length})</span>
         </span>
         <div className="flex items-center gap-2">
+          {/* Vista: lista (1 col) / tarjetas (2 col) */}
+          <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden flex-shrink-0">
+            <button
+              onClick={() => setViewMode('list')}
+              title="Vista de lista"
+              aria-label="Vista de lista"
+              className={`p-1.5 transition-colors ${viewMode === 'list' ? 'bg-slate-800 text-white' : 'bg-white text-slate-400 hover:text-slate-600'}`}
+            >
+              <List className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setViewMode('grid')}
+              title="Vista de tarjetas (2 columnas)"
+              aria-label="Vista de tarjetas (2 columnas)"
+              className={`p-1.5 transition-colors border-l border-slate-200 ${viewMode === 'grid' ? 'bg-slate-800 text-white' : 'bg-white text-slate-400 hover:text-slate-600'}`}
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+            </button>
+          </div>
           {onAssignLeague && (
             <button onClick={onAssignLeague} className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-700 font-medium" title="Asignar ligas completas">
               <Users className="w-3.5 h-3.5" /> Por liga
@@ -765,17 +785,27 @@ export function PlayerClubList({
           {visible.length === 0 ? (
             <p className="text-center text-slate-400 text-xs py-6">Ningún club coincide con los filtros</p>
           ) : (
-            <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+            <div className={viewMode === 'grid' ? 'space-y-3' : 'border border-slate-200 rounded-xl overflow-hidden bg-white'}>
               {groups.map(g => (
                 <div key={g.key}>
                   {groupBy !== 'none' && (
-                    <div className="px-3 py-1.5 bg-slate-50 border-y border-slate-100 text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <div className={`px-3 py-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5 ${viewMode === 'grid' ? '' : 'bg-slate-50 border-y border-slate-100'}`}>
                       {g.label} <span className="font-mono opacity-60">{g.items.length}</span>
                     </div>
                   )}
-                  <div className="divide-y divide-slate-100">
-                    {g.items.map(renderRow)}
-                  </div>
+                  {viewMode === 'grid' ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {g.items.map(x => (
+                        <div key={x.neg.id} className="border border-slate-200 rounded-lg overflow-hidden bg-white">
+                          {renderRow(x)}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-slate-100">
+                      {g.items.map(renderRow)}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
