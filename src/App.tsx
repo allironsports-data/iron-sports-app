@@ -359,13 +359,22 @@ export default function App() {
   }
 
   const handleAddTask = async (task: Task) => {
-    const saved = await db.createTask(task)
+    const withCompleted: Task = task.status === 'completada' && !task.completedAt
+      ? { ...task, completedAt: new Date().toISOString() }
+      : task
+    const saved = await db.createTask(withCompleted)
     setTasks((prev) => [...prev, saved])
   }
 
   const handleUpdateTask = async (updated: Task) => {
-    await db.updateTask(updated)
-    setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
+    // completedAt se gestiona centralmente: se fija al pasar a "completada"
+    // y se limpia si la tarea se reabre.
+    const previous = tasks.find((t) => t.id === updated.id)
+    const withCompleted: Task = updated.status === 'completada'
+      ? { ...updated, completedAt: updated.completedAt ?? previous?.completedAt ?? new Date().toISOString() }
+      : { ...updated, completedAt: undefined }
+    await db.updateTask(withCompleted)
+    setTasks((prev) => prev.map((t) => (t.id === withCompleted.id ? withCompleted : t)))
   }
 
   const handleDeleteTask = async (taskId: string) => {

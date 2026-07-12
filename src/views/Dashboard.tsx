@@ -175,23 +175,22 @@ export function Dashboard({
   }
   const [editingGeneralTask, setEditingGeneralTask] = useState<Task | null>(null);
   const [managerFilter, setManagerFilter] = useState<string>("all");
-  // quick filter from stat cards: overlays on top of tab filter
-  const [quickFilter, setQuickFilter] = useState<"overdue" | "urgent" | "inprogress" | null>(null);
+  // quick filter from stat cards: overlays on top of the person filter
+  const [quickFilter, setQuickFilter] = useState<"overdue" | "today" | "week" | "inprogress" | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [tasksMainView, setTasksMainView] = useState<'mis' | 'equipo'>(
-    () => (sessionStorage.getItem('nav_tasks_view') as 'mis' | 'equipo') ?? 'mis'
+  // Person filter for the unified board: 'me' | 'all' | <profileId>
+  const [personFilter, setPersonFilter] = useState<string>(
+    () => sessionStorage.getItem('nav_person_filter') ?? 'me'
   );
-  const [equipoSubView, setEquipoSubView] = useState<'persona' | 'todas'>(
-    () => (sessionStorage.getItem('nav_equipo_subview') as 'persona' | 'todas') ?? 'persona'
+  // Board grouping: estado (kanban/compacto/tabla) | jugador | persona
+  const [groupBy, setGroupBy] = useState<'estado' | 'jugador' | 'persona'>(
+    () => (sessionStorage.getItem('nav_group_by') as 'estado' | 'jugador' | 'persona') ?? 'estado'
   );
   const [weekOffset, setWeekOffset] = useState(0);
-  // Activities per profile for the equipo weekly view
+  // Activities per profile for the Equipo workload view (cached — week nav does NOT refetch)
   const [teamActivities, setTeamActivities] = useState<Record<string, PlayerActivity[]>>({});
   const [loadingTeamActivities, setLoadingTeamActivities] = useState(false);
-  const [showCompletedTeam, setShowCompletedTeam] = useState(false);
-  const [equipoQuickFilter, setEquipoQuickFilter] = useState<'overdue' | 'inprogress' | null>(null);
   const [misViewMode, setMisViewMode] = useState<'kanban' | 'compact' | 'table'>('kanban');
-  const [equipoViewMode, setEquipoViewMode] = useState<'kanban' | 'compact' | 'table'>('kanban');
   const [taskSortCol, setTaskSortCol] = useState<'title' | 'player' | 'priority' | 'dueDate' | 'status'>('dueDate');
   const [taskSortDir, setTaskSortDir] = useState<'asc' | 'desc'>('asc');
   const [detailTask, setDetailTask] = useState<Task | null>(null);
@@ -237,13 +236,14 @@ export function Dashboard({
     }
   }, [notifications]);
 
-  // Persist tasksMainView + equipoSubView so refresh restores position
-  useEffect(() => { sessionStorage.setItem('nav_tasks_view', tasksMainView) }, [tasksMainView]);
-  useEffect(() => { sessionStorage.setItem('nav_equipo_subview', equipoSubView) }, [equipoSubView]);
+  // Persist board preferences so refresh restores position
+  useEffect(() => { sessionStorage.setItem('nav_person_filter', personFilter) }, [personFilter]);
+  useEffect(() => { sessionStorage.setItem('nav_group_by', groupBy) }, [groupBy]);
 
-  // Fetch activities for all profiles when equipo tab is active
+  // Fetch activities for all profiles when the Equipo tab is active.
+  // Loaded once and cached: navigating between weeks reuses the same data.
   useEffect(() => {
-    if (tasksMainView !== 'equipo') return;
+    if (activeTab !== 'equipo') return;
     if (Object.keys(teamActivities).length > 0) return; // already loaded
     setLoadingTeamActivities(true);
     Promise.all(
@@ -253,46 +253,25 @@ export function Dashboard({
       results.forEach(r => { byProfile[r.id] = r.acts; });
       setTeamActivities(byProfile);
     }).catch(() => {}).finally(() => setLoadingTeamActivities(false));
-  }, [tasksMainView, profiles]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeTab, profiles]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Exclude intermediation-only players from mantenimiento
   const visiblePlayers = players.filter(p => !p.hiddenFromManagement)
 
   const pendingTasks = tasks.filter((t) => t.status !== "completada");
 
-  // helper: is the current user involved in a task (assignee OR watcher)
-  const iAmInvolved = (t: Task) =>
-    t.assigneeId === currentProfile.id || (t.watchers ?? []).includes(currentProfile.id);
+  // helper: does a profile "own" a task (assignee OR watcher)
+  const involvesProfile = (t: Task, pid: string) =>
+    t.assigneeId === pid || (t.watchers ?? []).includes(pid);
 
-  // myTasks: assigned to me OR watching (pending), excluding adminOnly if not admin
-  const myTasks = pendingTasks.filter((t) => {
-    if (!iAmInvolved(t)) return false;
-    if (t.adminOnly && !currentProfile.is_admin) return false;
-    return true;
-  });
-  // completed version for display
-  const myTasksCompleted = tasks.filter((t) => {
-    if (t.status !== "completada") return false;
-    if (!iAmInvolved(t)) return false;
-    if (t.adminOnly && !currentProfile.is_admin) return false;
-    return true;
-  });
-
-  // myPlayerTasks: ALL tasks for players I manage (no exclusions — overlap with myTasks is intentional)
-  const myPlayerTasks = pendingTasks.filter((t) => {
-    if (t.adminOnly && !currentProfile.is_admin) return false;
-    const player = players.find((p) => p.id === t.playerId);
-    return player && player.managedBy.includes(currentProfile.id);
-  });
-  const overdueMyTasks = myTasks.filter(t => t.dueDate && new Date(t.dueDate) < new Date());
-
-  // "Mis jugadores" tab: group by player
-  const playerTaskGroups: { player: Player; ptasks: Task[] }[] = (() => {
-    const pids = Array.from(new Set(myPlayerTasks.map(t => t.playerId)));
-    return pids
-      .map(pid => ({ player: players.find(p => p.id === pid)!, ptasks: myPlayerTasks.filter(t => t.playerId === pid) }))
-      .filter(g => g.player != null);
-  })();
+  // ── Unified board: one dataset filtered by personFilter ────
+  // Glosario único: una tarea "es de" alguien si es responsable o watcher.
+  const visibleTasks = tasks.filter(t => !(t.adminOnly && !currentProfile.is_admin));
+  const boardPersonId = personFilter === 'me' ? currentProfile.id : personFilter;
+  const matchesPerson = (t: Task) =>
+    personFilter === 'all' || involvesProfile(t, boardPersonId);
+  const boardTasks = visibleTasks.filter(t => t.status !== 'completada' && matchesPerson(t));
+  const boardCompleted = visibleTasks.filter(t => t.status === 'completada' && matchesPerson(t));
 
   // ── Tasks stats + week nav ──────────────────────────────────
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -305,7 +284,7 @@ export function Dashboard({
     return d;
   })();
   const weekSunday = new Date(weekMonday.getTime() + 6 * 24 * 60 * 60 * 1000);
-  // For "esta semana" stat in Mis tareas we always use offset=0
+  // For the "esta semana" stat in the board we always use offset=0
   const thisMonday = (() => {
     const d = new Date();
     const day = d.getDay();
@@ -314,21 +293,15 @@ export function Dashboard({
     return d;
   })();
   const thisSunday = new Date(thisMonday.getTime() + 6 * 24 * 60 * 60 * 1000);
-  const myTasksDueToday = myTasks.filter(t => t.dueDate === todayStr);
-  const myTasksDueThisWeek = myTasks.filter(t => {
+
+  const boardOverdue = boardTasks.filter(t => t.dueDate && t.dueDate < todayStr);
+  const boardDueToday = boardTasks.filter(t => t.dueDate === todayStr);
+  const boardDueThisWeek = boardTasks.filter(t => {
     if (!t.dueDate) return false;
     const d = new Date(t.dueDate + 'T12:00:00');
     return d >= thisMonday && d <= thisSunday;
   });
-  const myTasksInProgress = myTasks.filter(t => t.status === 'en_progreso');
-
-  // Team-wide tasks (for Equipo "Todas" kanban)
-  const teamAllTasks = tasks.filter(t => !(t.adminOnly && !currentProfile.is_admin));
-  const teamPendingAll = teamAllTasks.filter(t => t.status !== 'completada');
-  const teamCompletedAll = teamAllTasks.filter(t => t.status === 'completada');
-  const teamOverdue = teamPendingAll.filter(t => t.dueDate && t.dueDate < todayStr);
-  const teamDueToday = teamPendingAll.filter(t => t.dueDate === todayStr);
-  const teamInProgress = teamAllTasks.filter(t => t.status === 'en_progreso');
+  const boardInProgress = boardTasks.filter(t => t.status === 'en_progreso');
 
   // Birthdays
   const birthdaysToday = visiblePlayers.filter((p) => isBirthdayToday(p.birthDate));
@@ -624,22 +597,59 @@ export function Dashboard({
         {/* ── Tareas section ──────────────────────────────── */}
         {activeTab === 'tareas' && (<>
 
-        {/* ── Header: Mis tareas / Equipo toggle + actions ── */}
+        {/* ── Header: person filter chips + actions ── */}
         <div className="flex items-center justify-between gap-2 sm:gap-3 mb-4 flex-wrap">
-          <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
-            {(['mis', 'equipo'] as const).map(v => (
-              <button
-                key={v}
-                onClick={() => { setTasksMainView(v); setQuickFilter(null); }}
-                className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                  tasksMainView === v
-                    ? 'bg-white text-slate-800 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                {v === 'mis' ? 'Mis tareas' : 'Equipo'}
-              </button>
-            ))}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {/* Yo */}
+            <button
+              onClick={() => { setPersonFilter('me'); setQuickFilter(null); }}
+              className={`inline-flex items-center gap-1.5 pl-1.5 pr-3 py-1 rounded-full border text-xs font-semibold transition-colors ${
+                personFilter === 'me'
+                  ? 'bg-primary border-primary text-white'
+                  : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+              }`}
+            >
+              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold ${
+                personFilter === 'me' ? 'bg-white/20 text-white' : 'text-white'
+              }`} style={personFilter === 'me' ? {} : { background: PRIMARY }}>{currentProfile.avatar}</span>
+              Yo
+              <span className={personFilter === 'me' ? 'text-white/70 font-normal' : 'text-slate-400 font-normal'}>
+                {visibleTasks.filter(t => t.status !== 'completada' && involvesProfile(t, currentProfile.id)).length}
+              </span>
+            </button>
+            {/* Todos */}
+            <button
+              onClick={() => { setPersonFilter('all'); setQuickFilter(null); }}
+              className={`px-3 py-1 rounded-full border text-xs font-semibold transition-colors ${
+                personFilter === 'all'
+                  ? 'bg-primary border-primary text-white'
+                  : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+              }`}
+            >
+              Todos <span className={personFilter === 'all' ? 'text-white/70 font-normal' : 'text-slate-400 font-normal'}>{pendingTasks.filter(t => !(t.adminOnly && !currentProfile.is_admin)).length}</span>
+            </button>
+            {/* Resto del equipo (solo con tareas abiertas) */}
+            {profiles.filter(p => p.id !== currentProfile.id).map(p => {
+              const n = visibleTasks.filter(t => t.status !== 'completada' && involvesProfile(t, p.id)).length;
+              if (n === 0) return null;
+              const isSel = personFilter === p.id;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => { setPersonFilter(p.id); setQuickFilter(null); }}
+                  className={`inline-flex items-center gap-1.5 pl-1.5 pr-3 py-1 rounded-full border text-xs font-medium transition-colors ${
+                    isSel
+                      ? 'bg-primary border-primary text-white'
+                      : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                  }`}
+                >
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold ${isSel ? 'bg-white/20 text-white' : 'text-white'}`}
+                    style={isSel ? {} : { background: PRIMARY }}>{p.avatar}</span>
+                  {p.name.split(' ')[0]}
+                  <span className={isSel ? 'text-white/70 font-normal' : 'text-slate-400 font-normal'}>{n}</span>
+                </button>
+              );
+            })}
           </div>
           <div className="flex items-center gap-1.5">
             <button
@@ -659,76 +669,167 @@ export function Dashboard({
           </div>
         </div>
 
-        {/* ── MIS TAREAS view ─────────────────────────────── */}
-        {tasksMainView === 'mis' && (<>
-
-          {/* 4-stat strip */}
+          {/* 4-stat strip — todas clicables como filtro rápido */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
             <button
               onClick={() => setQuickFilter(q => q === 'overdue' ? null : 'overdue')}
               className={`rounded-xl p-3 text-center border transition-all active:scale-95 ${
                 quickFilter === 'overdue'
                   ? 'bg-red-50 border-red-400 shadow-sm'
-                  : overdueMyTasks.length > 0
+                  : boardOverdue.length > 0
                     ? 'bg-white border-red-200 hover:border-red-300'
                     : 'bg-white border-slate-200 hover:border-slate-300'
               }`}
             >
-              <p className={`text-xl font-semibold ${overdueMyTasks.length > 0 ? 'text-red-500' : 'text-slate-800'}`}>
-                {overdueMyTasks.length}
+              <p className={`text-xl font-semibold ${boardOverdue.length > 0 ? 'text-red-500' : 'text-slate-800'}`}>
+                {boardOverdue.length}
               </p>
               <p className="text-[11px] text-slate-400 mt-0.5">Vencidas</p>
             </button>
-            <div className="bg-white border border-slate-200 rounded-xl p-3 text-center">
-              <p className="text-xl font-semibold text-slate-800">{myTasksDueToday.length}</p>
+            <button
+              onClick={() => setQuickFilter(q => q === 'today' ? null : 'today')}
+              className={`rounded-xl p-3 text-center border transition-all active:scale-95 ${
+                quickFilter === 'today'
+                  ? 'bg-slate-100 border-slate-400 shadow-sm'
+                  : 'bg-white border-slate-200 hover:border-slate-300'
+              }`}
+            >
+              <p className="text-xl font-semibold text-slate-800">{boardDueToday.length}</p>
               <p className="text-[11px] text-slate-400 mt-0.5">Hoy</p>
-            </div>
-            <div className="bg-white border border-slate-200 rounded-xl p-3 text-center">
-              <p className="text-xl font-semibold text-slate-800">{myTasksDueThisWeek.length}</p>
+            </button>
+            <button
+              onClick={() => setQuickFilter(q => q === 'week' ? null : 'week')}
+              className={`rounded-xl p-3 text-center border transition-all active:scale-95 ${
+                quickFilter === 'week'
+                  ? 'bg-slate-100 border-slate-400 shadow-sm'
+                  : 'bg-white border-slate-200 hover:border-slate-300'
+              }`}
+            >
+              <p className="text-xl font-semibold text-slate-800">{boardDueThisWeek.length}</p>
               <p className="text-[11px] text-slate-400 mt-0.5">Esta semana</p>
-            </div>
+            </button>
             <button
               onClick={() => setQuickFilter(q => q === 'inprogress' ? null : 'inprogress')}
               className={`rounded-xl p-3 text-center border transition-all active:scale-95 ${
                 quickFilter === 'inprogress'
                   ? 'bg-blue-50 border-blue-400 shadow-sm'
-                  : myTasksInProgress.length > 0
+                  : boardInProgress.length > 0
                     ? 'bg-white border-blue-200 hover:border-blue-300'
                     : 'bg-white border-slate-200 hover:border-slate-300'
               }`}
             >
-              <p className={`text-xl font-semibold ${myTasksInProgress.length > 0 ? 'text-blue-600' : 'text-slate-800'}`}>
-                {myTasksInProgress.length}
+              <p className={`text-xl font-semibold ${boardInProgress.length > 0 ? 'text-blue-600' : 'text-slate-800'}`}>
+                {boardInProgress.length}
               </p>
               <p className="text-[11px] text-slate-400 mt-0.5">En progreso</p>
             </button>
           </div>
 
-          {/* Personal kanban */}
+          {/* Unified board */}
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden mb-4">
-            <div className="px-4 py-2.5 border-b border-slate-100 flex items-center gap-2">
+            <div className="px-4 py-2.5 border-b border-slate-100 flex items-center gap-2 flex-wrap">
               <p className="text-xs font-semibold text-slate-600 flex-1">
-                Mis tareas <span className="font-normal text-slate-400">({myTasks.length})</span>
+                {personFilter === 'me' ? 'Mis tareas'
+                  : personFilter === 'all' ? 'Todas las tareas'
+                  : `Tareas de ${profiles.find(p => p.id === personFilter)?.name.split(' ')[0] ?? ''}`}
+                {' '}<span className="font-normal text-slate-400">({boardTasks.length})</span>
               </p>
               {quickFilter && (
                 <button onClick={() => setQuickFilter(null)} className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1">
                   <X className="w-3 h-3" /> Limpiar filtro
                 </button>
               )}
-              <ViewModeToggle mode={misViewMode} onChange={setMisViewMode} />
+              {/* Agrupar por: estado | jugador | persona */}
+              <div className="flex items-center gap-0 bg-slate-100 rounded-lg p-0.5">
+                {([
+                  { id: 'estado' as const, label: 'Estado' },
+                  { id: 'jugador' as const, label: 'Jugador' },
+                  { id: 'persona' as const, label: 'Persona' },
+                ]).map(g => (
+                  <button
+                    key={g.id}
+                    onClick={() => setGroupBy(g.id)}
+                    className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-colors ${
+                      groupBy === g.id ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    {g.label}
+                  </button>
+                ))}
+              </div>
+              {groupBy === 'estado' && <ViewModeToggle mode={misViewMode} onChange={setMisViewMode} />}
             </div>
             {(() => {
-              const misFiltered = quickFilter === 'overdue'
-                ? myTasks.filter(t => t.dueDate && new Date(t.dueDate + 'T12:00:00') < new Date())
-                : quickFilter === 'inprogress'
-                  ? myTasks.filter(t => t.status === 'en_progreso')
-                  : myTasks;
-              const misPending   = misFiltered.filter(t => t.status === 'pendiente');
-              const misInProgress = misFiltered.filter(t => t.status === 'en_progreso');
+              const filteredBoard = quickFilter === 'overdue'
+                ? boardTasks.filter(t => t.dueDate && t.dueDate < todayStr)
+                : quickFilter === 'today'
+                  ? boardTasks.filter(t => t.dueDate === todayStr)
+                  : quickFilter === 'week'
+                    ? boardTasks.filter(t => {
+                        if (!t.dueDate) return false;
+                        const d = new Date(t.dueDate + 'T12:00:00');
+                        return d >= thisMonday && d <= thisSunday;
+                      })
+                    : quickFilter === 'inprogress'
+                      ? boardTasks.filter(t => t.status === 'en_progreso')
+                      : boardTasks;
+
+              // ── Agrupado por jugador o persona ──
+              if (groupBy === 'jugador' || groupBy === 'persona') {
+                type Group = { key: string; label: string; avatar?: string; gtasks: Task[] };
+                const map = new Map<string, Task[]>();
+                filteredBoard.forEach(t => {
+                  const k = groupBy === 'jugador'
+                    ? (t.playerId && t.playerId !== 'general' ? t.playerId : '__general__')
+                    : (t.assigneeId || '__nadie__');
+                  if (!map.has(k)) map.set(k, []);
+                  map.get(k)!.push(t);
+                });
+                const groups: Group[] = Array.from(map.entries()).map(([k, gtasks]) => {
+                  if (groupBy === 'jugador') {
+                    const pl = players.find(p => p.id === k);
+                    return { key: k, label: pl?.name ?? 'Generales (sin jugador)', gtasks };
+                  }
+                  const prof = profiles.find(p => p.id === k);
+                  return { key: k, label: prof?.name ?? 'Sin asignar', avatar: prof?.avatar, gtasks };
+                }).sort((a, b) => b.gtasks.length - a.gtasks.length);
+
+                if (groups.length === 0) {
+                  return <p className="text-center py-8 text-sm text-slate-400">✓ Sin tareas pendientes</p>;
+                }
+                return (
+                  <div>
+                    {groups.map(g => (
+                      <div key={g.key} className="border-b border-slate-100 last:border-b-0">
+                        <div className="px-4 py-2 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
+                          {groupBy === 'persona' && g.avatar && (
+                            <span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0"
+                              style={{ background: PRIMARY }}>{g.avatar}</span>
+                          )}
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{g.label}</p>
+                          <span className="text-[11px] text-slate-400 ml-auto">{g.gtasks.length}</span>
+                        </div>
+                        <div className="p-3 space-y-2">
+                          {g.gtasks.map(t => (
+                            <TaskListRow key={t.id} task={t} players={players} profiles={profiles}
+                              onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask}
+                              detailTaskId={detailTask?.id}
+                              overdue={!!(t.dueDate && t.dueDate < todayStr)} />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              }
+
+              // ── Agrupado por estado (kanban / compacto / tabla) ──
+              const colPending    = filteredBoard.filter(t => t.status === 'pendiente');
+              const colInProgress = filteredBoard.filter(t => t.status === 'en_progreso');
               if (misViewMode === 'compact') {
                 return (
                   <CompactTaskList
-                    tasks={misFiltered} completedTasks={myTasksCompleted}
+                    tasks={filteredBoard} completedTasks={boardCompleted}
                     players={players} profiles={profiles}
                     onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
                     showCompleted={showCompletedMine} onToggleCompleted={() => setShowCompletedMine(v => !v)}
@@ -738,7 +839,7 @@ export function Dashboard({
               if (misViewMode === 'table') {
                 return (
                   <TaskTableView
-                    tasks={[...myTasks, ...myTasksCompleted]}
+                    tasks={[...filteredBoard, ...boardCompleted]}
                     players={players} profiles={profiles}
                     onOpenDetail={setDetailTask} onCycleStatus={cycleTaskStatus} detailTaskId={detailTask?.id}
                     sortCol={taskSortCol} sortDir={taskSortDir}
@@ -750,29 +851,29 @@ export function Dashboard({
                 <>
                   <div className="hidden sm:grid grid-cols-3 gap-0 divide-x divide-slate-100 p-4 pt-3">
                     <KanbanCol label="Pendiente" dotColor="#94a3b8"
-                      tasks={misPending} players={players} profiles={profiles}
+                      tasks={colPending} players={players} profiles={profiles}
                       onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
                     />
                     <KanbanCol label="En progreso" dotColor="#378ADD"
-                      tasks={misInProgress} players={players} profiles={profiles}
+                      tasks={colInProgress} players={players} profiles={profiles}
                       onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
                     />
                     <KanbanCol label="Completada" dotColor="#1D9E75"
                       tasks={[]} players={players} profiles={profiles}
                       onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
                       showCompleted={showCompletedMine} onToggleCompleted={() => setShowCompletedMine(v => !v)}
-                      completedCount={myTasksCompleted.length} completedTasks={myTasksCompleted}
+                      completedCount={boardCompleted.length} completedTasks={boardCompleted}
                       isCompletedCol
                     />
                   </div>
                   <div className="sm:hidden p-4 space-y-2">
-                    {[...misPending, ...misInProgress].length === 0
+                    {[...colPending, ...colInProgress].length === 0
                       ? <p className="text-center py-6 text-sm text-slate-400">✓ Sin tareas pendientes</p>
-                      : [...misPending, ...misInProgress].map(t => (
+                      : [...colPending, ...colInProgress].map(t => (
                           <TaskListRow key={t.id} task={t} players={players} profiles={profiles}
                             onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask}
                             detailTaskId={detailTask?.id}
-                            overdue={!!(t.dueDate && new Date(t.dueDate) < new Date())} />
+                            overdue={!!(t.dueDate && t.dueDate < todayStr)} />
                         ))
                     }
                   </div>
@@ -780,381 +881,6 @@ export function Dashboard({
               );
             })()}
           </div>
-
-          {/* Mis jugadores */}
-          {playerTaskGroups.length > 0 && (
-            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-              <div className="px-4 py-2.5 border-b border-slate-100">
-                <p className="text-xs font-semibold text-slate-600">
-                  Mis jugadores <span className="font-normal text-slate-400">({myPlayerTasks.length} tareas)</span>
-                </p>
-              </div>
-              <div className="p-4 space-y-5">
-                {playerTaskGroups.map(({ player, ptasks }) => (
-                  <div key={player.id}>
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[9px] font-bold text-white"
-                        style={{ background: PRIMARY }}>
-                        {player.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                      </div>
-                      <p className="text-xs font-semibold text-slate-700">{player.name}</p>
-                      <span className="text-[11px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded-full font-medium">{ptasks.length}</span>
-                    </div>
-                    <div className="space-y-2 ml-8">
-                      {ptasks.map(t => (
-                        <TaskListRow key={t.id} task={t} players={players} profiles={profiles}
-                          onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask}
-                          detailTaskId={detailTask?.id}
-                          overdue={!!(t.dueDate && new Date(t.dueDate) < new Date())} />
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </>)}
-
-        {/* ── EQUIPO view ──────────────────────────────────── */}
-        {tasksMainView === 'equipo' && (<>
-
-          {/* Sub-toggle: Por persona | Todas las tareas */}
-          <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5 mb-5 w-fit">
-            {(['persona', 'todas'] as const).map(v => (
-              <button
-                key={v}
-                onClick={() => { setEquipoSubView(v); setEquipoQuickFilter(null); }}
-                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                  equipoSubView === v
-                    ? 'bg-white text-slate-800 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                {v === 'persona' ? 'Por persona' : 'Todas las tareas'}
-              </button>
-            ))}
-          </div>
-
-          {/* ── Por persona: week cards ── */}
-          {equipoSubView === 'persona' && (<>
-
-          {/* Week navigator */}
-          <div className="flex items-center justify-between mb-5">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => { setWeekOffset(o => o - 1); setTeamActivities({}); }}
-                aria-label="Semana anterior"
-                className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => { setWeekOffset(0); setTeamActivities({}); }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                  weekOffset === 0
-                    ? 'bg-slate-800 text-white border-slate-800'
-                    : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                Esta semana
-              </button>
-              <button
-                onClick={() => { setWeekOffset(o => o + 1); setTeamActivities({}); }}
-                aria-label="Semana siguiente"
-                className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-            <p className="text-xs font-medium text-slate-500">
-              {weekMonday.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
-              {' – '}
-              {weekSunday.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
-            </p>
-          </div>
-
-          {/* Per-person cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {profiles.map(p => {
-              const isMe = p.id === currentProfile.id;
-              const weekMonStr = weekMonday.toISOString().slice(0, 10);
-              const weekSunStr = weekSunday.toISOString().slice(0, 10);
-
-              const weekTasks = tasks.filter(t =>
-                t.assigneeId === p.id &&
-                t.dueDate != null &&
-                t.dueDate >= weekMonStr &&
-                t.dueDate <= weekSunStr
-              );
-              const inProgressP = tasks.filter(t =>
-                t.assigneeId === p.id && t.status === 'en_progreso'
-              );
-              const overdueP = tasks.filter(t =>
-                t.assigneeId === p.id &&
-                t.status !== 'completada' &&
-                t.dueDate != null &&
-                t.dueDate < todayStr
-              );
-              const allCompleted = tasks.filter(t =>
-                t.assigneeId === p.id &&
-                t.status === 'completada'
-              );
-              const profileActs = teamActivities[p.id] ?? [];
-              const weekEvents = profileActs.filter(a =>
-                a.date >= weekMonStr && a.date <= weekSunStr
-              );
-
-              return (
-                <div key={p.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden hover:shadow-md transition-shadow">
-                  {/* Header */}
-                  <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white"
-                        style={{ background: PRIMARY }}>
-                        {p.avatar}
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-slate-800">{p.name}</p>
-                        {isMe && <p className="text-[11px] text-slate-400">Tú</p>}
-                      </div>
-                    </div>
-                    {overdueP.length > 0 && (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full flex-shrink-0">
-                        <AlertTriangle className="w-3 h-3" />
-                        {overdueP.length} venc.
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Body */}
-                  <div className="p-4 space-y-3">
-                    {/* Tasks this week */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Tareas esta semana</p>
-                        <span className="text-[11px] font-medium text-slate-500">{weekTasks.length}</span>
-                      </div>
-                      {weekTasks.length === 0 ? (
-                        <p className="text-xs text-slate-300 italic">Sin tareas programadas</p>
-                      ) : (
-                        <div className="space-y-1.5">
-                          {weekTasks.slice(0, 3).map(t => (
-                            <div key={t.id} onClick={() => setDetailTask(t)}
-                              className="flex items-center gap-2 cursor-pointer group">
-                              <div className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                                style={{
-                                  background: t.status === 'completada' ? '#10b981'
-                                    : t.status === 'en_progreso' ? '#3b82f6'
-                                    : t.priority === 'alta' ? '#E24B4A'
-                                    : t.priority === 'media' ? '#EF9F27' : '#94a3b8'
-                                }} />
-                              <p className="text-xs text-slate-700 truncate group-hover:text-blue-600 transition-colors flex-1">{t.title}</p>
-                              {t.dueDate && (
-                                <span className="text-[10px] text-slate-400 flex-shrink-0">
-                                  {new Date(t.dueDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
-                                </span>
-                              )}
-                            </div>
-                          ))}
-                          {weekTasks.length > 3 && (
-                            <p className="text-[11px] text-slate-400">+{weekTasks.length - 3} más</p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="border-t border-slate-100" />
-
-                    {/* Events this week */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Eventos esta semana</p>
-                        <span className="text-[11px] font-medium text-slate-500">
-                          {loadingTeamActivities ? '…' : weekEvents.length}
-                        </span>
-                      </div>
-                      {loadingTeamActivities ? (
-                        <p className="text-xs text-slate-300 italic">Cargando…</p>
-                      ) : weekEvents.length === 0 ? (
-                        <p className="text-xs text-slate-300 italic">Sin eventos registrados</p>
-                      ) : (
-                        <div className="space-y-1.5">
-                          {weekEvents.slice(0, 3).map(a => {
-                            const evtPlayer = players.find(pl => pl.id === a.playerId);
-                            return (
-                              <div key={a.id} className="flex items-center gap-2">
-                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
-                                <p className="text-xs text-slate-700 truncate flex-1">
-                                  {a.type}
-                                  {evtPlayer && <span className="text-slate-400"> · {evtPlayer.name}</span>}
-                                </p>
-                                <span className="text-[10px] text-slate-400 flex-shrink-0">
-                                  {new Date(a.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
-                                </span>
-                              </div>
-                            );
-                          })}
-                          {weekEvents.length > 3 && (
-                            <p className="text-[11px] text-slate-400">+{weekEvents.length - 3} más</p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Footer */}
-                    <div className="border-t border-slate-100 pt-2.5 flex items-center justify-between">
-                      <div className="flex items-center gap-3 text-[11px]">
-                        {inProgressP.length > 0 && (
-                          <span className="text-blue-600 font-medium">{inProgressP.length} en progreso</span>
-                        )}
-                        {allCompleted.length > 0 && (
-                          <span className="text-emerald-600 font-medium">✓ {allCompleted.length} completadas</span>
-                        )}
-                        {inProgressP.length === 0 && allCompleted.length === 0 && weekTasks.length === 0 && weekEvents.length === 0 && (
-                          <span className="text-slate-300">Sin actividad</span>
-                        )}
-                      </div>
-                      {onSelectProfile && (
-                        <button
-                          onClick={() => onSelectProfile(p.id)}
-                          className="text-[11px] text-slate-500 hover:text-primary transition-colors font-medium"
-                        >
-                          Ver todo →
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </>)}
-
-          </>)}
-
-          {/* ── Todas las tareas: team kanban ── */}
-          {equipoSubView === 'todas' && (<>
-
-            {/* 4-stat strip */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
-              <button
-                onClick={() => setEquipoQuickFilter(q => q === 'overdue' ? null : 'overdue')}
-                className={`rounded-xl p-3 text-center border transition-all active:scale-95 ${
-                  equipoQuickFilter === 'overdue'
-                    ? 'bg-red-50 border-red-400 shadow-sm'
-                    : teamOverdue.length > 0
-                      ? 'bg-white border-red-200 hover:border-red-300'
-                      : 'bg-white border-slate-200 hover:border-slate-300'
-                }`}
-              >
-                <p className={`text-xl font-semibold ${teamOverdue.length > 0 ? 'text-red-500' : 'text-slate-800'}`}>
-                  {teamOverdue.length}
-                </p>
-                <p className="text-[11px] text-slate-400 mt-0.5">Vencidas</p>
-              </button>
-              <div className="bg-white border border-slate-200 rounded-xl p-3 text-center">
-                <p className="text-xl font-semibold text-slate-800">{teamDueToday.length}</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">Hoy</p>
-              </div>
-              <div className="bg-white border border-slate-200 rounded-xl p-3 text-center">
-                <p className="text-xl font-semibold text-slate-800">{teamPendingAll.length}</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">Pendientes</p>
-              </div>
-              <button
-                onClick={() => setEquipoQuickFilter(q => q === 'inprogress' ? null : 'inprogress')}
-                className={`rounded-xl p-3 text-center border transition-all active:scale-95 ${
-                  equipoQuickFilter === 'inprogress'
-                    ? 'bg-blue-50 border-blue-400 shadow-sm'
-                    : teamInProgress.length > 0
-                      ? 'bg-white border-blue-200 hover:border-blue-300'
-                      : 'bg-white border-slate-200 hover:border-slate-300'
-                }`}
-              >
-                <p className={`text-xl font-semibold ${teamInProgress.length > 0 ? 'text-blue-600' : 'text-slate-800'}`}>
-                  {teamInProgress.length}
-                </p>
-                <p className="text-[11px] text-slate-400 mt-0.5">En progreso</p>
-              </button>
-            </div>
-
-            {/* Team kanban */}
-            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-              <div className="px-4 py-2.5 border-b border-slate-100 flex items-center gap-2">
-                <p className="text-xs font-semibold text-slate-600 flex-1">
-                  Todas las tareas <span className="font-normal text-slate-400">({teamAllTasks.length})</span>
-                </p>
-                {equipoQuickFilter && (
-                  <button onClick={() => setEquipoQuickFilter(null)} className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1">
-                    <X className="w-3 h-3" /> Limpiar filtro
-                  </button>
-                )}
-                <ViewModeToggle mode={equipoViewMode} onChange={setEquipoViewMode} />
-              </div>
-              {(() => {
-                const filtered2 = equipoQuickFilter === 'overdue'
-                  ? teamPendingAll.filter(t => t.dueDate && t.dueDate < todayStr)
-                  : equipoQuickFilter === 'inprogress'
-                    ? teamAllTasks.filter(t => t.status === 'en_progreso')
-                    : teamPendingAll;
-                const colPending    = filtered2.filter(t => t.status === 'pendiente');
-                const colInProgress = filtered2.filter(t => t.status === 'en_progreso');
-                if (equipoViewMode === 'compact') {
-                  return (
-                    <CompactTaskList
-                      tasks={filtered2} completedTasks={teamCompletedAll}
-                      players={players} profiles={profiles}
-                      onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
-                      showCompleted={showCompletedTeam} onToggleCompleted={() => setShowCompletedTeam(v => !v)}
-                    />
-                  );
-                }
-                if (equipoViewMode === 'table') {
-                  return (
-                    <TaskTableView
-                      tasks={teamAllTasks}
-                      players={players} profiles={profiles}
-                      onOpenDetail={setDetailTask} onCycleStatus={cycleTaskStatus} detailTaskId={detailTask?.id}
-                      sortCol={taskSortCol} sortDir={taskSortDir}
-                      onSort={(col) => { if (col === taskSortCol) setTaskSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setTaskSortCol(col); setTaskSortDir('asc'); } }}
-                    />
-                  );
-                }
-                return (
-                  <>
-                    <div className="hidden sm:grid grid-cols-3 gap-0 divide-x divide-slate-100 p-4 pt-3">
-                      <KanbanCol label="Pendiente" dotColor="#94a3b8"
-                        tasks={colPending} players={players} profiles={profiles}
-                        onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
-                      />
-                      <KanbanCol label="En progreso" dotColor="#378ADD"
-                        tasks={colInProgress} players={players} profiles={profiles}
-                        onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
-                      />
-                      <KanbanCol label="Completada" dotColor="#1D9E75"
-                        tasks={[]} players={players} profiles={profiles}
-                        onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask} detailTaskId={detailTask?.id}
-                        showCompleted={showCompletedTeam} onToggleCompleted={() => setShowCompletedTeam(v => !v)}
-                        completedCount={teamCompletedAll.length} completedTasks={teamCompletedAll}
-                        isCompletedCol
-                      />
-                    </div>
-                    <div className="sm:hidden p-4 space-y-2">
-                      {filtered2.length === 0
-                        ? <p className="text-center py-6 text-sm text-slate-400">✓ Sin tareas pendientes</p>
-                        : filtered2.map(t => (
-                            <TaskListRow key={t.id} task={t} players={players} profiles={profiles}
-                              onCycleStatus={cycleTaskStatus} onOpenDetail={setDetailTask}
-                              detailTaskId={detailTask?.id}
-                              overdue={!!(t.dueDate && new Date(t.dueDate) < new Date())} />
-                          ))
-                      }
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-
-          </>)}
 
         </>)}
 
@@ -1584,76 +1310,183 @@ export function Dashboard({
 
         </>)}
 
-        {/* ── Equipo section ───────────────────────────────── */}
+        {/* ── Equipo section: carga y actividad por miembro ── */}
         {activeTab === 'equipo' && onSelectProfile && (<>
           <div className="mb-4">
             <h2 className="text-base font-semibold text-slate-800">Equipo</h2>
-            <p className="text-xs text-slate-400 mt-0.5">Haz clic en un miembro para ver su actividad y eventos</p>
+            <p className="text-xs text-slate-400 mt-0.5">Carga y actividad de cada miembro · clic en una fila para ver el detalle</p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-            {profiles.map(p => {
-              const managedCount   = players.filter(pl => pl.managedBy.includes(p.id)).length;
-              const assignedTasks  = tasks.filter(t => t.assigneeId === p.id && t.status !== "completada");
-              const overdueTasks   = assignedTasks.filter(t => t.dueDate && new Date(t.dueDate) < new Date());
-              const inProgressCount = assignedTasks.filter(t => t.status === "en_progreso").length;
-              const isMe = p.id === currentProfile.id;
+          {/* Week navigator (cached: no refetch al navegar) */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setWeekOffset(o => o - 1)}
+                aria-label="Semana anterior"
+                className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setWeekOffset(0)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                  weekOffset === 0
+                    ? 'bg-slate-800 text-white border-slate-800'
+                    : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                Esta semana
+              </button>
+              <button
+                onClick={() => setWeekOffset(o => o + 1)}
+                aria-label="Semana siguiente"
+                className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs font-medium text-slate-500">
+              {weekMonday.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+              {' – '}
+              {weekSunday.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+            </p>
+          </div>
 
-              return (
-                <button
-                  key={p.id}
-                  onClick={() => onSelectProfile(p.id)}
-                  className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 text-left cursor-pointer transition-all hover:shadow-md hover:border-slate-300 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 relative"
-                >
-                  {isMe && (
-                    <span className="absolute top-3 right-3 text-[10px] font-semibold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">Tú</span>
-                  )}
+          {/* Workload table */}
+          {(() => {
+            const weekMonStr = weekMonday.toISOString().slice(0, 10);
+            const weekSunStr = weekSunday.toISOString().slice(0, 10);
 
-                  {/* Avatar + name */}
-                  <div className="flex items-center gap-3 mb-4">
-                    <div
-                      className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-sm font-bold text-white"
-                      style={{ background: PRIMARY }}
-                    >
-                      {p.avatar}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-slate-900 truncate">{p.name}</p>
-                    </div>
-                  </div>
+            // Eventos deduplicados (los grupales comparten groupId)
+            const dedupedEvents = (acts: PlayerActivity[]) => {
+              const seen = new Set<string>();
+              return acts.filter(a => {
+                if (!a.groupId) return true;
+                if (seen.has(a.groupId)) return false;
+                seen.add(a.groupId);
+                return true;
+              });
+            };
 
-                  {/* Stats grid */}
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="bg-slate-50 rounded-lg px-2.5 py-2 text-center">
-                      <p className="text-base font-semibold text-slate-800">{managedCount}</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5 leading-tight">Jugadores</p>
-                    </div>
-                    <div className={`rounded-lg px-2.5 py-2 text-center ${overdueTasks.length > 0 ? 'bg-red-50' : 'bg-slate-50'}`}>
-                      <p className={`text-base font-semibold ${overdueTasks.length > 0 ? 'text-red-600' : 'text-slate-800'}`}>
-                        {assignedTasks.length}
-                      </p>
-                      <p className={`text-[10px] mt-0.5 leading-tight ${overdueTasks.length > 0 ? 'text-red-400' : 'text-slate-400'}`}>
-                        {overdueTasks.length > 0 ? `${overdueTasks.length} venc.` : 'Tareas'}
-                      </p>
-                    </div>
-                    <div className={`rounded-lg px-2.5 py-2 text-center ${inProgressCount > 0 ? 'bg-blue-50' : 'bg-slate-50'}`}>
-                      <p className={`text-base font-semibold ${inProgressCount > 0 ? 'text-blue-600' : 'text-slate-800'}`}>{inProgressCount}</p>
-                      <p className={`text-[10px] mt-0.5 leading-tight ${inProgressCount > 0 ? 'text-blue-400' : 'text-slate-400'}`}>En progreso</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-3 flex items-center justify-between">
-                    <span className="text-[11px] text-slate-400">Ver actividad →</span>
-                    {overdueTasks.length > 0 && (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">
-                        <AlertTriangle className="w-3 h-3" />
-                        {overdueTasks.length} vencida{overdueTasks.length > 1 ? 's' : ''}
-                      </span>
-                    )}
-                  </div>
-                </button>
+            const rows = profiles.map(p => {
+              // Carga abierta: pendiente + en progreso, con o sin fecha (asignado o watcher)
+              const open = visibleTasks.filter(t => t.status !== 'completada' && involvesProfile(t, p.id));
+              const openAsWatcher = open.filter(t => t.assigneeId !== p.id).length;
+              const dueWeek = open.filter(t => t.dueDate && t.dueDate >= weekMonStr && t.dueDate <= weekSunStr);
+              const overdue = open.filter(t => t.dueDate && t.dueDate < todayStr);
+              const completedWeek = visibleTasks.filter(t =>
+                t.status === 'completada' && t.assigneeId === p.id &&
+                t.completedAt && t.completedAt.slice(0, 10) >= weekMonStr && t.completedAt.slice(0, 10) <= weekSunStr
               );
-            })}
+              const events = dedupedEvents(teamActivities[p.id] ?? []);
+              const eventsWeek = events.filter(a => a.date >= weekMonStr && a.date <= weekSunStr);
+
+              // Actividad 4 semanas (completadas + eventos), terminando en la semana visible
+              const spark = [3, 2, 1, 0].map(i => {
+                const ws = new Date(weekMonday.getTime() - i * 7 * 24 * 60 * 60 * 1000);
+                const we = new Date(ws.getTime() + 6 * 24 * 60 * 60 * 1000);
+                const wsStr = ws.toISOString().slice(0, 10);
+                const weStr = we.toISOString().slice(0, 10);
+                const nDone = visibleTasks.filter(t =>
+                  t.status === 'completada' && t.assigneeId === p.id &&
+                  t.completedAt && t.completedAt.slice(0, 10) >= wsStr && t.completedAt.slice(0, 10) <= weStr
+                ).length;
+                const nEvt = events.filter(a => a.date >= wsStr && a.date <= weStr).length;
+                return nDone + nEvt;
+              });
+
+              return { p, open, openAsWatcher, dueWeek, overdue, completedWeek, eventsWeek, spark };
+            }).sort((a, b) => b.open.length - a.open.length);
+
+            const badge = (n: number, cls: string) =>
+              n > 0
+                ? <span className={`inline-block min-w-[26px] px-2 py-0.5 rounded-full text-[11px] font-semibold ${cls}`}>{n}</span>
+                : <span className="text-slate-300 text-[11px]">—</span>;
+
+            return (
+              <div className="bg-white border border-slate-200 rounded-xl overflow-x-auto">
+                <table className="w-full min-w-[680px] text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50 text-[10px] text-slate-400 uppercase tracking-wider">
+                      <th className="text-left px-4 py-2.5 font-semibold">Miembro</th>
+                      <th className="text-center px-2 py-2.5 font-semibold">Carga abierta</th>
+                      <th className="text-center px-2 py-2.5 font-semibold">Esta semana</th>
+                      <th className="text-center px-2 py-2.5 font-semibold">Vencidas</th>
+                      <th className="text-center px-2 py-2.5 font-semibold">Completadas</th>
+                      <th className="text-center px-2 py-2.5 font-semibold">Eventos</th>
+                      <th className="text-center px-2 py-2.5 font-semibold">Actividad 4 sem</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {rows.map(({ p, open, openAsWatcher, dueWeek, overdue, completedWeek, eventsWeek, spark }) => {
+                      const isMe = p.id === currentProfile.id;
+                      const sparkMax = Math.max(...spark, 1);
+                      const noActivity = open.length === 0 && completedWeek.length === 0 && eventsWeek.length === 0;
+                      return (
+                        <tr
+                          key={p.id}
+                          onClick={() => onSelectProfile(p.id)}
+                          className="cursor-pointer hover:bg-slate-50 transition-colors"
+                        >
+                          <td className="px-4 py-2.5">
+                            <div className="flex items-center gap-2.5">
+                              <span className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white"
+                                style={{ background: PRIMARY }}>{p.avatar}</span>
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold text-slate-800 truncate">
+                                  {p.name}{isMe && <span className="ml-1.5 text-[10px] font-medium text-slate-400">(tú)</span>}
+                                </p>
+                                <p className="text-[10px] text-slate-400">
+                                  {noActivity ? 'Sin actividad' : openAsWatcher > 0 ? `${openAsWatcher} como watcher` : ' '}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-2 py-2.5 text-center">{badge(open.length, 'bg-slate-100 text-slate-600')}</td>
+                          <td className="px-2 py-2.5 text-center">{badge(dueWeek.length, 'bg-blue-50 text-blue-700')}</td>
+                          <td className="px-2 py-2.5 text-center">
+                            {overdue.length > 0
+                              ? <span className="inline-flex items-center gap-1 min-w-[26px] px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-50 text-red-600 border border-red-200">
+                                  <AlertTriangle className="w-3 h-3" />{overdue.length}
+                                </span>
+                              : <span className="text-slate-300 text-[11px]">—</span>}
+                          </td>
+                          <td className="px-2 py-2.5 text-center">
+                            {completedWeek.length > 0
+                              ? <span className="inline-block min-w-[26px] px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-600">✓ {completedWeek.length}</span>
+                              : <span className="text-slate-300 text-[11px]">—</span>}
+                          </td>
+                          <td className="px-2 py-2.5 text-center">
+                            {loadingTeamActivities
+                              ? <span className="text-slate-300 text-[11px]">…</span>
+                              : badge(eventsWeek.length, 'bg-amber-50 text-amber-600')}
+                          </td>
+                          <td className="px-2 py-2.5">
+                            <div className="flex items-end justify-center gap-0.5 h-5" aria-hidden>
+                              {spark.map((v, i) => (
+                                <span
+                                  key={i}
+                                  className={`w-1.5 rounded-sm ${i === 3 ? 'bg-primary' : 'bg-slate-200'}`}
+                                  style={{ height: `${Math.max((v / sparkMax) * 18, 2)}px` }}
+                                />
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
+
+          {/* Glosario de métricas */}
+          <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 px-1 text-[11px] text-slate-400">
+            <span><b className="font-semibold text-slate-500">Carga abierta</b> = pendientes + en progreso, con o sin fecha (incl. watcher)</span>
+            <span><b className="font-semibold text-slate-500">Esta semana</b> = abiertas con vencimiento en la semana visible</span>
+            <span><b className="font-semibold text-slate-500">Completadas / Eventos</b> = en la semana visible</span>
+            <span><b className="font-semibold text-slate-500">Actividad</b> = completadas + eventos por semana (4 últimas)</span>
           </div>
 
           {profiles.length === 0 && (
@@ -2039,16 +1872,18 @@ export function Dashboard({
           onClose={() => setDetailTask(null)}
           onUpdate={async (updated) => {
             try {
-              if (onUpdateTask) await Promise.resolve(onUpdateTask(updated));
-              if (onUpdateGeneralTask) await Promise.resolve(onUpdateGeneralTask(updated));
+              // Un único handler: ambos props apuntan al mismo updater en App;
+              // llamar a los dos provocaba una doble escritura en la BD.
+              const update = onUpdateTask ?? onUpdateGeneralTask;
+              if (update) await Promise.resolve(update(updated));
             } catch {
               showToast("No se pudo guardar. Inténtalo de nuevo.", "error");
             }
           }}
           onSaveAndClose={async (updated) => {
             try {
-              if (onUpdateTask) await Promise.resolve(onUpdateTask(updated));
-              if (onUpdateGeneralTask) await Promise.resolve(onUpdateGeneralTask(updated));
+              const update = onUpdateTask ?? onUpdateGeneralTask;
+              if (update) await Promise.resolve(update(updated));
               setDetailTask(null);
               showToast("Tarea actualizada", "success");
             } catch (err) {

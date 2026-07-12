@@ -52,6 +52,7 @@ export interface Task {
   label?: TaskLabel;          // optional task type tag
   dueDate?: string;           // optional
   createdAt: string;
+  completedAt?: string;       // ISO — se rellena al pasar a "completada"
   comments: TaskComment[];
   adminOnly?: boolean;        // si true, solo visible para admins
 }

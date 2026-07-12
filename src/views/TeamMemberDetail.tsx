@@ -6,7 +6,7 @@ import { ListSkeleton } from "../components/Skeleton";
 import { EmptyState } from "../components/EmptyState";
 import {
   ArrowLeft, CheckCircle2, Clock, Activity,
-  Calendar, AlertCircle, Users, ChevronDown, ChevronUp,
+  Calendar, AlertCircle, Users, ChevronDown, ChevronUp, ListTodo,
 } from "lucide-react";
 
 const ACTIVITY_ICONS: Record<string, string> = {
@@ -32,7 +32,7 @@ const PERIOD_LABELS: Record<Period, string> = {
 
 interface TimelineItem {
   id: string;
-  date: string;         // YYYY-MM-DD or ISO
+  date: string;         // YYYY-MM-DD or ISO — fecha REAL del hecho
   kind: 'event' | 'task';
   title: string;
   subtitle?: string;
@@ -56,6 +56,7 @@ export function TeamMemberDetail({ profile, tasks, players, onBack, onSelectPlay
   const [loading, setLoading]       = useState(true);
   const [period, setPeriod]         = useState<Period>('30d');
   const [showPeriod, setShowPeriod] = useState(false);
+  const [tab, setTab]               = useState<'actividad' | 'abiertas'>('actividad');
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -75,19 +76,27 @@ export function TeamMemberDetail({ profile, tasks, players, onBack, onSelectPlay
     return d;
   })();
 
-  function inPeriod(dateStr: string) {
+  function inPeriod(dateStr?: string) {
+    if (!dateStr) return false;
     if (!cutoff) return true;
     return new Date(dateStr) >= cutoff;
   }
 
-  // ── Task stats ─────────────────────────────────────────────
-  const myTasks = tasks.filter(t => t.assigneeId === profile.id);
-  const myTasksPeriod = myTasks.filter(t => inPeriod(t.createdAt));
-  const completedPeriod = myTasksPeriod.filter(t => t.status === 'completada');
-  const pendingPeriod   = myTasksPeriod.filter(t => t.status === 'pendiente');
-  const inProgressPeriod = myTasksPeriod.filter(t => t.status === 'en_progreso');
-  const overduePeriod   = myTasksPeriod.filter(t =>
-    t.status !== 'completada' && t.dueDate && new Date(t.dueDate) < new Date()
+  // ── Task sets ──────────────────────────────────────────────
+  // "Suyas" = responsable o watcher (mismo glosario que el tablero)
+  const involves = (t: Task) =>
+    t.assigneeId === profile.id || (t.watchers ?? []).includes(profile.id);
+  const memberTasks = tasks.filter(involves);
+
+  // Abiertas AHORA (no dependen del período)
+  const openTasks = memberTasks.filter(t => t.status !== 'completada');
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const overdueTasks = openTasks.filter(t => t.dueDate && t.dueDate < todayStr);
+
+  // Completadas EN el período — por fecha de completado real (completed_at).
+  // Fallback a createdAt para tareas antiguas sin backfill.
+  const completedInPeriod = memberTasks.filter(t =>
+    t.status === 'completada' && inPeriod(t.completedAt ?? t.createdAt)
   );
 
   // ── Event stats — deduplicate group events for count ──────
@@ -101,10 +110,12 @@ export function TeamMemberDetail({ profile, tasks, players, onBack, onSelectPlay
     return true;
   });
 
-  // ── Build mixed timeline ───────────────────────────────────
+  // ── Timeline: solo hechos con fecha real ───────────────────
+  // Eventos por su fecha; tareas completadas por completed_at.
+  // Las tareas abiertas viven en su propia pestaña, no intercaladas
+  // por dueDate futuro.
   const timelineItems: TimelineItem[] = [];
 
-  // Events — deduplicate group events (same group_id → keep only first row seen)
   const seenGroupIds = new Set<string>();
   activities
     .filter(a => inPeriod(a.date))
@@ -114,7 +125,6 @@ export function TeamMemberDetail({ profile, tasks, players, onBack, onSelectPlay
         seenGroupIds.add(a.groupId);
       }
       const player = players.find(p => p.id === a.playerId);
-      // For group events show ALL linked players as peers, not just the one on this row
       const allLinkedIds = a.linkedPlayerIds ?? [a.playerId];
       const linkedPeers = allLinkedIds
         .map(id => players.find(p => p.id === id))
@@ -131,28 +141,19 @@ export function TeamMemberDetail({ profile, tasks, players, onBack, onSelectPlay
       });
     });
 
-  // Tasks
-  myTasks
-    .filter(t => inPeriod(t.createdAt))
-    .forEach(t => {
-      const taskPlayer = players.find(p => p.id === t.playerId);
-      const statusColor =
-        t.status === 'completada'  ? '#1D9E75' :
-        t.status === 'en_progreso' ? '#378ADD' : '#94a3b8';
-      const icon =
-        t.status === 'completada'  ? '✅' :
-        t.status === 'en_progreso' ? '🔄' : '📋';
-      timelineItems.push({
-        id:           `task-${t.id}`,
-        date:         t.dueDate ?? t.createdAt,
-        kind:         'task',
-        title:        t.title,
-        subtitle:     t.status === 'completada' ? 'Completada' : t.status === 'en_progreso' ? 'En progreso' : 'Pendiente',
-        icon,
-        statusColor,
-        player:       taskPlayer,
-      });
+  completedInPeriod.forEach(t => {
+    const taskPlayer = players.find(p => p.id === t.playerId);
+    timelineItems.push({
+      id:          `task-${t.id}`,
+      date:        (t.completedAt ?? t.createdAt).slice(0, 10),
+      kind:        'task',
+      title:       t.title,
+      subtitle:    'Completada',
+      icon:        '✅',
+      statusColor: '#1D9E75',
+      player:      taskPlayer,
     });
+  });
 
   // Sort newest first
   timelineItems.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -173,7 +174,7 @@ export function TeamMemberDetail({ profile, tasks, players, onBack, onSelectPlay
       setExpandedMonths(new Set(months.slice(0, 2)));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading]);
+  }, [loading, period]);
 
   function toggleMonth(m: string) {
     setExpandedMonths(prev => {
@@ -183,8 +184,36 @@ export function TeamMemberDetail({ profile, tasks, players, onBack, onSelectPlay
     });
   }
 
+  // Abiertas ordenadas: vencidas → con fecha → sin fecha
+  const sortedOpen = [...openTasks].sort((a, b) => {
+    const aOver = a.dueDate && a.dueDate < todayStr ? 0 : 1;
+    const bOver = b.dueDate && b.dueDate < todayStr ? 0 : 1;
+    if (aOver !== bOver) return aOver - bOver;
+    return (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999');
+  });
+
   const initials = (name: string) =>
     name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+
+  const playerChip = (player: Player) =>
+    onSelectPlayer ? (
+      <button
+        onClick={() => onSelectPlayer(player.id)}
+        className="inline-flex items-center gap-1 text-[11px] text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-full px-1.5 py-0.5 transition-colors cursor-pointer"
+      >
+        <span className="w-3 h-3 rounded-full bg-slate-400 flex items-center justify-center text-[7px] font-bold text-white">
+          {initials(player.name)}
+        </span>
+        {player.name.split(' ')[0]}
+      </button>
+    ) : (
+      <span className="inline-flex items-center gap-1 text-[11px] text-slate-500 bg-slate-100 rounded-full px-1.5 py-0.5">
+        <span className="w-3 h-3 rounded-full bg-slate-400 flex items-center justify-center text-[7px] font-bold text-white">
+          {initials(player.name)}
+        </span>
+        {player.name.split(' ')[0]}
+      </span>
+    );
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -241,6 +270,8 @@ export function TeamMemberDetail({ profile, tasks, players, onBack, onSelectPlay
       <div className="max-w-3xl mx-auto px-4 py-5 space-y-5">
 
         {/* ── Stat cards ─────────────────────────────────────── */}
+        {/* Eventos y Completadas dependen del período; Abiertas y
+            Vencidas son el estado ACTUAL (glosario del tablero). */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
           <div className="bg-white rounded-xl border border-slate-100 p-3.5 space-y-0.5">
             <div className="flex items-center gap-1.5 text-slate-400 mb-1.5">
@@ -248,35 +279,119 @@ export function TeamMemberDetail({ profile, tasks, players, onBack, onSelectPlay
               <span className="text-[11px] font-semibold uppercase tracking-wide">Eventos</span>
             </div>
             <p className="text-2xl font-bold text-slate-800">{eventsPeriod.length}</p>
-            <p className="text-[11px] text-slate-400">registrados</p>
+            <p className="text-[11px] text-slate-400">{PERIOD_LABELS[period].toLowerCase()}</p>
           </div>
           <div className="bg-white rounded-xl border border-slate-100 p-3.5 space-y-0.5">
             <div className="flex items-center gap-1.5 text-emerald-500 mb-1.5">
               <CheckCircle2 className="w-3.5 h-3.5" />
-              <span className="text-[11px] font-semibold uppercase tracking-wide">Tareas</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wide">Completadas</span>
             </div>
-            <p className="text-2xl font-bold text-slate-800">{completedPeriod.length}</p>
-            <p className="text-[11px] text-slate-400">completadas</p>
+            <p className="text-2xl font-bold text-slate-800">{completedInPeriod.length}</p>
+            <p className="text-[11px] text-slate-400">{PERIOD_LABELS[period].toLowerCase()}</p>
           </div>
           <div className="bg-white rounded-xl border border-slate-100 p-3.5 space-y-0.5">
             <div className="flex items-center gap-1.5 text-blue-500 mb-1.5">
               <Clock className="w-3.5 h-3.5" />
-              <span className="text-[11px] font-semibold uppercase tracking-wide">En curso</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wide">Abiertas</span>
             </div>
-            <p className="text-2xl font-bold text-slate-800">{inProgressPeriod.length + pendingPeriod.length}</p>
-            <p className="text-[11px] text-slate-400">abiertas</p>
+            <p className="text-2xl font-bold text-slate-800">{openTasks.length}</p>
+            <p className="text-[11px] text-slate-400">ahora mismo</p>
           </div>
-          <div className={`rounded-xl border p-3.5 space-y-0.5 ${overduePeriod.length > 0 ? 'bg-red-50 border-red-100' : 'bg-white border-slate-100'}`}>
-            <div className={`flex items-center gap-1.5 mb-1.5 ${overduePeriod.length > 0 ? 'text-red-500' : 'text-slate-400'}`}>
+          <div className={`rounded-xl border p-3.5 space-y-0.5 ${overdueTasks.length > 0 ? 'bg-red-50 border-red-100' : 'bg-white border-slate-100'}`}>
+            <div className={`flex items-center gap-1.5 mb-1.5 ${overdueTasks.length > 0 ? 'text-red-500' : 'text-slate-400'}`}>
               <AlertCircle className="w-3.5 h-3.5" />
               <span className="text-[11px] font-semibold uppercase tracking-wide">Vencidas</span>
             </div>
-            <p className={`text-2xl font-bold ${overduePeriod.length > 0 ? 'text-red-600' : 'text-slate-800'}`}>{overduePeriod.length}</p>
-            <p className={`text-[11px] ${overduePeriod.length > 0 ? 'text-red-400' : 'text-slate-400'}`}>sin completar</p>
+            <p className={`text-2xl font-bold ${overdueTasks.length > 0 ? 'text-red-600' : 'text-slate-800'}`}>{overdueTasks.length}</p>
+            <p className={`text-[11px] ${overdueTasks.length > 0 ? 'text-red-400' : 'text-slate-400'}`}>sin completar</p>
           </div>
         </div>
 
-        {/* ── Timeline ────────────────────────────────────────── */}
+        {/* ── Tabs: Actividad | Tareas abiertas ──────────────── */}
+        <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5 w-fit">
+          <button
+            onClick={() => setTab('actividad')}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+              tab === 'actividad' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <Calendar className="w-3.5 h-3.5" /> Actividad
+          </button>
+          <button
+            onClick={() => setTab('abiertas')}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+              tab === 'abiertas' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <ListTodo className="w-3.5 h-3.5" /> Tareas abiertas
+            {openTasks.length > 0 && (
+              <span className={`text-[10px] font-bold px-1.5 py-px rounded-full ${
+                overdueTasks.length > 0 ? 'bg-red-100 text-red-600' : 'bg-slate-200 text-slate-500'
+              }`}>{openTasks.length}</span>
+            )}
+          </button>
+        </div>
+
+        {/* ── Tareas abiertas ─────────────────────────────────── */}
+        {tab === 'abiertas' && (
+          <div className="bg-white rounded-xl border border-slate-100 overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
+              <ListTodo className="w-4 h-4 text-slate-400" />
+              <p className="text-xs font-semibold text-slate-700">Abiertas ahora</p>
+              <span className="ml-auto text-[11px] text-slate-400">{sortedOpen.length} tareas</span>
+            </div>
+            {sortedOpen.length === 0 ? (
+              <EmptyState
+                icon={<CheckCircle2 className="w-10 h-10" />}
+                title="Sin tareas abiertas"
+                subtitle="Todo al día."
+              />
+            ) : (
+              <div className="divide-y divide-slate-50">
+                {sortedOpen.map(t => {
+                  const player = players.find(p => p.id === t.playerId);
+                  const isOverdue = !!(t.dueDate && t.dueDate < todayStr);
+                  const isWatcher = t.assigneeId !== profile.id;
+                  const prioColor =
+                    t.priority === 'alta' ? '#E24B4A' :
+                    t.priority === 'media' ? '#EF9F27' : '#94a3b8';
+                  return (
+                    <div key={t.id} className={`flex items-center gap-3 px-4 py-2.5 ${isOverdue ? 'bg-red-50/40' : ''}`}>
+                      <span className="w-1 self-stretch rounded-full flex-shrink-0" style={{ background: prioColor }} />
+                      <span
+                        className="flex-shrink-0 w-3.5 h-3.5 rounded-full border-2"
+                        style={{
+                          background: t.status === 'en_progreso' ? '#3b82f6' : 'transparent',
+                          borderColor: t.status === 'en_progreso' ? '#3b82f6' : prioColor,
+                        }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-slate-800 leading-snug">{t.title}</p>
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                          {player && <span className="text-[11px] text-slate-400">{player.name}</span>}
+                          {t.label && (
+                            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">{t.label}</span>
+                          )}
+                          {isWatcher && (
+                            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100">watcher</span>
+                          )}
+                        </div>
+                      </div>
+                      <span className={`text-[11px] flex-shrink-0 ${isOverdue ? 'text-red-500 font-semibold' : 'text-slate-400'}`}>
+                        {t.dueDate
+                          ? `${new Date(t.dueDate + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}${isOverdue ? ' ⚠' : ''}`
+                          : 'sin fecha'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Timeline de actividad ───────────────────────────── */}
+        {tab === 'actividad' && (
         <div className="bg-white rounded-xl border border-slate-100 overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
             <Calendar className="w-4 h-4 text-slate-400" />
@@ -341,7 +456,7 @@ export function TeamMemberDetail({ profile, tasks, players, onBack, onSelectPlay
                                   <div className="flex items-start justify-between gap-2">
                                     <div className="flex-1 min-w-0">
                                       <p className="text-xs font-medium text-slate-700 leading-snug">{item.title}</p>
-                                      {item.subtitle && (
+                                      {item.subtitle && item.kind === 'event' && (
                                         <p className="text-[11px] text-slate-400 mt-0.5 leading-snug line-clamp-2">{item.subtitle}</p>
                                       )}
                                     </div>
@@ -351,28 +466,9 @@ export function TeamMemberDetail({ profile, tasks, players, onBack, onSelectPlay
                                   </div>
 
                                   {/* Player + linked peers */}
-                                  {(item.player || (item.linkedPeers && item.linkedPeers.length > 0)) && (
+                                  {(item.player || (item.linkedPeers && item.linkedPeers.length > 0) || item.kind === 'task') && (
                                     <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                                      {item.player && (
-                                        onSelectPlayer ? (
-                                          <button
-                                            onClick={() => onSelectPlayer(item.player!.id)}
-                                            className="inline-flex items-center gap-1 text-[11px] text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-full px-1.5 py-0.5 transition-colors cursor-pointer"
-                                          >
-                                            <span className="w-3 h-3 rounded-full bg-slate-400 flex items-center justify-center text-[7px] font-bold text-white">
-                                              {initials(item.player.name)}
-                                            </span>
-                                            {item.player.name.split(' ')[0]}
-                                          </button>
-                                        ) : (
-                                          <span className="inline-flex items-center gap-1 text-[11px] text-slate-500 bg-slate-100 rounded-full px-1.5 py-0.5">
-                                            <span className="w-3 h-3 rounded-full bg-slate-400 flex items-center justify-center text-[7px] font-bold text-white">
-                                              {initials(item.player.name)}
-                                            </span>
-                                            {item.player.name.split(' ')[0]}
-                                          </span>
-                                        )
-                                      )}
+                                      {item.player && playerChip(item.player)}
                                       {item.linkedPeers?.filter(p => p.id !== item.player?.id).map(p => (
                                         onSelectPlayer ? (
                                           <button
@@ -390,7 +486,7 @@ export function TeamMemberDetail({ profile, tasks, players, onBack, onSelectPlay
                                           </span>
                                         )
                                       ))}
-                                      {/* Task kind badge */}
+                                      {/* Task badge */}
                                       {item.kind === 'task' && (
                                         <span
                                           className="text-[11px] font-medium px-1.5 py-0.5 rounded-full"
@@ -414,6 +510,7 @@ export function TeamMemberDetail({ profile, tasks, players, onBack, onSelectPlay
             </div>
           )}
         </div>
+        )}
       </div>
     </div>
   );
