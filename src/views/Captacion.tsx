@@ -987,9 +987,10 @@ function ConclusionesTab({ players, reports, onSetAssessment, onOpenPlayer }: {
   }, [reports])
 
   // ── a) Candidatos a Llamar ──────────────────────────────────
+  // Cuenta solo los informes: cualquier jugador con N+ informes «Llamar»
+  // aparece aquí, independientemente de su etiqueta actual.
   const candidates = useMemo(() => {
     return players
-      .filter(p => p.assessment !== 'Llamar' && p.assessment !== 'Descartado')
       .map(p => {
         const rs = reportsByPlayer[p.id] ?? []
         const llamar = rs.filter(r => r.conclusion === 'Llamar')
@@ -1148,7 +1149,7 @@ function ConclusionesTab({ players, reports, onSetAssessment, onOpenPlayer }: {
         <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-center gap-2">
           <h3 className="text-sm font-bold text-slate-800">🔔 Candidatos a Llamar</h3>
           <span className="text-xs bg-slate-100 text-slate-600 rounded-full px-2 py-0.5 font-semibold">{candidates.length}</span>
-          <span className="text-[11px] text-slate-400 hidden sm:inline">suman informes «Llamar» y aún no están marcados</span>
+          <span className="text-[11px] text-slate-400 hidden sm:inline">jugadores con {threshold}+ informes «Llamar», sea cual sea su etiqueta</span>
           <div className="ml-auto flex items-center gap-1.5">
             <span className="text-[11px] text-slate-400">Umbral</span>
             <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
@@ -1160,7 +1161,7 @@ function ConclusionesTab({ players, reports, onSetAssessment, onOpenPlayer }: {
         </div>
         {candidates.length === 0 ? (
           <p className="text-xs text-slate-400 italic px-4 py-5">
-            Ningún jugador sin marcar acumula {threshold}+ informes con conclusión «Llamar».
+            Ningún jugador acumula {threshold}+ informes con conclusión «Llamar».
           </p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
@@ -1174,6 +1175,7 @@ function ConclusionesTab({ players, reports, onSetAssessment, onOpenPlayer }: {
                     <p className="text-[11px] text-slate-500 mt-0.5 truncate">
                       {[p.position1, birthYearFromBirthdate(p.birthdate) !== '—' ? birthYearFromBirthdate(p.birthdate) : null, p.team].filter(Boolean).join(' · ')}
                     </p>
+                    <div className="mt-1"><AssessmentChip a={p.assessment} small /></div>
                   </div>
                   <span className="text-[10px] font-extrabold bg-amber-500 text-white rounded-full px-2 py-0.5 whitespace-nowrap flex-shrink-0">
                     {llamarCount}× Llamar
@@ -1195,13 +1197,19 @@ function ConclusionesTab({ players, reports, onSetAssessment, onOpenPlayer }: {
                   </div>
                 )}
                 <div className="flex gap-1.5 mt-2.5">
-                  <button
-                    onClick={() => setAssessment(p, 'Llamar')}
-                    disabled={savingId === p.id}
-                    className="flex-1 py-1.5 rounded-lg text-[11px] font-bold bg-amber-100 border border-amber-200 text-amber-700 hover:bg-amber-200 disabled:opacity-50 transition-colors"
-                  >
-                    {savingId === p.id ? '…' : '☎ Marcar Llamar'}
-                  </button>
+                  {p.assessment === 'Llamar' ? (
+                    <span className="flex-1 py-1.5 rounded-lg text-[11px] font-bold bg-amber-50 border border-amber-200 text-amber-600 text-center">
+                      ✓ Ya en Llamar
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => setAssessment(p, 'Llamar')}
+                      disabled={savingId === p.id}
+                      className="flex-1 py-1.5 rounded-lg text-[11px] font-bold bg-amber-100 border border-amber-200 text-amber-700 hover:bg-amber-200 disabled:opacity-50 transition-colors"
+                    >
+                      {savingId === p.id ? '…' : '☎ Marcar Llamar'}
+                    </button>
+                  )}
                   <button
                     onClick={() => setAssessment(p, 'Seguir')}
                     disabled={savingId === p.id}
