@@ -960,10 +960,9 @@ function MatchRow({
 
 const MAP_ASSESSMENTS: ScoutingAssessment[] = ['Llamar', 'Seguir', 'Decidir']
 
-function ConclusionesTab({ players, reports, onSetAssessment, onOpenPlayer }: {
+function ConclusionesTab({ players, reports, onOpenPlayer }: {
   players: ScoutingPlayer[]
   reports: ScoutingReport[]
-  onSetAssessment: (p: ScoutingPlayer, a: ScoutingAssessment) => Promise<void>
   onOpenPlayer: (id: string) => void
 }) {
   const [threshold, setThreshold] = useState<number>(() => {
@@ -1144,12 +1143,6 @@ function ConclusionesTab({ players, reports, onSetAssessment, onOpenPlayer }: {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   [players, reportsByPlayer])
 
-  const [savingId, setSavingId] = useState<string | null>(null)
-  async function setAssessment(p: ScoutingPlayer, a: ScoutingAssessment) {
-    setSavingId(p.id)
-    try { await onSetAssessment(p, a) } finally { setSavingId(null) }
-  }
-
   const segBtn = (active: boolean) =>
     `px-2.5 py-1 rounded text-[11px] font-semibold transition-colors ${active ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`
 
@@ -1208,35 +1201,12 @@ function ConclusionesTab({ players, reports, onSetAssessment, onOpenPlayer }: {
                     </div>
                   </div>
                 )}
-                <div className="flex gap-1.5 mt-2.5">
-                  {p.assessment === 'Llamar' ? (
-                    <span className="flex-1 py-1.5 rounded-lg text-[11px] font-bold bg-amber-50 border border-amber-200 text-amber-600 text-center">
-                      ✓ Ya en Llamar
-                    </span>
-                  ) : (
-                    <button
-                      onClick={() => setAssessment(p, 'Llamar')}
-                      disabled={savingId === p.id}
-                      className="flex-1 py-1.5 rounded-lg text-[11px] font-bold bg-amber-100 border border-amber-200 text-amber-700 hover:bg-amber-200 disabled:opacity-50 transition-colors"
-                    >
-                      {savingId === p.id ? '…' : '☎ Marcar Llamar'}
-                    </button>
-                  )}
-                  <button
-                    onClick={() => setAssessment(p, 'Seguir')}
-                    disabled={savingId === p.id}
-                    className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-                  >
-                    Seguir
-                  </button>
-                  <button
-                    onClick={() => setAssessment(p, 'Descartado')}
-                    disabled={savingId === p.id}
-                    className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-slate-200 text-slate-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200 disabled:opacity-50"
-                  >
-                    Descartar
-                  </button>
-                </div>
+                <button
+                  onClick={() => onOpenPlayer(p.id)}
+                  className="w-full mt-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
+                >
+                  Ver ficha →
+                </button>
               </div>
             ))}
           </div>
@@ -2915,10 +2885,6 @@ export function Captacion({
             <ConclusionesTab
               players={scoutingPlayers}
               reports={scoutingReports}
-              onSetAssessment={async (p, a) => {
-                await handleQuickAssessment(p, a)
-                showToast(`${p.fullName} → ${a}`)
-              }}
               onOpenPlayer={id => setPanelPlayerId(id)}
             />
           </div>
