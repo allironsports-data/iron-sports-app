@@ -62,15 +62,21 @@ const BOULEMA_CONCLUSION_STYLE: Record<string, string> = {
   'Más video, no prioritario': 'bg-slate-100 text-slate-600 border border-slate-200',
 }
 
-const CONCLUSION_OPTIONS = ['', 'Seguir', 'Llamar', 'Firmar', 'Descartar'] as const
+const CONCLUSION_OPTIONS = ['', 'Seguir', 'Llamar', 'Descartar'] as const
 type ConclusionOption = typeof CONCLUSION_OPTIONS[number]
+
+// «Firmar» se unificó con «Llamar» (ver migration_merge_firmar_llamar.sql).
+// Este helper normaliza registros que aún no hayan pasado por la migración.
+function normConclusion(c?: string): string | undefined {
+  return c === 'Firmar' ? 'Llamar' : c || undefined
+}
 
 const CONCLUSION_STYLE: Record<string, string> = {
   Seguir:    'bg-blue-100 text-blue-700 border border-blue-200',
   Llamar:    'bg-amber-100 text-amber-700 border border-amber-200',
-  Firmar:    'bg-green-100 text-green-700 border border-green-200',
   Descartar: 'bg-red-100 text-red-600 border border-red-200',
-  // legado — por si hay registros antiguos con estos valores
+  // legado — por si hay registros antiguos sin migrar
+  Firmar:    'bg-amber-100 text-amber-700 border border-amber-200',
   Decidir:   'bg-orange-100 text-orange-700 border border-orange-200',
 }
 
@@ -314,7 +320,7 @@ function ReportCard({
   const [editTitle, setEditTitle] = useState(report.titulo ?? '')
   const [editText, setEditText] = useState(report.texto ?? '')
   const initialConclusion: ConclusionOption =
-    (CONCLUSION_OPTIONS as readonly string[]).includes(report.conclusion ?? '') ? (report.conclusion ?? '') as ConclusionOption : ''
+    (CONCLUSION_OPTIONS as readonly string[]).includes(normConclusion(report.conclusion) ?? '') ? (normConclusion(report.conclusion) ?? '') as ConclusionOption : ''
   const [editConclusion, setEditConclusion] = useState<ConclusionOption>(initialConclusion)
   const [saving, setSaving] = useState(false)
   const [confirmDiscard, setConfirmDiscard] = useState(false)
@@ -446,9 +452,9 @@ function ReportCard({
                 )}
               </span>
             )}
-            {report.conclusion && (
-              <span className={`px-1.5 py-0.5 rounded font-medium text-[11px] ${CONCLUSION_STYLE[report.conclusion] ?? 'bg-slate-100 text-slate-600'}`}>
-                {report.conclusion}
+            {normConclusion(report.conclusion) && (
+              <span className={`px-1.5 py-0.5 rounded font-medium text-[11px] ${CONCLUSION_STYLE[normConclusion(report.conclusion)!] ?? 'bg-slate-100 text-slate-600'}`}>
+                {normConclusion(report.conclusion)}
               </span>
             )}
             {matchLabel && (
@@ -795,9 +801,9 @@ function MatchRow({
                         {pReports.length > 0 ? (
                           <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
                             ✓ Informe{pReports.length > 1 ? `s (${pReports.length})` : ''} · {pReports[0].persona ?? '—'}
-                            {pReports[0].conclusion && (
-                              <span className={`ml-0.5 px-1.5 rounded-full text-[10px] ${CONCLUSION_STYLE[pReports[0].conclusion] ?? 'bg-slate-100 text-slate-500'}`}>
-                                {pReports[0].conclusion}
+                            {normConclusion(pReports[0].conclusion) && (
+                              <span className={`ml-0.5 px-1.5 rounded-full text-[10px] ${CONCLUSION_STYLE[normConclusion(pReports[0].conclusion)!] ?? 'bg-slate-100 text-slate-500'}`}>
+                                {normConclusion(pReports[0].conclusion)}
                               </span>
                             )}
                           </span>
@@ -987,22 +993,26 @@ function ConclusionesTab({ players, reports, onSetAssessment, onOpenPlayer }: {
   }, [reports])
 
   // ── a) Candidatos a Llamar ──────────────────────────────────
-  // Cuenta solo los informes: cualquier jugador con N+ informes «Llamar»
-  // aparece aquí, independientemente de su etiqueta actual.
+  // Cuenta solo los informes (con «Firmar» legado normalizado a «Llamar»):
+  // cualquier jugador con N+ informes «Llamar» aparece aquí,
+  // independientemente de su etiqueta actual.
   const candidates = useMemo(() => {
     return players
       .map(p => {
         const rs = reportsByPlayer[p.id] ?? []
-        const llamar = rs.filter(r => r.conclusion === 'Llamar')
-        if (llamar.length < threshold) return null
+        const positive = rs.filter(r => normConclusion(r.conclusion) === 'Llamar')
+        if (positive.length < threshold) return null
         const byConclusion: Record<string, number> = {}
-        rs.forEach(r => { if (r.conclusion) byConclusion[r.conclusion] = (byConclusion[r.conclusion] ?? 0) + 1 })
+        rs.forEach(r => {
+          const c = normConclusion(r.conclusion)
+          if (c) byConclusion[c] = (byConclusion[c] ?? 0) + 1
+        })
         return {
           p,
-          llamarCount: llamar.length,
+          llamarCount: positive.length,
           byConclusion,
           lastReport: rs[0],
-          lastLlamarDate: llamar[0]?.fecha ?? llamar[0]?.createdAt,
+          lastLlamarDate: positive[0]?.fecha ?? positive[0]?.createdAt,
         }
       })
       .filter(Boolean)
@@ -1100,13 +1110,14 @@ function ConclusionesTab({ players, reports, onSetAssessment, onOpenPlayer }: {
       })
     })
     reports.forEach(r => {
-      if (r.conclusion !== 'Llamar' && r.conclusion !== 'Firmar') return
+      const conc = normConclusion(r.conclusion)
+      if (conc !== 'Llamar') return
       const d = r.fecha ?? r.createdAt
       if (nowMs - Date.parse(d) > D21) return
       const p = players.find(pl => pl.id === r.playerId)
       if (!p) return
       const nth = (reportsByPlayer[p.id] ?? []).filter(x =>
-        x.conclusion === r.conclusion && (x.fecha ?? x.createdAt) <= d
+        normConclusion(x.conclusion) === conc && (x.fecha ?? x.createdAt) <= d
       ).length
       items.push({
         date: d,
@@ -1114,8 +1125,8 @@ function ConclusionesTab({ players, reports, onSetAssessment, onOpenPlayer }: {
           <span>
             Informe de <span className="font-mono font-semibold">{r.persona ?? '—'}</span> sobre{' '}
             <button onClick={() => onOpenPlayer(p.id)} className="font-semibold text-slate-800 hover:text-primary">{p.fullName}</button>
-            {' '}concluye <span className={`inline-flex px-1.5 py-0.5 rounded text-[11px] font-medium ${CONCLUSION_STYLE[r.conclusion!] ?? ''}`}>{r.conclusion}</span>
-            {nth > 1 && <span className="text-slate-400 text-[11px]"> ({nth}º en {r.conclusion})</span>}
+            {' '}concluye <span className={`inline-flex px-1.5 py-0.5 rounded text-[11px] font-medium ${CONCLUSION_STYLE[conc] ?? ''}`}>{conc}</span>
+            {nth > 1 && <span className="text-slate-400 text-[11px]"> ({nth}º en {conc})</span>}
           </span>
         ),
       })
@@ -2133,10 +2144,10 @@ export function Captacion({
     })
     const personaRanked = Object.entries(byPersona).sort((a, b) => b[1] - a[1])
 
-    // Conclusions
+    // Conclusions («Firmar» legado se cuenta como «Llamar»)
     const byConclusion: Record<string, number> = {}
     scoutingReports.forEach(r => {
-      const k = r.conclusion || 'Sin conclusión'
+      const k = normConclusion(r.conclusion) ?? 'Sin conclusión'
       byConclusion[k] = (byConclusion[k] ?? 0) + 1
     })
 
@@ -2981,9 +2992,9 @@ export function Captacion({
                         <div className="flex flex-wrap items-center gap-2 mb-0.5">
                           <span className="font-semibold text-slate-800 text-sm">{player?.fullName ?? '—'}</span>
                           {player?.position1 && <span className="text-[11px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{player.position1}</span>}
-                          {r.conclusion && (
-                            <span className={`text-[11px] px-1.5 py-0.5 rounded font-medium ${CONCLUSION_STYLE[r.conclusion] ?? 'bg-slate-100 text-slate-600'}`}>
-                              {r.conclusion}
+                          {normConclusion(r.conclusion) && (
+                            <span className={`text-[11px] px-1.5 py-0.5 rounded font-medium ${CONCLUSION_STYLE[normConclusion(r.conclusion)!] ?? 'bg-slate-100 text-slate-600'}`}>
+                              {normConclusion(r.conclusion)}
                             </span>
                           )}
                         </div>
