@@ -270,6 +270,7 @@ export interface ScoutingPlayer {
   foot?: string
   team?: string
   assessment?: ScoutingAssessment
+  assessmentUpdatedAt?: string  // ISO — se rellena al cambiar el assessment
   nationality?: string
   nationalTeam?: string
   agency?: string

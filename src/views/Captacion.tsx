@@ -3,7 +3,7 @@ import {
   Search, X, Plus, LogOut, Trash2, ChevronDown,
   FileText, Calendar, ChevronRight,
   TrendingUp, Eye, Maximize2, Minimize2, Pencil,
-  BarChart2, ClipboardList, Users, Inbox, Send,
+  BarChart2, ClipboardList, Users, Inbox, Send, Target,
 } from 'lucide-react'
 import logoImg from '../assets/logo.jpeg'
 import type { ScoutingPlayer, ScoutingReport, ScoutingAssessment, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion } from '../types'
@@ -21,7 +21,7 @@ type ShowToast = (message: string, variant?: 'success' | 'error' | 'info') => vo
 
 // ── Constants ────────────────────────────────────────────────
 
-type CaptacionTab = 'jugadores' | 'informes' | 'estadisticas' | 'partidos' | 'boulema'
+type CaptacionTab = 'jugadores' | 'conclusiones' | 'informes' | 'estadisticas' | 'partidos' | 'boulema'
 
 const ASSESSMENT_CONFIG: Record<ScoutingAssessment, { label: string; bg: string; text: string; border: string }> = {
   Llamar:     { label: 'Llamar',     bg: 'bg-amber-100',   text: 'text-amber-700',   border: 'border-amber-200' },
@@ -62,15 +62,15 @@ const BOULEMA_CONCLUSION_STYLE: Record<string, string> = {
   'Más video, no prioritario': 'bg-slate-100 text-slate-600 border border-slate-200',
 }
 
-const CONCLUSION_OPTIONS = ['', 'Seguir', 'Firmar', 'Descartar'] as const
+const CONCLUSION_OPTIONS = ['', 'Seguir', 'Llamar', 'Firmar', 'Descartar'] as const
 type ConclusionOption = typeof CONCLUSION_OPTIONS[number]
 
 const CONCLUSION_STYLE: Record<string, string> = {
   Seguir:    'bg-blue-100 text-blue-700 border border-blue-200',
+  Llamar:    'bg-amber-100 text-amber-700 border border-amber-200',
   Firmar:    'bg-green-100 text-green-700 border border-green-200',
   Descartar: 'bg-red-100 text-red-600 border border-red-200',
   // legado — por si hay registros antiguos con estos valores
-  Llamar:    'bg-green-100 text-green-700 border border-green-200',
   Decidir:   'bg-orange-100 text-orange-700 border border-orange-200',
 }
 
@@ -121,6 +121,90 @@ function relativeDate(iso?: string): string {
   if (days < 7) return `hace ${days}d`
   if (days < 30) return `hace ${Math.floor(days / 7)}sem`
   return ''
+}
+
+// ── Normalización de equipos (matching de sugerencias) ──────
+// "Real Madrid Juv B" ↔ "Real Madrid Juvenil B" ↔ "real madrid"
+const TEAM_NOISE_TOKENS = new Set([
+  'cf', 'cd', 'ud', 'fc', 'sd', 'ad', 'ce', 'sad', 'club',
+  'juv', 'juvenil', 'cadete', 'cad', 'inf', 'infantil', 'alevin',
+  'a', 'b', 'c', 'equipo', 'filial',
+])
+
+function normTeamTokens(name: string): string[] {
+  return name
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(t => t.length > 0 && !TEAM_NOISE_TOKENS.has(t))
+}
+
+/** ¿Se refieren (probablemente) al mismo club? */
+function teamsAlike(a?: string, b?: string): boolean {
+  if (!a || !b) return false
+  const ta = normTeamTokens(a), tb = normTeamTokens(b)
+  if (ta.length === 0 || tb.length === 0) return false
+  const na = ta.join(' '), nb = tb.join(' ')
+  if (na === nb || na.includes(nb) || nb.includes(na)) return true
+  let hits = 0
+  for (const t of ta) if (tb.includes(t)) hits++
+  return hits / Math.max(ta.length, tb.length) >= 0.5
+}
+
+// ── Grupos de posición y slots del campograma ────────────────
+type PosGroup = 'POR' | 'DEF' | 'MED' | 'EXT' | 'DEL'
+const POS_GROUPS: PosGroup[] = ['POR', 'DEF', 'MED', 'EXT', 'DEL']
+
+function normPos(pos?: string): string {
+  return (pos ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+}
+
+function posGroupOf(pos?: string): PosGroup | null {
+  const s = normPos(pos)
+  if (!s) return null
+  if (s.includes('portero') || s === 'por' || s === 'gk') return 'POR'
+  if (s.includes('lateral') || s.includes('central') || s.includes('defensa') || s.includes('carrilero')) return 'DEF'
+  if (s.includes('mediapunta') || s.includes('media punta') || s.includes('enganche')) return 'MED'
+  if (s.includes('pivote') || s.includes('medio') || s.includes('interior') || s.includes('volante')) return 'MED'
+  if (s.includes('extremo') || s.includes('banda')) return 'EXT'
+  if (s.includes('delantero') || s.includes('punta') || s.includes('ariete') || s.includes('killer')) return 'DEL'
+  return null
+}
+
+// Slots del campograma (x/y en % — portería propia abajo)
+type PitchSlotId = 'POR' | 'LD' | 'CTD' | 'CT' | 'CTI' | 'LI' | 'PIV' | 'MC' | 'MP' | 'ED' | 'EI' | 'DEL'
+const PITCH_SLOTS: { id: PitchSlotId; x: number; y: number }[] = [
+  { id: 'POR', x: 50, y: 93 },
+  { id: 'LD',  x: 84, y: 74 },
+  { id: 'CTD', x: 66, y: 82 },
+  { id: 'CT',  x: 50, y: 84 },
+  { id: 'CTI', x: 34, y: 82 },
+  { id: 'LI',  x: 16, y: 74 },
+  { id: 'PIV', x: 50, y: 62 },
+  { id: 'MC',  x: 32, y: 49 },
+  { id: 'MP',  x: 60, y: 40 },
+  { id: 'ED',  x: 85, y: 26 },
+  { id: 'EI',  x: 15, y: 26 },
+  { id: 'DEL', x: 50, y: 12 },
+]
+
+function pitchSlotOf(pos?: string): PitchSlotId | null {
+  const s = normPos(pos)
+  if (!s) return null
+  if (s.includes('portero')) return 'POR'
+  if (s.includes('lateral') && s.includes('der')) return 'LD'
+  if (s.includes('lateral') && s.includes('izq')) return 'LI'
+  if (s.includes('lateral') || s.includes('carrilero')) return 'LD'
+  if (s.includes('central') && s.includes('der')) return 'CTD'
+  if (s.includes('central') && s.includes('izq')) return 'CTI'
+  if (s.includes('central') || s.includes('defensa')) return 'CT'
+  if (s.includes('pivote')) return 'PIV'
+  if (s.includes('mediapunta') || s.includes('media punta') || s.includes('enganche')) return 'MP'
+  if (s.includes('mediocentro') || s.includes('medio') || s.includes('interior') || s.includes('volante')) return 'MC'
+  if (s.includes('extremo') && s.includes('izq')) return 'EI'
+  if (s.includes('extremo') || s.includes('banda')) return 'ED'
+  if (s.includes('delantero') || s.includes('punta') || s.includes('ariete')) return 'DEL'
+  return null
 }
 
 // ── Sub-components ───────────────────────────────────────────
@@ -429,8 +513,10 @@ function scoutColor(avatar: string) {
 function MatchRow({
   match, scoutName, profiles, currentProfile, isAdmin,
   scoutingPlayers, linkedPlayerIds,
+  scoutingReports, allMatches, matchPlayersByMatchId,
   onEdit, onDelete, onToggleStatus, onAssign,
   onAddMatchPlayer, onRemoveMatchPlayer,
+  onAddReport, onOpenPlayer,
   showToast,
 }: {
   match: ScoutingMatch
@@ -440,12 +526,17 @@ function MatchRow({
   isAdmin: boolean
   scoutingPlayers: ScoutingPlayer[]
   linkedPlayerIds: string[]
+  scoutingReports: ScoutingReport[]
+  allMatches: ScoutingMatch[]
+  matchPlayersByMatchId: Record<string, string[]>
   onEdit: (m: ScoutingMatch) => void
   onDelete: (id: string) => void
   onToggleStatus: (m: ScoutingMatch) => void
   onAssign: (m: ScoutingMatch, assignedTo: string) => void
   onAddMatchPlayer: (matchId: string, playerId: string) => Promise<void>
   onRemoveMatchPlayer: (matchId: string, playerId: string) => Promise<void>
+  onAddReport: (r: ScoutingReport) => void
+  onOpenPlayer?: (id: string) => void
   showToast?: ShowToast
 }) {
   const [confirm, setConfirm] = useState(false)
@@ -468,6 +559,15 @@ function MatchRow({
   const [assignOpen, setAssignOpen] = useState(false)
   const [playersOpen, setPlayersOpen] = useState(false)
   const [playerSearch, setPlayerSearch] = useState('')
+  // Filtros de afinado de sugerencias
+  const [suggYearFilter, setSuggYearFilter] = useState<string | null>(null)
+  const [suggPosFilter, setSuggPosFilter] = useState<PosGroup | null>(null)
+  // Informe rápido inline
+  const [reportFormFor, setReportFormFor] = useState<string | null>(null)
+  const [quickText, setQuickText] = useState('')
+  const [quickConclusion, setQuickConclusion] = useState<ConclusionOption>('')
+  const [savingQuick, setSavingQuick] = useState(false)
+
   const day = match.date.slice(8)
   const mon = MONTHS_ES[parseInt(match.date.slice(5, 7)) - 1]
   const yr = match.date.slice(2, 4)
@@ -476,21 +576,91 @@ function MatchRow({
 
   const linkedPlayers = scoutingPlayers.filter(p => linkedPlayerIds.includes(p.id))
 
-  // Auto-suggest: players whose team matches this match's teams
-  const homeL = match.homeTeam.toLowerCase()
-  const awayL = match.awayTeam.toLowerCase()
-  const teamSuggested = scoutingPlayers.filter(p => {
-    if (linkedPlayerIds.includes(p.id)) return false
-    if (!p.team) return false
-    const t = p.team.toLowerCase()
-    return homeL.includes(t) || awayL.includes(t) || t.includes(homeL) || t.includes(awayL)
-  }).slice(0, 10)
+  // Informes de ESTE partido, por jugador
+  const matchReportsByPlayer = useMemo(() => {
+    const map: Record<string, ScoutingReport[]> = {}
+    for (const r of scoutingReports) {
+      if (r.matchId !== match.id) continue
+      if (!map[r.playerId]) map[r.playerId] = []
+      map[r.playerId].push(r)
+    }
+    return map
+  }, [scoutingReports, match.id])
+  const linkedWithReport = linkedPlayers.filter(p => (matchReportsByPlayer[p.id] ?? []).length > 0).length
+
+  async function saveQuickReport() {
+    if (!reportFormFor || !quickText.trim() || savingQuick) return
+    setSavingQuick(true)
+    try {
+      const saved = await db.createScoutingReport({
+        playerId: reportFormFor,
+        fecha: new Date().toISOString(),
+        texto: quickText.trim(),
+        persona: currentProfile.avatar,
+        conclusion: quickConclusion || undefined,
+        matchId: match.id,
+        authorId: currentProfile.id,
+      })
+      onAddReport(saved)
+      setReportFormFor(null)
+      setQuickText('')
+      setQuickConclusion('')
+      showToast?.('Informe guardado — visible en la ficha del jugador')
+    } catch {
+      showToast?.('Error al guardar el informe', 'error')
+    } finally {
+      setSavingQuick(false)
+    }
+  }
+
+  // ── Sugerencias: matching normalizado + historial ──────────
+  const suggestionPool = useMemo(() => {
+    if (!playersOpen) return [] as { p: ScoutingPlayer; why: 'equipo' | 'historial' }[]
+    // 1) Equipo en BD coincide (tokens normalizados, sin acentos/sufijos)
+    const byTeam = new Map<string, 'equipo' | 'historial'>()
+    for (const p of scoutingPlayers) {
+      if (linkedPlayerIds.includes(p.id)) continue
+      if (teamsAlike(p.team, match.homeTeam) || teamsAlike(p.team, match.awayTeam)) {
+        byTeam.set(p.id, 'equipo')
+      }
+    }
+    // 2) Historial: vinculados a partidos anteriores de estos mismos equipos
+    for (const m2 of allMatches) {
+      if (m2.id === match.id) continue
+      const sameTeams =
+        teamsAlike(m2.homeTeam, match.homeTeam) || teamsAlike(m2.homeTeam, match.awayTeam) ||
+        teamsAlike(m2.awayTeam, match.homeTeam) || teamsAlike(m2.awayTeam, match.awayTeam)
+      if (!sameTeams) continue
+      for (const pid of (matchPlayersByMatchId[m2.id] ?? [])) {
+        if (linkedPlayerIds.includes(pid) || byTeam.has(pid)) continue
+        byTeam.set(pid, 'historial')
+      }
+    }
+    return Array.from(byTeam.entries())
+      .map(([id, why]) => ({ p: scoutingPlayers.find(sp => sp.id === id)!, why }))
+      .filter(x => x.p)
+  }, [playersOpen, scoutingPlayers, linkedPlayerIds, allMatches, matchPlayersByMatchId, match.id, match.homeTeam, match.awayTeam])
+
+  // Opciones de afinado derivadas del pool
+  const suggYears = useMemo(() =>
+    Array.from(new Set(suggestionPool.map(x => x.p.birthdate?.slice(0, 4)).filter(Boolean) as string[]))
+      .sort((a, b) => b.localeCompare(a)),
+  [suggestionPool])
+  const suggPosGroups = useMemo(() =>
+    POS_GROUPS.filter(g => suggestionPool.some(x => posGroupOf(x.p.position1) === g || posGroupOf(x.p.position2) === g)),
+  [suggestionPool])
+
+  const teamSuggested = suggestionPool
+    .filter(x => !suggYearFilter || x.p.birthdate?.slice(0, 4) === suggYearFilter)
+    .filter(x => !suggPosFilter || posGroupOf(x.p.position1) === suggPosFilter || posGroupOf(x.p.position2) === suggPosFilter)
+    .sort((a, b) => (a.why === b.why ? a.p.fullName.localeCompare(b.p.fullName) : a.why === 'equipo' ? -1 : 1))
+    .slice(0, 16)
 
   const searchResults = playerSearch.length >= 2
     ? scoutingPlayers.filter(p =>
         !linkedPlayerIds.includes(p.id) &&
         p.fullName.toLowerCase().includes(playerSearch.toLowerCase())
-      ).slice(0, 8)
+      ).slice(0, 8).map(p => ({ p, why: 'equipo' as const }))
     : teamSuggested
 
   return (
@@ -543,18 +713,22 @@ function MatchRow({
             </button>
           )}
         </td>
-        {/* Jugadores vinculados */}
+        {/* Jugadores vinculados + estado de informes */}
         <td className="px-3 py-2">
           <button
             onClick={() => { setPlayersOpen(o => !o); setPlayerSearch('') }}
-            className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded border transition-colors ${
-              linkedPlayers.length > 0
-                ? 'bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100'
-                : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
+            className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded border transition-colors whitespace-nowrap ${
+              linkedPlayers.length === 0
+                ? 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
+                : linkedWithReport < linkedPlayers.length
+                  ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                  : 'bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100'
             }`}
-            title="Ver / añadir jugadores vistos en este partido"
+            title={linkedPlayers.length > 0
+              ? `${linkedWithReport} de ${linkedPlayers.length} jugadores con informe de este partido`
+              : 'Ver / añadir jugadores vistos en este partido'}
           >
-            👤 {linkedPlayers.length > 0 ? linkedPlayers.length : '+'}
+            👤 {linkedPlayers.length > 0 ? `${linkedWithReport}/${linkedPlayers.length}` : '+'}
           </button>
         </td>
         {/* Notas */}
@@ -590,60 +764,180 @@ function MatchRow({
         </td>
       </tr>
 
-      {/* ── Fila expandida: jugadores vinculados ── */}
+      {/* ── Fila expandida: jugadores vinculados + informes rápidos ── */}
       {playersOpen && (
         <tr className="bg-violet-50/40">
           <td colSpan={11} className="px-4 py-3">
-            {/* Linked players row */}
+            {/* Jugadores vinculados, con estado de informe y formulario inline */}
             {linkedPlayers.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 items-center mb-2.5">
-                <span className="text-[11px] font-semibold text-violet-600 uppercase tracking-wide mr-1">Vistos</span>
-                {linkedPlayers.map(p => (
-                  <span key={p.id} className="inline-flex items-center gap-1 bg-white border border-violet-200 text-violet-800 text-xs px-2 py-0.5 rounded-full">
-                    {p.fullName}
-                    <button onClick={() => handleRemovePlayer(p.id)} aria-label={`Desvincular a ${p.fullName}`} className="text-violet-400 hover:text-red-500 ml-0.5">
-                      <X className="w-3 h-3" />
-                    </button>
-                  </span>
-                ))}
+              <div className="space-y-1.5 mb-3">
+                <span className="text-[11px] font-semibold text-violet-600 uppercase tracking-wide">
+                  Vistos en este partido · {linkedPlayers.length} jugador{linkedPlayers.length !== 1 ? 'es' : ''} · {linkedWithReport} con informe
+                </span>
+                {linkedPlayers.map(p => {
+                  const pReports = matchReportsByPlayer[p.id] ?? []
+                  const isFormOpen = reportFormFor === p.id
+                  return (
+                    <div key={p.id} className="bg-white border border-slate-200 rounded-lg px-3 py-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          onClick={() => onOpenPlayer?.(p.id)}
+                          className="text-xs font-semibold text-slate-800 hover:text-primary transition-colors"
+                          title="Abrir ficha del jugador"
+                        >
+                          {p.fullName}
+                        </button>
+                        <span className="text-[11px] text-slate-400">
+                          {[p.position1, birthYearFromBirthdate(p.birthdate) !== '—' ? birthYearFromBirthdate(p.birthdate) : null, p.team].filter(Boolean).join(' · ')}
+                        </span>
+                        <AssessmentChip a={p.assessment} small />
+                        <span className="flex-1" />
+                        {pReports.length > 0 ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                            ✓ Informe{pReports.length > 1 ? `s (${pReports.length})` : ''} · {pReports[0].persona ?? '—'}
+                            {pReports[0].conclusion && (
+                              <span className={`ml-0.5 px-1.5 rounded-full text-[10px] ${CONCLUSION_STYLE[pReports[0].conclusion] ?? 'bg-slate-100 text-slate-500'}`}>
+                                {pReports[0].conclusion}
+                              </span>
+                            )}
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setReportFormFor(isFormOpen ? null : p.id)
+                              setQuickText('')
+                              setQuickConclusion('')
+                            }}
+                            className="text-[11px] font-bold border border-primary text-primary bg-white hover:bg-blue-50 px-2.5 py-1 rounded-lg transition-colors"
+                          >
+                            {isFormOpen ? 'Cancelar' : '+ Informe'}
+                          </button>
+                        )}
+                        <button onClick={() => handleRemovePlayer(p.id)} aria-label={`Desvincular a ${p.fullName}`} className="text-slate-300 hover:text-red-500 p-1">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+
+                      {/* Mini-formulario de informe rápido */}
+                      {isFormOpen && (
+                        <div className="mt-2 bg-blue-50 border border-blue-200 rounded-lg p-2.5 space-y-2">
+                          <textarea
+                            value={quickText}
+                            onChange={e => setQuickText(e.target.value)}
+                            rows={3}
+                            autoFocus
+                            placeholder={`Informe corto de ${p.fullName.split(' ')[0]} en este partido…`}
+                            className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none"
+                            onKeyDown={e => {
+                              if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); saveQuickReport() }
+                            }}
+                          />
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-[11px] text-slate-500 font-medium">Conclusión:</span>
+                            {CONCLUSION_OPTIONS.filter(Boolean).map(c => (
+                              <button
+                                key={c}
+                                onClick={() => setQuickConclusion(quickConclusion === c ? '' : c)}
+                                className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
+                                  quickConclusion === c
+                                    ? (CONCLUSION_STYLE[c] ?? 'bg-slate-200 text-slate-700')
+                                    : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
+                                }`}
+                              >
+                                {c}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] text-slate-400">Se vincula a este partido y aparece en la ficha del jugador · ⌘+Enter</span>
+                            <button
+                              onClick={saveQuickReport}
+                              disabled={!quickText.trim() || savingQuick}
+                              className="px-3 py-1.5 text-[11px] font-bold bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-40 inline-flex items-center gap-1.5"
+                            >
+                              {savingQuick && <Spinner />}
+                              {savingQuick ? 'Guardando…' : 'Guardar informe'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             )}
 
-            {/* Search + suggestions row */}
-            <div className="flex flex-wrap items-start gap-3">
-              <div className="relative flex-shrink-0">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
-                <input
-                  value={playerSearch}
-                  onChange={e => setPlayerSearch(e.target.value)}
-                  placeholder="Buscar jugador..."
-                  className="pl-6 pr-3 py-1 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-violet-400/30 w-48"
-                />
+            {/* Buscar / sugerencias con afinado */}
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative flex-shrink-0">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+                  <input
+                    value={playerSearch}
+                    onChange={e => setPlayerSearch(e.target.value)}
+                    placeholder="Buscar jugador..."
+                    className="pl-6 pr-3 py-1 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-violet-400/30 w-48"
+                  />
+                </div>
+                {/* Afinado: año y posición */}
+                {playerSearch.length < 2 && suggestionPool.length > 0 && (suggYears.length > 1 || suggPosGroups.length > 1) && (
+                  <div className="flex flex-wrap items-center gap-1">
+                    <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">Afinar:</span>
+                    {suggYears.slice(0, 6).map(y => (
+                      <button
+                        key={y}
+                        onClick={() => setSuggYearFilter(f => f === y ? null : y)}
+                        className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
+                          suggYearFilter === y ? 'bg-violet-100 border-violet-300 text-violet-700' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'
+                        }`}
+                      >
+                        {y}
+                      </button>
+                    ))}
+                    {suggPosGroups.length > 1 && <span className="text-slate-200">|</span>}
+                    {suggPosGroups.map(g => (
+                      <button
+                        key={g}
+                        onClick={() => setSuggPosFilter(f => f === g ? null : g)}
+                        className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
+                          suggPosFilter === g ? 'bg-violet-100 border-violet-300 text-violet-700' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'
+                        }`}
+                      >
+                        {g}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              <div className="flex-1 min-w-0">
+              <div>
                 {searchResults.length > 0 ? (
                   <div className="flex flex-wrap gap-1 items-center">
                     {playerSearch.length < 2 && teamSuggested.length > 0 && (
                       <span className="text-[11px] text-violet-500 font-semibold uppercase tracking-wide mr-1">
-                        En BD de este partido:
+                        Sugeridos:
                       </span>
                     )}
-                    {searchResults.map(p => (
+                    {searchResults.map(({ p, why }) => (
                       <button
                         key={p.id}
                         onClick={() => { handleAddPlayer(p.id); setPlayerSearch('') }}
                         className="text-xs bg-white border border-violet-200 text-violet-700 hover:bg-violet-100 px-2 py-0.5 rounded-full transition-colors flex items-center gap-1"
                       >
                         <Plus className="w-3 h-3" />{p.fullName}
-                        {p.team && <span className="text-violet-400 text-[11px]">· {p.team}</span>}
+                        <span className="text-violet-400 text-[11px]">
+                          {[p.birthdate ? `'${p.birthdate.slice(2, 4)}` : null, p.team].filter(Boolean).join(' · ')}
+                          {why === 'historial' ? ' · visto antes con este equipo' : ''}
+                        </span>
                       </button>
                     ))}
                   </div>
                 ) : playerSearch.length >= 2 ? (
                   <span className="text-xs text-slate-400 italic">Sin resultados</span>
-                ) : teamSuggested.length === 0 && linkedPlayers.length === 0 ? (
+                ) : suggestionPool.length === 0 && linkedPlayers.length === 0 ? (
                   <span className="text-xs text-slate-400 italic">Busca un jugador para vincular</span>
+                ) : teamSuggested.length === 0 && suggestionPool.length > 0 ? (
+                  <span className="text-xs text-slate-400 italic">Ningún sugerido con esos filtros — <button className="underline" onClick={() => { setSuggYearFilter(null); setSuggPosFilter(null) }}>quitar afinado</button></span>
                 ) : null}
               </div>
             </div>
@@ -651,6 +945,507 @@ function MatchRow({
         </tr>
       )}
     </>
+  )
+}
+
+// ── ConclusionesTab ──────────────────────────────────────────
+// Punto de conclusiones: candidatos a Llamar, mapa por generación ×
+// posición/categoría (matriz o campograma) y movimientos recientes.
+
+const MAP_ASSESSMENTS: ScoutingAssessment[] = ['Llamar', 'Seguir', 'Decidir']
+
+function ConclusionesTab({ players, reports, onSetAssessment, onOpenPlayer }: {
+  players: ScoutingPlayer[]
+  reports: ScoutingReport[]
+  onSetAssessment: (p: ScoutingPlayer, a: ScoutingAssessment) => Promise<void>
+  onOpenPlayer: (id: string) => void
+}) {
+  const [threshold, setThreshold] = useState<number>(() => {
+    const v = parseInt(sessionStorage.getItem('capt_concl_threshold') ?? '3')
+    return [2, 3, 4].includes(v) ? v : 3
+  })
+  useEffect(() => { sessionStorage.setItem('capt_concl_threshold', String(threshold)) }, [threshold])
+  const [mapAssessment, setMapAssessment] = useState<ScoutingAssessment>('Llamar')
+  const [mapView, setMapView] = useState<'matriz' | 'campo'>('matriz')
+  const [mapDim, setMapDim] = useState<'pos' | 'cat'>('pos')
+  const [selectedCell, setSelectedCell] = useState<{ row: string; col: string } | null>(null)
+  const [genFilter, setGenFilter] = useState<string>('all')
+  const [expandedSlots, setExpandedSlots] = useState<Set<string>>(new Set())
+  const [showStale, setShowStale] = useState(false)
+
+  // Informes por jugador (desc por fecha)
+  const reportsByPlayer = useMemo(() => {
+    const map: Record<string, ScoutingReport[]> = {}
+    for (const r of reports) {
+      if (!map[r.playerId]) map[r.playerId] = []
+      map[r.playerId].push(r)
+    }
+    for (const k of Object.keys(map)) {
+      map[k].sort((a, b) => (b.fecha ?? b.createdAt).localeCompare(a.fecha ?? a.createdAt))
+    }
+    return map
+  }, [reports])
+
+  // ── a) Candidatos a Llamar ──────────────────────────────────
+  const candidates = useMemo(() => {
+    return players
+      .filter(p => p.assessment !== 'Llamar' && p.assessment !== 'Descartado')
+      .map(p => {
+        const rs = reportsByPlayer[p.id] ?? []
+        const llamar = rs.filter(r => r.conclusion === 'Llamar')
+        if (llamar.length < threshold) return null
+        const byConclusion: Record<string, number> = {}
+        rs.forEach(r => { if (r.conclusion) byConclusion[r.conclusion] = (byConclusion[r.conclusion] ?? 0) + 1 })
+        return {
+          p,
+          llamarCount: llamar.length,
+          byConclusion,
+          lastReport: rs[0],
+          lastLlamarDate: llamar[0]?.fecha ?? llamar[0]?.createdAt,
+        }
+      })
+      .filter(Boolean)
+      .sort((a, b) => (b!.lastLlamarDate ?? '').localeCompare(a!.lastLlamarDate ?? '')) as {
+        p: ScoutingPlayer; llamarCount: number; byConclusion: Record<string, number>
+        lastReport?: ScoutingReport; lastLlamarDate?: string
+      }[]
+  }, [players, reportsByPlayer, threshold])
+
+  // ── b) Mapa ─────────────────────────────────────────────────
+  const mapPlayers = useMemo(
+    () => players.filter(p => p.assessment === mapAssessment),
+    [players, mapAssessment]
+  )
+  const genRows = useMemo(() => {
+    const gens = new Set<string>()
+    mapPlayers.forEach(p => gens.add(p.birthdate ? p.birthdate.slice(0, 4) : '—'))
+    return Array.from(gens).sort((a, b) => b.localeCompare(a))
+  }, [mapPlayers])
+
+  const catCols = useMemo(() => {
+    const counts: Record<string, number> = {}
+    mapPlayers.forEach(p => { const c = p.categoria ?? 'Sin categoría'; counts[c] = (counts[c] ?? 0) + 1 })
+    const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([c]) => c)
+    return top
+  }, [mapPlayers])
+
+  const cols: string[] = mapDim === 'pos' ? POS_GROUPS : catCols
+
+  function colOf(p: ScoutingPlayer): string | null {
+    if (mapDim === 'pos') return posGroupOf(p.position1) ?? posGroupOf(p.position2)
+    const c = p.categoria ?? 'Sin categoría'
+    return catCols.includes(c) ? c : null
+  }
+
+  const matrix = useMemo(() => {
+    const m: Record<string, Record<string, ScoutingPlayer[]>> = {}
+    genRows.forEach(g => { m[g] = {}; cols.forEach(c => { m[g][c] = [] }) })
+    mapPlayers.forEach(p => {
+      const g = p.birthdate ? p.birthdate.slice(0, 4) : '—'
+      const c = colOf(p)
+      if (c && m[g]) m[g][c].push(p)
+    })
+    return m
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapPlayers, genRows, cols, mapDim])
+
+  const maxCell = useMemo(() => {
+    let mx = 1
+    genRows.forEach(g => cols.forEach(c => { mx = Math.max(mx, matrix[g]?.[c]?.length ?? 0) }))
+    return mx
+  }, [matrix, genRows, cols])
+
+  const cellPlayers = selectedCell ? (matrix[selectedCell.row]?.[selectedCell.col] ?? []) : []
+
+  // Campograma
+  const pitchGens = useMemo(() => {
+    const gens = new Set<string>()
+    mapPlayers.forEach(p => { if (p.birthdate) gens.add(p.birthdate.slice(0, 4)) })
+    return Array.from(gens).sort((a, b) => b.localeCompare(a))
+  }, [mapPlayers])
+
+  const pitchBySlot = useMemo(() => {
+    const map: Record<string, ScoutingPlayer[]> = {}
+    let unmapped = 0
+    mapPlayers
+      .filter(p => genFilter === 'all' || p.birthdate?.slice(0, 4) === genFilter)
+      .forEach(p => {
+        const slot = pitchSlotOf(p.position1) ?? pitchSlotOf(p.position2)
+        if (!slot) { unmapped++; return }
+        if (!map[slot]) map[slot] = []
+        map[slot].push(p)
+      })
+    return { map, unmapped }
+  }, [mapPlayers, genFilter])
+
+  // ── c) Movimientos ──────────────────────────────────────────
+  const nowMs = Date.now()
+  const D21 = 21 * 86400000
+  const D42 = 42 * 86400000
+  const movements = useMemo(() => {
+    type Mov = { date: string; node: React.ReactNode }
+    const items: Mov[] = []
+    players.forEach(p => {
+      if (!p.assessment || !p.assessmentUpdatedAt) return
+      if (nowMs - Date.parse(p.assessmentUpdatedAt) > D21) return
+      items.push({
+        date: p.assessmentUpdatedAt,
+        node: (
+          <span>
+            <button onClick={() => onOpenPlayer(p.id)} className="font-semibold text-slate-800 hover:text-primary">{p.fullName}</button>
+            {' '}marcado en <AssessmentChip a={p.assessment} small />
+          </span>
+        ),
+      })
+    })
+    reports.forEach(r => {
+      if (r.conclusion !== 'Llamar' && r.conclusion !== 'Firmar') return
+      const d = r.fecha ?? r.createdAt
+      if (nowMs - Date.parse(d) > D21) return
+      const p = players.find(pl => pl.id === r.playerId)
+      if (!p) return
+      const nth = (reportsByPlayer[p.id] ?? []).filter(x =>
+        x.conclusion === r.conclusion && (x.fecha ?? x.createdAt) <= d
+      ).length
+      items.push({
+        date: d,
+        node: (
+          <span>
+            Informe de <span className="font-mono font-semibold">{r.persona ?? '—'}</span> sobre{' '}
+            <button onClick={() => onOpenPlayer(p.id)} className="font-semibold text-slate-800 hover:text-primary">{p.fullName}</button>
+            {' '}concluye <span className={`inline-flex px-1.5 py-0.5 rounded text-[11px] font-medium ${CONCLUSION_STYLE[r.conclusion!] ?? ''}`}>{r.conclusion}</span>
+            {nth > 1 && <span className="text-slate-400 text-[11px]"> ({nth}º en {r.conclusion})</span>}
+          </span>
+        ),
+      })
+    })
+    return items.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 15)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [players, reports, reportsByPlayer])
+
+  const staleDecidir = useMemo(() =>
+    players.filter(p => {
+      if (p.assessment !== 'Decidir') return false
+      const last = reportsByPlayer[p.id]?.[0]
+      return !last || nowMs - Date.parse(last.fecha ?? last.createdAt) > D42
+    }),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [players, reportsByPlayer])
+
+  const [savingId, setSavingId] = useState<string | null>(null)
+  async function setAssessment(p: ScoutingPlayer, a: ScoutingAssessment) {
+    setSavingId(p.id)
+    try { await onSetAssessment(p, a) } finally { setSavingId(null) }
+  }
+
+  const segBtn = (active: boolean) =>
+    `px-2.5 py-1 rounded text-[11px] font-semibold transition-colors ${active ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`
+
+  return (
+    <div className="space-y-4">
+      {/* ── a) Candidatos a Llamar ── */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-center gap-2">
+          <h3 className="text-sm font-bold text-slate-800">🔔 Candidatos a Llamar</h3>
+          <span className="text-xs bg-slate-100 text-slate-600 rounded-full px-2 py-0.5 font-semibold">{candidates.length}</span>
+          <span className="text-[11px] text-slate-400 hidden sm:inline">suman informes «Llamar» y aún no están marcados</span>
+          <div className="ml-auto flex items-center gap-1.5">
+            <span className="text-[11px] text-slate-400">Umbral</span>
+            <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
+              {[2, 3, 4].map(n => (
+                <button key={n} onClick={() => setThreshold(n)} className={segBtn(threshold === n)}>{n}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+        {candidates.length === 0 ? (
+          <p className="text-xs text-slate-400 italic px-4 py-5">
+            Ningún jugador sin marcar acumula {threshold}+ informes con conclusión «Llamar».
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
+            {candidates.map(({ p, llamarCount, byConclusion, lastReport }) => (
+              <div key={p.id} className="border border-amber-200 rounded-xl p-3 bg-gradient-to-b from-amber-50/70 to-white">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <button onClick={() => onOpenPlayer(p.id)} className="text-sm font-bold text-slate-900 hover:text-primary text-left leading-tight">
+                      {p.fullName}
+                    </button>
+                    <p className="text-[11px] text-slate-500 mt-0.5 truncate">
+                      {[p.position1, birthYearFromBirthdate(p.birthdate) !== '—' ? birthYearFromBirthdate(p.birthdate) : null, p.team].filter(Boolean).join(' · ')}
+                    </p>
+                  </div>
+                  <span className="text-[10px] font-extrabold bg-amber-500 text-white rounded-full px-2 py-0.5 whitespace-nowrap flex-shrink-0">
+                    {llamarCount}× Llamar
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {Object.entries(byConclusion).sort((a, b) => b[1] - a[1]).map(([c, n]) => (
+                    <span key={c} className={`text-[11px] font-medium px-1.5 py-0.5 rounded ${CONCLUSION_STYLE[c] ?? 'bg-slate-100 text-slate-500'}`}>
+                      {n}× {c}
+                    </span>
+                  ))}
+                </div>
+                {lastReport?.texto && (
+                  <div className="mt-2 text-[11px] text-slate-600 bg-white border border-slate-100 rounded-lg px-2.5 py-2 leading-relaxed italic">
+                    “{lastReport.texto.length > 130 ? lastReport.texto.slice(0, 130) + '…' : lastReport.texto}”
+                    <div className="not-italic text-[10px] text-slate-400 mt-1">
+                      {lastReport.persona ?? '—'} · {fmtDate(lastReport.fecha ?? lastReport.createdAt)} · último informe
+                    </div>
+                  </div>
+                )}
+                <div className="flex gap-1.5 mt-2.5">
+                  <button
+                    onClick={() => setAssessment(p, 'Llamar')}
+                    disabled={savingId === p.id}
+                    className="flex-1 py-1.5 rounded-lg text-[11px] font-bold bg-amber-100 border border-amber-200 text-amber-700 hover:bg-amber-200 disabled:opacity-50 transition-colors"
+                  >
+                    {savingId === p.id ? '…' : '☎ Marcar Llamar'}
+                  </button>
+                  <button
+                    onClick={() => setAssessment(p, 'Seguir')}
+                    disabled={savingId === p.id}
+                    className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    Seguir
+                  </button>
+                  <button
+                    onClick={() => setAssessment(p, 'Descartado')}
+                    disabled={savingId === p.id}
+                    className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-slate-200 text-slate-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200 disabled:opacity-50"
+                  >
+                    Descartar
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── b) Mapa ── */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-center gap-2">
+          <h3 className="text-sm font-bold text-slate-800">🗺️ Jugadores en {mapAssessment}</h3>
+          <span className="text-xs bg-slate-100 text-slate-600 rounded-full px-2 py-0.5 font-semibold">{mapPlayers.length}</span>
+          <div className="ml-auto flex flex-wrap items-center gap-1.5">
+            <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
+              <button className={segBtn(mapView === 'matriz')} onClick={() => setMapView('matriz')}>Matriz</button>
+              <button className={segBtn(mapView === 'campo')} onClick={() => setMapView('campo')}>⚽ Campograma</button>
+            </div>
+            {mapView === 'matriz' && (
+              <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
+                <button className={segBtn(mapDim === 'pos')} onClick={() => { setMapDim('pos'); setSelectedCell(null) }}>× Posición</button>
+                <button className={segBtn(mapDim === 'cat')} onClick={() => { setMapDim('cat'); setSelectedCell(null) }}>× Categoría</button>
+              </div>
+            )}
+            <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
+              {MAP_ASSESSMENTS.map(a => (
+                <button key={a} className={segBtn(mapAssessment === a)} onClick={() => { setMapAssessment(a); setSelectedCell(null) }}>{a}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {mapPlayers.length === 0 ? (
+          <p className="text-xs text-slate-400 italic px-4 py-5">No hay jugadores en {mapAssessment}.</p>
+        ) : mapView === 'matriz' ? (
+          <>
+            <div className="p-4 overflow-x-auto">
+              <table className="w-full min-w-[560px]">
+                <thead>
+                  <tr>
+                    <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1.5" />
+                    {cols.map(c => (
+                      <th key={c} className="text-center text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1.5">{c}</th>
+                    ))}
+                    <th className="text-center text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1.5">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {genRows.map(g => {
+                    const total = cols.reduce((s, c) => s + (matrix[g]?.[c]?.length ?? 0), 0)
+                    return (
+                      <tr key={g}>
+                        <td className="px-2 py-1 text-xs font-bold text-slate-600 whitespace-nowrap">
+                          {g}{g !== '—' && <span className="text-slate-400 font-medium text-[10px]"> ({new Date().getFullYear() - parseInt(g)} años)</span>}
+                        </td>
+                        {cols.map(c => {
+                          const n = matrix[g]?.[c]?.length ?? 0
+                          const isSel = selectedCell?.row === g && selectedCell?.col === c
+                          if (n === 0) return <td key={c} className="p-0.5"><div className="h-9 rounded-lg bg-slate-50 flex items-center justify-center text-slate-200 text-xs">·</div></td>
+                          return (
+                            <td key={c} className="p-0.5">
+                              <button
+                                onClick={() => setSelectedCell(isSel ? null : { row: g, col: c })}
+                                className={`w-full h-9 rounded-lg flex items-center justify-center text-sm font-bold transition-all border ${
+                                  isSel ? 'border-amber-500 scale-105' : 'border-transparent hover:border-amber-300'
+                                }`}
+                                style={{ background: `rgba(245,158,11,${0.10 + 0.28 * (n / maxCell)})`, color: '#92400e' }}
+                              >
+                                {n}
+                              </button>
+                            </td>
+                          )
+                        })}
+                        <td className="p-0.5"><div className="h-9 rounded-lg flex items-center justify-center text-xs font-bold text-slate-500">{total}</div></td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {selectedCell && cellPlayers.length > 0 && (
+              <div className="mx-4 mb-4 border-t border-dashed border-slate-200 pt-3">
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
+                  {mapAssessment} · {selectedCell.row} · {selectedCell.col}
+                </p>
+                <div className="space-y-0.5">
+                  {cellPlayers.map(p => {
+                    const last = reportsByPlayer[p.id]?.[0]
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => onOpenPlayer(p.id)}
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 text-left"
+                      >
+                        <span className="text-xs font-semibold text-slate-800">{p.fullName}</span>
+                        <span className="text-[11px] text-slate-400">{p.team ?? ''}</span>
+                        <span className="ml-auto text-[10px] text-slate-400">
+                          {last ? `últ. informe ${fmtDate(last.fecha ?? last.createdAt)}` : 'sin informes'}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="p-4">
+            {/* Filtro de generación */}
+            <div className="flex flex-wrap items-center gap-1.5 mb-3">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Generación:</span>
+              <button
+                onClick={() => setGenFilter('all')}
+                className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
+                  genFilter === 'all' ? 'bg-violet-100 border-violet-300 text-violet-700' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'
+                }`}
+              >
+                Todas
+              </button>
+              {pitchGens.map(g => (
+                <button
+                  key={g}
+                  onClick={() => setGenFilter(f => f === g ? 'all' : g)}
+                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
+                    genFilter === g ? 'bg-violet-100 border-violet-300 text-violet-700' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'
+                  }`}
+                >
+                  {g}
+                </button>
+              ))}
+            </div>
+
+            {/* Campo */}
+            <div className="relative w-full max-w-[560px] mx-auto rounded-xl overflow-hidden"
+              style={{ aspectRatio: '100 / 130', background: 'linear-gradient(180deg,#15803d 0%,#166534 100%)', boxShadow: 'inset 0 0 40px rgba(0,0,0,.18)' }}>
+              <svg viewBox="0 0 100 130" preserveAspectRatio="none" className="absolute inset-0 w-full h-full" aria-hidden>
+                <rect x="1" y="1" width="98" height="128" rx="2" fill="none" stroke="#ffffff55" strokeWidth=".7" />
+                <line x1="1" y1="65" x2="99" y2="65" stroke="#ffffff55" strokeWidth=".7" />
+                <circle cx="50" cy="65" r="10" fill="none" stroke="#ffffff55" strokeWidth=".7" />
+                <rect x="24" y="109" width="52" height="20" fill="none" stroke="#ffffff55" strokeWidth=".7" />
+                <rect x="38" y="121" width="24" height="8" fill="none" stroke="#ffffff55" strokeWidth=".7" />
+                <rect x="24" y="1" width="52" height="20" fill="none" stroke="#ffffff55" strokeWidth=".7" />
+                <rect x="38" y="1" width="24" height="8" fill="none" stroke="#ffffff55" strokeWidth=".7" />
+              </svg>
+              {PITCH_SLOTS.map(s => {
+                const pls = pitchBySlot.map[s.id] ?? []
+                const isExpanded = expandedSlots.has(s.id)
+                const visible = isExpanded ? pls : pls.slice(0, 3)
+                const extra = pls.length - visible.length
+                return (
+                  <div key={s.id} className="absolute flex flex-col items-center gap-0.5 z-10" style={{ left: `${s.x}%`, top: `${s.y}%`, transform: 'translate(-50%,-50%)' }}>
+                    <div className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-white text-[10px] font-extrabold tracking-wide border ${pls.length === 0 ? 'opacity-40 border-white/30 bg-white/10' : 'border-white/40 bg-white/15'}`}
+                      style={{ backdropFilter: 'blur(2px)' }}>
+                      {s.id}
+                      {pls.length > 0 && <span className="bg-amber-500 text-[9px] text-amber-950 rounded-full px-1.5 font-extrabold">{pls.length}</span>}
+                    </div>
+                    <div className="flex flex-col items-center gap-0.5">
+                      {visible.map(p => (
+                        <button
+                          key={p.id}
+                          onClick={() => onOpenPlayer(p.id)}
+                          title={`${p.fullName}${p.team ? ' · ' + p.team : ''}${p.position2 ? ' · 2ª: ' + p.position2 : ''}`}
+                          className="bg-amber-50 border border-amber-200 text-amber-900 text-[9.5px] font-bold rounded-md px-1.5 py-px whitespace-nowrap shadow hover:bg-amber-100 transition-colors"
+                        >
+                          {p.fullName.split(' ')[0]} {p.fullName.split(' ')[1]?.[0] ?? ''}.{' '}
+                          {p.birthdate && <span className="font-medium text-amber-600">'{p.birthdate.slice(2, 4)}</span>}
+                        </button>
+                      ))}
+                      {extra > 0 && (
+                        <button
+                          onClick={() => setExpandedSlots(prev => { const n = new Set(prev); n.add(s.id); return n })}
+                          className="text-[9px] text-white/85 hover:text-white font-semibold"
+                        >
+                          +{extra} más
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            <p className="text-[10.5px] text-slate-400 text-center mt-2 max-w-[560px] mx-auto leading-relaxed">
+              Clic en un jugador → ficha. Los jugadores con 2ª posición cuentan en la principal (la 2ª se ve al pasar el ratón).
+              {pitchBySlot.unmapped > 0 && ` · ${pitchBySlot.unmapped} jugador${pitchBySlot.unmapped !== 1 ? 'es' : ''} sin posición reconocida (no se muestran)`}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* ── c) Movimientos ── */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
+          <h3 className="text-sm font-bold text-slate-800">📈 Movimientos · últimas 3 semanas</h3>
+          {staleDecidir.length > 0 && (
+            <button
+              onClick={() => setShowStale(v => !v)}
+              className="ml-auto text-[11px] font-semibold text-orange-700 bg-orange-50 border border-orange-200 rounded-full px-2.5 py-1 hover:bg-orange-100 transition-colors"
+            >
+              ⚠️ {staleDecidir.length} en Decidir sin actividad {'>'}6 sem {showStale ? '▴' : '▾'}
+            </button>
+          )}
+        </div>
+        {showStale && staleDecidir.length > 0 && (
+          <div className="px-4 py-2.5 bg-orange-50/50 border-b border-orange-100 flex flex-wrap gap-1.5">
+            {staleDecidir.map(p => (
+              <button
+                key={p.id}
+                onClick={() => onOpenPlayer(p.id)}
+                className="text-[11px] font-semibold bg-white border border-orange-200 text-orange-800 rounded-full px-2.5 py-1 hover:bg-orange-100 transition-colors"
+              >
+                {p.fullName}{p.birthdate ? ` '${p.birthdate.slice(2, 4)}` : ''}
+              </button>
+            ))}
+          </div>
+        )}
+        {movements.length === 0 ? (
+          <p className="text-xs text-slate-400 italic px-4 py-5">Sin movimientos en las últimas 3 semanas.</p>
+        ) : (
+          <div className="px-4 py-2">
+            {movements.map((m, i) => (
+              <div key={i} className="flex items-baseline gap-3 py-2 border-b border-slate-50 last:border-b-0 text-xs text-slate-600">
+                <span className="text-[10.5px] text-slate-400 whitespace-nowrap w-14 flex-shrink-0">
+                  {new Date(m.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                </span>
+                {m.node}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -1530,7 +2325,12 @@ export function Captacion({
 
   async function handleQuickAssessment(player: ScoutingPlayer, assessment: ScoutingAssessment | undefined) {
     try {
-      const updated = { ...player, assessment }
+      const updated = {
+        ...player,
+        assessment,
+        // registrar cuándo cambió (para "Movimientos" en Conclusiones)
+        assessmentUpdatedAt: assessment !== player.assessment ? new Date().toISOString() : player.assessmentUpdatedAt,
+      }
       await db.updateScoutingPlayer(updated)
       onUpdatePlayer(updated)
     } catch {
@@ -1595,7 +2395,13 @@ export function Captacion({
     setSavingPlayer(true)
     try {
       if (showEditPlayer && editTarget) {
-        const updated = { ...editTarget, ...payload }
+        const updated = {
+          ...editTarget,
+          ...payload,
+          assessmentUpdatedAt: payload.assessment !== editTarget.assessment
+            ? new Date().toISOString()
+            : editTarget.assessmentUpdatedAt,
+        }
         await db.updateScoutingPlayer(updated)
         onUpdatePlayer(updated)
         setPanelPlayerId(updated.id)
@@ -1753,6 +2559,7 @@ export function Captacion({
         <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center gap-1 py-1.5 border-t border-slate-100 bg-slate-50/60 overflow-x-auto scrollbar-none">
           {([
             { id: 'jugadores' as CaptacionTab, label: 'Jugadores', labelMobile: 'Jugadores', icon: <Users className="w-3.5 h-3.5" /> },
+            { id: 'conclusiones' as CaptacionTab, label: 'Conclusiones', labelMobile: 'Concl.', icon: <Target className="w-3.5 h-3.5" /> },
             { id: 'informes' as CaptacionTab, label: 'Informes recientes', labelMobile: 'Informes', icon: <FileText className="w-3.5 h-3.5" /> },
             { id: 'estadisticas' as CaptacionTab, label: 'Estadísticas', labelMobile: 'Stats', icon: <BarChart2 className="w-3.5 h-3.5" /> },
             { id: 'partidos' as CaptacionTab, label: 'Partidos', labelMobile: 'Partidos', icon: <ClipboardList className="w-3.5 h-3.5" /> },
@@ -2078,6 +2885,23 @@ export function Captacion({
             </div>
           </div>
         </>
+      )}
+
+      {/* ── CONCLUSIONES TAB ─────────────────────────────────── */}
+      {captTab === 'conclusiones' && (
+        <div className="flex-1 w-full px-3 sm:px-6 py-4">
+          <div className="max-w-6xl mx-auto">
+            <ConclusionesTab
+              players={scoutingPlayers}
+              reports={scoutingReports}
+              onSetAssessment={async (p, a) => {
+                await handleQuickAssessment(p, a)
+                showToast(`${p.fullName} → ${a}`)
+              }}
+              onOpenPlayer={id => setPanelPlayerId(id)}
+            />
+          </div>
+        </div>
       )}
 
       {/* ── INFORMES RECIENTES TAB ─────────────────────────── */}
@@ -2736,12 +3560,17 @@ export function Captacion({
                             isAdmin={isAdmin}
                             scoutingPlayers={scoutingPlayers}
                             linkedPlayerIds={linkedPlayerIds}
+                            scoutingReports={scoutingReports}
+                            allMatches={scoutingMatches}
+                            matchPlayersByMatchId={matchPlayersByMatchId}
                             onEdit={openEditMatch}
                             onDelete={handleDeleteMatch}
                             onToggleStatus={handleToggleMatchStatus}
                             onAssign={handleAssignMatch}
                             onAddMatchPlayer={onAddMatchPlayer}
                             onRemoveMatchPlayer={onRemoveMatchPlayer}
+                            onAddReport={onAddReport}
+                            onOpenPlayer={id => setPanelPlayerId(id)}
                             showToast={showToast}
                           />
                         )
