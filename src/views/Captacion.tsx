@@ -10,6 +10,7 @@ import type { ScoutingPlayer, ScoutingReport, ScoutingAssessment, ScoutingMatch,
 import type { Profile } from '../contexts/AuthContext'
 import * as db from '../lib/db'
 import { ConfirmModal } from '../components/ConfirmModal'
+import { ScoutingTable } from './ScoutingTable'
 import { ToastStack } from '../components/ToastStack'
 import { EmptyState } from '../components/EmptyState'
 import { useToast } from '../hooks/useToast'
@@ -960,17 +961,17 @@ function MatchRow({
 
 const MAP_ASSESSMENTS: ScoutingAssessment[] = ['Llamar', 'Seguir', 'Decidir']
 
-function ConclusionesTab({ players, reports, onOpenPlayer }: {
+function ConclusionesTab({ players, reports, threshold, onThresholdChange, isAdmin, onSetCandidateSeen, onOpenPlayer }: {
   players: ScoutingPlayer[]
   reports: ScoutingReport[]
+  threshold: number
+  onThresholdChange: (n: number) => void
+  isAdmin: boolean
+  onSetCandidateSeen: (p: ScoutingPlayer, seenCount?: number) => Promise<void>
   onOpenPlayer: (id: string) => void
 }) {
-  const [threshold, setThreshold] = useState<number>(() => {
-    const v = parseInt(sessionStorage.getItem('capt_concl_threshold') ?? '3')
-    return [2, 3, 4].includes(v) ? v : 3
-  })
-  useEffect(() => { sessionStorage.setItem('capt_concl_threshold', String(threshold)) }, [threshold])
   const [mapAssessment, setMapAssessment] = useState<ScoutingAssessment>('Llamar')
+  const [showHidden, setShowHidden] = useState(false)
   const [mapView, setMapView] = useState<'matriz' | 'campo'>('matriz')
   const [mapDim, setMapDim] = useState<'pos' | 'cat'>('pos')
   const [selectedCell, setSelectedCell] = useState<{ row: string; col: string } | null>(null)
@@ -1020,6 +1021,13 @@ function ConclusionesTab({ players, reports, onOpenPlayer }: {
         lastReport?: ScoutingReport; lastLlamarDate?: string
       }[]
   }, [players, reportsByPlayer, threshold])
+
+  // Bandeja: "nuevos" (sin ocultar, o con informes nuevos desde que se
+  // ocultaron) vs "ocultados" (revisados por un admin)
+  const isNewCandidate = (c: { p: ScoutingPlayer; llamarCount: number }) =>
+    c.p.candidateSeenCount == null || c.llamarCount > c.p.candidateSeenCount
+  const newCandidates = candidates.filter(isNewCandidate)
+  const hiddenCandidates = candidates.filter(c => !isNewCandidate(c))
 
   // ── b) Mapa ─────────────────────────────────────────────────
   const mapPlayers = useMemo(
@@ -1148,70 +1156,109 @@ function ConclusionesTab({ players, reports, onOpenPlayer }: {
 
   return (
     <div className="space-y-4">
-      {/* ── a) Candidatos a Llamar ── */}
+      {/* ── a) Candidatos a Llamar — bandeja de alertas ── */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-center gap-2">
           <h3 className="text-sm font-bold text-slate-800">🔔 Candidatos a Llamar</h3>
-          <span className="text-xs bg-slate-100 text-slate-600 rounded-full px-2 py-0.5 font-semibold">{candidates.length}</span>
+          {newCandidates.length > 0 && (
+            <span className="text-xs bg-amber-400 text-amber-950 rounded-full px-2 py-0.5 font-bold">{newCandidates.length} nuevo{newCandidates.length !== 1 ? 's' : ''}</span>
+          )}
           <span className="text-[11px] text-slate-400 hidden sm:inline">jugadores con {threshold}+ informes «Llamar», sea cual sea su etiqueta</span>
           <div className="ml-auto flex items-center gap-1.5">
             <span className="text-[11px] text-slate-400">Umbral</span>
             <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
               {[2, 3, 4].map(n => (
-                <button key={n} onClick={() => setThreshold(n)} className={segBtn(threshold === n)}>{n}</button>
+                <button key={n} onClick={() => onThresholdChange(n)} className={segBtn(threshold === n)}>{n}</button>
               ))}
             </div>
           </div>
         </div>
-        {candidates.length === 0 ? (
-          <p className="text-xs text-slate-400 italic px-4 py-5">
-            Ningún jugador acumula {threshold}+ informes con conclusión «Llamar».
-          </p>
-        ) : (
-          <div className="max-h-[360px] overflow-y-auto p-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {candidates.map(({ p, llamarCount, byConclusion, lastReport }) => (
-              <div key={p.id} className="border border-amber-200 rounded-xl p-3 bg-gradient-to-b from-amber-50/70 to-white">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <button onClick={() => onOpenPlayer(p.id)} className="text-sm font-bold text-slate-900 hover:text-primary text-left leading-tight">
-                      {p.fullName}
-                    </button>
-                    <p className="text-[11px] text-slate-500 mt-0.5 truncate">
-                      {[p.position1, birthYearFromBirthdate(p.birthdate) !== '—' ? birthYearFromBirthdate(p.birthdate) : null, p.team].filter(Boolean).join(' · ')}
-                    </p>
-                    <div className="mt-1"><AssessmentChip a={p.assessment} small /></div>
-                  </div>
-                  <span className="text-[10px] font-extrabold bg-amber-500 text-white rounded-full px-2 py-0.5 whitespace-nowrap flex-shrink-0">
-                    {llamarCount}× Llamar
+
+        {(() => {
+          const row = (c: typeof candidates[number], hidden: boolean) => {
+            const { p, llamarCount, lastReport } = c
+            const delta = p.candidateSeenCount != null ? llamarCount - p.candidateSeenCount : null
+            const lastDate = lastReport ? (lastReport.fecha ?? lastReport.createdAt) : undefined
+            return (
+              <div
+                key={p.id}
+                onClick={() => onOpenPlayer(p.id)}
+                title={lastReport?.texto ? `Último informe (${lastReport.persona ?? '—'}): ${lastReport.texto}` : undefined}
+                className={`flex items-center gap-2 px-4 py-2 border-b border-slate-50 last:border-b-0 cursor-pointer transition-colors ${
+                  hidden ? 'opacity-60 hover:opacity-90 hover:bg-slate-50' : 'bg-amber-50/40 hover:bg-amber-50'
+                }`}
+              >
+                <span className="text-xs font-semibold text-slate-800 whitespace-nowrap">{p.fullName}</span>
+                <span className="text-[11px] text-slate-400 truncate hidden sm:inline">
+                  {[p.position1, birthYearFromBirthdate(p.birthdate) !== '—' ? birthYearFromBirthdate(p.birthdate) : null, p.team].filter(Boolean).join(' · ')}
+                </span>
+                <AssessmentChip a={p.assessment} small />
+                <span className="flex-1" />
+                <span className="text-[10px] font-extrabold bg-amber-500 text-white rounded-full px-2 py-0.5 whitespace-nowrap">
+                  {llamarCount}× Llamar
+                </span>
+                {!hidden && delta != null && delta > 0 && (
+                  <span className="text-[10px] font-bold text-amber-700 bg-amber-100 border border-amber-200 rounded-full px-1.5 py-0.5 whitespace-nowrap">
+                    +{delta} desde ocultado
                   </span>
-                </div>
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {Object.entries(byConclusion).sort((a, b) => b[1] - a[1]).map(([c, n]) => (
-                    <span key={c} className={`text-[11px] font-medium px-1.5 py-0.5 rounded ${CONCLUSION_STYLE[c] ?? 'bg-slate-100 text-slate-500'}`}>
-                      {n}× {c}
-                    </span>
-                  ))}
-                </div>
-                {lastReport?.texto && (
-                  <div className="mt-2 text-[11px] text-slate-600 bg-white border border-slate-100 rounded-lg px-2.5 py-2 leading-relaxed italic">
-                    “{lastReport.texto.length > 130 ? lastReport.texto.slice(0, 130) + '…' : lastReport.texto}”
-                    <div className="not-italic text-[10px] text-slate-400 mt-1">
-                      {lastReport.persona ?? '—'} · {fmtDate(lastReport.fecha ?? lastReport.createdAt)} · último informe
-                    </div>
-                  </div>
                 )}
-                <button
-                  onClick={() => onOpenPlayer(p.id)}
-                  className="w-full mt-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
-                >
-                  Ver ficha →
-                </button>
+                {lastDate && (
+                  <span className="text-[10px] text-slate-400 whitespace-nowrap hidden md:inline">
+                    últ. {lastReport?.persona ?? '—'} · {relativeDate(lastDate) || fmtDate(lastDate)}
+                  </span>
+                )}
+                {isAdmin && (
+                  hidden ? (
+                    <button
+                      onClick={e => { e.stopPropagation(); onSetCandidateSeen(p, undefined) }}
+                      className="text-[10px] font-semibold text-slate-500 border border-slate-200 rounded-full px-2 py-0.5 hover:bg-white hover:text-slate-700 transition-colors"
+                    >
+                      Restaurar
+                    </button>
+                  ) : (
+                    <button
+                      onClick={e => { e.stopPropagation(); onSetCandidateSeen(p, llamarCount) }}
+                      title="Ocultar de la bandeja (reaparece si suma informes nuevos)"
+                      aria-label={`Ocultar a ${p.fullName}`}
+                      className="text-slate-300 hover:text-slate-600 p-1 transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )
+                )}
               </div>
-            ))}
-          </div>
-          </div>
-        )}
+            )
+          }
+
+          return (
+            <>
+              {newCandidates.length === 0 ? (
+                <p className="text-xs text-slate-400 italic px-4 py-4">
+                  Sin candidatos nuevos — todo revisado. Los ocultados reaparecen si suman informes «Llamar» nuevos.
+                </p>
+              ) : (
+                <div className="max-h-[300px] overflow-y-auto">
+                  {newCandidates.map(c => row(c, false))}
+                </div>
+              )}
+              {hiddenCandidates.length > 0 && (
+                <div className="border-t border-slate-100">
+                  <button
+                    onClick={() => setShowHidden(v => !v)}
+                    className="w-full text-left px-4 py-2 text-[11px] font-medium text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    {showHidden ? '▴ Ocultar revisados' : `▾ Ver revisados (${hiddenCandidates.length})`}
+                  </button>
+                  {showHidden && (
+                    <div className="max-h-[240px] overflow-y-auto border-t border-slate-50">
+                      {hiddenCandidates.map(c => row(c, true))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )
+        })()}
       </div>
 
       {/* ── b) Mapa ── */}
@@ -1990,6 +2037,33 @@ export function Captacion({
   // ── section tab ── (must be before header-height effect)
   const [captTab, setCaptTab] = useState<CaptacionTab>('jugadores')
 
+  // ── umbral de candidatos (compartido: badge de pestaña + Conclusiones) ──
+  const [conclThreshold, setConclThreshold] = useState<number>(() => {
+    const v = parseInt(sessionStorage.getItem('capt_concl_threshold') ?? '3')
+    return [2, 3, 4].includes(v) ? v : 3
+  })
+  useEffect(() => { sessionStorage.setItem('capt_concl_threshold', String(conclThreshold)) }, [conclThreshold])
+
+  // nº de informes «Llamar» por jugador (Firmar legado cuenta como Llamar)
+  const llamarCountByPlayer = useMemo(() => {
+    const m: Record<string, number> = {}
+    scoutingReports.forEach(r => {
+      if (normConclusion(r.conclusion) !== 'Llamar') return
+      m[r.playerId] = (m[r.playerId] ?? 0) + 1
+    })
+    return m
+  }, [scoutingReports])
+
+  // Candidatos "nuevos": cumplen umbral y no están ocultados (o suman
+  // informes nuevos desde que se ocultaron) → badge en la pestaña
+  const newCandidatesCount = useMemo(() =>
+    scoutingPlayers.filter(p => {
+      const n = llamarCountByPlayer[p.id] ?? 0
+      if (n < conclThreshold) return false
+      return p.candidateSeenCount == null || n > p.candidateSeenCount
+    }).length,
+  [scoutingPlayers, llamarCountByPlayer, conclThreshold])
+
   // ── header height (for panel offset) ──
   const headerRef = React.useRef<HTMLElement>(null)
   const [headerHeight, setHeaderHeight] = useState(0)
@@ -2011,6 +2085,11 @@ export function Captacion({
   const [showCatMenu, setShowCatMenu] = useState(false)
   const [showPosMenu, setShowPosMenu] = useState(false)
   const [quickAssessId, setQuickAssessId] = useState<string | null>(null)
+  // Vista de Jugadores: lista (con panel) o tabla de edición rápida
+  const [jugadoresView, setJugadoresView] = useState<'lista' | 'edicion'>(
+    () => (sessionStorage.getItem('capt_jugadores_view') as 'lista' | 'edicion') ?? 'lista'
+  )
+  useEffect(() => { sessionStorage.setItem('capt_jugadores_view', jugadoresView) }, [jugadoresView])
 
   // ── panel state ──
   const [panelPlayerId, setPanelPlayerId] = useState<string | null>(null)
@@ -2314,6 +2393,22 @@ export function Captacion({
     }
   }
 
+  // Ocultar / restaurar candidato (solo admins). seenCount = nº de informes
+  // «Llamar» en el momento de ocultar; undefined = restaurar.
+  async function handleCandidateSeen(p: ScoutingPlayer, seenCount?: number) {
+    try {
+      const updated: ScoutingPlayer = {
+        ...p,
+        candidateSeenCount: seenCount,
+        candidateSeenAt: seenCount != null ? new Date().toISOString() : undefined,
+      }
+      await db.updateScoutingPlayer(updated)
+      onUpdatePlayer(updated)
+    } catch {
+      showToast('Error al actualizar el candidato', 'error')
+    }
+  }
+
   async function handleQuickAssessment(player: ScoutingPlayer, assessment: ScoutingAssessment | undefined) {
     try {
       const updated = {
@@ -2568,6 +2663,13 @@ export function Captacion({
               {t.icon}
               <span className="hidden sm:inline">{t.label}</span>
               <span className="sm:hidden">{t.labelMobile}</span>
+              {t.id === 'conclusiones' && newCandidatesCount > 0 && (
+                <span className={`min-w-[16px] text-center text-[10px] font-bold rounded-full px-1 ${
+                  captTab === t.id ? 'bg-white/25 text-white' : 'bg-amber-400 text-amber-950'
+                }`}>
+                  {newCandidatesCount > 99 ? '99+' : newCandidatesCount}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -2691,6 +2793,27 @@ export function Captacion({
               <div className="flex-1" />
               <span className="text-xs text-slate-400">{filtered.length} jugadores</span>
 
+              {/* Vista: lista | edición rápida */}
+              <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
+                <button
+                  onClick={() => setJugadoresView('lista')}
+                  className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-colors ${
+                    jugadoresView === 'lista' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  Lista
+                </button>
+                <button
+                  onClick={() => setJugadoresView('edicion')}
+                  title="Tabla de edición rápida: edita celdas sin abrir cada jugador"
+                  className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-colors ${
+                    jugadoresView === 'edicion' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  ✎ Edición
+                </button>
+              </div>
+
               {/* Add player — available to all users */}
               <button
                 onClick={openAddPlayer}
@@ -2721,6 +2844,13 @@ export function Captacion({
                 </div>
               )
             })()}
+            {jugadoresView === 'edicion' ? (
+              <ScoutingTable
+                players={filtered}
+                onUpdatePlayer={onUpdatePlayer}
+                showToast={showToast}
+              />
+            ) : (
             <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -2874,6 +3004,7 @@ export function Captacion({
                 </div>
               )}
             </div>
+            )}
           </div>
         </>
       )}
@@ -2885,6 +3016,10 @@ export function Captacion({
             <ConclusionesTab
               players={scoutingPlayers}
               reports={scoutingReports}
+              threshold={conclThreshold}
+              onThresholdChange={setConclThreshold}
+              isAdmin={isAdmin}
+              onSetCandidateSeen={handleCandidateSeen}
               onOpenPlayer={id => setPanelPlayerId(id)}
             />
           </div>

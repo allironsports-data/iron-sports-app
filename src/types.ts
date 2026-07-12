@@ -271,6 +271,8 @@ export interface ScoutingPlayer {
   team?: string
   assessment?: ScoutingAssessment
   assessmentUpdatedAt?: string  // ISO — se rellena al cambiar el assessment
+  candidateSeenCount?: number   // nº de informes «Llamar» cuando un admin lo ocultó de Candidatos
+  candidateSeenAt?: string      // ISO — cuándo se ocultó
   nationality?: string
   nationalTeam?: string
   agency?: string
