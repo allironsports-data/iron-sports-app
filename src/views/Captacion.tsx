@@ -1164,7 +1164,8 @@ function ConclusionesTab({ players, reports, onSetAssessment, onOpenPlayer }: {
             Ningún jugador acumula {threshold}+ informes con conclusión «Llamar».
           </p>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
+          <div className="max-h-[360px] overflow-y-auto p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {candidates.map(({ p, llamarCount, byConclusion, lastReport }) => (
               <div key={p.id} className="border border-amber-200 rounded-xl p-3 bg-gradient-to-b from-amber-50/70 to-white">
                 <div className="flex items-start justify-between gap-2">
@@ -1227,6 +1228,7 @@ function ConclusionesTab({ players, reports, onSetAssessment, onOpenPlayer }: {
                 </div>
               </div>
             ))}
+          </div>
           </div>
         )}
       </div>
