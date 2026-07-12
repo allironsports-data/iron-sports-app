@@ -1377,10 +1377,10 @@ function ConclusionesTab({ players, reports, onSetAssessment, onOpenPlayer }: {
                           key={p.id}
                           onClick={() => onOpenPlayer(p.id)}
                           title={`${p.fullName}${p.team ? ' · ' + p.team : ''}${p.position2 ? ' · 2ª: ' + p.position2 : ''}`}
-                          className="bg-amber-50 border border-amber-200 text-amber-900 text-[9.5px] font-bold rounded-md px-1.5 py-px whitespace-nowrap shadow hover:bg-amber-100 transition-colors"
+                          className="bg-amber-50 border border-amber-200 text-amber-900 text-[9.5px] font-bold rounded-md px-1.5 py-px whitespace-nowrap shadow hover:bg-amber-100 transition-colors max-w-[130px] truncate"
                         >
-                          {p.fullName.split(' ')[0]} {p.fullName.split(' ')[1]?.[0] ?? ''}.{' '}
-                          {p.birthdate && <span className="font-medium text-amber-600">'{p.birthdate.slice(2, 4)}</span>}
+                          {p.fullName.split(' ').slice(0, 2).join(' ')}
+                          {p.birthdate && <span className="font-medium text-amber-600"> '{p.birthdate.slice(2, 4)}</span>}
                         </button>
                       ))}
                       {extra > 0 && (
