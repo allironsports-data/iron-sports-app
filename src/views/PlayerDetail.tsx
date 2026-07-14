@@ -2233,7 +2233,7 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
 
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <h4 className="text-sm font-semibold text-slate-800">
               {editing ? 'Editar evento' : 'Nuevo evento de actividad'}
             </h4>
@@ -2264,8 +2264,8 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
               <label className="text-xs font-medium text-slate-600">Notas <span className="text-slate-400">(opcional)</span></label>
               <textarea value={fNotes} onChange={e => setFNotes(e.target.value)}
                 placeholder="Detalles del evento…"
-                rows={3}
-                className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-blue-200" />
+                rows={7}
+                className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 resize-y min-h-[140px] focus:outline-none focus:ring-1 focus:ring-blue-200" />
             </div>
 
             {/* Other players — combobox, only when creating */}
@@ -2925,7 +2925,7 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
       {/* Add event modal */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <h4 className="text-sm font-semibold text-slate-800">Nuevo evento de actividad</h4>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
@@ -2954,8 +2954,8 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
               <label className="text-xs font-medium text-slate-600">Notas <span className="text-slate-400">(opcional)</span></label>
               <textarea value={fNotes} onChange={e => setFNotes(e.target.value)}
                 placeholder="Detalles del evento…"
-                rows={3}
-                className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-blue-200" />
+                rows={7}
+                className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 resize-y min-h-[140px] focus:outline-none focus:ring-1 focus:ring-blue-200" />
             </div>
             <div className="flex gap-2 pt-1">
               <button onClick={() => setShowForm(false)}
