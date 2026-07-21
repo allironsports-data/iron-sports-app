@@ -245,6 +245,9 @@ export function Distribution({
   const [selectedClubId, setSelectedClubId] = useState<string | null>(null)
   const [openManagerDropId, setOpenManagerDropId] = useState<string | null>(null)
   const [managerDropPos, setManagerDropPos]       = useState<{ top: number; right: number } | null>(null)
+  // Cambiar estado de negociación desde la vista tabla, sin abrir la ficha
+  const [openStatusDropId, setOpenStatusDropId]   = useState<string | null>(null)
+  const [statusDropPos, setStatusDropPos]         = useState<{ top: number; right: number } | null>(null)
   // Encargado de hablar con el club (dropdown en ClubCard)
   const [openClubManagerId, setOpenClubManagerId]   = useState<string | null>(null)
   const [clubManagerDropPos, setClubManagerDropPos] = useState<{ top: number; right: number } | null>(null)
@@ -301,12 +304,13 @@ export function Distribution({
   // Se cierra también con scroll AMPLIO (el dropdown es fixed y se desalinearía),
   // pero ignorando micro-scrolls para que no desaparezca antes de elegir.
   useEffect(() => {
-    if (!openManagerDropId && !openClubManagerId && !bulkClubManagerPos && !openClubContactedId) return
+    if (!openManagerDropId && !openClubManagerId && !bulkClubManagerPos && !openClubContactedId && !openStatusDropId) return
     const close = () => {
       setOpenManagerDropId(null); setManagerDropPos(null)
       setOpenClubManagerId(null); setClubManagerDropPos(null)
       setBulkClubManagerPos(null)
       setOpenClubContactedId(null); setClubContactedDropPos(null)
+      setOpenStatusDropId(null); setStatusDropPos(null)
     }
     // Espera al siguiente tick para no capturar el mismo clic que lo abrió
     let startY = window.scrollY
@@ -323,7 +327,7 @@ export function Distribution({
       document.removeEventListener('click', close)
       window.removeEventListener('scroll', onScroll, true)
     }
-  }, [openManagerDropId, openClubManagerId, bulkClubManagerPos, openClubContactedId])
+  }, [openManagerDropId, openClubManagerId, bulkClubManagerPos, openClubContactedId, openStatusDropId])
 
   // modals
   const [showAddPlayer, setShowAddPlayer] = useState(false)
@@ -344,6 +348,8 @@ export function Distribution({
   const [showClosedDeals, setShowClosedDeals] = useState(false)
   const [pipelineMyOnly, setPipelineMyOnly] = useState(false)
   const [pipelineListView, setPipelineListView] = useState(false)
+  const [jugadoresTableView, setJugadoresTableView] = useState<boolean>(() => sessionStorage.getItem('dist_jugadores_table_view') === '1')
+  useEffect(() => { sessionStorage.setItem('dist_jugadores_table_view', jugadoresTableView ? '1' : '0') }, [jugadoresTableView])
 
   // filters
   const [leagueFilter, setLeagueFilter] = useState<string[]>((storedF.leagueFilter as string[]) ?? [])
@@ -934,12 +940,27 @@ export function Distribution({
                   </div>
                   {playersFilterControls}
                 </div>
-                <button
-                  onClick={() => setShowAddPlayer(true)}
-                  className="hidden sm:inline-flex flex-shrink-0 items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-sm rounded-lg hover:bg-primary/90 transition-colors"
-                >
-                  <Plus className="w-4 h-4" /> Añadir jugador
-                </button>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    onClick={() => setJugadoresTableView(v => !v)}
+                    title={jugadoresTableView ? 'Ver tarjetas' : 'Ver tabla'}
+                    className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                      jugadoresTableView
+                        ? 'bg-slate-800 text-white border-slate-800'
+                        : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    {jugadoresTableView
+                      ? <><LayoutGrid className="w-4 h-4" /> Tarjetas</>
+                      : <><List className="w-4 h-4" /> Tabla</>}
+                  </button>
+                  <button
+                    onClick={() => setShowAddPlayer(true)}
+                    className="hidden sm:inline-flex flex-shrink-0 items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-sm rounded-lg hover:bg-primary/90 transition-colors"
+                  >
+                    <Plus className="w-4 h-4" /> Añadir jugador
+                  </button>
+                </div>
               </div>
 
               {/* Móvil: barra compacta búsqueda + botón Filtros */}
@@ -962,12 +983,139 @@ export function Distribution({
                   <SlidersHorizontal className="w-4 h-4" /> Filtros
                   {playersActiveFilters > 0 && <span className="text-xs">({playersActiveFilters})</span>}
                 </button>
+                <button
+                  onClick={() => setJugadoresTableView(v => !v)}
+                  title={jugadoresTableView ? 'Ver tarjetas' : 'Ver tabla'}
+                  aria-label={jugadoresTableView ? 'Ver tarjetas' : 'Ver tabla'}
+                  className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                    jugadoresTableView ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200'
+                  }`}
+                >
+                  {jugadoresTableView ? <LayoutGrid className="w-4 h-4" /> : <List className="w-4 h-4" />}
+                </button>
               </div>
 
               <FilterSheet open={filterSheet === 'jugadores'} onClose={() => setFilterSheet(null)} title="Filtros de jugadores">
                 {playersFilterControls}
               </FilterSheet>
 
+              {jugadoresTableView ? (
+                <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+                          <th className="px-3 py-2.5 w-9">Pr.</th>
+                          <th className="px-3 py-2.5">Jugador</th>
+                          <th className="px-3 py-2.5">Pos.</th>
+                          <th className="px-3 py-2.5">Tipo</th>
+                          <th className="px-3 py-2.5">Contrato</th>
+                          <th className="px-3 py-2.5">Estado</th>
+                          <th className="px-3 py-2.5 text-right">Clubs</th>
+                          <th className="px-3 py-2.5">Encargado</th>
+                          <th className="px-3 py-2.5 w-8" />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(['A', 'B', 'C', 'D'] as const).flatMap(pr => byPriority[pr]).map(entry => {
+                          const player = players.find(p => p.id === entry.playerId)
+                          if (!player) return null
+                          const cfg = PRIORITY_CONFIG[entry.priority]
+                          const negCount = negotiations.filter(n => n.playerId === entry.playerId).length
+                          const activeNegs = negotiations.filter(n => n.playerId === entry.playerId && !['descartado'].includes(n.status))
+                          const hasClosed = negotiations.some(n => n.playerId === entry.playerId && n.status === 'cerrado')
+                          const topNeg = activeNegs.find(n => n.status === 'negociando')
+                            ?? activeNegs.find(n => n.status === 'interesado')
+                            ?? activeNegs.find(n => n.status === 'ofrecido')
+                            ?? activeNegs.find(n => n.status === 'cerrado')
+                            ?? activeNegs.find(n => n.status === 'pendiente')
+                          const badge = contractBadge(player.clubContract?.endDate)
+                          return (
+                            <tr
+                              key={entry.id}
+                              onClick={() => { setSelectedEntryId(entry.id); setSelectedClubId(null) }}
+                              className={`border-b border-slate-50 last:border-0 cursor-pointer hover:bg-slate-50 transition-colors ${
+                                selectedEntryId === entry.id ? 'bg-blue-50/60' : hasClosed ? 'bg-emerald-50/50' : ''
+                              }`}
+                            >
+                              <td className="px-3 py-2">
+                                <span className={`inline-flex w-5 h-5 rounded text-[11px] font-bold items-center justify-center ${cfg.bg} ${cfg.text}`}>
+                                  {entry.priority}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2">
+                                <div className="flex items-center gap-2 min-w-[160px]">
+                                  <Avatar name={player.name} photo={player.photo} size="xs" />
+                                  <span className="font-medium text-slate-800 truncate">{player.name}</span>
+                                  {player.hiddenFromManagement && (
+                                    <span className="text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full font-medium flex-shrink-0">Interm.</span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{player.positions[0] ?? '—'}</td>
+                              <td className="px-3 py-2">
+                                {entry.condition
+                                  ? <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full whitespace-nowrap">{entry.condition}</span>
+                                  : <span className="text-slate-300">—</span>}
+                              </td>
+                              <td className="px-3 py-2">
+                                {badge
+                                  ? <span className={`text-xs px-1.5 py-0.5 rounded-full border whitespace-nowrap ${badge.cls}`}>{badge.label}</span>
+                                  : <span className="text-slate-300">—</span>}
+                              </td>
+                              <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
+                                {topNeg ? (
+                                  <button
+                                    onClick={(e) => {
+                                      if (openStatusDropId === topNeg.id) { setOpenStatusDropId(null); setStatusDropPos(null); return }
+                                      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                                      setStatusDropPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
+                                      setOpenStatusDropId(topNeg.id)
+                                    }}
+                                    title="Cambiar estado"
+                                    className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full whitespace-nowrap transition-colors hover:brightness-95 ${STATUS_CONFIG[topNeg.status].color}`}
+                                  >
+                                    {STATUS_CONFIG[topNeg.status].label}
+                                    <ChevronDown className="w-3 h-3 opacity-60" />
+                                  </button>
+                                ) : (
+                                  <span className="text-slate-300 text-xs">—</span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 text-right text-slate-500">{negCount || '—'}</td>
+                              <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
+                                <button
+                                  title={entry.aisManager
+                                    ? (profiles.find(p => p.avatar === entry.aisManager)?.name ?? entry.aisManager)
+                                    : 'Sin encargado'}
+                                  onClick={e => {
+                                    if (openManagerDropId === entry.id) {
+                                      setOpenManagerDropId(null); setManagerDropPos(null); return;
+                                    }
+                                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                    setManagerDropPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                                    setOpenManagerDropId(entry.id);
+                                  }}
+                                  className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold border-2 transition-colors ${
+                                    entry.aisManager
+                                      ? 'bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-200'
+                                      : 'bg-slate-100 text-slate-400 border-dashed border-slate-300 hover:bg-slate-200'
+                                  }`}
+                                >
+                                  {entry.aisManager ?? '+'}
+                                </button>
+                              </td>
+                              <td className="px-3 py-2">
+                                <ChevronRight className="w-4 h-4 text-slate-300" />
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (
               <div className="space-y-3">
                 {(['A', 'B', 'C', 'D'] as const).map(pr => {
                   const group = byPriority[pr]
@@ -1069,6 +1217,7 @@ export function Distribution({
                   )
                 })}
               </div>
+              )}
 
               {filteredEntries.length === 0 && (
                 (search || posFilters.length > 0 || yearFilters.length > 0 || activityFilter) ? (
@@ -3695,6 +3844,47 @@ export function Distribution({
                 </button>
               </>
             )}
+          </div>
+        )
+      })()}
+
+      {/* Cambiar estado de negociación — dropdown fijo, usado desde la vista tabla de jugadores */}
+      {openStatusDropId && statusDropPos && (() => {
+        const neg = negotiations.find(n => n.id === openStatusDropId)
+        if (!neg) return null
+        const club = clubs.find(c => c.id === neg.clubId)
+        const pos = clampDropPos(statusDropPos.top, NEG_STATUSES.length + 1)
+        return (
+          <div
+            className="fixed z-[200] bg-white border border-slate-200 rounded-xl shadow-xl py-1 min-w-[180px] max-w-[calc(100vw-2rem)] overflow-y-auto"
+            style={{ top: pos.top, right: statusDropPos.right, maxHeight: pos.maxHeight }}
+            onClick={e => e.stopPropagation()}
+          >
+            {club && (
+              <p className="px-3 pt-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400 truncate">
+                {club.name}
+              </p>
+            )}
+            {NEG_STATUSES.map(s => (
+              <button
+                key={s}
+                onClick={async () => {
+                  try {
+                    await onUpdateNegotiation({ ...neg, status: s })
+                  } catch {
+                    showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+                  }
+                  setOpenStatusDropId(null); setStatusDropPos(null)
+                }}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-slate-50 transition-colors ${
+                  neg.status === s ? 'font-semibold text-slate-800' : 'text-slate-600'
+                }`}
+              >
+                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_CONFIG[s].dot}`} />
+                {STATUS_CONFIG[s].label}
+                {neg.status === s && <Check className="w-3.5 h-3.5 ml-auto text-blue-600" />}
+              </button>
+            ))}
           </div>
         )
       })()}
