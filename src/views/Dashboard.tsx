@@ -391,11 +391,24 @@ export function Dashboard({
     && (hoursSince(myStatus?.updatedAt) ?? Infinity) > STATUS_STALE_HOURS;
   const staleStatusCount = statusProfiles.filter(p => (hoursSince(memberStatuses.find(s => s.profileId === p.id)?.updatedAt) ?? Infinity) > STATUS_STALE_HOURS).length;
 
+  // Tarea "en progreso" más reciente de un miembro — el panel la muestra
+  // automáticamente aunque no la haya elegido en su estado.
+  const inProgressTaskFor = (profileId: string): Task | undefined =>
+    tasks
+      .filter(t => t.status === 'en_progreso' && t.assigneeId === profileId)
+      .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))[0];
+
   function openStatusEditor() {
+    // Tarea en curso: la del estado si sigue abierta; si no, coge automáticamente
+    // tu tarea "en progreso" del tablero (la más reciente).
+    const explicit = myStatus?.currentTaskId ? tasks.find(t => t.id === myStatus.currentTaskId) : undefined;
+    const effectiveTaskId = explicit && explicit.status !== 'completada'
+      ? explicit.id
+      : (inProgressTaskFor(currentProfile.id)?.id ?? '');
     setStForm({
       locationType: myStatus?.locationType ?? '',
       locationDetail: myStatus?.locationDetail ?? '',
-      currentTaskId: myStatus?.currentTaskId ?? '',
+      currentTaskId: effectiveTaskId,
       eventNote: myStatus?.eventNote ?? '',
       note: myStatus?.note ?? '',
     });
@@ -942,7 +955,8 @@ export function Dashboard({
               <div className="flex items-center gap-2 flex-1 overflow-x-auto py-0.5">
                 {statusProfiles.map(p => {
                   const s = memberStatuses.find(x => x.profileId === p.id);
-                  const curTask = s?.currentTaskId ? tasks.find(t => t.id === s.currentTaskId) : undefined;
+                  const explicitTask = s?.currentTaskId ? tasks.find(t => t.id === s.currentTaskId) : undefined;
+                  const curTask = explicitTask && explicitTask.status !== 'completada' ? explicitTask : inProgressTaskFor(p.id);
                   const taskActive = !!curTask && curTask.status !== 'completada';
                   const stale = (hoursSince(s?.updatedAt) ?? Infinity) > STATUS_STALE_HOURS;
                   const locText = s ? [s.locationType, s.locationDetail].filter(Boolean).join(' — ') : 'sin estado';
@@ -974,7 +988,8 @@ export function Dashboard({
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2">
                   {statusProfiles.map(p => {
                     const s = memberStatuses.find(x => x.profileId === p.id);
-                    const curTask = s?.currentTaskId ? tasks.find(t => t.id === s.currentTaskId) : undefined;
+                    const explicitTask = s?.currentTaskId ? tasks.find(t => t.id === s.currentTaskId) : undefined;
+                    const curTask = explicitTask && explicitTask.status !== 'completada' ? explicitTask : inProgressTaskFor(p.id);
                     const taskActive = !!curTask && curTask.status !== 'completada';
                     const stale = (hoursSince(s?.updatedAt) ?? Infinity) > STATUS_STALE_HOURS;
                     const isMe = p.id === currentProfile.id;
