@@ -1768,11 +1768,19 @@ export function Dashboard({
                   t.completedAt && t.completedAt.slice(0, 10) >= wsStr && t.completedAt.slice(0, 10) <= weStr
                 ).length;
                 const nEvt = events.filter(a => a.date >= wsStr && a.date <= weStr).length;
-                return nDone + nEvt;
+                return {
+                  v: nDone + nEvt,
+                  done: nDone,
+                  evt: nEvt,
+                  label: `Semana del ${ws.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}`,
+                };
               });
 
               return { p, open, openAsWatcher, dueWeek, overdue, completedWeek, eventsWeek, spark };
             }).sort((a, b) => b.open.length - a.open.length);
+
+            // Escala común a todo el equipo: las barras son comparables entre filas
+            const sparkGlobalMax = Math.max(1, ...rows.flatMap(r => r.spark.map(s => s.v)));
 
             const badge = (n: number, cls: string) =>
               n > 0
@@ -1796,7 +1804,7 @@ export function Dashboard({
                   <tbody className="divide-y divide-slate-50">
                     {rows.map(({ p, open, openAsWatcher, dueWeek, overdue, completedWeek, eventsWeek, spark }) => {
                       const isMe = p.id === currentProfile.id;
-                      const sparkMax = Math.max(...spark, 1);
+                      const sparkTotal = spark.reduce((n, s) => n + s.v, 0);
                       const noActivity = open.length === 0 && completedWeek.length === 0 && eventsWeek.length === 0;
                       return (
                         <tr
@@ -1850,14 +1858,24 @@ export function Dashboard({
                               : badge(eventsWeek.length, 'bg-amber-50 text-amber-600')}
                           </td>
                           <td className="px-2 py-2.5">
-                            <div className="flex items-end justify-center gap-0.5 h-5" aria-hidden>
-                              {spark.map((v, i) => (
-                                <span
-                                  key={i}
-                                  className={`w-1.5 rounded-sm ${i === 3 ? 'bg-primary' : 'bg-slate-200'}`}
-                                  style={{ height: `${Math.max((v / sparkMax) * 18, 2)}px` }}
-                                />
-                              ))}
+                            <div className="flex items-center justify-center gap-2">
+                              <div className="flex items-end gap-1 h-6">
+                                {spark.map((s, i) => (
+                                  <span
+                                    key={i}
+                                    title={`${s.label}: ${s.v} (${s.done} tarea${s.done !== 1 ? 's' : ''} · ${s.evt} evento${s.evt !== 1 ? 's' : ''})`}
+                                    className={`w-2 rounded-sm cursor-default transition-colors ${
+                                      s.v === 0 ? 'bg-slate-100' : i === 3 ? 'bg-primary' : 'bg-slate-300 hover:bg-slate-400'
+                                    }`}
+                                    style={{ height: s.v === 0 ? '3px' : `${Math.max((s.v / sparkGlobalMax) * 22, 5)}px` }}
+                                  />
+                                ))}
+                              </div>
+                              <span className={`text-[11px] w-6 text-right tabular-nums flex-shrink-0 ${
+                                sparkTotal > 0 ? 'font-semibold text-slate-600' : 'text-slate-300'
+                              }`}>
+                                {sparkTotal > 0 ? sparkTotal : '—'}
+                              </span>
                             </div>
                           </td>
                         </tr>
@@ -1892,7 +1910,7 @@ export function Dashboard({
             <span><b className="font-semibold text-slate-500">Carga abierta</b> = pendientes + en progreso, con o sin fecha (incl. watcher)</span>
             <span><b className="font-semibold text-slate-500">Esta semana</b> = abiertas con vencimiento en la semana visible</span>
             <span><b className="font-semibold text-slate-500">Completadas / Eventos</b> = en la semana visible</span>
-            <span><b className="font-semibold text-slate-500">Actividad</b> = completadas + eventos por semana (4 últimas)</span>
+            <span><b className="font-semibold text-slate-500">Actividad</b> = completadas + eventos por semana (4 últimas, barra azul = semana visible, número = total) · misma escala para todo el equipo · pasa el ratón por una barra para el detalle</span>
           </div>
 
           {profiles.length === 0 && (

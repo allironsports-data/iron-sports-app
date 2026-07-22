@@ -593,6 +593,7 @@ export default function App() {
           players={players}
           onBack={() => setSelectedProfileId(null)}
           onSelectPlayer={(id) => { setSelectedProfileId(null); navigateToPlayer(id, false) }}
+          onUpdateTask={handleUpdateTask}
         />
       )
     }

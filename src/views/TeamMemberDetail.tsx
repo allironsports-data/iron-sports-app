@@ -4,6 +4,8 @@ import type { Profile } from "../contexts/AuthContext";
 import { fetchActivitiesByAuthor } from "../lib/db";
 import { ListSkeleton } from "../components/Skeleton";
 import { EmptyState } from "../components/EmptyState";
+import { ToastStack } from "../components/ToastStack";
+import { useToast } from "../hooks/useToast";
 import {
   ArrowLeft, CheckCircle2, Clock, Activity,
   Calendar, AlertCircle, Users, ChevronDown, ChevronUp, ListTodo,
@@ -49,9 +51,11 @@ interface Props {
   players: Player[];
   onBack: () => void;
   onSelectPlayer?: (id: string) => void;
+  onUpdateTask?: (t: Task) => Promise<void> | void;
 }
 
-export function TeamMemberDetail({ profile, tasks, players, onBack, onSelectPlayer }: Props) {
+export function TeamMemberDetail({ profile, tasks, players, onBack, onSelectPlayer, onUpdateTask }: Props) {
+  const { toasts, showToast, dismissToast } = useToast();
   const [activities, setActivities] = useState<PlayerActivity[]>([]);
   const [loading, setLoading]       = useState(true);
   const [period, setPeriod]         = useState<Period>('30d');
@@ -194,6 +198,21 @@ export function TeamMemberDetail({ profile, tasks, players, onBack, onSelectPlay
 
   const initials = (name: string) =>
     name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+
+  // ── Cambiar estado de una tarea desde la lista de abiertas ──
+  async function setTaskStatus(t: Task, next: Task['status']) {
+    if (!onUpdateTask) return;
+    try {
+      await Promise.resolve(onUpdateTask({ ...t, status: next }));
+      showToast(
+        next === 'completada' ? `«${t.title}» completada ✓`
+          : next === 'en_progreso' ? `«${t.title}» en progreso`
+          : `«${t.title}» vuelve a pendiente`
+      );
+    } catch {
+      showToast('No se pudo guardar. Inténtalo de nuevo.', 'error');
+    }
+  }
 
   const playerChip = (player: Player) =>
     onSelectPlayer ? (
@@ -358,13 +377,22 @@ export function TeamMemberDetail({ profile, tasks, players, onBack, onSelectPlay
                   return (
                     <div key={t.id} className={`flex items-center gap-3 px-4 py-2.5 ${isOverdue ? 'bg-red-50/40' : ''}`}>
                       <span className="w-1 self-stretch rounded-full flex-shrink-0" style={{ background: prioColor }} />
-                      <span
-                        className="flex-shrink-0 w-3.5 h-3.5 rounded-full border-2"
-                        style={{
-                          background: t.status === 'en_progreso' ? '#3b82f6' : 'transparent',
-                          borderColor: t.status === 'en_progreso' ? '#3b82f6' : prioColor,
-                        }}
-                      />
+                      {/* Estado: clic alterna pendiente ↔ en progreso */}
+                      <button
+                        onClick={() => setTaskStatus(t, t.status === 'en_progreso' ? 'pendiente' : 'en_progreso')}
+                        disabled={!onUpdateTask}
+                        title={onUpdateTask ? (t.status === 'en_progreso' ? 'Pasar a pendiente' : 'Pasar a en progreso') : undefined}
+                        aria-label="Cambiar estado"
+                        className="flex-shrink-0 p-1 -m-1 rounded-full disabled:cursor-default enabled:hover:bg-slate-100 transition-colors"
+                      >
+                        <span
+                          className="block w-3.5 h-3.5 rounded-full border-2"
+                          style={{
+                            background: t.status === 'en_progreso' ? '#3b82f6' : 'transparent',
+                            borderColor: t.status === 'en_progreso' ? '#3b82f6' : prioColor,
+                          }}
+                        />
+                      </button>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium text-slate-800 leading-snug">{t.title}</p>
                         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
@@ -382,6 +410,17 @@ export function TeamMemberDetail({ profile, tasks, players, onBack, onSelectPlay
                           ? `${new Date(t.dueDate + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}${isOverdue ? ' ⚠' : ''}`
                           : 'sin fecha'}
                       </span>
+                      {/* Completar directamente */}
+                      {onUpdateTask && (
+                        <button
+                          onClick={() => setTaskStatus(t, 'completada')}
+                          title="Marcar como completada"
+                          aria-label="Marcar como completada"
+                          className="flex-shrink-0 p-1 rounded-full text-slate-300 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -512,6 +551,8 @@ export function TeamMemberDetail({ profile, tasks, players, onBack, onSelectPlay
         </div>
         )}
       </div>
+
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
