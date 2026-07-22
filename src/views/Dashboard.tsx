@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { TaskDetailPanel } from "../components/TaskDetailPanel";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { EmptyState } from "../components/EmptyState";
@@ -8,7 +8,7 @@ import { useEscapeKey } from "../hooks/useEscapeKey";
 import { useDebounce } from "../hooks/useDebounce";
 import { isValidName, isValidBirthDate } from "../lib/validate";
 import logoImg from '../assets/logo.jpeg';
-import type { Player, Task, TaskLabel, PlayerActivity, ScoutingMatch } from "../types";
+import type { Player, Task, TaskLabel, PlayerActivity, ScoutingMatch, MemberStatus } from "../types";
 import { calcAge, clubsLabel } from "../types";
 import { createPlayerActivity, fetchActivitiesByAuthor } from "../lib/db";
 import type { Profile } from "../contexts/AuthContext";
@@ -65,6 +65,8 @@ interface Props {
   onOverview?: () => void;
   onSelectProfile?: (profileId: string) => void;
   scoutingMatches?: ScoutingMatch[];
+  memberStatuses?: MemberStatus[];
+  onUpdateMemberStatus?: (s: Omit<MemberStatus, 'updatedAt'>) => Promise<void>;
 }
 
 // Birthday helpers
@@ -89,6 +91,39 @@ const ACTIVITY_TYPES_DASH = [
   'Email', 'Visita presencial', 'Partido', 'Transferencia', 'Nota general',
 ] as const;
 
+// ── Estado del equipo (panel "¿con qué está cada uno?") ──────
+const STATUS_LOCATIONS = ['Oficina', 'Casa', 'Viaje', 'Partido', 'Vacaciones'];
+const STATUS_STALE_HOURS = 24;
+// Modo estricto: si true, al entrar con el estado caducado se abre el editor
+// automáticamente y no se puede cerrar hasta guardar. Empezamos en modo suave;
+// cambiar a true si el equipo no adopta la costumbre.
+const STATUS_STRICT_MODE = false;
+
+function hoursSince(iso?: string): number | null {
+  if (!iso) return null;
+  return (Date.now() - new Date(iso).getTime()) / 3600000;
+}
+
+function statusAgoLabel(iso?: string): string {
+  const h = hoursSince(iso);
+  if (h === null) return 'sin estado';
+  const m = Math.floor(h * 60);
+  if (m < 1) return 'ahora';
+  if (m < 60) return `hace ${m} min`;
+  if (h < 48) return `hace ${Math.floor(h)} h`;
+  return `hace ${Math.floor(h / 24)} d`;
+}
+
+/** Color del punto de estado de un miembro */
+function statusDotColor(s: MemberStatus | undefined, hasTaskInProgress: boolean): string {
+  const h = hoursSince(s?.updatedAt);
+  if (h === null || h > STATUS_STALE_HOURS) return 'bg-red-400';
+  if (s?.locationType === 'Vacaciones') return 'bg-slate-300';
+  if (s?.locationType === 'Viaje' || s?.locationType === 'Partido') return 'bg-amber-400';
+  if (hasTaskInProgress) return 'bg-blue-500';
+  return 'bg-emerald-500';
+}
+
 export function Dashboard({
   view = 'tareas',
   onViewChange,
@@ -111,6 +146,8 @@ export function Dashboard({
   onOverview,
   onSelectProfile,
   scoutingMatches = [],
+  memberStatuses = [],
+  onUpdateMemberStatus,
 }: Props) {
   const { toasts, showToast, dismissToast } = useToast();
   // Internal tab: 'equipo' is handled locally; 'tareas'/'jugadores' are driven by `view` prop
@@ -120,6 +157,11 @@ export function Dashboard({
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [showMatchesToday, setShowMatchesToday] = useState(false);
   const [showAddGeneralTask, setShowAddGeneralTask] = useState(false);
+
+  // ── Estado del equipo: editor "Mi estado" ──
+  const [statusEditorOpen, setStatusEditorOpen] = useState(false);
+  const [stSaving, setStSaving] = useState(false);
+  const [stForm, setStForm] = useState({ locationType: '', locationDetail: '', currentTaskId: '', eventNote: '', note: '' });
 
   // Add event modal state
   const [showAddEvent, setShowAddEvent]           = useState(false);
@@ -325,6 +367,61 @@ export function Dashboard({
       return acc;
     }, {} as Record<string, { key: string; name: string; matches: ScoutingMatch[] }>)
   ).sort((a, b) => a.name.localeCompare(b.name));
+
+  // ── Estado del equipo: datos derivados ──
+  const myStatus = memberStatuses.find(s => s.profileId === currentProfile.id);
+  const myStatusStale = (hoursSince(myStatus?.updatedAt) ?? Infinity) > STATUS_STALE_HOURS;
+
+  function openStatusEditor() {
+    setStForm({
+      locationType: myStatus?.locationType ?? '',
+      locationDetail: myStatus?.locationDetail ?? '',
+      currentTaskId: myStatus?.currentTaskId ?? '',
+      eventNote: myStatus?.eventNote ?? '',
+      note: myStatus?.note ?? '',
+    });
+    setStatusEditorOpen(true);
+  }
+
+  // Modo estricto: al entrar con el estado caducado, abrir el editor automáticamente.
+  // Se comprueba una sola vez, cuando los estados ya han cargado (evita el falso
+  // positivo de comprobar antes de que llegue la fase 2 de datos).
+  const strictCheckedRef = useRef(false);
+  useEffect(() => {
+    if (!STATUS_STRICT_MODE || strictCheckedRef.current || !onUpdateMemberStatus) return;
+    if (memberStatuses.length === 0) return; // aún cargando (o tabla vacía en el primer despliegue)
+    strictCheckedRef.current = true;
+    if ((hoursSince(memberStatuses.find(s => s.profileId === currentProfile.id)?.updatedAt) ?? Infinity) > STATUS_STALE_HOURS) {
+      openStatusEditor();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [memberStatuses]);
+
+  async function saveMyStatus() {
+    if (!onUpdateMemberStatus) return;
+    setStSaving(true);
+    try {
+      await onUpdateMemberStatus({
+        profileId: currentProfile.id,
+        locationType: stForm.locationType || undefined,
+        locationDetail: stForm.locationDetail.trim() || undefined,
+        currentTaskId: stForm.currentTaskId || undefined,
+        eventNote: stForm.eventNote.trim() || undefined,
+        note: stForm.note.trim() || undefined,
+      });
+      // La tarea elegida pasa a "En progreso" para que el panel y el tablero cuadren
+      const t = stForm.currentTaskId ? tasks.find(x => x.id === stForm.currentTaskId) : undefined;
+      if (t && t.status === 'pendiente' && onUpdateTask) {
+        await Promise.resolve(onUpdateTask({ ...t, status: 'en_progreso' }));
+      }
+      setStatusEditorOpen(false);
+      showToast('Estado actualizado');
+    } catch {
+      showToast('No se pudo guardar el estado. Inténtalo de nuevo.', 'error');
+    } finally {
+      setStSaving(false);
+    }
+  }
 
   // Available options for multi-filters (derived from visible players)
   const positionOptions = POSITION_CODES;
@@ -748,59 +845,103 @@ export function Dashboard({
           </div>
         </div>
 
-          {/* 4-stat strip — todas clicables como filtro rápido */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+          {/* ── Aviso suave: mi estado caducado ── */}
+          {onUpdateMemberStatus && myStatusStale && !STATUS_STRICT_MODE && (
+            <div className="mb-3 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5">
+              <span className="text-sm">⏰</span>
+              <span className="text-xs font-semibold text-amber-800 flex-1">
+                {myStatus ? `Tu estado lleva ${statusAgoLabel(myStatus.updatedAt).replace('hace ', '')} sin actualizar` : 'Aún no has puesto tu estado de hoy'}
+              </span>
+              <button
+                onClick={openStatusEditor}
+                className="text-xs font-bold text-amber-800 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-3 py-1.5 transition-colors flex-shrink-0"
+              >
+                Actualizar ahora
+              </button>
+            </div>
+          )}
+
+          {/* ── Panel de estado del equipo (sustituye a los 4 stats) ── */}
+          <div className="flex gap-2 overflow-x-auto pb-1 sm:pb-0 sm:overflow-visible sm:grid sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 mb-3">
+            {profiles.map(p => {
+              const s = memberStatuses.find(x => x.profileId === p.id);
+              const curTask = s?.currentTaskId ? tasks.find(t => t.id === s.currentTaskId) : undefined;
+              const taskActive = !!curTask && curTask.status !== 'completada';
+              const stale = (hoursSince(s?.updatedAt) ?? Infinity) > STATUS_STALE_HOURS;
+              const isMe = p.id === currentProfile.id;
+              const dot = statusDotColor(s, taskActive);
+              const locText = s ? [s.locationType, s.locationDetail].filter(Boolean).join(' — ') : '';
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => { if (isMe && onUpdateMemberStatus) openStatusEditor(); else onSelectProfile?.(p.id); }}
+                  className={`text-left rounded-xl border px-3 py-2 min-w-[200px] sm:min-w-0 transition-all hover:shadow-sm ${
+                    stale ? 'bg-red-50/40 border-red-200' : 'bg-white border-slate-200 hover:border-slate-300'
+                  } ${isMe ? 'ring-1 ring-blue-200' : ''}`}
+                  title={isMe ? 'Actualizar mi estado' : `Ver detalle de ${p.name.split(' ')[0]}`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="relative flex-shrink-0">
+                      <span className="w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-bold text-white" style={{ background: PRIMARY }}>
+                        {p.avatar}
+                      </span>
+                      <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${dot}`} />
+                    </span>
+                    <span className="text-xs font-bold text-slate-800 truncate flex-1">
+                      {p.name.split(' ')[0]}{isMe && <span className="font-normal text-slate-400"> (yo)</span>}
+                    </span>
+                    <span className={`text-[10px] flex-shrink-0 ${stale ? 'text-red-500 font-bold' : 'text-slate-400'}`}>
+                      {stale && s ? `${statusAgoLabel(s.updatedAt)} ⚠️` : statusAgoLabel(s?.updatedAt)}
+                    </span>
+                  </div>
+                  <div className={`text-[11px] truncate ${locText ? 'text-slate-600' : 'text-slate-300 italic'}`}>
+                    📍 {locText || 'Sin actualizar'}
+                  </div>
+                  <div className={`text-[11px] truncate ${taskActive ? 'text-blue-600 font-semibold' : 'text-slate-300 italic'}`}>
+                    ▶ {taskActive ? curTask!.title : (s?.note || 'Ninguna tarea en curso')}
+                  </div>
+                  <div className={`text-[11px] truncate ${s?.eventNote ? 'text-purple-600' : 'text-slate-300 italic'}`}>
+                    📅 {s?.eventNote || 'Sin eventos hoy'}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* ── Stats comprimidos en chips (mantienen el filtro rápido) ── */}
+          <div className="flex items-center gap-1.5 flex-wrap mb-4">
+            <span className="text-[11px] text-slate-400 font-medium mr-0.5">Tareas:</span>
             <button
               onClick={() => setQuickFilter(q => q === 'overdue' ? null : 'overdue')}
-              className={`rounded-xl p-3 text-center border transition-all active:scale-95 ${
-                quickFilter === 'overdue'
-                  ? 'bg-red-50 border-red-400 shadow-sm'
-                  : boardOverdue.length > 0
-                    ? 'bg-white border-red-200 hover:border-red-300'
-                    : 'bg-white border-slate-200 hover:border-slate-300'
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-xs font-semibold transition-colors ${
+                quickFilter === 'overdue' ? 'bg-red-50 border-red-400 text-red-700' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
               }`}
             >
-              <p className={`text-xl font-semibold ${boardOverdue.length > 0 ? 'text-red-500' : 'text-slate-800'}`}>
-                {boardOverdue.length}
-              </p>
-              <p className="text-[11px] text-slate-400 mt-0.5">Vencidas</p>
+              <span className={boardOverdue.length > 0 ? 'text-red-500 font-bold' : 'font-bold'}>{boardOverdue.length}</span> vencidas
             </button>
             <button
               onClick={() => setQuickFilter(q => q === 'today' ? null : 'today')}
-              className={`rounded-xl p-3 text-center border transition-all active:scale-95 ${
-                quickFilter === 'today'
-                  ? 'bg-slate-100 border-slate-400 shadow-sm'
-                  : 'bg-white border-slate-200 hover:border-slate-300'
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-xs font-semibold transition-colors ${
+                quickFilter === 'today' ? 'bg-slate-100 border-slate-400 text-slate-800' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
               }`}
             >
-              <p className="text-xl font-semibold text-slate-800">{boardDueToday.length}</p>
-              <p className="text-[11px] text-slate-400 mt-0.5">Hoy</p>
+              <span className="font-bold">{boardDueToday.length}</span> hoy
             </button>
             <button
               onClick={() => setQuickFilter(q => q === 'week' ? null : 'week')}
-              className={`rounded-xl p-3 text-center border transition-all active:scale-95 ${
-                quickFilter === 'week'
-                  ? 'bg-slate-100 border-slate-400 shadow-sm'
-                  : 'bg-white border-slate-200 hover:border-slate-300'
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-xs font-semibold transition-colors ${
+                quickFilter === 'week' ? 'bg-slate-100 border-slate-400 text-slate-800' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
               }`}
             >
-              <p className="text-xl font-semibold text-slate-800">{boardDueThisWeek.length}</p>
-              <p className="text-[11px] text-slate-400 mt-0.5">Esta semana</p>
+              <span className="font-bold">{boardDueThisWeek.length}</span> esta semana
             </button>
             <button
               onClick={() => setQuickFilter(q => q === 'inprogress' ? null : 'inprogress')}
-              className={`rounded-xl p-3 text-center border transition-all active:scale-95 ${
-                quickFilter === 'inprogress'
-                  ? 'bg-blue-50 border-blue-400 shadow-sm'
-                  : boardInProgress.length > 0
-                    ? 'bg-white border-blue-200 hover:border-blue-300'
-                    : 'bg-white border-slate-200 hover:border-slate-300'
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-xs font-semibold transition-colors ${
+                quickFilter === 'inprogress' ? 'bg-blue-50 border-blue-400 text-blue-700' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
               }`}
             >
-              <p className={`text-xl font-semibold ${boardInProgress.length > 0 ? 'text-blue-600' : 'text-slate-800'}`}>
-                {boardInProgress.length}
-              </p>
-              <p className="text-[11px] text-slate-400 mt-0.5">En progreso</p>
+              <span className={boardInProgress.length > 0 ? 'text-blue-600 font-bold' : 'font-bold'}>{boardInProgress.length}</span> en progreso
             </button>
           </div>
 
@@ -1982,6 +2123,117 @@ export function Dashboard({
           }}
         />
       )}
+
+      {/* ── Editor "Mi estado" ── */}
+      {statusEditorOpen && onUpdateMemberStatus && (() => {
+        const myOpenTasks = tasks
+          .filter(t => t.status !== 'completada' && (t.assigneeId === currentProfile.id || (t.watchers ?? []).includes(currentProfile.id)))
+          .sort((a, b) => (a.status === 'en_progreso' ? -1 : 0) - (b.status === 'en_progreso' ? -1 : 0) || a.title.localeCompare(b.title));
+        const canClose = !STATUS_STRICT_MODE || !myStatusStale;
+        return (
+          <div
+            className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+            onClick={() => { if (canClose) setStatusEditorOpen(false); }}
+          >
+            <div
+              className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-slate-100">
+                <span className="w-7 h-7 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0" style={{ background: PRIMARY }}>
+                  {currentProfile.avatar}
+                </span>
+                <h3 className="text-sm font-bold text-slate-800 flex-1">Mi estado</h3>
+                <span className="text-[10px] text-slate-400">{myStatus ? `últ. act. ${statusAgoLabel(myStatus.updatedAt)}` : 'sin estado aún'}</span>
+                {canClose && (
+                  <button onClick={() => setStatusEditorOpen(false)} aria-label="Cerrar" className="text-slate-400 hover:text-slate-600 p-1">
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              <div className="px-5 py-4 space-y-4">
+                {STATUS_STRICT_MODE && myStatusStale && (
+                  <p className="text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-3 py-2">
+                    Tu estado está caducado — actualízalo para seguir usando la app.
+                  </p>
+                )}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">📍 ¿Dónde estás?</label>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {STATUS_LOCATIONS.map(loc => (
+                      <button
+                        key={loc}
+                        onClick={() => setStForm(f => ({ ...f, locationType: f.locationType === loc ? '' : loc }))}
+                        className={`px-3 py-1.5 rounded-full border text-xs transition-colors ${
+                          stForm.locationType === loc
+                            ? 'bg-primary border-primary text-white font-semibold'
+                            : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                        }`}
+                      >
+                        {loc}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    value={stForm.locationDetail}
+                    onChange={e => setStForm(f => ({ ...f, locationDetail: e.target.value }))}
+                    placeholder="Detalle opcional: ciudad, club… (ej. «Elche»)"
+                    className="mt-2 w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">▶ Tarea en curso</label>
+                  <select
+                    value={stForm.currentTaskId}
+                    onChange={e => setStForm(f => ({ ...f, currentTaskId: e.target.value }))}
+                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
+                  >
+                    <option value="">— Ninguna / disponible —</option>
+                    {myOpenTasks.map(t => (
+                      <option key={t.id} value={t.id}>
+                        {t.title}{t.status === 'en_progreso' ? ' (en progreso)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-slate-400 mt-1">Al elegirla pasará a "En progreso" en el tablero.</p>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">📅 Evento de hoy</label>
+                  <input
+                    value={stForm.eventNote}
+                    onChange={e => setStForm(f => ({ ...f, eventNote: e.target.value }))}
+                    placeholder="Ej. «Reunión Levante · 18:00» o «Elche vs Castellón · 20:30»"
+                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">💬 Nota (opcional)</label>
+                  <input
+                    value={stForm.note}
+                    onChange={e => setStForm(f => ({ ...f, note: e.target.value }))}
+                    placeholder="Ej. «Disponible a partir de las 17h»"
+                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 px-5 py-3.5 border-t border-slate-100">
+                {canClose && (
+                  <button onClick={() => setStatusEditorOpen(false)} className="px-4 py-2 text-xs text-slate-500 hover:text-slate-700 rounded-lg">
+                    Cancelar
+                  </button>
+                )}
+                <button
+                  onClick={saveMyStatus}
+                  disabled={stSaving}
+                  className="px-5 py-2 text-xs font-bold text-white bg-primary hover:bg-primary/90 rounded-lg transition-colors disabled:opacity-60"
+                >
+                  {stSaving ? 'Guardando…' : 'Actualizar estado'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>

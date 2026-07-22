@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion, ClubLog, PlayerMeeting, PlayerActivity } from '../types'
+import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion, ClubLog, PlayerMeeting, PlayerActivity, MemberStatus } from '../types'
 
 // ── helpers ──────────────────────────────────────────────────
 
@@ -350,6 +350,40 @@ export async function updateProfile(id: string, updates: { name?: string; avatar
 export async function inviteUser(email: string) {
   const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } })
   if (error) throw error
+}
+
+// ── MEMBER STATUS (panel "¿con qué está cada uno?") ──────────
+
+function dbToMemberStatus(row: Record<string, unknown>): MemberStatus {
+  return {
+    profileId: row.profile_id as string,
+    locationType: (row.location_type as string) ?? undefined,
+    locationDetail: (row.location_detail as string) ?? undefined,
+    currentTaskId: (row.current_task_id as string) ?? undefined,
+    eventNote: (row.event_note as string) ?? undefined,
+    note: (row.note as string) ?? undefined,
+    updatedAt: row.updated_at as string,
+  }
+}
+
+export async function fetchMemberStatuses(): Promise<MemberStatus[]> {
+  const { data, error } = await supabase.from('member_status').select('*')
+  if (error) throw error
+  return (data ?? []).map(dbToMemberStatus)
+}
+
+export async function upsertMemberStatus(s: Omit<MemberStatus, 'updatedAt'>): Promise<MemberStatus> {
+  const { data, error } = await supabase.from('member_status').upsert({
+    profile_id: s.profileId,
+    location_type: s.locationType ?? null,
+    location_detail: s.locationDetail ?? null,
+    current_task_id: s.currentTaskId ?? null,
+    event_note: s.eventNote ?? null,
+    note: s.note ?? null,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'profile_id' }).select().single()
+  if (error) throw error
+  return dbToMemberStatus(data)
 }
 
 // ── CLUBS ─────────────────────────────────────────────────────

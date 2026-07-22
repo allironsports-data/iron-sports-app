@@ -334,6 +334,17 @@ export interface ScoutingMatch {
   createdAt: string
 }
 
+// ── ESTADO DEL EQUIPO (panel "¿con qué está cada uno?") ─────
+export interface MemberStatus {
+  profileId: string
+  locationType?: string      // 'Oficina' | 'Casa' | 'Viaje' | 'Partido' | 'Vacaciones' | libre
+  locationDetail?: string    // ciudad, club… (opcional)
+  currentTaskId?: string     // tarea en curso (de sus tareas abiertas)
+  eventNote?: string         // evento de hoy, texto libre
+  note?: string              // nota libre "¿en qué estás?"
+  updatedAt: string
+}
+
 // ---- Helpers ----
 export function calcAge(birthDate: string): number {
   const today = new Date();

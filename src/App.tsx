@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, lazy } from 'react'
 import { useAuth } from './contexts/AuthContext'
-import type { Player, Task, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion } from './types'
+import type { Player, Task, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion, MemberStatus } from './types'
 import * as db from './lib/db'
 import { supabase } from './lib/supabase'
 import type { Profile } from './contexts/AuthContext'
@@ -75,6 +75,9 @@ export default function App() {
   const [distEntries, setDistEntries] = useState<DistributionEntry[]>([])
   const [negotiations, setNegotiations] = useState<ClubNegotiation[]>([])
 
+  // Estado del equipo (panel "¿con qué está cada uno?")
+  const [memberStatuses, setMemberStatuses] = useState<MemberStatus[]>([])
+
   // Captación state
   const [scoutingPlayers, setScoutingPlayers] = useState<ScoutingPlayer[]>([])
   const [scoutingReports, setScoutingReports] = useState<ScoutingReport[]>([])
@@ -143,7 +146,8 @@ export default function App() {
         db.fetchScoutingMatches(),
         db.fetchMatchPlayers(),
         db.fetchBoulemaPeticiones().catch(() => [] as BoulemaPeticion[]),
-      ]).then(([cl, de, ng, sp, sr, sm, mp, bp]) => {
+        db.fetchMemberStatuses().catch(() => [] as MemberStatus[]),
+      ]).then(([cl, de, ng, sp, sr, sm, mp, bp, ms]) => {
         if (cancelled) return
         setClubs(cl as Club[])
         setDistEntries(de as DistributionEntry[])
@@ -153,6 +157,7 @@ export default function App() {
         setScoutingMatches(sm as ScoutingMatch[])
         setMatchPlayers(mp as ScoutingMatchPlayer[])
         setBoulemaPeticiones(bp as BoulemaPeticion[])
+        setMemberStatuses(ms as MemberStatus[])
       }).catch((err: unknown) => {
         // No bloquea la app: Distribución/Captación mostrarán listas vacías
         console.error('Error cargando datos secundarios:', err)
@@ -287,6 +292,8 @@ export default function App() {
         debouncedRefetch('players', () => db.fetchPlayers().then((d) => setPlayers(d)).catch(() => {})))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () =>
         debouncedRefetch('tasks', () => db.fetchTasks().then((d) => setTasks(d)).catch(() => {})))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'member_status' }, () =>
+        debouncedRefetch('member_status', () => db.fetchMemberStatuses().then((d) => setMemberStatuses(d)).catch(() => {})))
       .subscribe()
     return () => {
       Object.values(timers).forEach(clearTimeout)
@@ -385,6 +392,14 @@ export default function App() {
   const handleRefreshProfiles = async () => {
     const pr = await db.fetchProfiles()
     setProfiles(pr as Profile[])
+  }
+
+  const handleUpdateMemberStatus = async (s: Omit<MemberStatus, 'updatedAt'>) => {
+    const saved = await db.upsertMemberStatus(s)
+    setMemberStatuses(prev => {
+      const exists = prev.some(x => x.profileId === saved.profileId)
+      return exists ? prev.map(x => x.profileId === saved.profileId ? saved : x) : [...prev, saved]
+    })
   }
 
   // ── distribution handlers ────────────────────────────────────
@@ -743,6 +758,8 @@ export default function App() {
       onDeleteGeneralTask={handleDeleteTask}
       onSelectProfile={(id) => setSelectedProfileId(id)}
       scoutingMatches={scoutingMatches}
+      memberStatuses={memberStatuses}
+      onUpdateMemberStatus={handleUpdateMemberStatus}
     />
   )
 }
