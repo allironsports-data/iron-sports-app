@@ -39,6 +39,8 @@ import {
   Eye,
   EyeOff,
   Activity,
+  ExternalLink,
+  RotateCcw,
 } from "lucide-react";
 import { POSITIONS, POSITION_CODES, positionLabel } from "../lib/positions";
 
@@ -72,6 +74,7 @@ interface Props {
   onToggleStatusHidden?: (profileId: string, hidden: boolean) => Promise<void>;
   postpartidos?: Postpartido[];
   onCreatePostpartido?: (p: Omit<Postpartido, 'id' | 'createdAt'>) => Promise<Postpartido>;
+  onUpdatePostpartido?: (p: Postpartido) => Promise<void>;
   onDeletePostpartido?: (p: Postpartido) => Promise<void>;
   /** Sincroniza en App un partido creado desde aquí (aparece en Captación → Partidos) */
   onAddScoutingMatch?: (m: ScoutingMatch) => void;
@@ -159,6 +162,7 @@ export function Dashboard({
   onToggleStatusHidden,
   postpartidos = [],
   onCreatePostpartido,
+  onUpdatePostpartido,
   onDeletePostpartido,
   onAddScoutingMatch,
 }: Props) {
@@ -199,9 +203,34 @@ export function Dashboard({
   const [ppDue, setPpDue] = useState('');
   const [ppNotes, setPpNotes] = useState('');
   const [ppSaving, setPpSaving] = useState(false);
-  const [ppShowDone, setPpShowDone] = useState(false);
+  const [ppShowDone, setPpShowDone] = useState(true);   // completados visibles (solo cambian de color)
   const [ppDeleteConfirm, setPpDeleteConfirm] = useState<Postpartido | null>(null);
   const [ppDeleting, setPpDeleting] = useState(false);
+  // Completar exige link de vídeo (Streamable)
+  const [ppCompleteTarget, setPpCompleteTarget] = useState<{ pp: Postpartido; task: Task } | null>(null);
+  const [ppVideoUrl, setPpVideoUrl] = useState('');
+  const [ppCompleting, setPpCompleting] = useState(false);
+
+  async function completePostpartido() {
+    if (!ppCompleteTarget || !onUpdatePostpartido || !onUpdateTask || ppCompleting) return;
+    const url = ppVideoUrl.trim();
+    if (!/^https?:\/\/.+/.test(url)) {
+      showToast('Pega el link del vídeo (debe empezar por http…).', 'error');
+      return;
+    }
+    setPpCompleting(true);
+    try {
+      await onUpdatePostpartido({ ...ppCompleteTarget.pp, videoUrl: url });
+      await Promise.resolve(onUpdateTask({ ...ppCompleteTarget.task, status: 'completada' }));
+      setPpCompleteTarget(null);
+      setPpVideoUrl('');
+      showToast('Postpartido completado ✓');
+    } catch {
+      showToast('No se pudo guardar. Inténtalo de nuevo.', 'error');
+    } finally {
+      setPpCompleting(false);
+    }
+  }
 
   function openAddPostpartido() {
     setPpMatchId(''); setPpNewMatchOpen(false);
@@ -2095,10 +2124,10 @@ export function Dashboard({
                   const isDone = task?.status === 'completada';
                   const isOverdue = !!(task?.dueDate && task.dueDate < todayStr && !isDone);
                   return (
-                    <div key={pp.id} className={`flex items-center gap-3 px-4 py-3 ${isDone ? 'opacity-60' : isOverdue ? 'bg-red-50/40' : ''}`}>
+                    <div key={pp.id} className={`flex items-center gap-3 px-4 py-3 ${isDone ? 'bg-emerald-50/60' : isOverdue ? 'bg-red-50/40' : ''}`}>
                       {/* Partido */}
                       <div className="flex-1 min-w-0">
-                        <p className={`text-sm font-medium text-slate-800 truncate ${isDone ? 'line-through' : ''}`}>
+                        <p className={`text-sm font-medium truncate ${isDone ? 'text-emerald-800' : 'text-slate-800'}`}>
                           {match ? `${match.homeTeam} vs ${match.awayTeam}` : 'Partido eliminado'}
                         </p>
                         <div className="flex items-center gap-2 mt-0.5 flex-wrap text-[11px] text-slate-400">
@@ -2107,6 +2136,15 @@ export function Dashboard({
                           )}
                           {match?.competition && <span>· {match.competition}</span>}
                           {pp.notes && <span className="italic truncate">· {pp.notes}</span>}
+                          {pp.videoUrl && (
+                            <a
+                              href={pp.videoUrl} target="_blank" rel="noopener noreferrer"
+                              onClick={e => e.stopPropagation()}
+                              className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline font-medium"
+                            >
+                              <ExternalLink className="w-3 h-3" /> Ver vídeo
+                            </a>
+                          )}
                         </div>
                       </div>
                       {/* Jugador */}
@@ -2121,14 +2159,18 @@ export function Dashboard({
                       >
                         {player?.name ?? pp.playerName ?? '—'}
                       </button>
-                      {/* Responsable */}
-                      <span
-                        className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[8px] font-bold text-white"
-                        style={{ background: PRIMARY }}
-                        title={assignee?.name ?? 'Sin responsable'}
-                      >
-                        {assignee?.avatar ?? '?'}
-                      </span>
+                      {/* Responsable — nombre completo visible */}
+                      <div className="flex-shrink-0 flex items-center gap-1.5" title={assignee?.name ?? 'Sin responsable'}>
+                        <span
+                          className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[8px] font-bold text-white"
+                          style={{ background: PRIMARY }}
+                        >
+                          {assignee?.avatar ?? '?'}
+                        </span>
+                        <span className="hidden sm:inline text-[13px] font-semibold text-slate-700 whitespace-nowrap">
+                          {assignee?.name ?? 'Sin responsable'}
+                        </span>
+                      </div>
                       {/* Estado + fecha */}
                       <div className="flex-shrink-0 flex items-center gap-2">
                         {statusBadge(task)}
@@ -2139,20 +2181,29 @@ export function Dashboard({
                         )}
                       </div>
                       {/* Acciones */}
-                      {task && !isDone && onUpdateTask && (
+                      {task && !isDone && onUpdateTask && onUpdatePostpartido && (
+                        <button
+                          onClick={() => { setPpVideoUrl(pp.videoUrl ?? ''); setPpCompleteTarget({ pp, task }); }}
+                          title="Completar (pide el link del vídeo)"
+                          className="flex-shrink-0 p-1 rounded-full text-slate-300 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                        >
+                          <CheckSquare className="w-4 h-4" />
+                        </button>
+                      )}
+                      {task && isDone && onUpdateTask && (
                         <button
                           onClick={async () => {
                             try {
-                              await Promise.resolve(onUpdateTask({ ...task, status: 'completada' }));
-                              showToast(`Postpartido completado ✓`);
+                              await Promise.resolve(onUpdateTask({ ...task, status: 'pendiente' }));
+                              showToast('Postpartido reabierto (vuelve a pendiente)', 'info');
                             } catch {
                               showToast('No se pudo guardar. Inténtalo de nuevo.', 'error');
                             }
                           }}
-                          title="Marcar como completado"
-                          className="flex-shrink-0 p-1 rounded-full text-slate-300 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                          title="Desmarcar (volver a pendiente)"
+                          className="flex-shrink-0 p-1 rounded-full text-slate-300 hover:text-amber-600 hover:bg-amber-50 transition-colors"
                         >
-                          <CheckSquare className="w-4 h-4" />
+                          <RotateCcw className="w-4 h-4" />
                         </button>
                       )}
                       {onDeletePostpartido && (
@@ -2652,7 +2703,7 @@ export function Dashboard({
                   className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
                 >
                   <option value="">— Elige un jugador —</option>
-                  {[...players].sort((a, b) => a.name.localeCompare(b.name)).map(p => (
+                  {players.filter(p => !p.hiddenFromManagement).sort((a, b) => a.name.localeCompare(b.name)).map(p => (
                     <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
                   <option value="__otro__">Otro (texto libre)…</option>
@@ -2702,6 +2753,42 @@ export function Dashboard({
                 className="px-5 py-2 text-xs font-bold text-white bg-primary hover:bg-primary/90 rounded-lg transition-colors disabled:opacity-60"
               >
                 {ppSaving ? 'Creando…' : 'Crear postpartido'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Completar postpartido — exige link del vídeo */}
+      {ppCompleteTarget && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setPpCompleteTarget(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
+              <h3 className="text-sm font-bold text-slate-800">Completar postpartido</h3>
+              <button onClick={() => setPpCompleteTarget(null)} aria-label="Cerrar" className="text-slate-400 hover:text-slate-600 p-1">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-2">
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">🎬 Link del vídeo (obligatorio)</label>
+              <input
+                autoFocus
+                value={ppVideoUrl}
+                onChange={e => setPpVideoUrl(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') completePostpartido(); }}
+                placeholder="https://streamable.com/…"
+                className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200"
+              />
+              <p className="text-[11px] text-slate-400">El link quedará visible en la lista y en la ficha del jugador (Rendimiento → Postpartidos).</p>
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-3.5 border-t border-slate-100">
+              <button onClick={() => setPpCompleteTarget(null)} className="px-4 py-2 text-xs text-slate-500 hover:text-slate-700 rounded-lg">Cancelar</button>
+              <button
+                onClick={completePostpartido}
+                disabled={ppCompleting || !ppVideoUrl.trim()}
+                className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {ppCompleting ? 'Guardando…' : '✓ Completar'}
               </button>
             </div>
           </div>

@@ -363,6 +363,7 @@ function dbToPostpartido(row: Record<string, unknown>): Postpartido {
     assigneeId: (row.assignee_id as string) ?? undefined,
     taskId: (row.task_id as string) ?? undefined,
     notes: (row.notes as string) ?? undefined,
+    videoUrl: (row.video_url as string) ?? undefined,
     createdAt: row.created_at as string,
   }
 }
@@ -384,6 +385,19 @@ export async function createPostpartido(p: Omit<Postpartido, 'id' | 'createdAt'>
   }).select().single()
   if (error) throw error
   return dbToPostpartido(data)
+}
+
+export async function updatePostpartido(p: Postpartido): Promise<void> {
+  const { error } = await supabase.from('postpartidos').update({
+    match_id: p.matchId ?? null,
+    player_id: p.playerId ?? null,
+    player_name: p.playerName ?? null,
+    assignee_id: p.assigneeId ?? null,
+    task_id: p.taskId ?? null,
+    notes: p.notes ?? null,
+    video_url: p.videoUrl ?? null,
+  }).eq('id', p.id)
+  if (error) throw error
 }
 
 export async function deletePostpartido(id: string): Promise<void> {

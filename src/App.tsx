@@ -408,6 +408,10 @@ export default function App() {
     setPostpartidos(prev => [saved, ...prev])
     return saved
   }
+  const handleUpdatePostpartido = async (p: Postpartido) => {
+    await db.updatePostpartido(p)
+    setPostpartidos(prev => prev.map(x => x.id === p.id ? p : x))
+  }
   const handleDeletePostpartido = async (pp: Postpartido) => {
     // Borrar también su tarea asociada (la fila de postpartidos cae en cascada,
     // pero limpiamos el estado local de ambas cosas)
@@ -649,6 +653,8 @@ export default function App() {
         onUpdateNegotiation={handleUpdateNegotiation}
         onDeleteNegotiation={handleDeleteNegotiation}
         onSelectClub={navigateToClub}
+        postpartidos={postpartidos.filter(pp => pp.playerId === selectedPlayer.id)}
+        scoutingMatches={scoutingMatches}
       />
     )
   }
@@ -795,6 +801,7 @@ export default function App() {
       onToggleStatusHidden={profile.is_admin ? handleToggleStatusHidden : undefined}
       postpartidos={postpartidos}
       onCreatePostpartido={handleCreatePostpartido}
+      onUpdatePostpartido={handleUpdatePostpartido}
       onDeletePostpartido={handleDeletePostpartido}
       onAddScoutingMatch={handleAddScoutingMatch}
     />

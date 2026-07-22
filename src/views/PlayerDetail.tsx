@@ -4,7 +4,7 @@ import type {
   Player, Task,
   PerformanceNote, PlayerLink, VideoSession,
   DistributionEntry, ClubNegotiation, Club,
-  PlayerActivity,
+  PlayerActivity, Postpartido, ScoutingMatch,
 } from "../types";
 import { calcAge } from "../types";
 import type { Profile } from "../contexts/AuthContext";
@@ -57,6 +57,9 @@ interface Props {
   onUpdateNegotiation?: (n: ClubNegotiation) => Promise<void>;
   onDeleteNegotiation?: (id: string) => Promise<void>;
   onSelectClub?: (id: string) => void;
+  /** Postpartidos de este jugador (con su link de vídeo) — pestaña Rendimiento */
+  postpartidos?: Postpartido[];
+  scoutingMatches?: ScoutingMatch[];
 }
 
 type TabId = "resumen" | "tareas" | "contrato" | "rendimiento" | "info" | "actividad" | "distribucion";
@@ -70,6 +73,7 @@ export function PlayerDetail({
   distributionEntry, playerNegotiations = [], clubs = [],
   onUpdateEntry, onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation,
   onSelectClub,
+  postpartidos = [], scoutingMatches = [],
 }: Props) {
   // Pestaña persistida: recargar la página no te saca de donde estabas
   const [activeTab, setActiveTabState] = useState<TabId>(
@@ -84,7 +88,7 @@ export function PlayerDetail({
   const { toasts, showToast, dismissToast } = useToast();
 
   const pendingCount   = tasks.filter((t) => t.status !== "completada").length;
-  const rendimCount    = (player.videoSessions?.length ?? 0) || undefined;
+  const rendimCount    = ((player.videoSessions?.length ?? 0) + postpartidos.length) || undefined;
   const distribCount   = playerNegotiations.length || undefined;
 
   const navGroups: NavGroup[] = [
@@ -326,7 +330,8 @@ export function PlayerDetail({
               <ContractTab player={player} onUpdate={onUpdatePlayer} isAdmin={currentProfile.is_admin} />
             )}
             {activeTab === "rendimiento" && (
-              <PerformanceTab player={player} profiles={profiles} onUpdate={onUpdatePlayer} />
+              <PerformanceTab player={player} profiles={profiles} onUpdate={onUpdatePlayer}
+                postpartidos={postpartidos} scoutingMatches={scoutingMatches} allTasks={allTasks} />
             )}
             {activeTab === "info" && (
               <div className="space-y-4">
@@ -1018,8 +1023,11 @@ function ContractTab({ player, onUpdate, isAdmin }: { player: Player; onUpdate: 
 }
 
 /* ========== PERFORMANCE TAB ========== */
-function PerformanceTab({ player, profiles, onUpdate }: { player: Player; profiles: Profile[]; onUpdate: (p: Player) => void }) {
-  const [section, setSection] = useState<"informes" | "video">("informes");
+function PerformanceTab({ player, profiles, onUpdate, postpartidos = [], scoutingMatches = [], allTasks = [] }: {
+  player: Player; profiles: Profile[]; onUpdate: (p: Player) => void;
+  postpartidos?: Postpartido[]; scoutingMatches?: ScoutingMatch[]; allTasks?: Task[];
+}) {
+  const [section, setSection] = useState<"informes" | "video" | "postpartidos">("informes");
   const [showAddNote, setShowAddNote] = useState(false);
   const [showAddVideo, setShowAddVideo] = useState(false);
   const [editingNote, setEditingNote] = useState<PerformanceNote | null>(null);
@@ -1046,6 +1054,7 @@ function PerformanceTab({ player, profiles, onUpdate }: { player: Player; profil
         {([
           { id: "informes", label: "Informes", icon: <BookOpen className="w-3.5 h-3.5" />, count: notesLoading ? undefined : notes.length },
           { id: "video", label: "Vídeoanalisis", icon: <Video className="w-3.5 h-3.5" />, count: videos.length },
+          { id: "postpartidos", label: "Postpartidos", icon: <ClipboardList className="w-3.5 h-3.5" />, count: postpartidos.length },
         ] as const).map(s => (
           <button key={s.id} onClick={() => setSection(s.id)}
             className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md text-xs font-medium transition-colors ${
@@ -1161,6 +1170,66 @@ function PerformanceTab({ player, profiles, onUpdate }: { player: Player; profil
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* POSTPARTIDOS SECTION */}
+      {section === "postpartidos" && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-slate-800">Postpartidos</h3>
+            <p className="text-[11px] text-slate-400">Se crean desde Mantenimiento → Postpartidos</p>
+          </div>
+          {postpartidos.length === 0 && (
+            <div className="text-center py-10 text-sm text-slate-400 bg-white border border-slate-200 rounded-lg">
+              Sin postpartidos para este jugador
+            </div>
+          )}
+          <div className="space-y-2">
+            {[...postpartidos]
+              .sort((a, b) => {
+                const da = scoutingMatches.find(m => m.id === a.matchId)?.date ?? a.createdAt.slice(0, 10);
+                const db2 = scoutingMatches.find(m => m.id === b.matchId)?.date ?? b.createdAt.slice(0, 10);
+                return db2.localeCompare(da);
+              })
+              .map(pp => {
+                const match = pp.matchId ? scoutingMatches.find(m => m.id === pp.matchId) : undefined;
+                const task = pp.taskId ? allTasks.find(t => t.id === pp.taskId) : undefined;
+                const assignee = pp.assigneeId ? profiles.find(p => p.id === pp.assigneeId) : undefined;
+                const isDone = task?.status === 'completada';
+                return (
+                  <div key={pp.id} className={`bg-white border rounded-lg p-4 ${isDone ? 'border-emerald-200 bg-emerald-50/40' : 'border-slate-200'}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <ClipboardList className={`w-3.5 h-3.5 flex-shrink-0 ${isDone ? 'text-emerald-500' : 'text-amber-500'}`} />
+                          <p className="text-sm font-medium text-slate-800 truncate">
+                            {match ? `${match.homeTeam} vs ${match.awayTeam}` : 'Partido eliminado'}
+                          </p>
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                            isDone ? 'bg-emerald-100 text-emerald-700' : task?.status === 'en_progreso' ? 'bg-blue-50 text-blue-600' : 'bg-amber-50 text-amber-600'
+                          }`}>
+                            {isDone ? '✓ Completado' : task?.status === 'en_progreso' ? 'En progreso' : 'Pendiente'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400">
+                          {match && new Date(match.date + 'T12:00:00').toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}
+                          {match?.competition ? ` · ${match.competition}` : ''}
+                          {assignee ? ` · por ${assignee.name}` : ''}
+                        </p>
+                        {pp.notes && <p className="text-xs text-slate-500 mt-1 italic">{pp.notes}</p>}
+                        {pp.videoUrl && (
+                          <a href={pp.videoUrl} target="_blank" rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 mt-1.5 text-xs text-blue-600 hover:text-blue-800 hover:underline">
+                            <ExternalLink className="w-3 h-3" /> Ver vídeo
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
           </div>
         </div>
       )}

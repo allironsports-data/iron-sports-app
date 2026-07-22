@@ -345,6 +345,7 @@ export interface Postpartido {
   assigneeId?: string    // profile.id del responsable
   taskId?: string        // tarea generada en el tablero
   notes?: string
+  videoUrl?: string      // link (Streamable) — obligatorio al completar
   createdAt: string
 }
 
