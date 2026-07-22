@@ -175,6 +175,8 @@ export function Dashboard({
   const [stNewTaskPlayerId, setStNewTaskPlayerId] = useState('general');
   const [stNewTaskDue, setStNewTaskDue] = useState('');
   const [stCreatingTask, setStCreatingTask] = useState(false);
+  // Qué hacer con la tarea en curso anterior al cambiarla por otra
+  const [stPrevTaskAction, setStPrevTaskAction] = useState<'keep' | 'completar' | 'pendiente'>('keep');
 
   // Add event modal state
   const [showAddEvent, setShowAddEvent]           = useState(false);
@@ -399,6 +401,7 @@ export function Dashboard({
     });
     setStQuickTaskOpen(false);
     setStNewTaskTitle(''); setStNewTaskPlayerId('general'); setStNewTaskDue('');
+    setStPrevTaskAction('keep');
     setStatusEditorOpen(true);
   }
 
@@ -465,8 +468,23 @@ export function Dashboard({
       if (t && t.status === 'pendiente' && onUpdateTask) {
         await Promise.resolve(onUpdateTask({ ...t, status: 'en_progreso' }));
       }
+      // La tarea en curso anterior: se hace lo que hayas elegido en el editor
+      // ('keep' = sigue en progreso, sin tocarla)
+      const prevTask = myStatus?.currentTaskId && myStatus.currentTaskId !== stForm.currentTaskId
+        ? tasks.find(x => x.id === myStatus.currentTaskId)
+        : undefined;
+      if (prevTask && prevTask.status === 'en_progreso' && stPrevTaskAction !== 'keep' && onUpdateTask) {
+        await Promise.resolve(onUpdateTask({
+          ...prevTask,
+          status: stPrevTaskAction === 'completar' ? 'completada' : 'pendiente',
+        }));
+      }
       setStatusEditorOpen(false);
-      showToast('Estado actualizado');
+      showToast(
+        prevTask && stPrevTaskAction === 'completar' ? `Estado actualizado · «${prevTask.title}» completada`
+          : prevTask && stPrevTaskAction === 'pendiente' ? `Estado actualizado · «${prevTask.title}» vuelve a pendiente`
+          : 'Estado actualizado'
+      );
     } catch {
       showToast('No se pudo guardar el estado. Inténtalo de nuevo.', 'error');
     } finally {
@@ -2381,6 +2399,42 @@ export function Dashboard({
                       </div>
                     </div>
                   )}
+                  {/* ¿Qué hacemos con la tarea en curso anterior? */}
+                  {(() => {
+                    const prevTask = myStatus?.currentTaskId && myStatus.currentTaskId !== stForm.currentTaskId
+                      ? tasks.find(t => t.id === myStatus.currentTaskId)
+                      : undefined;
+                    if (!prevTask || prevTask.status !== 'en_progreso') return null;
+                    const OPTS: { v: typeof stPrevTaskAction; label: string }[] = [
+                      { v: 'completar', label: '✓ Completada' },
+                      { v: 'keep', label: 'Sigue en progreso' },
+                      { v: 'pendiente', label: 'Vuelve a pendiente' },
+                    ];
+                    return (
+                      <div className="mt-2 bg-blue-50/60 border border-blue-200 rounded-lg px-3 py-2.5">
+                        <p className="text-[11px] font-semibold text-slate-700 mb-1.5 truncate">
+                          ¿Y la anterior, «{prevTask.title}»?
+                        </p>
+                        <div className="flex gap-1.5 flex-wrap">
+                          {OPTS.map(o => (
+                            <button
+                              key={o.v}
+                              onClick={() => setStPrevTaskAction(o.v)}
+                              className={`px-2.5 py-1 rounded-full border text-[11px] transition-colors ${
+                                stPrevTaskAction === o.v
+                                  ? o.v === 'completar'
+                                    ? 'bg-emerald-600 border-emerald-600 text-white font-semibold'
+                                    : 'bg-primary border-primary text-white font-semibold'
+                                  : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                              }`}
+                            >
+                              {o.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">📅 Evento de hoy</label>
