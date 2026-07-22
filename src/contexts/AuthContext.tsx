@@ -8,6 +8,7 @@ export interface Profile {
   name: string
   avatar: string
   is_admin: boolean
+  hidden_from_status?: boolean   // oculto en el panel de estado del equipo (lo gestiona un admin)
 }
 
 interface AuthState {
@@ -33,6 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         name: data.name ?? '',
         avatar: data.avatar ?? '',
         is_admin: data.is_admin ?? false,
+        hidden_from_status: data.hidden_from_status ?? false,
       })
     }
   }

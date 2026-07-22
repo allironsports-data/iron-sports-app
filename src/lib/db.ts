@@ -342,7 +342,7 @@ export async function fetchProfiles() {
   return data ?? []
 }
 
-export async function updateProfile(id: string, updates: { name?: string; avatar?: string; is_admin?: boolean }) {
+export async function updateProfile(id: string, updates: { name?: string; avatar?: string; is_admin?: boolean; hidden_from_status?: boolean }) {
   const { error } = await supabase.from('profiles').update(updates).eq('id', id)
   if (error) throw error
 }

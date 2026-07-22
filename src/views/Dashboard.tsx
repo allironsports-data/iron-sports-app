@@ -37,6 +37,7 @@ import {
   Zap,
   TrendingUp,
   Eye,
+  EyeOff,
   Activity,
 } from "lucide-react";
 import { POSITIONS, POSITION_CODES, positionLabel } from "../lib/positions";
@@ -58,7 +59,7 @@ interface Props {
   onBulkAssignManager?: (playerIds: string[], managerId: string) => Promise<void>;
   notifications?: AppNotification[];
   onDismissNotification?: (id: string) => void;
-  onAddGeneralTask?: (task: Task) => void;
+  onAddGeneralTask?: (task: Task) => void | Task | Promise<void | Task>;
   onUpdateGeneralTask?: (task: Task) => void;
   onUpdateTask?: (task: Task) => void;
   onDeleteGeneralTask?: (taskId: string) => void;
@@ -67,6 +68,8 @@ interface Props {
   scoutingMatches?: ScoutingMatch[];
   memberStatuses?: MemberStatus[];
   onUpdateMemberStatus?: (s: Omit<MemberStatus, 'updatedAt'>) => Promise<void>;
+  /** Solo llega si el usuario es admin: oculta/muestra un miembro en el panel de estado */
+  onToggleStatusHidden?: (profileId: string, hidden: boolean) => Promise<void>;
 }
 
 // Birthday helpers
@@ -148,6 +151,7 @@ export function Dashboard({
   scoutingMatches = [],
   memberStatuses = [],
   onUpdateMemberStatus,
+  onToggleStatusHidden,
 }: Props) {
   const { toasts, showToast, dismissToast } = useToast();
   // Internal tab: 'equipo' is handled locally; 'tareas'/'jugadores' are driven by `view` prop
@@ -162,6 +166,15 @@ export function Dashboard({
   const [statusEditorOpen, setStatusEditorOpen] = useState(false);
   const [stSaving, setStSaving] = useState(false);
   const [stForm, setStForm] = useState({ locationType: '', locationDetail: '', currentTaskId: '', eventNote: '', note: '' });
+  // Panel plegado por defecto para no comer pantalla; recuerda tu elección
+  const [statusPanelOpen, setStatusPanelOpen] = useState<boolean>(() => sessionStorage.getItem('dash_status_open') === '1');
+  useEffect(() => { sessionStorage.setItem('dash_status_open', statusPanelOpen ? '1' : '0'); }, [statusPanelOpen]);
+  // Tarea rápida desde el editor de estado
+  const [stQuickTaskOpen, setStQuickTaskOpen] = useState(false);
+  const [stNewTaskTitle, setStNewTaskTitle] = useState('');
+  const [stNewTaskPlayerId, setStNewTaskPlayerId] = useState('general');
+  const [stNewTaskDue, setStNewTaskDue] = useState('');
+  const [stCreatingTask, setStCreatingTask] = useState(false);
 
   // Add event modal state
   const [showAddEvent, setShowAddEvent]           = useState(false);
@@ -369,8 +382,12 @@ export function Dashboard({
   ).sort((a, b) => a.name.localeCompare(b.name));
 
   // ── Estado del equipo: datos derivados ──
+  const statusProfiles = profiles.filter(p => !p.hidden_from_status);
+  const hiddenStatusProfiles = profiles.filter(p => p.hidden_from_status);
   const myStatus = memberStatuses.find(s => s.profileId === currentProfile.id);
-  const myStatusStale = (hoursSince(myStatus?.updatedAt) ?? Infinity) > STATUS_STALE_HOURS;
+  const myStatusStale = !currentProfile.hidden_from_status
+    && (hoursSince(myStatus?.updatedAt) ?? Infinity) > STATUS_STALE_HOURS;
+  const staleStatusCount = statusProfiles.filter(p => (hoursSince(memberStatuses.find(s => s.profileId === p.id)?.updatedAt) ?? Infinity) > STATUS_STALE_HOURS).length;
 
   function openStatusEditor() {
     setStForm({
@@ -380,6 +397,8 @@ export function Dashboard({
       eventNote: myStatus?.eventNote ?? '',
       note: myStatus?.note ?? '',
     });
+    setStQuickTaskOpen(false);
+    setStNewTaskTitle(''); setStNewTaskPlayerId('general'); setStNewTaskDue('');
     setStatusEditorOpen(true);
   }
 
@@ -396,6 +415,38 @@ export function Dashboard({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [memberStatuses]);
+
+  // Crear una tarea nueva desde el editor de estado y dejarla seleccionada como "en curso"
+  async function createStatusQuickTask() {
+    if (!onAddGeneralTask || !stNewTaskTitle.trim() || stCreatingTask) return;
+    setStCreatingTask(true);
+    try {
+      const player = stNewTaskPlayerId !== 'general' ? players.find(p => p.id === stNewTaskPlayerId) : undefined;
+      const t: Task = {
+        id: 't' + Date.now(),
+        playerId: stNewTaskPlayerId || 'general',
+        title: stNewTaskTitle.trim(),
+        description: '',
+        assigneeId: currentProfile.id,
+        watchers: player?.managedBy?.filter(id => id !== currentProfile.id).slice(0, 2) ?? [],
+        priority: 'media',
+        status: 'en_progreso',
+        createdAt: new Date().toISOString(),
+        dueDate: stNewTaskDue || undefined,
+        comments: [],
+      };
+      const result = await Promise.resolve(onAddGeneralTask(t));
+      const saved = result && typeof result === 'object' && 'id' in result ? (result as Task) : undefined;
+      setStForm(f => ({ ...f, currentTaskId: saved?.id ?? f.currentTaskId }));
+      setStQuickTaskOpen(false);
+      setStNewTaskTitle(''); setStNewTaskPlayerId('general'); setStNewTaskDue('');
+      showToast('Tarea creada y puesta en curso');
+    } catch {
+      showToast('No se pudo crear la tarea. Inténtalo de nuevo.', 'error');
+    } finally {
+      setStCreatingTask(false);
+    }
+  }
 
   async function saveMyStatus() {
     if (!onUpdateMemberStatus) return;
@@ -861,51 +912,123 @@ export function Dashboard({
             </div>
           )}
 
-          {/* ── Panel de estado del equipo (sustituye a los 4 stats) ── */}
-          <div className="flex gap-2 overflow-x-auto pb-1 sm:pb-0 sm:overflow-visible sm:grid sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 mb-3">
-            {profiles.map(p => {
-              const s = memberStatuses.find(x => x.profileId === p.id);
-              const curTask = s?.currentTaskId ? tasks.find(t => t.id === s.currentTaskId) : undefined;
-              const taskActive = !!curTask && curTask.status !== 'completada';
-              const stale = (hoursSince(s?.updatedAt) ?? Infinity) > STATUS_STALE_HOURS;
-              const isMe = p.id === currentProfile.id;
-              const dot = statusDotColor(s, taskActive);
-              const locText = s ? [s.locationType, s.locationDetail].filter(Boolean).join(' — ') : '';
-              return (
-                <button
-                  key={p.id}
-                  onClick={() => { if (isMe && onUpdateMemberStatus) openStatusEditor(); else onSelectProfile?.(p.id); }}
-                  className={`text-left rounded-xl border px-3 py-2 min-w-[200px] sm:min-w-0 transition-all hover:shadow-sm ${
-                    stale ? 'bg-red-50/40 border-red-200' : 'bg-white border-slate-200 hover:border-slate-300'
-                  } ${isMe ? 'ring-1 ring-blue-200' : ''}`}
-                  title={isMe ? 'Actualizar mi estado' : `Ver detalle de ${p.name.split(' ')[0]}`}
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="relative flex-shrink-0">
+          {/* ── Panel de estado del equipo (plegable; sustituye a los 4 stats) ── */}
+          <div className="mb-3 bg-white border border-slate-200 rounded-xl overflow-hidden">
+            {/* Barra plegada: un vistazo del equipo en ~40px */}
+            <button
+              onClick={() => setStatusPanelOpen(v => !v)}
+              className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 transition-colors"
+              title={statusPanelOpen ? 'Plegar panel de equipo' : 'Ver estado del equipo'}
+            >
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex-shrink-0">Equipo</span>
+              <div className="flex items-center gap-2 flex-1 overflow-x-auto py-0.5">
+                {statusProfiles.map(p => {
+                  const s = memberStatuses.find(x => x.profileId === p.id);
+                  const curTask = s?.currentTaskId ? tasks.find(t => t.id === s.currentTaskId) : undefined;
+                  const taskActive = !!curTask && curTask.status !== 'completada';
+                  const stale = (hoursSince(s?.updatedAt) ?? Infinity) > STATUS_STALE_HOURS;
+                  const locText = s ? [s.locationType, s.locationDetail].filter(Boolean).join(' — ') : 'sin estado';
+                  return (
+                    <span
+                      key={p.id}
+                      className={`relative flex-shrink-0 ${stale ? 'ring-2 ring-red-300 rounded-full' : ''}`}
+                      title={`${p.name.split(' ')[0]} · ${locText}${taskActive ? ` · ▶ ${curTask!.title}` : ''}`}
+                    >
                       <span className="w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-bold text-white" style={{ background: PRIMARY }}>
                         {p.avatar}
                       </span>
-                      <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${dot}`} />
+                      <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${statusDotColor(s, taskActive)}`} />
                     </span>
-                    <span className="text-xs font-bold text-slate-800 truncate flex-1">
-                      {p.name.split(' ')[0]}{isMe && <span className="font-normal text-slate-400"> (yo)</span>}
-                    </span>
-                    <span className={`text-[10px] flex-shrink-0 ${stale ? 'text-red-500 font-bold' : 'text-slate-400'}`}>
-                      {stale && s ? `${statusAgoLabel(s.updatedAt)} ⚠️` : statusAgoLabel(s?.updatedAt)}
-                    </span>
+                  );
+                })}
+              </div>
+              {staleStatusCount > 0 && (
+                <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 rounded-full px-2 py-0.5 flex-shrink-0">
+                  {staleStatusCount} sin actualizar
+                </span>
+              )}
+              <ChevronDown className={`w-4 h-4 text-slate-400 flex-shrink-0 transition-transform ${statusPanelOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {/* Panel desplegado: tarjetas completas */}
+            {statusPanelOpen && (
+              <div className="border-t border-slate-100 p-2.5 bg-slate-50/60">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2">
+                  {statusProfiles.map(p => {
+                    const s = memberStatuses.find(x => x.profileId === p.id);
+                    const curTask = s?.currentTaskId ? tasks.find(t => t.id === s.currentTaskId) : undefined;
+                    const taskActive = !!curTask && curTask.status !== 'completada';
+                    const stale = (hoursSince(s?.updatedAt) ?? Infinity) > STATUS_STALE_HOURS;
+                    const isMe = p.id === currentProfile.id;
+                    const dot = statusDotColor(s, taskActive);
+                    const locText = s ? [s.locationType, s.locationDetail].filter(Boolean).join(' — ') : '';
+                    return (
+                      <div
+                        key={p.id}
+                        onClick={() => { if (isMe && onUpdateMemberStatus) openStatusEditor(); else onSelectProfile?.(p.id); }}
+                        className={`cursor-pointer text-left rounded-xl border px-3 py-2 transition-all hover:shadow-sm ${
+                          stale ? 'bg-red-50/40 border-red-200' : 'bg-white border-slate-200 hover:border-slate-300'
+                        } ${isMe ? 'ring-1 ring-blue-200' : ''}`}
+                        title={isMe ? 'Actualizar mi estado' : `Ver detalle de ${p.name.split(' ')[0]}`}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="relative flex-shrink-0">
+                            <span className="w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-bold text-white" style={{ background: PRIMARY }}>
+                              {p.avatar}
+                            </span>
+                            <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${dot}`} />
+                          </span>
+                          <span className="text-xs font-bold text-slate-800 truncate flex-1">
+                            {p.name.split(' ')[0]}{isMe && <span className="font-normal text-slate-400"> (yo)</span>}
+                          </span>
+                          {onToggleStatusHidden && (
+                            <span
+                              onClick={e => {
+                                e.stopPropagation();
+                                onToggleStatusHidden(p.id, true).catch(() => showToast('No se pudo guardar. Inténtalo de nuevo.', 'error'));
+                              }}
+                              title={`Ocultar a ${p.name.split(' ')[0]} del panel`}
+                              className="p-0.5 text-slate-300 hover:text-slate-500 cursor-pointer flex-shrink-0"
+                            >
+                              <EyeOff className="w-3 h-3" />
+                            </span>
+                          )}
+                          <span className={`text-[10px] flex-shrink-0 ${stale ? 'text-red-500 font-bold' : 'text-slate-400'}`}>
+                            {stale && s ? `${statusAgoLabel(s.updatedAt)} ⚠️` : statusAgoLabel(s?.updatedAt)}
+                          </span>
+                        </div>
+                        <div className={`text-[11px] truncate ${locText ? 'text-slate-600' : 'text-slate-300 italic'}`}>
+                          📍 {locText || 'Sin actualizar'}
+                        </div>
+                        <div className={`text-[11px] truncate ${taskActive ? 'text-blue-600 font-semibold' : 'text-slate-300 italic'}`}>
+                          ▶ {taskActive ? curTask!.title : (s?.note || 'Ninguna tarea en curso')}
+                        </div>
+                        <div className={`text-[11px] truncate ${s?.eventNote ? 'text-purple-600' : 'text-slate-300 italic'}`}>
+                          📅 {s?.eventNote || 'Sin eventos hoy'}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* Miembros ocultos (solo admins) */}
+                {onToggleStatusHidden && hiddenStatusProfiles.length > 0 && (
+                  <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                    <EyeOff className="w-3 h-3 text-slate-400 flex-shrink-0" />
+                    <span className="text-[11px] text-slate-400">Ocultos:</span>
+                    {hiddenStatusProfiles.map(p => (
+                      <button
+                        key={p.id}
+                        onClick={() => onToggleStatusHidden(p.id, false).catch(() => showToast('No se pudo guardar. Inténtalo de nuevo.', 'error'))}
+                        title="Volver a mostrar en el panel"
+                        className="text-[11px] bg-white border border-slate-200 hover:border-slate-400 rounded-full px-2 py-0.5 text-slate-500 transition-colors"
+                      >
+                        {p.name.split(' ')[0]} · Mostrar
+                      </button>
+                    ))}
                   </div>
-                  <div className={`text-[11px] truncate ${locText ? 'text-slate-600' : 'text-slate-300 italic'}`}>
-                    📍 {locText || 'Sin actualizar'}
-                  </div>
-                  <div className={`text-[11px] truncate ${taskActive ? 'text-blue-600 font-semibold' : 'text-slate-300 italic'}`}>
-                    ▶ {taskActive ? curTask!.title : (s?.note || 'Ninguna tarea en curso')}
-                  </div>
-                  <div className={`text-[11px] truncate ${s?.eventNote ? 'text-purple-600' : 'text-slate-300 italic'}`}>
-                    📅 {s?.eventNote || 'Sin eventos hoy'}
-                  </div>
-                </button>
-              );
-            })}
+                )}
+              </div>
+            )}
           </div>
 
           {/* ── Stats comprimidos en chips (mantienen el filtro rápido) ── */}
@@ -2195,7 +2318,69 @@ export function Dashboard({
                       </option>
                     ))}
                   </select>
-                  <p className="text-[10px] text-slate-400 mt-1">Al elegirla pasará a "En progreso" en el tablero.</p>
+                  <div className="flex items-center justify-between mt-1">
+                    <p className="text-[10px] text-slate-400">Al elegirla pasará a "En progreso" en el tablero.</p>
+                    {onAddGeneralTask && !stQuickTaskOpen && (
+                      <button
+                        onClick={() => setStQuickTaskOpen(true)}
+                        className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold flex-shrink-0"
+                      >
+                        + Nueva tarea
+                      </button>
+                    )}
+                  </div>
+                  {/* Crear tarea rápida sin salir del editor */}
+                  {stQuickTaskOpen && onAddGeneralTask && (
+                    <div className="mt-2 bg-slate-50 border border-slate-200 rounded-lg p-2.5 space-y-2">
+                      <input
+                        autoFocus
+                        value={stNewTaskTitle}
+                        onChange={e => setStNewTaskTitle(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') createStatusQuickTask(); }}
+                        placeholder="¿Qué vas a hacer?"
+                        className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Jugador</label>
+                          <select
+                            value={stNewTaskPlayerId}
+                            onChange={e => setStNewTaskPlayerId(e.target.value)}
+                            className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
+                          >
+                            <option value="general">— General —</option>
+                            {[...players].sort((a, b) => a.name.localeCompare(b.name)).map(p => (
+                              <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Fecha límite (opc.)</label>
+                          <input
+                            type="date"
+                            value={stNewTaskDue}
+                            onChange={e => setStNewTaskDue(e.target.value)}
+                            className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => { setStQuickTaskOpen(false); setStNewTaskTitle(''); }}
+                          className="px-2.5 py-1.5 text-[11px] text-slate-500 hover:text-slate-700"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          onClick={createStatusQuickTask}
+                          disabled={!stNewTaskTitle.trim() || stCreatingTask}
+                          className="px-3 py-1.5 text-[11px] font-bold text-white bg-primary hover:bg-primary/90 rounded-lg disabled:opacity-50 transition-colors"
+                        >
+                          {stCreatingTask ? 'Creando…' : 'Crear y poner en curso'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">📅 Evento de hoy</label>

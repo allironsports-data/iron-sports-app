@@ -365,12 +365,13 @@ export default function App() {
     )
   }
 
-  const handleAddTask = async (task: Task) => {
+  const handleAddTask = async (task: Task): Promise<Task> => {
     const withCompleted: Task = task.status === 'completada' && !task.completedAt
       ? { ...task, completedAt: new Date().toISOString() }
       : task
     const saved = await db.createTask(withCompleted)
     setTasks((prev) => [...prev, saved])
+    return saved
   }
 
   const handleUpdateTask = async (updated: Task) => {
@@ -392,6 +393,12 @@ export default function App() {
   const handleRefreshProfiles = async () => {
     const pr = await db.fetchProfiles()
     setProfiles(pr as Profile[])
+  }
+
+  // Ocultar/mostrar un miembro en el panel de estado (solo admins)
+  const handleToggleStatusHidden = async (profileId: string, hidden: boolean) => {
+    await db.updateProfile(profileId, { hidden_from_status: hidden })
+    await handleRefreshProfiles()
   }
 
   const handleUpdateMemberStatus = async (s: Omit<MemberStatus, 'updatedAt'>) => {
@@ -760,6 +767,7 @@ export default function App() {
       scoutingMatches={scoutingMatches}
       memberStatuses={memberStatuses}
       onUpdateMemberStatus={handleUpdateMemberStatus}
+      onToggleStatusHidden={profile.is_admin ? handleToggleStatusHidden : undefined}
     />
   )
 }
