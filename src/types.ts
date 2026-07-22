@@ -37,7 +37,7 @@ export interface TaskComment {
   attachments: TaskAttachment[];
 }
 
-export type TaskLabel = 'General' | 'Scouting' | 'Distribución' | 'Negociación' | 'Reunión/Comida' | 'Administrativa' | 'Seguimiento' | 'Informe' | 'Marketing' | 'Comunicación'
+export type TaskLabel = 'General' | 'Scouting' | 'Distribución' | 'Negociación' | 'Reunión/Comida' | 'Administrativa' | 'Seguimiento' | 'Informe' | 'Marketing' | 'Comunicación' | 'Postpartido'
 
 export interface Task {
   id: string;
@@ -330,6 +330,20 @@ export interface ScoutingMatch {
   assignedTo?: string       // persona initials, e.g. "NB"
   viewMode?: 'video' | 'campo'
   status?: 'pendiente' | 'visto'
+  notes?: string
+  createdAt: string
+}
+
+// ── POSTPARTIDOS ────────────────────────────────────────────
+// Informe postpartido: partido (Captación) + jugador (nuestro o texto
+// libre) + responsable. La tarea asociada (taskId) lleva el estado.
+export interface Postpartido {
+  id: string
+  matchId?: string       // ScoutingMatch.id
+  playerId?: string      // jugador de mantenimiento…
+  playerName?: string    // …o "otro" en texto libre
+  assigneeId?: string    // profile.id del responsable
+  taskId?: string        // tarea generada en el tablero
   notes?: string
   createdAt: string
 }

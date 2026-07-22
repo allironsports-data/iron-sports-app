@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion, ClubLog, PlayerMeeting, PlayerActivity, MemberStatus } from '../types'
+import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion, ClubLog, PlayerMeeting, PlayerActivity, MemberStatus, Postpartido } from '../types'
 
 // ── helpers ──────────────────────────────────────────────────
 
@@ -349,6 +349,45 @@ export async function updateProfile(id: string, updates: { name?: string; avatar
 
 export async function inviteUser(email: string) {
   const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } })
+  if (error) throw error
+}
+
+// ── POSTPARTIDOS ─────────────────────────────────────────────
+
+function dbToPostpartido(row: Record<string, unknown>): Postpartido {
+  return {
+    id: row.id as string,
+    matchId: (row.match_id as string) ?? undefined,
+    playerId: (row.player_id as string) ?? undefined,
+    playerName: (row.player_name as string) ?? undefined,
+    assigneeId: (row.assignee_id as string) ?? undefined,
+    taskId: (row.task_id as string) ?? undefined,
+    notes: (row.notes as string) ?? undefined,
+    createdAt: row.created_at as string,
+  }
+}
+
+export async function fetchPostpartidos(): Promise<Postpartido[]> {
+  const { data, error } = await supabase.from('postpartidos').select('*').order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map(dbToPostpartido)
+}
+
+export async function createPostpartido(p: Omit<Postpartido, 'id' | 'createdAt'>): Promise<Postpartido> {
+  const { data, error } = await supabase.from('postpartidos').insert({
+    match_id: p.matchId ?? null,
+    player_id: p.playerId ?? null,
+    player_name: p.playerName ?? null,
+    assignee_id: p.assigneeId ?? null,
+    task_id: p.taskId ?? null,
+    notes: p.notes ?? null,
+  }).select().single()
+  if (error) throw error
+  return dbToPostpartido(data)
+}
+
+export async function deletePostpartido(id: string): Promise<void> {
+  const { error } = await supabase.from('postpartidos').delete().eq('id', id)
   if (error) throw error
 }
 

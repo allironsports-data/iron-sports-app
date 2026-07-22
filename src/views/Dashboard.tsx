@@ -8,9 +8,9 @@ import { useEscapeKey } from "../hooks/useEscapeKey";
 import { useDebounce } from "../hooks/useDebounce";
 import { isValidName, isValidBirthDate } from "../lib/validate";
 import logoImg from '../assets/logo.jpeg';
-import type { Player, Task, TaskLabel, PlayerActivity, ScoutingMatch, MemberStatus } from "../types";
+import type { Player, Task, TaskLabel, PlayerActivity, ScoutingMatch, MemberStatus, Postpartido } from "../types";
 import { calcAge, clubsLabel } from "../types";
-import { createPlayerActivity, fetchActivitiesByAuthor } from "../lib/db";
+import { createPlayerActivity, fetchActivitiesByAuthor, createScoutingMatch } from "../lib/db";
 import type { Profile } from "../contexts/AuthContext";
 import type { AppNotification } from "../App";
 import {
@@ -70,6 +70,11 @@ interface Props {
   onUpdateMemberStatus?: (s: Omit<MemberStatus, 'updatedAt'>) => Promise<void>;
   /** Solo llega si el usuario es admin: oculta/muestra un miembro en el panel de estado */
   onToggleStatusHidden?: (profileId: string, hidden: boolean) => Promise<void>;
+  postpartidos?: Postpartido[];
+  onCreatePostpartido?: (p: Omit<Postpartido, 'id' | 'createdAt'>) => Promise<Postpartido>;
+  onDeletePostpartido?: (p: Postpartido) => Promise<void>;
+  /** Sincroniza en App un partido creado desde aquí (aparece en Captación → Partidos) */
+  onAddScoutingMatch?: (m: ScoutingMatch) => void;
 }
 
 // Birthday helpers
@@ -152,11 +157,15 @@ export function Dashboard({
   memberStatuses = [],
   onUpdateMemberStatus,
   onToggleStatusHidden,
+  postpartidos = [],
+  onCreatePostpartido,
+  onDeletePostpartido,
+  onAddScoutingMatch,
 }: Props) {
   const { toasts, showToast, dismissToast } = useToast();
-  // Internal tab: 'equipo' is handled locally; 'tareas'/'jugadores' are driven by `view` prop
-  const [internalTab, setInternalTab] = useState<'equipo' | null>(null);
-  const activeTab = internalTab ?? view;   // 'tareas' | 'jugadores' | 'equipo'
+  // Internal tabs: 'equipo'/'postpartidos' se gestionan localmente; 'tareas'/'jugadores' vienen del prop `view`
+  const [internalTab, setInternalTab] = useState<'equipo' | 'postpartidos' | null>(null);
+  const activeTab = internalTab ?? view;   // 'tareas' | 'jugadores' | 'equipo' | 'postpartidos'
   const [search, setSearch] = useState("");
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [showMatchesToday, setShowMatchesToday] = useState(false);
@@ -177,6 +186,104 @@ export function Dashboard({
   const [stCreatingTask, setStCreatingTask] = useState(false);
   // Qué hacer con la tarea en curso anterior al cambiarla por otra
   const [stPrevTaskAction, setStPrevTaskAction] = useState<'keep' | 'completar' | 'pendiente'>('keep');
+
+  // ── Postpartidos ──
+  const [showAddPostpartido, setShowAddPostpartido] = useState(false);
+  const [ppMatchId, setPpMatchId] = useState('');
+  const [ppNewMatchOpen, setPpNewMatchOpen] = useState(false);
+  const [ppNewMatch, setPpNewMatch] = useState({ date: '', home: '', away: '', competition: '' });
+  const [ppCreatingMatch, setPpCreatingMatch] = useState(false);
+  const [ppPlayerId, setPpPlayerId] = useState('');          // id de jugador o '__otro__'
+  const [ppPlayerName, setPpPlayerName] = useState('');      // texto libre si '__otro__'
+  const [ppAssigneeId, setPpAssigneeId] = useState('');
+  const [ppDue, setPpDue] = useState('');
+  const [ppNotes, setPpNotes] = useState('');
+  const [ppSaving, setPpSaving] = useState(false);
+  const [ppShowDone, setPpShowDone] = useState(false);
+  const [ppDeleteConfirm, setPpDeleteConfirm] = useState<Postpartido | null>(null);
+  const [ppDeleting, setPpDeleting] = useState(false);
+
+  function openAddPostpartido() {
+    setPpMatchId(''); setPpNewMatchOpen(false);
+    setPpNewMatch({ date: '', home: '', away: '', competition: '' });
+    setPpPlayerId(''); setPpPlayerName('');
+    setPpAssigneeId(currentProfile.id);
+    setPpDue(''); setPpNotes('');
+    setShowAddPostpartido(true);
+  }
+
+  // Crear un partido nuevo desde el formulario — aparece también en Captación → Partidos
+  async function createMatchInline() {
+    if (!ppNewMatch.date || !ppNewMatch.home.trim() || !ppNewMatch.away.trim()) {
+      showToast('Fecha, local y visitante son obligatorios.', 'error');
+      return;
+    }
+    setPpCreatingMatch(true);
+    try {
+      const saved = await createScoutingMatch({
+        date: ppNewMatch.date,
+        homeTeam: ppNewMatch.home.trim(),
+        awayTeam: ppNewMatch.away.trim(),
+        competition: ppNewMatch.competition.trim() || undefined,
+        status: 'pendiente',
+      });
+      onAddScoutingMatch?.(saved);
+      setPpMatchId(saved.id);
+      setPpNewMatchOpen(false);
+      setPpNewMatch({ date: '', home: '', away: '', competition: '' });
+      showToast('Partido añadido (visible en Captación → Partidos)');
+    } catch {
+      showToast('No se pudo crear el partido. Inténtalo de nuevo.', 'error');
+    } finally {
+      setPpCreatingMatch(false);
+    }
+  }
+
+  async function createPostpartido() {
+    if (!onCreatePostpartido || !onAddGeneralTask || ppSaving) return;
+    const match = scoutingMatches.find(m => m.id === ppMatchId);
+    if (!match) { showToast('Elige un partido (o añade uno nuevo).', 'error'); return; }
+    const player = ppPlayerId && ppPlayerId !== '__otro__' ? players.find(p => p.id === ppPlayerId) : undefined;
+    const playerLabel = player ? player.name : ppPlayerName.trim();
+    if (!playerLabel) { showToast('Elige un jugador o escríbelo en texto libre.', 'error'); return; }
+    if (!ppAssigneeId) { showToast('Elige un responsable.', 'error'); return; }
+    setPpSaving(true);
+    try {
+      // 1) La tarea: aparece en el tablero del responsable y en la ficha del jugador
+      const t: Task = {
+        id: 't' + Date.now(),
+        playerId: player ? player.id : 'general',
+        title: `Postpartido ${match.homeTeam} vs ${match.awayTeam} — ${playerLabel}`,
+        description: [ppNotes.trim(), player ? '' : `Jugador: ${playerLabel}`].filter(Boolean).join('\n'),
+        assigneeId: ppAssigneeId,
+        watchers: [],
+        priority: 'media',
+        status: 'pendiente',
+        label: 'Postpartido',
+        dueDate: ppDue || undefined,
+        createdAt: new Date().toISOString(),
+        comments: [],
+      };
+      const result = await Promise.resolve(onAddGeneralTask(t));
+      const savedTask = result && typeof result === 'object' && 'id' in result ? (result as Task) : undefined;
+      // 2) El registro de postpartido con sus tres vínculos
+      await onCreatePostpartido({
+        matchId: match.id,
+        playerId: player?.id,
+        playerName: player ? undefined : playerLabel,
+        assigneeId: ppAssigneeId,
+        taskId: savedTask?.id,
+        notes: ppNotes.trim() || undefined,
+      });
+      setShowAddPostpartido(false);
+      const assignee = profiles.find(pr => pr.id === ppAssigneeId);
+      showToast(`Postpartido creado y asignado a ${assignee?.name.split(' ')[0] ?? 'responsable'}`);
+    } catch {
+      showToast('No se pudo crear el postpartido. Inténtalo de nuevo.', 'error');
+    } finally {
+      setPpSaving(false);
+    }
+  }
 
   // Add event modal state
   const [showAddEvent, setShowAddEvent]           = useState(false);
@@ -702,29 +809,39 @@ export function Dashboard({
             {/* Level 2: Mantenimiento sub-tabs */}
             <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center bg-slate-50 border-t border-slate-100 overflow-x-auto scrollbar-none">
               {([
-                { id: 'tareas'    as const, label: 'Tareas' },
-                { id: 'jugadores' as const, label: 'Jugadores' },
-                { id: 'equipo'    as const, label: 'Equipo' },
+                { id: 'tareas'       as const, label: 'Tareas' },
+                { id: 'jugadores'    as const, label: 'Jugadores' },
+                { id: 'equipo'       as const, label: 'Equipo' },
+                { id: 'postpartidos' as const, label: 'Postpartidos' },
               ]).map(tab => {
                 const isActive = activeTab === tab.id;
+                const ppPending = tab.id === 'postpartidos'
+                  ? postpartidos.filter(pp => {
+                      const t = pp.taskId ? tasks.find(x => x.id === pp.taskId) : undefined;
+                      return !t || t.status !== 'completada';
+                    }).length
+                  : 0;
                 return (
                   <button
                     key={tab.id}
                     onClick={() => {
-                      if (tab.id === 'equipo') {
-                        setInternalTab('equipo');
+                      if (tab.id === 'equipo' || tab.id === 'postpartidos') {
+                        setInternalTab(tab.id);
                       } else {
                         setInternalTab(null);
                         onViewChange(tab.id);
                       }
                     }}
-                    className={`flex-shrink-0 px-4 py-2 text-xs font-medium border-b-2 transition-colors ${
+                    className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 text-xs font-medium border-b-2 transition-colors ${
                       isActive
                         ? 'border-primary text-primary'
                         : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
                     }`}
                   >
                     {tab.label}
+                    {ppPending > 0 && (
+                      <span className="text-[10px] font-bold bg-blue-100 text-blue-700 rounded-full px-1.5 py-px">{ppPending}</span>
+                    )}
                   </button>
                 );
               })}
@@ -1917,6 +2034,143 @@ export function Dashboard({
             <div className="text-center py-12 text-sm text-slate-400">No hay miembros del equipo</div>
           )}
         </>)}
+
+        {/* ── Postpartidos section ──────────────────────────── */}
+        {activeTab === 'postpartidos' && (() => {
+          const rows = postpartidos.map(pp => ({
+            pp,
+            match: pp.matchId ? scoutingMatches.find(m => m.id === pp.matchId) : undefined,
+            player: pp.playerId ? players.find(p => p.id === pp.playerId) : undefined,
+            task: pp.taskId ? tasks.find(t => t.id === pp.taskId) : undefined,
+            assignee: pp.assigneeId ? profiles.find(pr => pr.id === pp.assigneeId) : undefined,
+          }));
+          const pending = rows.filter(r => !r.task || r.task.status !== 'completada');
+          const done = rows.filter(r => r.task && r.task.status === 'completada');
+          const shown = ppShowDone ? [...pending, ...done] : pending;
+          const statusBadge = (t?: Task) => {
+            if (!t) return <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-400">sin tarea</span>;
+            if (t.status === 'completada') return <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600">✓ Completado</span>;
+            if (t.status === 'en_progreso') return <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">En progreso</span>;
+            return <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-600">Pendiente</span>;
+          };
+          return (<>
+            <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+              <div>
+                <h2 className="text-base font-semibold text-slate-800">Postpartidos</h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Informes postpartido pendientes · cada uno genera una tarea al responsable y queda ligado al jugador y al partido
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPpShowDone(v => !v)}
+                  className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+                    ppShowDone ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'
+                  }`}
+                >
+                  {ppShowDone ? 'Ocultar completados' : `Ver completados (${done.length})`}
+                </button>
+                {onCreatePostpartido && onAddGeneralTask && (
+                  <button
+                    onClick={openAddPostpartido}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-sm rounded-lg hover:bg-primary/90 transition-colors"
+                  >
+                    <Plus className="w-4 h-4" /> Nuevo postpartido
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {shown.length === 0 ? (
+              <EmptyState
+                icon={<Calendar className="w-10 h-10" />}
+                title={pending.length === 0 && done.length > 0 ? 'Todo al día' : 'No hay postpartidos'}
+                subtitle={pending.length === 0 && done.length > 0
+                  ? `Los ${done.length} postpartidos están completados.`
+                  : 'Crea el primero con "Nuevo postpartido".'}
+              />
+            ) : (
+              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-50">
+                {shown.map(({ pp, match, player, task, assignee }) => {
+                  const isDone = task?.status === 'completada';
+                  const isOverdue = !!(task?.dueDate && task.dueDate < todayStr && !isDone);
+                  return (
+                    <div key={pp.id} className={`flex items-center gap-3 px-4 py-3 ${isDone ? 'opacity-60' : isOverdue ? 'bg-red-50/40' : ''}`}>
+                      {/* Partido */}
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-medium text-slate-800 truncate ${isDone ? 'line-through' : ''}`}>
+                          {match ? `${match.homeTeam} vs ${match.awayTeam}` : 'Partido eliminado'}
+                        </p>
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap text-[11px] text-slate-400">
+                          {match && (
+                            <span>{new Date(match.date + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}</span>
+                          )}
+                          {match?.competition && <span>· {match.competition}</span>}
+                          {pp.notes && <span className="italic truncate">· {pp.notes}</span>}
+                        </div>
+                      </div>
+                      {/* Jugador */}
+                      <button
+                        onClick={() => { if (player) onSelectPlayer(player.id); }}
+                        className={`flex-shrink-0 text-[11px] px-2 py-0.5 rounded-full ${
+                          player
+                            ? 'bg-slate-100 text-slate-600 hover:bg-slate-200 cursor-pointer'
+                            : 'bg-orange-50 text-orange-600 cursor-default'
+                        }`}
+                        title={player ? 'Ver ficha del jugador' : 'Jugador externo'}
+                      >
+                        {player?.name ?? pp.playerName ?? '—'}
+                      </button>
+                      {/* Responsable */}
+                      <span
+                        className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[8px] font-bold text-white"
+                        style={{ background: PRIMARY }}
+                        title={assignee?.name ?? 'Sin responsable'}
+                      >
+                        {assignee?.avatar ?? '?'}
+                      </span>
+                      {/* Estado + fecha */}
+                      <div className="flex-shrink-0 flex items-center gap-2">
+                        {statusBadge(task)}
+                        {task?.dueDate && !isDone && (
+                          <span className={`text-[11px] ${isOverdue ? 'text-red-500 font-semibold' : 'text-slate-400'}`}>
+                            {new Date(task.dueDate + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}{isOverdue ? ' ⚠' : ''}
+                          </span>
+                        )}
+                      </div>
+                      {/* Acciones */}
+                      {task && !isDone && onUpdateTask && (
+                        <button
+                          onClick={async () => {
+                            try {
+                              await Promise.resolve(onUpdateTask({ ...task, status: 'completada' }));
+                              showToast(`Postpartido completado ✓`);
+                            } catch {
+                              showToast('No se pudo guardar. Inténtalo de nuevo.', 'error');
+                            }
+                          }}
+                          title="Marcar como completado"
+                          className="flex-shrink-0 p-1 rounded-full text-slate-300 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                        >
+                          <CheckSquare className="w-4 h-4" />
+                        </button>
+                      )}
+                      {onDeletePostpartido && (
+                        <button
+                          onClick={() => setPpDeleteConfirm(pp)}
+                          title="Eliminar postpartido (y su tarea)"
+                          className="flex-shrink-0 p-1 rounded-full text-slate-300 hover:text-red-600 hover:bg-red-50 transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>);
+        })()}
       </main>
 
       {/* Bulk action toolbar */}
@@ -2327,6 +2581,155 @@ export function Dashboard({
           }}
         />
       )}
+
+      {/* ── Modal Nuevo postpartido ── */}
+      {showAddPostpartido && onCreatePostpartido && onAddGeneralTask && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setShowAddPostpartido(false)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
+              <h3 className="text-sm font-bold text-slate-800">Nuevo postpartido</h3>
+              <button onClick={() => setShowAddPostpartido(false)} aria-label="Cerrar" className="text-slate-400 hover:text-slate-600 p-1">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-4">
+              {/* Partido */}
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">⚽ Partido</label>
+                <select
+                  value={ppMatchId}
+                  onChange={e => setPpMatchId(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
+                >
+                  <option value="">— Elige un partido —</option>
+                  {[...scoutingMatches].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 200).map(m => (
+                    <option key={m.id} value={m.id}>
+                      {new Date(m.date + 'T12:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })} · {m.homeTeam} vs {m.awayTeam}{m.competition ? ` (${m.competition})` : ''}
+                    </option>
+                  ))}
+                </select>
+                {!ppNewMatchOpen ? (
+                  <button
+                    onClick={() => setPpNewMatchOpen(true)}
+                    className="mt-1 text-[11px] text-blue-600 hover:text-blue-700 font-semibold"
+                  >
+                    + El partido no está — añadirlo nuevo
+                  </button>
+                ) : (
+                  <div className="mt-2 bg-slate-50 border border-slate-200 rounded-lg p-2.5 space-y-2">
+                    <p className="text-[10px] text-slate-400">Se añadirá también a Captación → Partidos.</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input type="date" value={ppNewMatch.date} onChange={e => setPpNewMatch(f => ({ ...f, date: e.target.value }))}
+                        className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white" />
+                      <input placeholder="Competición (opc.)" value={ppNewMatch.competition} onChange={e => setPpNewMatch(f => ({ ...f, competition: e.target.value }))}
+                        className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input placeholder="Local" value={ppNewMatch.home} onChange={e => setPpNewMatch(f => ({ ...f, home: e.target.value }))}
+                        className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white" />
+                      <input placeholder="Visitante" value={ppNewMatch.away} onChange={e => setPpNewMatch(f => ({ ...f, away: e.target.value }))}
+                        className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white" />
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button onClick={() => setPpNewMatchOpen(false)} className="px-2.5 py-1.5 text-[11px] text-slate-500 hover:text-slate-700">Cancelar</button>
+                      <button
+                        onClick={createMatchInline}
+                        disabled={ppCreatingMatch}
+                        className="px-3 py-1.5 text-[11px] font-bold text-white bg-primary hover:bg-primary/90 rounded-lg disabled:opacity-50 transition-colors"
+                      >
+                        {ppCreatingMatch ? 'Creando…' : 'Crear partido'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {/* Jugador */}
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">👤 Jugador</label>
+                <select
+                  value={ppPlayerId}
+                  onChange={e => setPpPlayerId(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
+                >
+                  <option value="">— Elige un jugador —</option>
+                  {[...players].sort((a, b) => a.name.localeCompare(b.name)).map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                  <option value="__otro__">Otro (texto libre)…</option>
+                </select>
+                {ppPlayerId === '__otro__' && (
+                  <input
+                    autoFocus
+                    value={ppPlayerName}
+                    onChange={e => setPpPlayerName(e.target.value)}
+                    placeholder="Nombre del jugador"
+                    className="mt-2 w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  />
+                )}
+              </div>
+              {/* Responsable */}
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">✍️ Responsable (le aparece como tarea)</label>
+                <select
+                  value={ppAssigneeId}
+                  onChange={e => setPpAssigneeId(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
+                >
+                  {profiles.map(p => (
+                    <option key={p.id} value={p.id}>{p.avatar} {p.name.split(' ')[0]}</option>
+                  ))}
+                </select>
+              </div>
+              {/* Fecha límite + notas */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">📅 Fecha límite (opc.)</label>
+                  <input type="date" value={ppDue} onChange={e => setPpDue(e.target.value)}
+                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">💬 Notas (opc.)</label>
+                  <input value={ppNotes} onChange={e => setPpNotes(e.target.value)} placeholder="Ej. «Centrarse en fase defensiva»"
+                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200" />
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-3.5 border-t border-slate-100">
+              <button onClick={() => setShowAddPostpartido(false)} className="px-4 py-2 text-xs text-slate-500 hover:text-slate-700 rounded-lg">Cancelar</button>
+              <button
+                onClick={createPostpartido}
+                disabled={ppSaving}
+                className="px-5 py-2 text-xs font-bold text-white bg-primary hover:bg-primary/90 rounded-lg transition-colors disabled:opacity-60"
+              >
+                {ppSaving ? 'Creando…' : 'Crear postpartido'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmación de borrado de postpartido */}
+      <ConfirmModal
+        open={!!ppDeleteConfirm}
+        title="¿Eliminar este postpartido?"
+        message="Se eliminará también la tarea asociada del tablero. No se puede deshacer."
+        confirmLabel={ppDeleting ? 'Eliminando…' : 'Eliminar'}
+        variant="danger"
+        onConfirm={async () => {
+          if (!ppDeleteConfirm || !onDeletePostpartido || ppDeleting) return;
+          setPpDeleting(true);
+          try {
+            await onDeletePostpartido(ppDeleteConfirm);
+            showToast('Postpartido eliminado', 'info');
+          } catch {
+            showToast('No se pudo eliminar. Inténtalo de nuevo.', 'error');
+          } finally {
+            setPpDeleting(false);
+            setPpDeleteConfirm(null);
+          }
+        }}
+        onCancel={() => setPpDeleteConfirm(null)}
+      />
 
       {/* ── Editor "Mi estado" ── */}
       {statusEditorOpen && onUpdateMemberStatus && (() => {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, lazy } from 'react'
 import { useAuth } from './contexts/AuthContext'
-import type { Player, Task, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion, MemberStatus } from './types'
+import type { Player, Task, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion, MemberStatus, Postpartido } from './types'
 import * as db from './lib/db'
 import { supabase } from './lib/supabase'
 import type { Profile } from './contexts/AuthContext'
@@ -78,6 +78,9 @@ export default function App() {
   // Estado del equipo (panel "¿con qué está cada uno?")
   const [memberStatuses, setMemberStatuses] = useState<MemberStatus[]>([])
 
+  // Postpartidos
+  const [postpartidos, setPostpartidos] = useState<Postpartido[]>([])
+
   // Captación state
   const [scoutingPlayers, setScoutingPlayers] = useState<ScoutingPlayer[]>([])
   const [scoutingReports, setScoutingReports] = useState<ScoutingReport[]>([])
@@ -147,7 +150,8 @@ export default function App() {
         db.fetchMatchPlayers(),
         db.fetchBoulemaPeticiones().catch(() => [] as BoulemaPeticion[]),
         db.fetchMemberStatuses().catch(() => [] as MemberStatus[]),
-      ]).then(([cl, de, ng, sp, sr, sm, mp, bp, ms]) => {
+        db.fetchPostpartidos().catch(() => [] as Postpartido[]),
+      ]).then(([cl, de, ng, sp, sr, sm, mp, bp, ms, pp]) => {
         if (cancelled) return
         setClubs(cl as Club[])
         setDistEntries(de as DistributionEntry[])
@@ -158,6 +162,7 @@ export default function App() {
         setMatchPlayers(mp as ScoutingMatchPlayer[])
         setBoulemaPeticiones(bp as BoulemaPeticion[])
         setMemberStatuses(ms as MemberStatus[])
+        setPostpartidos(pp as Postpartido[])
       }).catch((err: unknown) => {
         // No bloquea la app: Distribución/Captación mostrarán listas vacías
         console.error('Error cargando datos secundarios:', err)
@@ -294,6 +299,8 @@ export default function App() {
         debouncedRefetch('tasks', () => db.fetchTasks().then((d) => setTasks(d)).catch(() => {})))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'member_status' }, () =>
         debouncedRefetch('member_status', () => db.fetchMemberStatuses().then((d) => setMemberStatuses(d)).catch(() => {})))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'postpartidos' }, () =>
+        debouncedRefetch('postpartidos', () => db.fetchPostpartidos().then((d) => setPostpartidos(d)).catch(() => {})))
       .subscribe()
     return () => {
       Object.values(timers).forEach(clearTimeout)
@@ -393,6 +400,23 @@ export default function App() {
   const handleRefreshProfiles = async () => {
     const pr = await db.fetchProfiles()
     setProfiles(pr as Profile[])
+  }
+
+  // ── Postpartidos ────────────────────────────────────────────
+  const handleCreatePostpartido = async (p: Omit<Postpartido, 'id' | 'createdAt'>) => {
+    const saved = await db.createPostpartido(p)
+    setPostpartidos(prev => [saved, ...prev])
+    return saved
+  }
+  const handleDeletePostpartido = async (pp: Postpartido) => {
+    // Borrar también su tarea asociada (la fila de postpartidos cae en cascada,
+    // pero limpiamos el estado local de ambas cosas)
+    if (pp.taskId) {
+      try { await db.deleteTask(pp.taskId) } catch { /* la tarea puede no existir ya */ }
+      setTasks(prev => prev.filter(t => t.id !== pp.taskId))
+    }
+    try { await db.deletePostpartido(pp.id) } catch { /* puede haber caído en cascada */ }
+    setPostpartidos(prev => prev.filter(x => x.id !== pp.id))
   }
 
   // Ocultar/mostrar un miembro en el panel de estado (solo admins)
@@ -769,6 +793,10 @@ export default function App() {
       memberStatuses={memberStatuses}
       onUpdateMemberStatus={handleUpdateMemberStatus}
       onToggleStatusHidden={profile.is_admin ? handleToggleStatusHidden : undefined}
+      postpartidos={postpartidos}
+      onCreatePostpartido={handleCreatePostpartido}
+      onDeletePostpartido={handleDeletePostpartido}
+      onAddScoutingMatch={handleAddScoutingMatch}
     />
   )
 }
