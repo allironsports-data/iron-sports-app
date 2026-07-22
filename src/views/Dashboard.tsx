@@ -8,7 +8,7 @@ import { useEscapeKey } from "../hooks/useEscapeKey";
 import { useDebounce } from "../hooks/useDebounce";
 import { isValidName, isValidBirthDate } from "../lib/validate";
 import logoImg from '../assets/logo.jpeg';
-import type { Player, Task, TaskLabel, PlayerActivity } from "../types";
+import type { Player, Task, TaskLabel, PlayerActivity, ScoutingMatch } from "../types";
 import { calcAge, clubsLabel } from "../types";
 import { createPlayerActivity, fetchActivitiesByAuthor } from "../lib/db";
 import type { Profile } from "../contexts/AuthContext";
@@ -64,6 +64,7 @@ interface Props {
   onDeleteGeneralTask?: (taskId: string) => void;
   onOverview?: () => void;
   onSelectProfile?: (profileId: string) => void;
+  scoutingMatches?: ScoutingMatch[];
 }
 
 // Birthday helpers
@@ -109,6 +110,7 @@ export function Dashboard({
   onDeleteGeneralTask,
   onOverview,
   onSelectProfile,
+  scoutingMatches = [],
 }: Props) {
   const { toasts, showToast, dismissToast } = useToast();
   // Internal tab: 'equipo' is handled locally; 'tareas'/'jugadores' are driven by `view` prop
@@ -116,6 +118,7 @@ export function Dashboard({
   const activeTab = internalTab ?? view;   // 'tareas' | 'jugadores' | 'equipo'
   const [search, setSearch] = useState("");
   const [showAddPlayer, setShowAddPlayer] = useState(false);
+  const [showMatchesToday, setShowMatchesToday] = useState(false);
   const [showAddGeneralTask, setShowAddGeneralTask] = useState(false);
 
   // Add event modal state
@@ -306,6 +309,22 @@ export function Dashboard({
   // Birthdays
   const birthdaysToday = visiblePlayers.filter((p) => isBirthdayToday(p.birthDate));
   const birthdaysSoon = visiblePlayers.filter((p) => isBirthdaySoon(p.birthDate, 7));
+
+  // ── Partidos de Captación asignados para hoy (pendientes de ver) ──
+  const matchesToday = scoutingMatches.filter(
+    (m) => m.date === todayStr && m.status !== 'visto' && m.assignedTo
+  );
+  const matchesTodayByScout = Object.values(
+    matchesToday.reduce((acc, m) => {
+      const key = m.assignedTo!;
+      if (!acc[key]) {
+        const p = profiles.find((pr) => pr.avatar === key);
+        acc[key] = { key, name: p?.name ?? key, matches: [] as ScoutingMatch[] };
+      }
+      acc[key].matches.push(m);
+      return acc;
+    }, {} as Record<string, { key: string; name: string; matches: ScoutingMatch[] }>)
+  ).sort((a, b) => a.name.localeCompare(b.name));
 
   // Available options for multi-filters (derived from visible players)
   const positionOptions = POSITION_CODES;
@@ -589,6 +608,66 @@ export function Dashboard({
                     return `${p.name} (${dayMonth})`;
                   }).join(", ")}
                 </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Partidos asignados para hoy (Captación) */}
+        {matchesToday.length > 0 && (
+          <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg overflow-hidden">
+            <button
+              onClick={() => setShowMatchesToday((v) => !v)}
+              className="w-full flex items-center gap-2 p-3 text-left hover:bg-blue-100/50 transition-colors"
+            >
+              <Eye className="w-4 h-4 text-blue-600 flex-shrink-0" />
+              <span className="text-sm font-semibold text-blue-800">
+                {matchesToday.length} partido{matchesToday.length !== 1 ? "s" : ""} para ver hoy
+              </span>
+              <span className="hidden sm:inline text-xs text-blue-600/70 font-normal truncate">
+                {matchesTodayByScout.map((g) => `${g.name.split(" ")[0]} (${g.matches.length})`).join(" · ")}
+              </span>
+              <ChevronDown className={`w-4 h-4 text-blue-600 ml-auto flex-shrink-0 transition-transform ${showMatchesToday ? "rotate-180" : ""}`} />
+            </button>
+            {showMatchesToday && (
+              <div className="border-t border-blue-200 divide-y divide-blue-100">
+                {matchesTodayByScout.map((g) => (
+                  <div key={g.key} className="px-3 py-2">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span
+                        className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0"
+                        style={{ background: PRIMARY }}
+                      >
+                        {g.key}
+                      </span>
+                      <span className="text-xs font-semibold text-slate-700">{g.name}</span>
+                      <span className="text-[11px] text-slate-400">
+                        {g.matches.length} partido{g.matches.length !== 1 ? "s" : ""}
+                      </span>
+                    </div>
+                    <div className="space-y-1 pl-7">
+                      {g.matches.map((m) => (
+                        <div key={m.id} className="flex items-center gap-2 text-xs text-slate-600 flex-wrap">
+                          <span className="truncate">{m.homeTeam} vs {m.awayTeam}</span>
+                          {m.competition && <span className="text-slate-400 flex-shrink-0">· {m.competition}</span>}
+                          <span className={`flex-shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${
+                            m.viewMode === "campo" ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"
+                          }`}>
+                            {m.viewMode === "campo" ? "Campo" : "Vídeo"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                {onViewChange && (
+                  <button
+                    onClick={() => onViewChange("captacion")}
+                    className="w-full text-center text-xs font-medium text-blue-700 hover:bg-blue-100/50 py-2 transition-colors"
+                  >
+                    Ver en Captación →
+                  </button>
+                )}
               </div>
             )}
           </div>

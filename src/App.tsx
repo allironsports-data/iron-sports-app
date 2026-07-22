@@ -742,6 +742,7 @@ export default function App() {
       onUpdateTask={handleUpdateTask}
       onDeleteGeneralTask={handleDeleteTask}
       onSelectProfile={(id) => setSelectedProfileId(id)}
+      scoutingMatches={scoutingMatches}
     />
   )
 }
