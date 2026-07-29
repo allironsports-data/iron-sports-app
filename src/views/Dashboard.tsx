@@ -225,8 +225,11 @@ export function Dashboard({
       setPpCompleteTarget(null);
       setPpVideoUrl('');
       showToast('Postpartido completado ✓');
-    } catch {
-      showToast('No se pudo guardar. Inténtalo de nuevo.', 'error');
+    } catch (err) {
+      // Mostramos el motivo real (p. ej. "column video_url does not exist"
+      // si falta la migración migration_postpartidos_video_url.sql)
+      const msg = err instanceof Error ? err.message : '';
+      showToast(msg ? `No se pudo guardar: ${msg}` : 'No se pudo guardar. Inténtalo de nuevo.', 'error');
     } finally {
       setPpCompleting(false);
     }
