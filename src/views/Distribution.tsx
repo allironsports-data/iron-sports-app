@@ -3556,8 +3556,14 @@ export function Distribution({
               setSelectedClubId(saved.id)
               setShowAddClub(false)
               showToast('Club creado correctamente')
-            } catch {
-              showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+            } catch (err: unknown) {
+              console.error('Error al crear club:', err)
+              const code = (err as { code?: string })?.code
+              if (code === '23505') {
+                showToast(`Ya existe un club llamado "${data.name}". Búscalo en la lista y edítalo en vez de crear uno nuevo.`, 'error')
+              } else {
+                showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+              }
             }
           }}
         />
