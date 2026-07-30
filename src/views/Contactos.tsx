@@ -398,7 +398,7 @@ export function Contactos({ onBack }: { onBack: () => void }) {
           <select
             value={roleFilter ?? ''}
             onChange={e => setRoleFilter(e.target.value || null)}
-            className={`pl-2 pr-1 py-1.5 text-xs border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-200 appearance-none max-w-[110px] ${roleFilter ? 'border-blue-300 text-blue-700 font-medium' : 'border-slate-200 text-slate-500'}`}
+            className="pl-2 pr-1 py-1.5 text-xs border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-200 appearance-none max-w-[110px] border-slate-200 text-slate-600"
           >
             <option value="">Rol…</option>
             {ALL_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
@@ -407,7 +407,7 @@ export function Contactos({ onBack }: { onBack: () => void }) {
           <select
             value={tierFilter ?? ''}
             onChange={e => setTierFilter(e.target.value || null)}
-            className={`pl-2 pr-1 py-1.5 text-xs border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-200 appearance-none max-w-[80px] ${tierFilter ? 'border-amber-300 text-amber-700 font-medium' : 'border-slate-200 text-slate-500'}`}
+            className="pl-2 pr-1 py-1.5 text-xs border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-200 appearance-none max-w-[80px] border-slate-200 text-slate-600"
           >
             <option value="">Tier…</option>
             <option value="Tier 1">T1</option>
