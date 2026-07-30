@@ -324,6 +324,7 @@ export interface BoulemaPeticion {
 export interface ScoutingMatch {
   id: string
   date: string              // "YYYY-MM-DD"
+  time?: string             // "HH:MM", opcional
   homeTeam: string
   awayTeam: string
   competition?: string

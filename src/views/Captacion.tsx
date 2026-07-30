@@ -3,7 +3,7 @@ import {
   Search, X, Plus, LogOut, Trash2, ChevronDown,
   FileText, Calendar, ChevronRight,
   TrendingUp, Eye, Maximize2, Minimize2, Pencil,
-  BarChart2, ClipboardList, Users, Inbox, Send, Target, Sun,
+  BarChart2, ClipboardList, Users, Inbox, Send, Target,
 } from 'lucide-react'
 import logoImg from '../assets/logo.jpeg'
 import type { ScoutingPlayer, ScoutingReport, ScoutingAssessment, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion } from '../types'
@@ -22,7 +22,7 @@ type ShowToast = (message: string, variant?: 'success' | 'error' | 'info') => vo
 
 // ── Constants ────────────────────────────────────────────────
 
-type CaptacionTab = 'jugadores' | 'conclusiones' | 'informes' | 'estadisticas' | 'partidos' | 'pretemporada' | 'boulema'
+type CaptacionTab = 'jugadores' | 'conclusiones' | 'informes' | 'estadisticas' | 'partidos' | 'boulema'
 
 const ASSESSMENT_CONFIG: Record<ScoutingAssessment, { label: string; bg: string; text: string; border: string }> = {
   Llamar:     { label: 'Llamar',     bg: 'bg-amber-100',   text: 'text-amber-700',   border: 'border-amber-200' },
@@ -101,10 +101,6 @@ const COMPETITION_OPTIONS = [
   'Ligue 1', 'Eredivisie', 'Serie A', 'Belgium 1', 'CESA',
 ]
 
-// ── Pretemporada page ───────────────────────────────────────
-// «Menores de 2002» → nacidos en 2002 o después
-const PRETEMPORADA_MIN_BIRTH_YEAR = 2002
-
 // ── Helpers ─────────────────────────────────────────────────
 
 function birthYearFromBirthdate(birthdate?: string): string {
@@ -121,6 +117,16 @@ function personaToName(persona: string | undefined, profiles: Profile[]): string
 function fmtDate(iso?: string): string {
   if (!iso) return '—'
   return new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+function todayISO(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+// Partido de hoy en adelante = aún no ha podido jugarse
+function isFutureMatch(dateStr: string): boolean {
+  return dateStr >= todayISO()
 }
 
 function relativeDate(iso?: string): string {
@@ -584,6 +590,7 @@ function MatchRow({
   const yr = match.date.slice(2, 4)
   const isVisto = match.status === 'visto'
   const isPendingForMe = match.assignedTo === currentProfile.avatar && !isVisto
+  const isFuture = isFutureMatch(match.date)
 
   const linkedPlayers = scoutingPlayers.filter(p => linkedPlayerIds.includes(p.id))
 
@@ -676,9 +683,16 @@ function MatchRow({
 
   return (
     <>
-      <tr className={`transition-colors ${isPendingForMe ? 'bg-amber-50/60 hover:bg-amber-50' : 'hover:bg-slate-50/60'}`}>
+      <tr className={`transition-colors ${
+        isPendingForMe ? 'bg-amber-50/60 hover:bg-amber-50' :
+        isFuture ? 'bg-blue-50/40 hover:bg-blue-50/70' :
+        'hover:bg-slate-50/60'
+      }`}>
         {/* Fecha */}
-        <td className="px-3 py-2 text-xs text-slate-500 whitespace-nowrap">{day} {mon} '{yr}</td>
+        <td className={`px-3 py-2 text-xs whitespace-nowrap ${isFuture ? 'text-blue-600 font-semibold' : 'text-slate-500'}`}>
+          {day} {mon} '{yr}
+          {match.time && <span className={`block text-[11px] font-normal ${isFuture ? 'text-blue-500' : 'text-slate-400'}`}>{match.time}</span>}
+        </td>
         {/* Local */}
         <td className="px-3 py-2 text-sm font-medium text-slate-800 whitespace-nowrap">{match.homeTeam}</td>
         {/* vs */}
@@ -1522,9 +1536,9 @@ interface Props {
 }
 
 // ── MatchFormPanel — isolated so keystrokes don't re-render the whole list ──
-type MatchFormState = { date: string; homeTeam: string; awayTeam: string; competition: string; assignedTo: string; viewMode: 'video' | 'campo'; notes: string }
+type MatchFormState = { date: string; time: string; homeTeam: string; awayTeam: string; competition: string; assignedTo: string; viewMode: 'video' | 'campo'; notes: string }
 function emptyMatchForm(): MatchFormState {
-  return { date: '', homeTeam: '', awayTeam: '', competition: '', assignedTo: '', viewMode: 'video', notes: '' }
+  return { date: '', time: '', homeTeam: '', awayTeam: '', competition: '', assignedTo: '', viewMode: 'video', notes: '' }
 }
 function MatchFormPanel({ initial, profiles, onSave, onCancel, showToast }: {
   initial?: ScoutingMatch
@@ -1534,7 +1548,7 @@ function MatchFormPanel({ initial, profiles, onSave, onCancel, showToast }: {
   showToast?: ShowToast
 }) {
   const [form, setForm] = useState<MatchFormState>(initial
-    ? { date: initial.date, homeTeam: initial.homeTeam, awayTeam: initial.awayTeam, competition: initial.competition ?? '', assignedTo: initial.assignedTo ?? '', viewMode: initial.viewMode ?? 'video', notes: initial.notes ?? '' }
+    ? { date: initial.date, time: initial.time ?? '', homeTeam: initial.homeTeam, awayTeam: initial.awayTeam, competition: initial.competition ?? '', assignedTo: initial.assignedTo ?? '', viewMode: initial.viewMode ?? 'video', notes: initial.notes ?? '' }
     : emptyMatchForm()
   )
   const [saving, setSaving] = useState(false)
@@ -1554,8 +1568,9 @@ function MatchFormPanel({ initial, profiles, onSave, onCancel, showToast }: {
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
       <h3 className="text-sm font-semibold text-slate-700">{initial ? 'Editar partido' : 'Nuevo partido'}</h3>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
         <FormRow label="Fecha"><input type="date" value={form.date} onChange={e => set('date', e.target.value)} className="field" /></FormRow>
+        <FormRow label="Hora (opcional)"><input type="time" value={form.time} onChange={e => set('time', e.target.value)} className="field" /></FormRow>
         <FormRow label="Competición">
           <input value={form.competition} onChange={e => set('competition', e.target.value)} list="competition-options" className="field" placeholder="Liga, Copa..." />
           <datalist id="competition-options">{COMPETITION_OPTIONS.map(c => <option key={c} value={c} />)}</datalist>
@@ -2126,10 +2141,6 @@ export function Captacion({
   const [matchStatusFilter, setMatchStatusFilter] = useState<'all' | 'visto' | 'pendiente'>('all')
   const [reportPersonaFilter, setReportPersonaFilter] = useState('all')
 
-  // ── pretemporada filters ──
-  const [preSearch, setPreSearch] = useState('')
-  const [preAssessFilter, setPreAssessFilter] = useState<ScoutingAssessment | 'sin' | 'all'>('all')
-
   // ── pagination ──
   const PAGE_SIZE = 50
   const [page, setPage] = useState(0)
@@ -2325,81 +2336,6 @@ export function Captacion({
     }
     return map
   }, [matchPlayers])
-
-  // ── PRETEMPORADA: jugadores nacidos ≥2002 vistos en partidos de Pretemporada ──
-  const pretemporadaData = useMemo(() => {
-    const preMatches = scoutingMatches.filter(m => m.competition === 'Pretemporada')
-    const preMatchIds = new Set(preMatches.map(m => m.id))
-    const matchById = new Map(preMatches.map(m => [m.id, m]))
-
-    // jugador → partidos de pretemporada en los que fue visto
-    // (columna «Vistos» + informes ligados a esos partidos)
-    const matchIdsByPlayer: Record<string, Set<string>> = {}
-    for (const mp of matchPlayers) {
-      if (!preMatchIds.has(mp.matchId)) continue
-      if (!matchIdsByPlayer[mp.playerId]) matchIdsByPlayer[mp.playerId] = new Set()
-      matchIdsByPlayer[mp.playerId].add(mp.matchId)
-    }
-    for (const r of scoutingReports) {
-      if (!r.matchId || !preMatchIds.has(r.matchId)) continue
-      if (!matchIdsByPlayer[r.playerId]) matchIdsByPlayer[r.playerId] = new Set()
-      matchIdsByPlayer[r.playerId].add(r.matchId)
-    }
-
-    const playerById = new Map(scoutingPlayers.map(p => [p.id, p]))
-    let sinFechaCount = 0
-    const players: { player: ScoutingPlayer; matches: ScoutingMatch[] }[] = []
-    for (const pid of Object.keys(matchIdsByPlayer)) {
-      const p = playerById.get(pid)
-      if (!p) continue
-      const year = p.birthdate ? parseInt(p.birthdate.slice(0, 4)) : NaN
-      if (Number.isNaN(year)) { sinFechaCount++; continue }
-      if (year < PRETEMPORADA_MIN_BIRTH_YEAR) continue
-      const ms = Array.from(matchIdsByPlayer[pid])
-        .map(id => matchById.get(id))
-        .filter((m): m is ScoutingMatch => !!m)
-        .sort((a, b) => b.date.localeCompare(a.date))
-      players.push({ player: p, matches: ms })
-    }
-    return { players, sinFechaCount, matchCount: preMatches.length }
-  }, [scoutingMatches, matchPlayers, scoutingReports, scoutingPlayers])
-
-  // agrupado por club y ordenado por estatus dentro de cada club
-  const pretemporadaGroups = useMemo(() => {
-    const q = preSearch.toLowerCase().trim()
-    const order: Record<string, number> = {}
-    ALL_ASSESSMENTS.forEach((a, i) => { order[a] = i })
-
-    const filteredPre = pretemporadaData.players.filter(({ player: p }) => {
-      if (preAssessFilter === 'sin') {
-        if (p.assessment) return false
-      } else if (preAssessFilter !== 'all' && p.assessment !== preAssessFilter) {
-        return false
-      }
-      if (q && !p.fullName.toLowerCase().includes(q) && !(p.team?.toLowerCase().includes(q))) return false
-      return true
-    })
-
-    const byClub: Record<string, { player: ScoutingPlayer; matches: ScoutingMatch[] }[]> = {}
-    for (const entry of filteredPre) {
-      const club = entry.player.team?.trim() || 'Sin equipo'
-      if (!byClub[club]) byClub[club] = []
-      byClub[club].push(entry)
-    }
-    const groups = Object.entries(byClub)
-      .sort((a, b) =>
-        ((a[0] === 'Sin equipo' ? 1 : 0) - (b[0] === 'Sin equipo' ? 1 : 0)) ||
-        a[0].localeCompare(b[0], 'es')
-      )
-      .map(([club, entries]) => ({
-        club,
-        entries: entries.slice().sort((a, b) =>
-          ((order[a.player.assessment ?? ''] ?? 99) - (order[b.player.assessment ?? ''] ?? 99)) ||
-          a.player.fullName.localeCompare(b.player.fullName, 'es')
-        ),
-      }))
-    return { groups, total: filteredPre.length }
-  }, [pretemporadaData, preSearch, preAssessFilter])
 
   // ── recent reports ──
   const reportPersonas = useMemo(() => {
@@ -2605,6 +2541,7 @@ export function Captacion({
   async function handleSaveMatch(form: MatchFormState) {
     const payload = {
       date: form.date,
+      time: form.time.trim() || undefined,
       homeTeam: form.homeTeam.trim(),
       awayTeam: form.awayTeam.trim(),
       competition: form.competition.trim() || undefined,
@@ -2732,7 +2669,6 @@ export function Captacion({
             { id: 'informes' as CaptacionTab, label: 'Informes recientes', labelMobile: 'Informes', icon: <FileText className="w-3.5 h-3.5" /> },
             { id: 'estadisticas' as CaptacionTab, label: 'Estadísticas', labelMobile: 'Stats', icon: <BarChart2 className="w-3.5 h-3.5" /> },
             { id: 'partidos' as CaptacionTab, label: 'Partidos', labelMobile: 'Partidos', icon: <ClipboardList className="w-3.5 h-3.5" /> },
-            { id: 'pretemporada' as CaptacionTab, label: 'Pretemporada', labelMobile: 'Pretemp.', icon: <Sun className="w-3.5 h-3.5" /> },
             { id: 'boulema' as CaptacionTab, label: 'Boulema', labelMobile: 'Boulema', icon: <Inbox className="w-3.5 h-3.5" /> },
           ]).map(t => (
             <button
@@ -3673,9 +3609,14 @@ export function Captacion({
                   const linkedPlayerIds = matchPlayersByMatchId[m.id] ?? []
                   const linkedPlayers = scoutingPlayers.filter(p => linkedPlayerIds.includes(p.id))
                   const isVisto = m.status === 'visto'
+                  const isFuture = isFutureMatch(m.date)
                   const day = m.date.slice(8); const mon = MONTHS_ES[parseInt(m.date.slice(5, 7)) - 1]; const yr = m.date.slice(2, 4)
                   return (
-                    <div key={m.id} className={`bg-white border rounded-xl p-3 space-y-2 ${isVisto ? 'border-slate-200' : 'border-amber-200 bg-amber-50/30'}`}>
+                    <div key={m.id} className={`bg-white border rounded-xl p-3 space-y-2 ${
+                      isVisto ? 'border-slate-200' :
+                      isFuture ? 'border-blue-200 bg-blue-50/30' :
+                      'border-amber-200 bg-amber-50/30'
+                    }`}>
                       {/* Header row */}
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
@@ -3683,7 +3624,9 @@ export function Captacion({
                             {m.homeTeam} <span className="text-slate-400 font-normal text-xs">vs</span> {m.awayTeam}
                           </div>
                           <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                            <span className="text-xs text-slate-400">{day} {mon} &apos;{yr}</span>
+                            <span className={`text-xs ${isFuture ? 'text-blue-600 font-semibold' : 'text-slate-400'}`}>
+                              {day} {mon} &apos;{yr}{m.time ? ` · ${m.time}` : ''}
+                            </span>
                             {m.competition && <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">{m.competition}</span>}
                             {m.viewMode === 'campo'
                               ? <span className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">🏟️ Campo</span>
@@ -3793,146 +3736,6 @@ export function Captacion({
                 </div>
               </div>
             </>
-          )}
-        </div>
-      )}
-
-      {/* ── PRETEMPORADA TAB ─────────────────────────────────── */}
-      {captTab === 'pretemporada' && (
-        <div className="flex-1 w-full max-w-6xl mx-auto px-3 sm:px-6 py-4 space-y-3">
-          <div>
-            <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
-              <Sun className="w-4 h-4 text-amber-500" /> Pretemporada
-            </h2>
-            <p className="text-xs text-slate-400">
-              Jugadores nacidos en {PRETEMPORADA_MIN_BIRTH_YEAR} o después vistos en {pretemporadaData.matchCount} partido{pretemporadaData.matchCount !== 1 ? 's' : ''} de Pretemporada, agrupados por club y ordenados por estatus
-            </p>
-          </div>
-
-          {/* Filtros */}
-          <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex flex-wrap items-center gap-2">
-            <div className="relative flex-1 min-w-[160px] max-w-xs">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-              <input
-                value={preSearch}
-                onChange={e => setPreSearch(e.target.value)}
-                placeholder="Buscar jugador, club..."
-                className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-              />
-              {preSearch && (
-                <button onClick={() => setPreSearch('')} aria-label="Limpiar búsqueda" className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-
-            {/* Estatus chips */}
-            <div className="flex items-center gap-1 flex-wrap">
-              <button
-                onClick={() => setPreAssessFilter('all')}
-                className={`px-2.5 py-1.5 sm:py-1 text-xs font-medium rounded-full border transition-colors ${
-                  preAssessFilter === 'all' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'
-                }`}
-              >
-                Todos
-              </button>
-              {ALL_ASSESSMENTS.map(a => {
-                const cfg = ASSESSMENT_CONFIG[a]
-                const active = preAssessFilter === a
-                return (
-                  <button
-                    key={a}
-                    onClick={() => setPreAssessFilter(active ? 'all' : a)}
-                    className={`px-2.5 py-1.5 sm:py-1 text-xs font-medium rounded-full border transition-colors ${
-                      active ? `${cfg.bg} ${cfg.text} ${cfg.border}` : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
-                    }`}
-                  >
-                    {cfg.label}
-                  </button>
-                )
-              })}
-              <button
-                onClick={() => setPreAssessFilter(preAssessFilter === 'sin' ? 'all' : 'sin')}
-                className={`px-2.5 py-1.5 sm:py-1 text-xs font-medium rounded-full border transition-colors ${
-                  preAssessFilter === 'sin' ? 'bg-slate-100 text-slate-600 border-slate-300' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
-                }`}
-              >
-                Sin valorar
-              </button>
-            </div>
-
-            <span className="text-xs text-slate-400 ml-auto">
-              {pretemporadaGroups.total} jugador{pretemporadaGroups.total !== 1 ? 'es' : ''} · {pretemporadaGroups.groups.length} club{pretemporadaGroups.groups.length !== 1 ? 'es' : ''}
-            </span>
-          </div>
-
-          {pretemporadaData.sinFechaCount > 0 && (
-            <p className="text-[11px] text-slate-400 italic">
-              {pretemporadaData.sinFechaCount} jugador{pretemporadaData.sinFechaCount !== 1 ? 'es' : ''} visto{pretemporadaData.sinFechaCount !== 1 ? 's' : ''} en pretemporada sin fecha de nacimiento (no se muestra{pretemporadaData.sinFechaCount !== 1 ? 'n' : ''})
-            </p>
-          )}
-
-          {pretemporadaGroups.groups.length === 0 ? (
-            <EmptyState
-              icon={<Sun className="w-10 h-10" />}
-              title="No hay jugadores que mostrar"
-              subtitle={pretemporadaData.matchCount === 0
-                ? 'No hay partidos con competición «Pretemporada» registrados'
-                : 'Ningún jugador nacido en 2002 o después coincide con los filtros'}
-            />
-          ) : (
-            <div className="space-y-3">
-              {pretemporadaGroups.groups.map(g => (
-                <div key={g.club} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-                  {/* Cabecera del club */}
-                  <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 border-b border-slate-100">
-                    <span className="text-sm font-semibold text-slate-800">{g.club}</span>
-                    <span className="text-xs bg-white border border-slate-200 text-slate-500 rounded-full px-1.5 py-0.5 font-semibold">{g.entries.length}</span>
-                  </div>
-                  {/* Jugadores */}
-                  <div className="divide-y divide-slate-50">
-                    {g.entries.map(({ player: p, matches: pms }) => {
-                      const cfg = p.assessment ? ASSESSMENT_CONFIG[p.assessment] : null
-                      const pos = [p.position1, p.position2].filter(Boolean).join(' · ')
-                      return (
-                        <div
-                          key={p.id}
-                          onClick={() => { setCaptTab('jugadores'); setPanelPlayerId(p.id); setShowAddPlayer(false); setShowEditPlayer(false) }}
-                          className="flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-1 px-4 py-2.5 hover:bg-slate-50 cursor-pointer transition-colors"
-                        >
-                          <div className="flex-1 min-w-[140px]">
-                            <div className="text-sm font-medium text-slate-800 leading-tight">{p.fullName}</div>
-                            <div className="text-[11px] text-slate-400">
-                              {birthYearFromBirthdate(p.birthdate)}
-                              {pos && <> · {pos}</>}
-                              {p.nationality && <> · {p.nationality}</>}
-                            </div>
-                          </div>
-                          {/* Partidos de pretemporada en los que fue visto */}
-                          <div className="hidden md:flex items-center gap-1 flex-wrap max-w-[45%]">
-                            {pms.slice(0, 2).map(m => (
-                              <span key={m.id} className="text-[11px] bg-slate-50 border border-slate-200 text-slate-500 px-1.5 py-0.5 rounded truncate max-w-[220px]">
-                                {m.homeTeam} vs {m.awayTeam} · {m.date.slice(8)} {MONTHS_ES[parseInt(m.date.slice(5, 7)) - 1]}
-                              </span>
-                            ))}
-                            {pms.length > 2 && (
-                              <span className="text-[11px] text-slate-400">+{pms.length - 2}</span>
-                            )}
-                          </div>
-                          {/* Estatus */}
-                          {cfg ? (
-                            <span className={`flex-shrink-0 text-xs font-medium px-2 py-0.5 rounded-full border ${cfg.bg} ${cfg.text} ${cfg.border}`}>{cfg.label}</span>
-                          ) : (
-                            <span className="flex-shrink-0 text-xs text-slate-400 px-2 py-0.5 rounded-full border border-slate-200 bg-white">Sin valorar</span>
-                          )}
-                          <ChevronRight className="w-3.5 h-3.5 text-slate-300 flex-shrink-0 hidden sm:block" />
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
           )}
         </div>
       )}

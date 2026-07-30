@@ -828,6 +828,7 @@ function dbToScoutingMatch(row: Record<string, unknown>): ScoutingMatch {
   return {
     id: row.id as string,
     date: row.date as string,
+    time: (row.time as string) ?? undefined,
     homeTeam: row.home_team as string,
     awayTeam: row.away_team as string,
     competition: (row.competition as string) ?? undefined,
@@ -865,6 +866,7 @@ export async function fetchScoutingMatches(): Promise<ScoutingMatch[]> {
 export async function createScoutingMatch(m: Omit<ScoutingMatch, 'id' | 'createdAt'>): Promise<ScoutingMatch> {
   const { data, error } = await supabase.from('scouting_matches').insert({
     date: m.date,
+    time: m.time ?? null,
     home_team: m.homeTeam,
     away_team: m.awayTeam,
     competition: m.competition ?? null,
@@ -880,6 +882,7 @@ export async function createScoutingMatch(m: Omit<ScoutingMatch, 'id' | 'created
 export async function updateScoutingMatch(m: ScoutingMatch): Promise<void> {
   const { error } = await supabase.from('scouting_matches').update({
     date: m.date,
+    time: m.time ?? null,
     home_team: m.homeTeam,
     away_team: m.awayTeam,
     competition: m.competition ?? null,
