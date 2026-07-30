@@ -83,7 +83,15 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
   const [resetId, setResetId] = useState<string | null>(null)
   const [newPassword, setNewPassword] = useState('')
   const [resetStatus, setResetStatus] = useState<'idle' | 'saving' | 'ok' | 'error'>('idle')
+  const [resetError, setResetError] = useState<string | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  const errMsg = (err: unknown): string =>
+    (typeof err === 'object' && err !== null && 'message' in err && typeof (err as { message?: unknown }).message === 'string')
+      ? (err as { message: string }).message
+      : 'Error desconocido'
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -123,21 +131,31 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
     try {
       const { error } = await supabase.rpc('update_user_password', { target_user_id: profileId, new_password: newPassword })
       if (error) throw error
+      setResetError(null)
       setResetStatus('ok')
       setTimeout(() => { setResetStatus('idle'); setResetId(null); setNewPassword('') }, 2000)
-    } catch {
+    } catch (err: unknown) {
+      console.error('update_user_password:', err)
+      setResetError(errMsg(err))
       setResetStatus('error')
-      setTimeout(() => setResetStatus('idle'), 3000)
+      setTimeout(() => setResetStatus('idle'), 6000)
     }
   }
 
   const handleDeleteUser = async (p: Profile) => {
+    setDeleteBusy(true)
+    setDeleteError(null)
     try {
       const { error } = await supabase.rpc('delete_user', { target_user_id: p.id })
       if (error) throw error
       setDeleteId(null)
       await onRefresh()
-    } catch { /* ignore */ }
+    } catch (err: unknown) {
+      console.error('delete_user:', err)
+      setDeleteError(errMsg(err))
+    } finally {
+      setDeleteBusy(false)
+    }
   }
 
   const handleToggleAdmin = async (p: Profile) => {
@@ -293,25 +311,37 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
 
                 {/* Reset password */}
                 {resetId === p.id && (
-                  <div className="mt-2 ml-0 sm:ml-12 flex items-center gap-2 flex-wrap bg-amber-50 border border-amber-200 rounded-lg p-2.5">
-                    <input type="text" value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
-                      className="flex-1 rounded border border-amber-200 px-2 py-1 text-sm font-mono" placeholder="Nueva contraseña" />
-                    <button onClick={() => handleResetPassword(p.id)} disabled={resetStatus === 'saving'}
-                      className="text-xs px-2.5 py-1 rounded bg-amber-500 text-white hover:bg-amber-600">
-                      {resetStatus === 'ok' ? '✓ Guardada' : resetStatus === 'saving' ? '...' : 'Guardar'}
-                    </button>
-                    <button onClick={() => setResetId(null)} className="text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>
-                    {resetStatus === 'error' && <span className="text-xs text-red-500">Error — usa Supabase Auth</span>}
+                  <div className="mt-2 ml-0 sm:ml-12 bg-amber-50 border border-amber-200 rounded-lg p-2.5 space-y-1.5">
+                    <p className="text-[11px] text-amber-700">
+                      La contraseña actual no se puede ver (solo se guarda cifrada). Aquí generas una <strong>nueva</strong> y se la compartes.
+                    </p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <input type="text" value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
+                        className="flex-1 rounded border border-amber-200 px-2 py-1 text-sm font-mono" placeholder="Nueva contraseña" />
+                      <button onClick={() => handleResetPassword(p.id)} disabled={resetStatus === 'saving'}
+                        className="text-xs px-2.5 py-1 rounded bg-amber-500 text-white hover:bg-amber-600">
+                        {resetStatus === 'ok' ? '✓ Guardada' : resetStatus === 'saving' ? '...' : 'Guardar'}
+                      </button>
+                      <button onClick={() => setResetId(null)} className="text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>
+                    </div>
+                    {resetStatus === 'error' && <span className="text-xs text-red-500 block">Error: {resetError ?? 'desconocido'}</span>}
                   </div>
                 )}
 
                 {/* Delete confirm */}
                 {deleteId === p.id && (
-                  <div className="mt-2 ml-0 sm:ml-12 flex items-center gap-2 flex-wrap bg-red-50 border border-red-200 rounded-lg p-2.5">
-                    <span className="text-xs text-red-700 flex-1">¿Eliminar a <strong>{p.name}</strong>? Esta acción no se puede deshacer.</span>
-                    <button onClick={() => handleDeleteUser(p)}
-                      className="text-xs px-2.5 py-1 rounded bg-red-500 text-white hover:bg-red-600">Eliminar</button>
-                    <button onClick={() => setDeleteId(null)} className="text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>
+                  <div className="mt-2 ml-0 sm:ml-12 bg-red-50 border border-red-200 rounded-lg p-2.5 space-y-1.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs text-red-700 flex-1">
+                        ¿Eliminar a <strong>{p.name}</strong>? Su cuenta desaparece; sus tareas, informes y comentarios se conservan sin autor. Esta acción no se puede deshacer.
+                      </span>
+                      <button onClick={() => handleDeleteUser(p)} disabled={deleteBusy}
+                        className="text-xs px-2.5 py-1 rounded bg-red-500 text-white hover:bg-red-600 disabled:opacity-50">
+                        {deleteBusy ? 'Eliminando…' : 'Eliminar'}
+                      </button>
+                      <button onClick={() => { setDeleteId(null); setDeleteError(null) }} className="text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>
+                    </div>
+                    {deleteError && <span className="text-xs text-red-600 block font-medium">Error: {deleteError}</span>}
                   </div>
                 )}
               </div>
