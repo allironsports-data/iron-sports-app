@@ -252,27 +252,17 @@ export function ClubDetail({
         {activeTab === 'jugadores' && (
           <div className="max-w-2xl space-y-3">
             <ClubInfoStrip club={club} />
-            {/* Status filter pills */}
-            <div className="flex gap-1.5 flex-wrap">
-              <button
-                onClick={() => setStatusFilter('todos')}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${statusFilter === 'todos' ? 'bg-slate-800 text-white' : 'bg-white border border-slate-200 text-slate-500'}`}
-              >
-                Todos ({clubNegs.length})
-              </button>
-              {NEG_STATUSES.filter(s => (countByStatus[s] ?? 0) > 0).map(s => {
-                const cfg = STATUS_CONFIG[s]
-                return (
-                  <button
-                    key={s}
-                    onClick={() => setStatusFilter(s)}
-                    className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${statusFilter === s ? cfg.color + ' ring-1 ring-current' : 'bg-white border border-slate-200 text-slate-500'}`}
-                  >
-                    {cfg.label} ({countByStatus[s]})
-                  </button>
-                )
-              })}
-            </div>
+            {/* Status filter */}
+            <select
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value as ClubNegotiation['status'] | 'todos')}
+              className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 text-slate-700"
+            >
+              <option value="todos">Todos ({clubNegs.length})</option>
+              {NEG_STATUSES.filter(s => (countByStatus[s] ?? 0) > 0).map(s => (
+                <option key={s} value={s}>{STATUS_CONFIG[s].label} ({countByStatus[s]})</option>
+              ))}
+            </select>
 
             {/* Add player button */}
             <div className="flex justify-end">
