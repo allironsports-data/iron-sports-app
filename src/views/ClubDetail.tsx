@@ -143,7 +143,9 @@ export function ClubDetail({
   const clubNegs = negotiations.filter(n => n.clubId === club.id)
 
   const filteredNegs = useMemo(() => {
-    if (statusFilter === 'todos') return clubNegs
+    // "Todos" oculta los cerrados por defecto (quedan como historial, visibles
+    // solo si se filtra explícitamente por "Cerrado" en el selector de estado).
+    if (statusFilter === 'todos') return clubNegs.filter(n => n.status !== 'cerrado')
     return clubNegs.filter(n => n.status === statusFilter)
   }, [clubNegs, statusFilter])
 

@@ -2945,12 +2945,15 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
             <p className="text-xs text-slate-400 mb-3 pb-3 border-b border-slate-100">Sin ficha de distribución activa</p>
           )}
 
-          {/* Negotiations list */}
-          {playerNegotiations.length === 0 ? (
-            <p className="text-xs text-slate-400">Sin negociaciones</p>
-          ) : (
+          {/* Negotiations list — los "cerrado" quedan como historial y no se muestran aquí por defecto */}
+          {(() => {
+            const visibleNegs = playerNegotiations.filter(n => n.status !== 'cerrado');
+            if (visibleNegs.length === 0) {
+              return <p className="text-xs text-slate-400">Sin negociaciones{playerNegotiations.length > 0 ? ' activas' : ''}</p>;
+            }
+            return (
             <div className="space-y-2">
-              {playerNegotiations
+              {visibleNegs
                 .slice()
                 .sort((a, b) => {
                   const order = ['negociando', 'interesado', 'ofrecido', 'pendiente', 'cerrado', 'descartado'];
@@ -2987,7 +2990,8 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
                   );
                 })}
             </div>
-          )}
+            );
+          })()}
         </div>
       )}
 

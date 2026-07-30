@@ -440,7 +440,9 @@ export function PlayerClubList({
 
   const q = clubSearch.trim().toLowerCase()
   const visible = withClub
-    .filter(x => statusFilter.length === 0 || statusFilter.includes(x.neg.status))
+    // Por defecto ("Todos") se ocultan los cerrados: quedan como historial,
+    // visibles solo si se marca "Cerrado" explícitamente en el filtro de Estado.
+    .filter(x => statusFilter.length > 0 ? statusFilter.includes(x.neg.status) : x.neg.status !== 'cerrado')
     .filter(x => gestorFilter.length === 0 || parseGestores(x.neg.aisManager).some(g => gestorFilter.includes(g)))
     .filter(x => !staleOnly || isStale(x.neg))
     .filter(x => leagueFilter.length === 0 || leagueFilter.includes(leagueKey(x.club)))
