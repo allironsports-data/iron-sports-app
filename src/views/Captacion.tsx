@@ -3,7 +3,7 @@ import {
   Search, X, Plus, LogOut, Trash2, ChevronDown,
   FileText, Calendar, ChevronRight,
   TrendingUp, Eye, Maximize2, Minimize2, Pencil,
-  BarChart2, ClipboardList, Users, Inbox, Send, Target,
+  BarChart2, ClipboardList, Users, Inbox, Send, Target, Sun,
 } from 'lucide-react'
 import logoImg from '../assets/logo.jpeg'
 import type { ScoutingPlayer, ScoutingReport, ScoutingAssessment, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion } from '../types'
@@ -22,7 +22,7 @@ type ShowToast = (message: string, variant?: 'success' | 'error' | 'info') => vo
 
 // ── Constants ────────────────────────────────────────────────
 
-type CaptacionTab = 'jugadores' | 'conclusiones' | 'informes' | 'estadisticas' | 'partidos' | 'boulema'
+type CaptacionTab = 'jugadores' | 'conclusiones' | 'informes' | 'estadisticas' | 'partidos' | 'pretemporada' | 'boulema'
 
 const ASSESSMENT_CONFIG: Record<ScoutingAssessment, { label: string; bg: string; text: string; border: string }> = {
   Llamar:     { label: 'Llamar',     bg: 'bg-amber-100',   text: 'text-amber-700',   border: 'border-amber-200' },
@@ -34,6 +34,9 @@ const ASSESSMENT_CONFIG: Record<ScoutingAssessment, { label: string; bg: string;
 }
 
 const ALL_ASSESSMENTS: ScoutingAssessment[] = ['Llamar', 'Seguir', 'Decidir', 'Basque', 'Visto', 'Descartado']
+
+// Pretemporada: solo interesan jugadores nacidos en este año o después
+const PRETEMPORADA_MIN_BIRTH_YEAR = 2002
 
 const POSITIONS_SCOUTING = [
   'Portero',
@@ -2141,6 +2144,10 @@ export function Captacion({
   const [matchStatusFilter, setMatchStatusFilter] = useState<'all' | 'visto' | 'pendiente'>('all')
   const [reportPersonaFilter, setReportPersonaFilter] = useState('all')
 
+  // ── pretemporada filters ──
+  const [preSearch, setPreSearch] = useState('')
+  const [preAssessFilter, setPreAssessFilter] = useState<ScoutingAssessment | 'all' | 'sin'>('all')
+
   // ── pagination ──
   const PAGE_SIZE = 50
   const [page, setPage] = useState(0)
@@ -2336,6 +2343,73 @@ export function Captacion({
     }
     return map
   }, [matchPlayers])
+
+  // ── pretemporada: jugadores vistos en partidos de Pretemporada, nacidos >= PRETEMPORADA_MIN_BIRTH_YEAR ──
+  const pretemporadaData = useMemo(() => {
+    const preMatches = scoutingMatches.filter(m => m.competition === 'Pretemporada')
+    const preMatchIds = new Set(preMatches.map(m => m.id))
+    const matchById = new Map(preMatches.map(m => [m.id, m]))
+
+    // playerId -> Set<matchId> (de partidos de pretemporada)
+    const matchIdsByPlayer: Record<string, Set<string>> = {}
+    for (const mp of matchPlayers) {
+      if (!preMatchIds.has(mp.matchId)) continue
+      if (!matchIdsByPlayer[mp.playerId]) matchIdsByPlayer[mp.playerId] = new Set()
+      matchIdsByPlayer[mp.playerId].add(mp.matchId)
+    }
+    for (const r of scoutingReports) {
+      if (!r.matchId || !preMatchIds.has(r.matchId)) continue
+      if (!matchIdsByPlayer[r.playerId]) matchIdsByPlayer[r.playerId] = new Set()
+      matchIdsByPlayer[r.playerId].add(r.matchId)
+    }
+
+    let sinFechaCount = 0
+    const players: { player: ScoutingPlayer; matches: ScoutingMatch[] }[] = []
+    for (const p of scoutingPlayers) {
+      const matchIds = matchIdsByPlayer[p.id]
+      if (!matchIds || matchIds.size === 0) continue
+      if (!p.birthdate) { sinFechaCount++; continue }
+      const birthYear = parseInt(p.birthdate.slice(0, 4))
+      if (isNaN(birthYear) || birthYear < PRETEMPORADA_MIN_BIRTH_YEAR) continue
+      const matches = Array.from(matchIds).map(id => matchById.get(id)).filter(Boolean) as ScoutingMatch[]
+      players.push({ player: p, matches })
+    }
+
+    return { players, sinFechaCount, matchCount: preMatches.length }
+  }, [scoutingMatches, matchPlayers, scoutingReports, scoutingPlayers])
+
+  const pretemporadaGroups = useMemo(() => {
+    const q = preSearch.toLowerCase().trim()
+    const filtered = pretemporadaData.players.filter(({ player }) => {
+      if (preAssessFilter === 'sin' && player.assessment) return false
+      if (preAssessFilter !== 'all' && preAssessFilter !== 'sin' && player.assessment !== preAssessFilter) return false
+      if (q && !player.fullName.toLowerCase().includes(q) && !(player.team?.toLowerCase().includes(q))) return false
+      return true
+    })
+
+    const byTeam: Record<string, typeof filtered> = {}
+    for (const entry of filtered) {
+      const key = entry.player.team?.trim() || 'Sin equipo'
+      if (!byTeam[key]) byTeam[key] = []
+      byTeam[key].push(entry)
+    }
+
+    const teamNames = Object.keys(byTeam).sort((a, b) => {
+      if (a === 'Sin equipo') return 1
+      if (b === 'Sin equipo') return -1
+      return a.localeCompare(b)
+    })
+
+    return teamNames.map(team => ({
+      team,
+      players: byTeam[team].sort((a, b) => {
+        const ai = a.player.assessment ? ALL_ASSESSMENTS.indexOf(a.player.assessment) : ALL_ASSESSMENTS.length
+        const bi = b.player.assessment ? ALL_ASSESSMENTS.indexOf(b.player.assessment) : ALL_ASSESSMENTS.length
+        if (ai !== bi) return ai - bi
+        return a.player.fullName.localeCompare(b.player.fullName)
+      }),
+    }))
+  }, [pretemporadaData, preSearch, preAssessFilter])
 
   // ── recent reports ──
   const reportPersonas = useMemo(() => {
@@ -2669,6 +2743,7 @@ export function Captacion({
             { id: 'informes' as CaptacionTab, label: 'Informes recientes', labelMobile: 'Informes', icon: <FileText className="w-3.5 h-3.5" /> },
             { id: 'estadisticas' as CaptacionTab, label: 'Estadísticas', labelMobile: 'Stats', icon: <BarChart2 className="w-3.5 h-3.5" /> },
             { id: 'partidos' as CaptacionTab, label: 'Partidos', labelMobile: 'Partidos', icon: <ClipboardList className="w-3.5 h-3.5" /> },
+            { id: 'pretemporada' as CaptacionTab, label: 'Pretemporada', labelMobile: 'Pretemp.', icon: <Sun className="w-3.5 h-3.5" /> },
             { id: 'boulema' as CaptacionTab, label: 'Boulema', labelMobile: 'Boulema', icon: <Inbox className="w-3.5 h-3.5" /> },
           ]).map(t => (
             <button
@@ -3736,6 +3811,128 @@ export function Captacion({
                 </div>
               </div>
             </>
+          )}
+        </div>
+      )}
+
+      {/* ── PRETEMPORADA TAB ──────────────────────────────────── */}
+      {captTab === 'pretemporada' && (
+        <div className="flex-1 w-full px-3 sm:px-6 py-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-800">Pretemporada</h2>
+              <p className="text-xs text-slate-400">
+                Jugadores nacidos en {PRETEMPORADA_MIN_BIRTH_YEAR} o después, vistos en {pretemporadaData.matchCount} partido{pretemporadaData.matchCount !== 1 ? 's' : ''} de pretemporada
+              </p>
+            </div>
+          </div>
+
+          {pretemporadaData.sinFechaCount > 0 && (
+            <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs text-amber-700">
+              <span className="text-amber-500">⚠️</span>
+              {pretemporadaData.sinFechaCount} jugador{pretemporadaData.sinFechaCount !== 1 ? 'es' : ''} visto{pretemporadaData.sinFechaCount !== 1 ? 's' : ''} en pretemporada sin fecha de nacimiento registrada (no se puede confirmar si cumple el criterio de edad)
+            </div>
+          )}
+
+          {/* Filtros */}
+          <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 min-w-[180px] max-w-xs">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+              <input
+                value={preSearch}
+                onChange={e => setPreSearch(e.target.value)}
+                placeholder="Buscar jugador, club..."
+                className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              />
+              {preSearch && (
+                <button onClick={() => setPreSearch('')} aria-label="Limpiar búsqueda" className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-1">
+              <button
+                onClick={() => setPreAssessFilter('all')}
+                className={`px-2.5 py-1.5 sm:py-1 text-xs font-medium rounded-full border transition-colors ${
+                  preAssessFilter === 'all' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
+                }`}
+              >
+                Todos
+              </button>
+              {ALL_ASSESSMENTS.map(a => (
+                <button
+                  key={a}
+                  onClick={() => setPreAssessFilter(a)}
+                  className={`px-2.5 py-1.5 sm:py-1 text-xs font-medium rounded-full border transition-colors ${
+                    preAssessFilter === a
+                      ? `${ASSESSMENT_CONFIG[a].bg} ${ASSESSMENT_CONFIG[a].text} ${ASSESSMENT_CONFIG[a].border}`
+                      : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
+                  }`}
+                >
+                  {ASSESSMENT_CONFIG[a].label}
+                </button>
+              ))}
+              <button
+                onClick={() => setPreAssessFilter('sin')}
+                className={`px-2.5 py-1.5 sm:py-1 text-xs font-medium rounded-full border transition-colors ${
+                  preAssessFilter === 'sin' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
+                }`}
+              >
+                Sin valorar
+              </button>
+            </div>
+            <span className="text-xs text-slate-400 ml-auto">
+              {pretemporadaData.players.length} jugador{pretemporadaData.players.length !== 1 ? 'es' : ''}
+            </span>
+          </div>
+
+          {pretemporadaData.players.length === 0 ? (
+            <EmptyState
+              icon={<Sun className="w-10 h-10" />}
+              title="No hay jugadores de pretemporada aún"
+              subtitle="Se mostrarán aquí los jugadores vistos en partidos marcados con competición «Pretemporada»"
+            />
+          ) : pretemporadaGroups.length === 0 ? (
+            <div className="text-center py-10 text-slate-400 text-sm">No hay jugadores que coincidan con los filtros</div>
+          ) : (
+            <div className="space-y-4">
+              {pretemporadaGroups.map(({ team, players }) => (
+                <div key={team} className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                  <div className="px-4 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                    <h3 className="text-xs font-semibold text-slate-700">{team}</h3>
+                    <span className="text-xs text-slate-400">{players.length} jugador{players.length !== 1 ? 'es' : ''}</span>
+                  </div>
+                  <div className="divide-y divide-slate-100">
+                    {players.map(({ player, matches }) => (
+                      <button
+                        key={player.id}
+                        onClick={() => { setCaptTab('jugadores'); setPanelPlayerId(player.id) }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50/60 transition-colors text-left"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-slate-800 truncate">{player.fullName}</div>
+                          <div className="text-xs text-slate-400 flex flex-wrap items-center gap-1.5 mt-0.5">
+                            {player.position1 && <span>{player.position1}</span>}
+                            {player.birthdate && <span>· {player.birthdate.slice(0, 4)}</span>}
+                            <span>· visto en {matches.length} partido{matches.length !== 1 ? 's' : ''}</span>
+                          </div>
+                        </div>
+                        {player.assessment ? (
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${ASSESSMENT_CONFIG[player.assessment].bg} ${ASSESSMENT_CONFIG[player.assessment].text} ${ASSESSMENT_CONFIG[player.assessment].border}`}>
+                            {ASSESSMENT_CONFIG[player.assessment].label}
+                          </span>
+                        ) : (
+                          <span className="text-xs font-medium px-2 py-0.5 rounded-full border bg-slate-50 text-slate-400 border-slate-200">
+                            Sin valorar
+                          </span>
+                        )}
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}
