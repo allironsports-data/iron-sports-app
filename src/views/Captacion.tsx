@@ -35,8 +35,17 @@ const ASSESSMENT_CONFIG: Record<ScoutingAssessment, { label: string; bg: string;
 
 const ALL_ASSESSMENTS: ScoutingAssessment[] = ['Llamar', 'Seguir', 'Decidir', 'Basque', 'Visto', 'Descartado']
 
+// Punto de color sólido para indicar estado en tablas compactas (más legible que el bg pastel de ASSESSMENT_CONFIG)
+const ASSESSMENT_DOT: Record<ScoutingAssessment, string> = {
+  Llamar: 'bg-amber-500', Seguir: 'bg-blue-500', Decidir: 'bg-orange-500',
+  Basque: 'bg-violet-500', Visto: 'bg-slate-400', Descartado: 'bg-red-500',
+}
+
 // Pretemporada: solo interesan jugadores nacidos en este año o después
 const PRETEMPORADA_MIN_BIRTH_YEAR = 2002
+
+// Estilo compartido para los selectores de filtro (look sobrio: sin globos/chips)
+const SELECT_CLS = "text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 text-slate-700 hover:border-slate-300 transition-colors"
 
 const POSITIONS_SCOUTING = [
   'Portero',
@@ -1383,27 +1392,12 @@ function ConclusionesTab({ players, reports, threshold, onThresholdChange, isAdm
         ) : (
           <div className="p-4">
             {/* Filtro de generación */}
-            <div className="flex flex-wrap items-center gap-1.5 mb-3">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Generación:</span>
-              <button
-                onClick={() => setGenFilter('all')}
-                className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
-                  genFilter === 'all' ? 'bg-violet-100 border-violet-300 text-violet-700' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'
-                }`}
-              >
-                Todas
-              </button>
-              {pitchGens.map(g => (
-                <button
-                  key={g}
-                  onClick={() => setGenFilter(f => f === g ? 'all' : g)}
-                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
-                    genFilter === g ? 'bg-violet-100 border-violet-300 text-violet-700' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'
-                  }`}
-                >
-                  {g}
-                </button>
-              ))}
+            <div className="flex items-center gap-1.5 mb-3">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Generación</span>
+              <select value={genFilter} onChange={e => setGenFilter(e.target.value)} className={SELECT_CLS}>
+                <option value="all">Todas</option>
+                {pitchGens.map(g => <option key={g} value={g}>{g}</option>)}
+              </select>
             </div>
 
             {/* Campo */}
@@ -2104,8 +2098,6 @@ export function Captacion({
   const [assessFilter, setAssessFilter] = useState<ScoutingAssessment | 'all'>('all')
   const [categoriaFilter, setCategoriaFilter] = useState<string>('all')
   const [posFilter, setPosFilter] = useState<string>('all')
-  const [showCatMenu, setShowCatMenu] = useState(false)
-  const [showPosMenu, setShowPosMenu] = useState(false)
   const [quickAssessId, setQuickAssessId] = useState<string | null>(null)
   // Vista de Jugadores: lista (con panel) o tabla de edición rápida
   const [jugadoresView, setJugadoresView] = useState<'lista' | 'edicion'>(
@@ -2147,6 +2139,11 @@ export function Captacion({
   // ── pretemporada filters ──
   const [preSearch, setPreSearch] = useState('')
   const [preAssessFilter, setPreAssessFilter] = useState<ScoutingAssessment | 'all' | 'sin'>('all')
+  const [preClubFilter, setPreClubFilter] = useState('all')
+  const [prePosFilter, setPrePosFilter] = useState('all')
+  const [preCatFilter, setPreCatFilter] = useState('all')
+  const [preSortKey, setPreSortKey] = useState<'name' | 'club' | 'pos' | 'year' | 'cat' | 'matches' | 'assess'>('assess')
+  const [preSortDir, setPreSortDir] = useState<1 | -1>(1)
 
   // ── pagination ──
   const PAGE_SIZE = 50
@@ -2378,38 +2375,57 @@ export function Captacion({
     return { players, sinFechaCount, matchCount: preMatches.length }
   }, [scoutingMatches, matchPlayers, scoutingReports, scoutingPlayers])
 
-  const pretemporadaGroups = useMemo(() => {
+  // Opciones de club/categoría presentes en los datos de pretemporada (para los selectores)
+  const preClubOptions = useMemo(() => {
+    const set = new Set<string>()
+    pretemporadaData.players.forEach(({ player }) => set.add(player.team?.trim() || 'Sin equipo'))
+    return Array.from(set).sort((a, b) => a === 'Sin equipo' ? 1 : b === 'Sin equipo' ? -1 : a.localeCompare(b))
+  }, [pretemporadaData])
+
+  const preCatOptions = useMemo(() => {
+    const set = new Set<string>()
+    pretemporadaData.players.forEach(({ player }) => { if (player.categoria) set.add(player.categoria) })
+    return Array.from(set).sort()
+  }, [pretemporadaData])
+
+  const pretemporadaFiltered = useMemo(() => {
     const q = preSearch.toLowerCase().trim()
     const filtered = pretemporadaData.players.filter(({ player }) => {
       if (preAssessFilter === 'sin' && player.assessment) return false
       if (preAssessFilter !== 'all' && preAssessFilter !== 'sin' && player.assessment !== preAssessFilter) return false
+      if (preClubFilter !== 'all' && (player.team?.trim() || 'Sin equipo') !== preClubFilter) return false
+      if (prePosFilter !== 'all' && player.position1 !== prePosFilter && player.position2 !== prePosFilter) return false
+      if (preCatFilter !== 'all' && player.categoria !== preCatFilter) return false
       if (q && !player.fullName.toLowerCase().includes(q) && !(player.team?.toLowerCase().includes(q))) return false
       return true
     })
 
-    const byTeam: Record<string, typeof filtered> = {}
-    for (const entry of filtered) {
-      const key = entry.player.team?.trim() || 'Sin equipo'
-      if (!byTeam[key]) byTeam[key] = []
-      byTeam[key].push(entry)
-    }
-
-    const teamNames = Object.keys(byTeam).sort((a, b) => {
-      if (a === 'Sin equipo') return 1
-      if (b === 'Sin equipo') return -1
-      return a.localeCompare(b)
+    const sorted = [...filtered].sort((a, b) => {
+      let av: string | number, bv: string | number
+      switch (preSortKey) {
+        case 'assess':
+          av = a.player.assessment ? ALL_ASSESSMENTS.indexOf(a.player.assessment) : ALL_ASSESSMENTS.length
+          bv = b.player.assessment ? ALL_ASSESSMENTS.indexOf(b.player.assessment) : ALL_ASSESSMENTS.length
+          break
+        case 'club': av = a.player.team ?? ''; bv = b.player.team ?? ''; break
+        case 'pos': av = a.player.position1 ?? ''; bv = b.player.position1 ?? ''; break
+        case 'year': av = a.player.birthdate?.slice(0, 4) ?? ''; bv = b.player.birthdate?.slice(0, 4) ?? ''; break
+        case 'cat': av = a.player.categoria ?? ''; bv = b.player.categoria ?? ''; break
+        case 'matches': av = a.matches.length; bv = b.matches.length; break
+        default: av = a.player.fullName; bv = b.player.fullName
+      }
+      if (av < bv) return -1 * preSortDir
+      if (av > bv) return 1 * preSortDir
+      return a.player.fullName.localeCompare(b.player.fullName)
     })
 
-    return teamNames.map(team => ({
-      team,
-      players: byTeam[team].sort((a, b) => {
-        const ai = a.player.assessment ? ALL_ASSESSMENTS.indexOf(a.player.assessment) : ALL_ASSESSMENTS.length
-        const bi = b.player.assessment ? ALL_ASSESSMENTS.indexOf(b.player.assessment) : ALL_ASSESSMENTS.length
-        if (ai !== bi) return ai - bi
-        return a.player.fullName.localeCompare(b.player.fullName)
-      }),
-    }))
-  }, [pretemporadaData, preSearch, preAssessFilter])
+    return sorted
+  }, [pretemporadaData, preSearch, preAssessFilter, preClubFilter, prePosFilter, preCatFilter, preSortKey, preSortDir])
+
+  function setPreSort(key: typeof preSortKey) {
+    if (preSortKey === key) setPreSortDir(d => (d === 1 ? -1 : 1))
+    else { setPreSortKey(key); setPreSortDir(1) }
+  }
 
   // ── recent reports ──
   const reportPersonas = useMemo(() => {
@@ -2666,8 +2682,6 @@ export function Captacion({
     }
   }
 
-  const closeCatMenu = () => setShowCatMenu(false)
-  const closePosMenu = () => setShowPosMenu(false)
 
   function closePanel() {
     setPanelPlayerId(null)
@@ -2792,98 +2806,35 @@ export function Captacion({
                 )}
               </div>
 
-              {/* Assessment chips */}
-              <div className="flex items-center gap-1 flex-wrap">
-                <button
-                  onClick={() => setAssessFilter('all')}
-                  className={`px-2.5 py-1.5 sm:py-1 text-xs font-medium rounded-full border transition-colors ${
-                    assessFilter === 'all' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'
-                  }`}
-                >
-                  Todos
-                </button>
-                {ALL_ASSESSMENTS.map(a => {
-                  const cfg = ASSESSMENT_CONFIG[a]
-                  const active = assessFilter === a
-                  return (
-                    <button
-                      key={a}
-                      onClick={() => setAssessFilter(active ? 'all' : a)}
-                      className={`px-2.5 py-1.5 sm:py-1 text-xs font-medium rounded-full border transition-colors ${
-                        active ? `${cfg.bg} ${cfg.text} ${cfg.border}` : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
-                      }`}
-                    >
-                      {a}
-                    </button>
-                  )
-                })}
-              </div>
+              {/* Assessment filter */}
+              <select
+                value={assessFilter}
+                onChange={e => setAssessFilter(e.target.value as ScoutingAssessment | 'all')}
+                className={SELECT_CLS}
+              >
+                <option value="all">Assessment: todos</option>
+                {ALL_ASSESSMENTS.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
 
-              {/* Categoria dropdown */}
-              <div className="relative">
-                <button
-                  onClick={() => { setShowCatMenu(!showCatMenu); setShowPosMenu(false) }}
-                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium border border-slate-200 rounded-lg bg-white hover:border-slate-400 transition-colors"
-                >
-                  {categoriaFilter === 'all' ? 'Categoría' : categoriaFilter}
-                  <ChevronDown className="w-3 h-3 text-slate-400" />
-                </button>
-                {showCatMenu && (
-                  <>
-                    <div className="fixed inset-0 z-10" onClick={closeCatMenu} />
-                    <div className="absolute top-full left-0 mt-1 z-20 bg-white border border-slate-200 rounded-lg shadow-lg py-1 min-w-[160px] max-h-64 overflow-y-auto">
-                      <button
-                        onClick={() => { setCategoriaFilter('all'); closeCatMenu() }}
-                        className={`w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 ${categoriaFilter === 'all' ? 'font-semibold text-blue-700' : 'text-slate-700'}`}
-                      >
-                        Todas las categorías
-                      </button>
-                      {allCategories.map(cat => (
-                        <button
-                          key={cat}
-                          onClick={() => { setCategoriaFilter(cat); closeCatMenu() }}
-                          className={`w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 ${categoriaFilter === cat ? 'font-semibold text-blue-700' : 'text-slate-700'}`}
-                        >
-                          {cat}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
+              {/* Categoria filter */}
+              <select
+                value={categoriaFilter}
+                onChange={e => setCategoriaFilter(e.target.value)}
+                className={SELECT_CLS}
+              >
+                <option value="all">Todas las categorías</option>
+                {allCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+              </select>
 
-              {/* Position dropdown */}
-              <div className="relative">
-                <button
-                  onClick={() => { setShowPosMenu(!showPosMenu); setShowCatMenu(false) }}
-                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium border border-slate-200 rounded-lg bg-white hover:border-slate-400 transition-colors"
-                >
-                  {posFilter === 'all' ? 'Posición' : posFilter}
-                  <ChevronDown className="w-3 h-3 text-slate-400" />
-                </button>
-                {showPosMenu && (
-                  <>
-                    <div className="fixed inset-0 z-10" onClick={closePosMenu} />
-                    <div className="absolute top-full left-0 mt-1 z-20 bg-white border border-slate-200 rounded-lg shadow-lg py-1 min-w-[180px] max-h-64 overflow-y-auto">
-                      <button
-                        onClick={() => { setPosFilter('all'); closePosMenu() }}
-                        className={`w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 ${posFilter === 'all' ? 'font-semibold text-blue-700' : 'text-slate-700'}`}
-                      >
-                        Todas las posiciones
-                      </button>
-                      {POSITIONS_SCOUTING.map(pos => (
-                        <button
-                          key={pos}
-                          onClick={() => { setPosFilter(pos); closePosMenu() }}
-                          className={`w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 ${posFilter === pos ? 'font-semibold text-blue-700' : 'text-slate-700'}`}
-                        >
-                          {pos}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
+              {/* Position filter */}
+              <select
+                value={posFilter}
+                onChange={e => setPosFilter(e.target.value)}
+                className={SELECT_CLS}
+              >
+                <option value="all">Todas las posiciones</option>
+                {POSITIONS_SCOUTING.map(pos => <option key={pos} value={pos}>{pos}</option>)}
+              </select>
 
               <div className="flex-1" />
               <span className="text-xs text-slate-400">{filtered.length} jugadores</span>
@@ -3152,25 +3103,16 @@ export function Captacion({
                 <FileText className="w-4 h-4 text-slate-400" />
                 Últimos informes ({recentReports.length})
               </h3>
-              {/* Persona filter chips */}
+              {/* Persona filter */}
               {reportPersonas.length > 0 && (
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <button
-                    onClick={() => setReportPersonaFilter('all')}
-                    className={`text-[11px] px-2 py-0.5 rounded-full font-medium transition-colors ${reportPersonaFilter === 'all' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
-                  >
-                    Todos
-                  </button>
-                  {reportPersonas.map(p => (
-                    <button
-                      key={p}
-                      onClick={() => setReportPersonaFilter(prev => prev === p ? 'all' : p)}
-                      className={`text-[11px] px-2 py-0.5 rounded-full font-mono font-semibold transition-colors ${reportPersonaFilter === p ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-                    >
-                      {p}
-                    </button>
-                  ))}
-                </div>
+                <select
+                  value={reportPersonaFilter}
+                  onChange={e => setReportPersonaFilter(e.target.value)}
+                  className={SELECT_CLS}
+                >
+                  <option value="all">Todos los scouts</option>
+                  {reportPersonas.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
               )}
             </div>
             <div className="space-y-2">
@@ -3616,23 +3558,15 @@ export function Captacion({
               </select>
 
               {/* Estado */}
-              <div className="flex items-center gap-1">
-                {(['all', 'visto', 'pendiente'] as const).map(s => (
-                  <button
-                    key={s}
-                    onClick={() => setMatchStatusFilter(s)}
-                    className={`px-2.5 py-1.5 sm:py-1 text-xs font-medium rounded-full border transition-colors ${
-                      matchStatusFilter === s
-                        ? s === 'visto' ? 'bg-emerald-500 text-white border-emerald-500'
-                          : s === 'pendiente' ? 'bg-amber-400 text-white border-amber-400'
-                          : 'bg-slate-800 text-white border-slate-800'
-                        : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
-                    }`}
-                  >
-                    {s === 'all' ? 'Todos' : s === 'visto' ? '✓ Vistos' : '⏳ Pendientes'}
-                  </button>
-                ))}
-              </div>
+              <select
+                value={matchStatusFilter}
+                onChange={e => setMatchStatusFilter(e.target.value as 'all' | 'visto' | 'pendiente')}
+                className={SELECT_CLS}
+              >
+                <option value="all">Todos los estados</option>
+                <option value="visto">Vistos</option>
+                <option value="pendiente">Pendientes</option>
+              </select>
 
               {/* Resultados */}
               <span className="text-xs text-slate-400 ml-auto">
@@ -3816,75 +3750,35 @@ export function Captacion({
       )}
 
       {/* ── PRETEMPORADA TAB ──────────────────────────────────── */}
-      {captTab === 'pretemporada' && (
+      {captTab === 'pretemporada' && (() => {
+        const preCols: { k: typeof preSortKey; l: string }[] = [
+          { k: 'name', l: 'Jugador' },
+          { k: 'club', l: 'Club' },
+          { k: 'pos', l: 'Posición' },
+          { k: 'year', l: 'Año' },
+          { k: 'cat', l: 'Categoría' },
+          { k: 'matches', l: 'Partidos' },
+          { k: 'assess', l: 'Estado' },
+        ]
+        const llamarCount = pretemporadaFiltered.filter(x => x.player.assessment === 'Llamar').length
+        const seguirCount = pretemporadaFiltered.filter(x => x.player.assessment === 'Seguir').length
+        const decidirCount = pretemporadaFiltered.filter(x => x.player.assessment === 'Decidir').length
+        const sinCount = pretemporadaFiltered.filter(x => !x.player.assessment).length
+        const clubCount = new Set(pretemporadaFiltered.map(x => x.player.team?.trim() || 'Sin equipo')).size
+        return (
         <div className="flex-1 w-full px-3 sm:px-6 py-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-800">Pretemporada</h2>
-              <p className="text-xs text-slate-400">
-                Jugadores nacidos en {PRETEMPORADA_MIN_BIRTH_YEAR} o después, vistos en {pretemporadaData.matchCount} partido{pretemporadaData.matchCount !== 1 ? 's' : ''} de pretemporada
-              </p>
-            </div>
+          <div>
+            <h2 className="text-sm font-semibold text-slate-800">Pretemporada</h2>
+            <p className="text-xs text-slate-400">
+              Jugadores nacidos en {PRETEMPORADA_MIN_BIRTH_YEAR} o después, vistos en {pretemporadaData.matchCount} partido{pretemporadaData.matchCount !== 1 ? 's' : ''} de pretemporada
+            </p>
           </div>
 
           {pretemporadaData.sinFechaCount > 0 && (
-            <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs text-amber-700">
-              <span className="text-amber-500">⚠️</span>
+            <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-xs text-amber-700">
               {pretemporadaData.sinFechaCount} jugador{pretemporadaData.sinFechaCount !== 1 ? 'es' : ''} visto{pretemporadaData.sinFechaCount !== 1 ? 's' : ''} en pretemporada sin fecha de nacimiento registrada (no se puede confirmar si cumple el criterio de edad)
             </div>
           )}
-
-          {/* Filtros */}
-          <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex flex-wrap items-center gap-2">
-            <div className="relative flex-1 min-w-[180px] max-w-xs">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-              <input
-                value={preSearch}
-                onChange={e => setPreSearch(e.target.value)}
-                placeholder="Buscar jugador, club..."
-                className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-              />
-              {preSearch && (
-                <button onClick={() => setPreSearch('')} aria-label="Limpiar búsqueda" className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-            <div className="flex flex-wrap items-center gap-1">
-              <button
-                onClick={() => setPreAssessFilter('all')}
-                className={`px-2.5 py-1.5 sm:py-1 text-xs font-medium rounded-full border transition-colors ${
-                  preAssessFilter === 'all' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
-                }`}
-              >
-                Todos
-              </button>
-              {ALL_ASSESSMENTS.map(a => (
-                <button
-                  key={a}
-                  onClick={() => setPreAssessFilter(a)}
-                  className={`px-2.5 py-1.5 sm:py-1 text-xs font-medium rounded-full border transition-colors ${
-                    preAssessFilter === a
-                      ? `${ASSESSMENT_CONFIG[a].bg} ${ASSESSMENT_CONFIG[a].text} ${ASSESSMENT_CONFIG[a].border}`
-                      : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
-                  }`}
-                >
-                  {ASSESSMENT_CONFIG[a].label}
-                </button>
-              ))}
-              <button
-                onClick={() => setPreAssessFilter('sin')}
-                className={`px-2.5 py-1.5 sm:py-1 text-xs font-medium rounded-full border transition-colors ${
-                  preAssessFilter === 'sin' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
-                }`}
-              >
-                Sin valorar
-              </button>
-            </div>
-            <span className="text-xs text-slate-400 ml-auto">
-              {pretemporadaData.players.length} jugador{pretemporadaData.players.length !== 1 ? 'es' : ''}
-            </span>
-          </div>
 
           {pretemporadaData.players.length === 0 ? (
             <EmptyState
@@ -3892,50 +3786,138 @@ export function Captacion({
               title="No hay jugadores de pretemporada aún"
               subtitle="Se mostrarán aquí los jugadores vistos en partidos marcados con competición «Pretemporada»"
             />
-          ) : pretemporadaGroups.length === 0 ? (
-            <div className="text-center py-10 text-slate-400 text-sm">No hay jugadores que coincidan con los filtros</div>
           ) : (
-            <div className="space-y-4">
-              {pretemporadaGroups.map(({ team, players }) => (
-                <div key={team} className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                  <div className="px-4 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                    <h3 className="text-xs font-semibold text-slate-700">{team}</h3>
-                    <span className="text-xs text-slate-400">{players.length} jugador{players.length !== 1 ? 'es' : ''}</span>
+            <>
+              {/* Estadísticas */}
+              <div className="flex border border-slate-200 rounded-lg bg-white overflow-hidden divide-x divide-slate-200">
+                {[
+                  ['Jugadores', pretemporadaFiltered.length],
+                  ['Clubes', clubCount],
+                  ['Llamar', llamarCount],
+                  ['Seguir', seguirCount],
+                  ['Decidir', decidirCount],
+                  ['Sin valorar', sinCount],
+                ].map(([l, n]) => (
+                  <div key={l as string} className="flex-1 px-4 py-2">
+                    <div className="text-lg font-bold text-slate-800 leading-tight">{n}</div>
+                    <div className="text-[11px] text-slate-400">{l}</div>
                   </div>
-                  <div className="divide-y divide-slate-100">
-                    {players.map(({ player, matches }) => (
-                      <button
-                        key={player.id}
-                        onClick={() => { setCaptTab('jugadores'); setPanelPlayerId(player.id) }}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50/60 transition-colors text-left"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium text-slate-800 truncate">{player.fullName}</div>
-                          <div className="text-xs text-slate-400 flex flex-wrap items-center gap-1.5 mt-0.5">
-                            {player.position1 && <span>{player.position1}</span>}
-                            {player.birthdate && <span>· {player.birthdate.slice(0, 4)}</span>}
-                            <span>· visto en {matches.length} partido{matches.length !== 1 ? 's' : ''}</span>
-                          </div>
-                        </div>
-                        {player.assessment ? (
-                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${ASSESSMENT_CONFIG[player.assessment].bg} ${ASSESSMENT_CONFIG[player.assessment].text} ${ASSESSMENT_CONFIG[player.assessment].border}`}>
-                            {ASSESSMENT_CONFIG[player.assessment].label}
-                          </span>
-                        ) : (
-                          <span className="text-xs font-medium px-2 py-0.5 rounded-full border bg-slate-50 text-slate-400 border-slate-200">
-                            Sin valorar
-                          </span>
-                        )}
-                        <ChevronRight className="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />
-                      </button>
-                    ))}
-                  </div>
+                ))}
+              </div>
+
+              {/* Filtros: todos selectores */}
+              <div className="bg-white border border-slate-200 rounded-lg px-3 py-2.5 flex flex-wrap items-center gap-2">
+                <div className="relative flex-1 min-w-[160px] max-w-xs">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                  <input
+                    value={preSearch}
+                    onChange={e => setPreSearch(e.target.value)}
+                    placeholder="Buscar jugador, club..."
+                    className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                  />
+                  {preSearch && (
+                    <button onClick={() => setPreSearch('')} aria-label="Limpiar búsqueda" className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
                 </div>
-              ))}
-            </div>
+                <select value={preClubFilter} onChange={e => setPreClubFilter(e.target.value)} className={SELECT_CLS}>
+                  <option value="all">Todos los clubes</option>
+                  {preClubOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <select value={prePosFilter} onChange={e => setPrePosFilter(e.target.value)} className={SELECT_CLS}>
+                  <option value="all">Todas las posiciones</option>
+                  {POSITIONS_SCOUTING.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+                {preCatOptions.length > 0 && (
+                  <select value={preCatFilter} onChange={e => setPreCatFilter(e.target.value)} className={SELECT_CLS}>
+                    <option value="all">Todas las categorías</option>
+                    {preCatOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                )}
+                <select
+                  value={preAssessFilter}
+                  onChange={e => setPreAssessFilter(e.target.value as ScoutingAssessment | 'all' | 'sin')}
+                  className={SELECT_CLS}
+                >
+                  <option value="all">Todos los estados</option>
+                  {ALL_ASSESSMENTS.map(a => <option key={a} value={a}>{a}</option>)}
+                  <option value="sin">Sin valorar</option>
+                </select>
+                <button
+                  onClick={() => { setPreSearch(''); setPreClubFilter('all'); setPrePosFilter('all'); setPreCatFilter('all'); setPreAssessFilter('all') }}
+                  className="text-xs text-slate-500 border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white hover:bg-slate-50 transition-colors"
+                >
+                  Limpiar filtros
+                </button>
+                <span className="text-xs text-slate-400 ml-auto">
+                  {pretemporadaFiltered.length} de {pretemporadaData.players.length}
+                </span>
+              </div>
+
+              {/* Tabla */}
+              <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200">
+                        {preCols.map(c => (
+                          <th
+                            key={c.k}
+                            onClick={() => setPreSort(c.k)}
+                            className={`text-left px-3 py-2 text-[10.5px] font-bold uppercase tracking-wide cursor-pointer select-none whitespace-nowrap hover:text-slate-700 ${preSortKey === c.k ? 'text-slate-700' : 'text-slate-400'}`}
+                          >
+                            {c.l}
+                            <span className={`ml-1 text-[9px] ${preSortKey === c.k ? 'opacity-100' : 'opacity-30'}`}>
+                              {preSortKey === c.k && preSortDir === -1 ? '▼' : '▲'}
+                            </span>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {pretemporadaFiltered.length === 0 ? (
+                        <tr>
+                          <td colSpan={preCols.length} className="text-center py-10 text-slate-400 text-sm">
+                            No hay jugadores que coincidan con los filtros
+                          </td>
+                        </tr>
+                      ) : pretemporadaFiltered.map(({ player, matches }) => (
+                        <tr
+                          key={player.id}
+                          onClick={() => { setCaptTab('jugadores'); setPanelPlayerId(player.id) }}
+                          className="cursor-pointer hover:bg-slate-50/60 transition-colors"
+                        >
+                          <td className="px-3 py-2 font-medium text-slate-800">{player.fullName}</td>
+                          <td className="px-3 py-2 text-slate-500">{player.team || '—'}</td>
+                          <td className="px-3 py-2 text-slate-500">{player.position1 ?? '—'}</td>
+                          <td className="px-3 py-2 text-slate-500 tabular-nums">{player.birthdate ? player.birthdate.slice(0, 4) : '—'}</td>
+                          <td className="px-3 py-2 text-slate-500">{player.categoria ?? '—'}</td>
+                          <td className="px-3 py-2 text-slate-500 tabular-nums">{matches.length}</td>
+                          <td className="px-3 py-2">
+                            {player.assessment ? (
+                              <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${ASSESSMENT_CONFIG[player.assessment].text}`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${ASSESSMENT_DOT[player.assessment]}`} />
+                                {player.assessment}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-400">
+                                <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                                Sin valorar
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
           )}
         </div>
-      )}
+        )
+      })()}
 
       {/* ── BOULEMA TAB ──────────────────────────────────────── */}
       {captTab === 'boulema' && (() => {

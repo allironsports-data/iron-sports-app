@@ -902,16 +902,7 @@ export function Distribution({
                   selected={yearFilters}
                   onChange={setYearFilters}
                 />
-                <button
-                  onClick={() => setActivityFilter(!activityFilter)}
-                  className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
-                    activityFilter
-                      ? 'bg-primary text-white border-primary'
-                      : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
-                  }`}
-                >
-                  Con actividad
-                </button>
+                <FilterCheck label="Con actividad" checked={activityFilter} onClick={() => setActivityFilter(!activityFilter)} />
                 {playersActiveFilters > 0 && (
                   <button
                     onClick={() => { setPosFilters([]); setYearFilters([]); setActivityFilter(false) }}
@@ -1286,26 +1277,15 @@ export function Distribution({
             )
             const clubsFilterControls = (
               <>
-              {/* ── Filter row 1: Tier chips + Confederation dropdown ── */}
+              {/* ── Filter row 1: Nivel + Confederation dropdown ── */}
               <div className="flex flex-wrap items-center gap-2 mb-2">
-                {/* Tier chips */}
-                <span className="text-xs text-slate-400 font-medium">Nivel:</span>
-                {(['A', 'B', 'C', 'D'] as LeagueTier[]).map(t => {
-                  const cfg = TIER_CONFIG[t]
-                  const active = tierFilter.includes(t)
-                  return (
-                    <button
-                      key={t}
-                      title={cfg.title}
-                      onClick={() => setTierFilter(prev => active ? prev.filter(x => x !== t) : [...prev, t])}
-                      className={`w-7 h-7 rounded-lg text-xs font-bold border transition-all ${
-                        active ? `${cfg.bg} ${cfg.text} ${cfg.border} ring-2 ring-offset-1 ring-current` : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300'
-                      }`}
-                    >
-                      {t}
-                    </button>
-                  )
-                })}
+                {/* Nivel (tier) */}
+                <MultiSelect
+                  label="Nivel"
+                  options={['A', 'B', 'C', 'D']}
+                  selected={tierFilter}
+                  onChange={v => setTierFilter(v as LeagueTier[])}
+                />
 
                 <div className="w-px h-5 bg-slate-200 mx-1" />
 
@@ -1450,53 +1430,23 @@ export function Distribution({
                 </div>
 
                 {/* Priority toggle */}
-                <button
-                  onClick={() => setPriorityOnly(v => !v)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
-                    priorityOnly ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-                  }`}
-                >
-                  <Star className="w-3.5 h-3.5" /> Prioritarios
-                </button>
+                <FilterCheck label={<><Star className="w-3.5 h-3.5" /> Prioritarios</>} checked={priorityOnly} onClick={() => setPriorityOnly(v => !v)} />
 
                 {/* Has needs toggle */}
-                <button
-                  onClick={() => setHasNeedsOnly(v => !v)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
-                    hasNeedsOnly ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-                  }`}
-                >
-                  <AlertCircle className="w-3.5 h-3.5" /> Con solicitudes
-                </button>
+                <FilterCheck label={<><AlertCircle className="w-3.5 h-3.5" /> Con solicitudes</>} checked={hasNeedsOnly} onClick={() => setHasNeedsOnly(v => !v)} />
 
                 {/* Has contact toggle */}
-                <button
-                  onClick={() => setHasContactOnly(v => !v)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
-                    hasContactOnly ? 'bg-green-100 text-green-700 border-green-200' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-                  }`}
-                >
-                  <Users className="w-3.5 h-3.5" /> Con contacto
-                </button>
+                <FilterCheck label={<><Users className="w-3.5 h-3.5" /> Con contacto</>} checked={hasContactOnly} onClick={() => setHasContactOnly(v => !v)} />
 
                 {/* Bandeja stale: propuestas paradas */}
-                <button
-                  onClick={() => setStaleOnly(v => !v)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
-                    staleOnly ? 'bg-orange-100 text-orange-700 border-orange-200' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-                  }`}
-                >
-                  ⏰ Paradas &gt;7d
-                </button>
+                <FilterCheck label="Paradas >7d" checked={staleOnly} onClick={() => setStaleOnly(v => !v)} />
 
                 {/* Filtro por encargado del club */}
                 <select
                   value={clubManagerFilter}
                   onChange={e => setClubManagerFilter(e.target.value)}
                   aria-label="Filtrar por encargado"
-                  className={`px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                    clubManagerFilter ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-                  }`}
+                  className="px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors cursor-pointer bg-white border-slate-200 text-slate-600 hover:border-slate-300"
                 >
                   <option value="">Encargado: todos</option>
                   {profiles.map(p => (
@@ -1510,9 +1460,7 @@ export function Distribution({
                   value={contactedFilter}
                   onChange={e => setContactedFilter(e.target.value)}
                   aria-label="Filtrar por contactado"
-                  className={`px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                    contactedFilter ? 'bg-green-100 text-green-700 border-green-200' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-                  }`}
+                  className="px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors cursor-pointer bg-white border-slate-200 text-slate-600 hover:border-slate-300"
                 >
                   <option value="">Contactado: todos</option>
                   <option value="yes">Contactados</option>
@@ -1853,27 +1801,15 @@ export function Distribution({
             const needsActiveFilters = needsTierFilter.length + (needsLeagueFilter ? 1 : 0) + (needsAgeFilter ? 1 : 0) + (positionFilter ? 1 : 0)
             const needsFilterControls = (
               <>
-              {/* Row 1: Tier chips + League select + Age select + clear */}
+              {/* Row 1: Nivel select + League select + Age select + clear */}
               <div className="flex flex-wrap items-center gap-2">
-                {/* Tier chips */}
-                {(['A', 'B', 'C', 'D'] as LeagueTier[]).map(t => {
-                  const cfg = TIER_CONFIG[t]
-                  const active = needsTierFilter.includes(t)
-                  return (
-                    <button
-                      key={t}
-                      onClick={() => setNeedsTierFilter(prev => active ? prev.filter(x => x !== t) : [...prev, t])}
-                      title={cfg.title}
-                      className={`flex items-center gap-1 px-2.5 py-1.5 border rounded-lg text-xs font-bold transition-colors ${
-                        active
-                          ? `${cfg.bg} ${cfg.text} ${cfg.border}`
-                          : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
-                      }`}
-                    >
-                      Tier {t}
-                    </button>
-                  )
-                })}
+                {/* Nivel (tier) */}
+                <MultiSelect
+                  label="Nivel"
+                  options={['A', 'B', 'C', 'D']}
+                  selected={needsTierFilter}
+                  onChange={v => setNeedsTierFilter(v as LeagueTier[])}
+                />
 
                 {/* League select */}
                 <select
@@ -1914,28 +1850,18 @@ export function Distribution({
                 )}
               </div>
 
-              {/* Row 2: Position chips */}
-              <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0">
-                <button
-                  onClick={() => setPositionFilter('')}
-                  className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                    !positionFilter ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
+              {/* Row 2: Posición */}
+              <div className="flex items-center gap-2">
+                <select
+                  value={positionFilter}
+                  onChange={e => setPositionFilter(e.target.value)}
+                  className="text-xs rounded-lg border border-slate-200 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-200 text-slate-600 bg-white"
                 >
-                  Todas las posiciones
-                </button>
-                {allNeedsPositions.map(pos => (
-                  <button
-                    key={pos}
-                    onClick={() => setPositionFilter(positionFilter === pos ? '' : pos)}
-                    title={positionEs(pos) || undefined}
-                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                      positionFilter === pos ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    {pos}
-                  </button>
-                ))}
+                  <option value="">Todas las posiciones</option>
+                  {allNeedsPositions.map(pos => (
+                    <option key={pos} value={pos} title={positionEs(pos) || undefined}>{pos}</option>
+                  ))}
+                </select>
               </div>
               </>
             )
@@ -2291,16 +2217,11 @@ export function Distribution({
 
             const pipelineActiveFilters = (pipelineMyOnly ? 1 : 0) + (pipelinePosFilter ? 1 : 0) + (pipelineGestorFilter ? 1 : 0) + (showClosedDeals ? 1 : 0)
             const pipelineMiCola = (
-              <button
+              <FilterCheck
+                label={pipelineMyOnly ? `Mis negs (${deals.length})` : 'Mis negs'}
+                checked={pipelineMyOnly}
                 onClick={() => { setPipelineMyOnly(v => !v); setPipelineGestorFilter('') }}
-                className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors ${
-                  pipelineMyOnly
-                    ? 'bg-primary text-white border-primary'
-                    : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-                }`}
-              >
-                👤 {pipelineMyOnly ? `Mis negs (${deals.length})` : 'Mis negs'}
-              </button>
+              />
             )
             const pipelineFilterControls = (
               <>
@@ -2323,16 +2244,7 @@ export function Distribution({
                     {allGestores.map(g => <option key={g} value={g}>{g}</option>)}
                   </select>
                 )}
-                <button
-                  onClick={() => setShowClosedDeals(v => !v)}
-                  className={`text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
-                    showClosedDeals
-                      ? 'bg-slate-800 text-white border-slate-800'
-                      : 'border-slate-200 text-slate-500 hover:border-slate-400'
-                  }`}
-                >
-                  {showClosedDeals ? 'Ocultar cerrados' : 'Ver cerrados'}
-                </button>
+                <FilterCheck label="Ver cerrados" checked={showClosedDeals} onClick={() => setShowClosedDeals(v => !v)} />
               </>
             )
             // En móvil siempre vista lista; el kanban es inusable a 375px
@@ -2388,16 +2300,7 @@ export function Distribution({
                         ? <><LayoutGrid className="w-3.5 h-3.5" /> Kanban</>
                         : <><List className="w-3.5 h-3.5" /> Lista</>}
                     </button>
-                    <button
-                      onClick={() => setShowClosedDeals(v => !v)}
-                      className={`text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
-                        showClosedDeals
-                          ? 'bg-slate-800 text-white border-slate-800'
-                          : 'border-slate-200 text-slate-500 hover:border-slate-400'
-                      }`}
-                    >
-                      {showClosedDeals ? 'Ocultar cerrados' : 'Ver cerrados'}
-                    </button>
+                    <FilterCheck label="Ver cerrados" checked={showClosedDeals} onClick={() => setShowClosedDeals(v => !v)} />
                   </div>
                 </div>
 
@@ -5131,6 +5034,22 @@ function ModalShell({ title, onClose, children, escDisabled = false }: { title: 
 // ── BULK ASSIGN MODAL ─────────────────────────────────────────
 // Accordion-style: shows all leagues with select-all checkbox per league.
 // Multiple leagues can be expanded and selected simultaneously.
+
+// ── FILTER CHECKBOX (toggle aséptico, sin fondo de color) ─────
+
+function FilterCheck({ label, checked, onClick }: { label: React.ReactNode; checked: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 bg-white hover:border-slate-300 transition-colors text-slate-600"
+    >
+      <span className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${checked ? 'bg-slate-800 border-slate-800' : 'border-slate-300'}`}>
+        {checked && <Check className="w-2.5 h-2.5 text-white" />}
+      </span>
+      {label}
+    </button>
+  )
+}
 
 // ── MULTI-SELECT DROPDOWN ─────────────────────────────────────
 

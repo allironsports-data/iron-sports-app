@@ -41,6 +41,7 @@ import {
   Activity,
   ExternalLink,
   RotateCcw,
+  Check,
 } from "lucide-react";
 import { POSITIONS, POSITION_CODES, positionLabel } from "../lib/positions";
 
@@ -1213,41 +1214,38 @@ export function Dashboard({
             )}
           </div>
 
-          {/* ── Stats comprimidos en chips (mantienen el filtro rápido) ── */}
-          <div className="flex items-center gap-1.5 flex-wrap mb-4">
-            <span className="text-[11px] text-slate-400 font-medium mr-0.5">Tareas:</span>
-            <button
-              onClick={() => setQuickFilter(q => q === 'overdue' ? null : 'overdue')}
-              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-xs font-semibold transition-colors ${
-                quickFilter === 'overdue' ? 'bg-red-50 border-red-400 text-red-700' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-              }`}
+          {/* ── Estadísticas + filtro rápido de tareas ── */}
+          <div className="flex border border-slate-200 rounded-lg bg-white overflow-hidden divide-x divide-slate-200 mb-3">
+            <div className="flex-1 px-3 py-2">
+              <div className={`text-lg font-bold leading-tight ${boardOverdue.length > 0 ? 'text-red-600' : 'text-slate-800'}`}>{boardOverdue.length}</div>
+              <div className="text-[11px] text-slate-400">Vencidas</div>
+            </div>
+            <div className="flex-1 px-3 py-2">
+              <div className="text-lg font-bold leading-tight text-slate-800">{boardDueToday.length}</div>
+              <div className="text-[11px] text-slate-400">Hoy</div>
+            </div>
+            <div className="flex-1 px-3 py-2">
+              <div className="text-lg font-bold leading-tight text-slate-800">{boardDueThisWeek.length}</div>
+              <div className="text-[11px] text-slate-400">Esta semana</div>
+            </div>
+            <div className="flex-1 px-3 py-2">
+              <div className={`text-lg font-bold leading-tight ${boardInProgress.length > 0 ? 'text-blue-600' : 'text-slate-800'}`}>{boardInProgress.length}</div>
+              <div className="text-[11px] text-slate-400">En progreso</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-[11px] text-slate-400 font-medium">Filtro rápido</span>
+            <select
+              value={quickFilter ?? 'none'}
+              onChange={e => setQuickFilter(e.target.value === 'none' ? null : e.target.value as typeof quickFilter)}
+              className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 text-slate-700"
             >
-              <span className={boardOverdue.length > 0 ? 'text-red-500 font-bold' : 'font-bold'}>{boardOverdue.length}</span> vencidas
-            </button>
-            <button
-              onClick={() => setQuickFilter(q => q === 'today' ? null : 'today')}
-              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-xs font-semibold transition-colors ${
-                quickFilter === 'today' ? 'bg-slate-100 border-slate-400 text-slate-800' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-              }`}
-            >
-              <span className="font-bold">{boardDueToday.length}</span> hoy
-            </button>
-            <button
-              onClick={() => setQuickFilter(q => q === 'week' ? null : 'week')}
-              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-xs font-semibold transition-colors ${
-                quickFilter === 'week' ? 'bg-slate-100 border-slate-400 text-slate-800' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-              }`}
-            >
-              <span className="font-bold">{boardDueThisWeek.length}</span> esta semana
-            </button>
-            <button
-              onClick={() => setQuickFilter(q => q === 'inprogress' ? null : 'inprogress')}
-              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-xs font-semibold transition-colors ${
-                quickFilter === 'inprogress' ? 'bg-blue-50 border-blue-400 text-blue-700' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-              }`}
-            >
-              <span className={boardInProgress.length > 0 ? 'text-blue-600 font-bold' : 'font-bold'}>{boardInProgress.length}</span> en progreso
-            </button>
+              <option value="none">Todas las tareas</option>
+              <option value="overdue">Vencidas ({boardOverdue.length})</option>
+              <option value="today">Hoy ({boardDueToday.length})</option>
+              <option value="week">Esta semana ({boardDueThisWeek.length})</option>
+              <option value="inprogress">En progreso ({boardInProgress.length})</option>
+            </select>
           </div>
 
           {/* Unified board */}
@@ -1446,22 +1444,18 @@ export function Dashboard({
 
           {/* Manager filter */}
           <div className="flex items-center gap-1.5 flex-wrap">
-            <button onClick={() => setManagerFilter("all")}
-              className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${managerFilter === "all" ? "text-white border-transparent" : "border-slate-200 text-slate-500 hover:text-slate-700 bg-white"}`}
-              style={managerFilter === "all" ? { background: PRIMARY } : {}}>
-              Todos ({visiblePlayers.length})
-            </button>
-            {profiles.map((m) => {
-              const count = visiblePlayers.filter((p) => p.managedBy.includes(m.id)).length;
-              if (count === 0) return null;
-              return (
-                <button key={m.id} onClick={() => setManagerFilter(managerFilter === m.id ? "all" : m.id)}
-                  className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${managerFilter === m.id ? "text-white border-transparent" : "border-slate-200 text-slate-500 hover:text-slate-700 bg-white"}`}
-                  style={managerFilter === m.id ? { background: PRIMARY } : {}}>
-                  {m.avatar} {m.name.split(" ")[0]} ({count})
-                </button>
-              );
-            })}
+            <select
+              value={managerFilter}
+              onChange={e => setManagerFilter(e.target.value)}
+              className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 text-slate-700"
+            >
+              <option value="all">Todos ({visiblePlayers.length})</option>
+              {profiles.map((m) => {
+                const count = visiblePlayers.filter((p) => p.managedBy.includes(m.id)).length;
+                if (count === 0) return null;
+                return <option key={m.id} value={m.id}>{m.avatar} {m.name.split(" ")[0]} ({count})</option>;
+              })}
+            </select>
           </div>
 
           {/* Select-all row */}
@@ -1492,16 +1486,7 @@ export function Dashboard({
             selected={yearFilters}
             onChange={setYearFilters}
           />
-          <button
-            onClick={() => setActivityFilter(v => !v)}
-            className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
-              activityFilter
-                ? 'bg-primary text-white border-primary'
-                : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
-            }`}
-          >
-            Con actividad
-          </button>
+          <FilterCheck label="Con actividad" checked={activityFilter} onClick={() => setActivityFilter(v => !v)} />
           {(posFilters.length > 0 || yearFilters.length > 0 || activityFilter) && (
             <button
               onClick={() => { setPosFilters([]); setYearFilters([]); setActivityFilter(false); }}
@@ -3033,6 +3018,21 @@ export function Dashboard({
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
+}
+
+/* ── FilterCheck: toggle aséptico, sin fondo de color ── */
+function FilterCheck({ label, checked, onClick }: { label: React.ReactNode; checked: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 bg-white hover:border-slate-300 transition-colors text-slate-600"
+    >
+      <span className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${checked ? 'bg-slate-800 border-slate-800' : 'border-slate-300'}`}>
+        {checked && <Check className="w-2.5 h-2.5 text-white" />}
+      </span>
+      {label}
+    </button>
+  )
 }
 
 /* ── MultiSelectFilter: dropdown checkbox filter ── */
