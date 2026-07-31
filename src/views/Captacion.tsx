@@ -1862,14 +1862,14 @@ function FirmasTab({
       out.push({ icon: '👤', tone: 'red', entryId: e.id, text: `${e.playerName} no tiene encargado asignado` })
     })
 
-    // incoherencia con el assessment de scouting
+    // incoherencia con el assessment de scouting.
+    // Nota: que en scouting esté en «Llamar» y aquí frío/templado es NORMAL —
+    // el proceso natural es: scouting decide «Llamar» → pasa a Firmar, y aquí
+    // vive su propio estatus. Solo avisamos del caso contradictorio (Descartado).
     active.forEach(e => {
       const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
-      if (!sp?.assessment) return
-      if (sp.assessment === 'Descartado') {
+      if (sp?.assessment === 'Descartado') {
         out.push({ icon: '🚫', tone: 'red', entryId: e.id, text: `${e.playerName}: en scouting está Descartado — ¿sacarlo del pipeline?` })
-      } else if (sp.assessment === 'Llamar' && e.status === 'frio') {
-        out.push({ icon: '🌡️', tone: 'amber', entryId: e.id, text: `${e.playerName}: en scouting está en «Llamar» pero aquí está frío — ¿subirlo?` })
       }
     })
 
