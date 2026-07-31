@@ -250,6 +250,22 @@ export default function App() {
           return prev
         })
       })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'captacion_firmas' }, (payload: { new: Record<string, unknown> }) => {
+        // Aviso a los encargados taggeados cuando otro añade un apunte o cambia el estatus
+        const row = payload.new as Record<string, unknown>
+        const managers = (row.managers as string[]) ?? []
+        if (!managers.includes(profile.id)) return
+        const comments = (row.comments as { text?: string; date?: string; author?: string; authorId?: string; kind?: string }[]) ?? []
+        const last = comments[comments.length - 1]
+        if (!last?.date) return
+        if (last.authorId === profile.id) return                       // mis propios cambios no me avisan
+        if (Date.now() - new Date(last.date).getTime() > 60000) return // solo actividad recién añadida
+        const who = (last.author ?? 'Alguien').split(' ')[0]
+        const playerName = (row.player_name as string) ?? 'jugador'
+        const preview = (last.text ?? '').length > 45 ? (last.text ?? '').slice(0, 45) + '…' : (last.text ?? '')
+        const what = last.kind === 'estatus' ? `cambió el estatus (${preview})` : `añadió: "${preview}"`
+        addNotification(`Firmar · ${playerName}: ${who} ${what}`, 'task_new')
+      })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'club_negotiations' }, (payload: { new: Record<string, unknown> }) => {
         const row = payload.new as Record<string, unknown>
         const status = (row.status as string) ?? 'pendiente'

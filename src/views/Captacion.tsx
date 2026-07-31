@@ -1745,6 +1745,24 @@ function FirmasTab({
   const [selZone, setSelZone] = useState<string>(() => sessionStorage.getItem('capt_firmas_zone') ?? '')
   useEffect(() => { if (selZone) sessionStorage.setItem('capt_firmas_zone', selZone) }, [selZone])
 
+  // Renombrar una zona entera (actualiza todas sus entradas)
+  const [renamingZone, setRenamingZone] = useState(false)
+  const [renameValue, setRenameValue] = useState('')
+  const renameZone = async (from: string) => {
+    const v = renameValue.trim()
+    setRenamingZone(false)
+    if (!v || v === from) return
+    const list = entries.filter(e => e.zone === from)
+    try {
+      for (const e of list) await onUpdate({ ...e, zone: v })
+      setSelZone(v)
+      showToast(`Zona «${from}» renombrada a «${v}» (${list.length} jugadores)`)
+    } catch (err) {
+      console.error(err)
+      showToast('No se pudo renombrar la zona completa', 'error')
+    }
+  }
+
   // ── panel y modales ──
   const [panelId, setPanelId] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
@@ -1812,13 +1830,6 @@ function FirmasTab({
   const filtered = useMemo(() => entries.filter(e => matchesFilters(e)), [entries, matchesFilters])
   // Igual pero sin filtro de zona — alimenta el selector de zonas
   const filteredNoZone = useMemo(() => entries.filter(e => matchesFilters(e, true)), [entries, matchesFilters])
-
-  const byStatus = useMemo(() => {
-    const m: Record<FirmasStatus, FirmasEntry[]> = { llamar: [], caliente: [], templado: [], frio: [], decidir: [], firmado: [] }
-    filtered.forEach(e => m[e.status].push(e))
-    FIRMAS_STATUSES.forEach(s => m[s].sort((a, b) => a.sortPos - b.sortPos || a.playerName.localeCompare(b.playerName)))
-    return m
-  }, [filtered])
 
   const overdueCount = useMemo(() => entries.filter(e => firmasAging(e)?.overdue).length, [entries])
 
@@ -2078,28 +2089,6 @@ function FirmasTab({
             </div>
           )}
 
-          {/* Estadísticas */}
-          <div className="flex border border-slate-200 rounded-lg bg-white overflow-x-auto divide-x divide-slate-200 scrollbar-none">
-            <div className="flex-1 min-w-[80px] px-3 py-2">
-              <div className="text-lg font-bold text-slate-800 leading-tight">{filtered.length}</div>
-              <div className="text-[11px] text-slate-400">Jugadores</div>
-            </div>
-            {FIRMAS_STATUSES.map(s => (
-              <div key={s} className="flex-1 min-w-[74px] px-3 py-2">
-                <div className={`text-lg font-bold leading-tight ${FIRMAS_CONFIG[s].text}`}>{byStatus[s].length}</div>
-                <div className="text-[11px] text-slate-400">{FIRMAS_CONFIG[s].label}</div>
-              </div>
-            ))}
-            <button
-              onClick={() => setOverdueOnly(v => !v)}
-              className={`flex-1 min-w-[96px] px-3 py-2 text-left transition-colors ${overdueOnly ? 'bg-red-50' : 'hover:bg-slate-50'}`}
-              title="Caliente sin tocar +10 días, templado +50, frío +90"
-            >
-              <div className={`text-lg font-bold leading-tight ${overdueCount > 0 ? 'text-red-600' : 'text-slate-300'}`}>{overdueCount}</div>
-              <div className={`text-[11px] ${overdueOnly ? 'text-red-500 font-semibold' : 'text-slate-400'}`}>⚠ Desatendidos</div>
-            </button>
-          </div>
-
           {/* Filtros + toggle de vista */}
           <div className="bg-white border border-slate-200 rounded-lg px-3 py-2.5 flex flex-wrap items-center gap-2">
             <div className="relative flex-1 min-w-[150px] max-w-xs">
@@ -2134,6 +2123,15 @@ function FirmasTab({
                 {managerOptions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             )}
+            <button
+              onClick={() => setOverdueOnly(v => !v)}
+              className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
+                overdueOnly ? 'bg-red-50 border-red-200 text-red-600 font-semibold' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+              }`}
+              title="Desatendidos: caliente sin tocar +10 días, templado +50, frío +90"
+            >
+              ⚠ <span className="hidden sm:inline">Desatendidos</span> {overdueCount}
+            </button>
             {(search || zoneFilter !== 'all' || statusFilter !== 'all' || managerFilter !== 'all' || overdueOnly) && (
               <button
                 onClick={clearFilters}
@@ -2219,7 +2217,31 @@ function FirmasTab({
                   <div>
                     <div className="flex items-center gap-2 mb-2">
                       <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                      <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">{activeZone}</span>
+                      {renamingZone ? (
+                        <span className="flex items-center gap-1.5">
+                          <input
+                            value={renameValue}
+                            onChange={e => setRenameValue(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') void renameZone(activeZone); if (e.key === 'Escape') setRenamingZone(false) }}
+                            autoFocus
+                            className="text-xs font-bold text-slate-700 border border-blue-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                          />
+                          <button onClick={() => void renameZone(activeZone)} className="text-[11px] font-medium text-primary hover:underline">Guardar</button>
+                          <button onClick={() => setRenamingZone(false)} className="text-[11px] text-slate-400 hover:text-slate-600">Cancelar</button>
+                        </span>
+                      ) : (
+                        <>
+                          <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">{activeZone}</span>
+                          <button
+                            onClick={() => { setRenameValue(activeZone); setRenamingZone(true) }}
+                            className="p-0.5 text-slate-300 hover:text-slate-500"
+                            title="Renombrar zona (se aplica a todos sus jugadores)"
+                            aria-label="Renombrar zona"
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                        </>
+                      )}
                       <span className="text-[11px] text-slate-400">{zoneEntries.length} jugador{zoneEntries.length !== 1 ? 'es' : ''}</span>
                     </div>
                     {statusBoard(zoneEntries)}
@@ -2370,6 +2392,7 @@ function FirmasTab({
 }
 
 // ── Panel de detalle de una entrada del pipeline ─────────────
+// Media pantalla en escritorio, dos columnas: datos | historial.
 function FirmasDetailPanel({
   entry, profiles, currentProfile, scoutingPlayers, spById, reportsByPlayer,
   zones, headerHeight, onClose, onPatch, onChangeStatus, onOpenScoutingPlayer, onRequestDelete,
@@ -2401,6 +2424,10 @@ function FirmasDetailPanel({
   const [newComment, setNewComment] = useState('')
   const [commentKind, setCommentKind] = useState<string>('nota')
   const [commentOutcome, setCommentOutcome] = useState<'contesto' | 'no_contesto' | null>(null)
+
+  // ── edición de apuntes ──
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
+  const [editingCommentText, setEditingCommentText] = useState('')
 
   // ── próxima acción ──
   const [editingAction, setEditingAction] = useState(false)
@@ -2459,6 +2486,14 @@ function FirmasDetailPanel({
     void onPatch(entry, { comments: entry.comments.filter(c => c.id !== id) })
   }
 
+  const saveCommentEdit = () => {
+    const v = editingCommentText.trim()
+    const id = editingCommentId
+    setEditingCommentId(null)
+    if (!v || !id) return
+    void onPatch(entry, { comments: entry.comments.map(c => c.id === id ? { ...c, text: v } : c) })
+  }
+
   const saveAction = () => {
     if (!actionLabel.trim() && !actionDate) { setEditingAction(false); return }
     void onPatch(entry, {
@@ -2485,269 +2520,223 @@ function FirmasDetailPanel({
     setActionLabel(''); setActionDate('')
   }
 
-  const sortedComments = [...entry.comments].sort((a, b) => a.date.localeCompare(b.date))
+  // recientes primero
+  const sortedComments = [...entry.comments].sort((a, b) => b.date.localeCompare(a.date))
   const actionAssigneeProfile = entry.nextActionAssignee ? profiles.find(p => p.id === entry.nextActionAssignee) : undefined
   const actionOverdue = !!entry.nextActionDate && entry.nextActionDate < todayISO()
+
+  const LABEL_CLS = 'text-[10px] font-bold text-slate-400 uppercase tracking-wide'
 
   return (
     <>
       <div className="fixed inset-x-0 bottom-0 bg-black/20 z-30" style={{ top: headerHeight }} onClick={onClose} />
       <div
-        className="fixed right-0 w-full sm:w-[440px] bg-white shadow-2xl z-40 flex flex-col border-l border-slate-200"
+        className="fixed right-0 w-full lg:w-[55%] xl:w-1/2 max-w-[880px] bg-white shadow-2xl z-40 flex flex-col border-l border-slate-200"
         style={{ top: headerHeight, height: `calc(100vh - ${headerHeight}px)` }}
       >
-        {/* header */}
-        <div className="flex items-start gap-2 px-4 py-3 border-b border-slate-200">
-          <div className="flex-1 min-w-0">
-            {editingName ? (
-              <input
-                value={name}
-                onChange={e => setName(e.target.value)}
-                onBlur={saveName}
-                onKeyDown={e => { if (e.key === 'Enter') saveName() }}
-                autoFocus
-                className="w-full text-base font-bold text-slate-800 border-b border-blue-300 focus:outline-none"
-              />
-            ) : (
-              <button onClick={() => setEditingName(true)} className="group flex items-center gap-1.5 text-left">
-                <span className="text-base font-bold text-slate-800 leading-tight">{entry.playerName}</span>
-                <Pencil className="w-3 h-3 text-slate-300 group-hover:text-slate-500 flex-shrink-0" />
-              </button>
-            )}
-            <div className="mt-1 flex items-center gap-2 flex-wrap">
-              <FirmasStatusChip status={entry.status} onChange={s => onChangeStatus(entry, s)} size="md" />
+        {/* header compacto */}
+        <div className="flex items-center gap-2.5 px-4 py-2.5 border-b border-slate-200">
+          {editingName ? (
+            <input
+              value={name}
+              onChange={e => setName(e.target.value)}
+              onBlur={saveName}
+              onKeyDown={e => { if (e.key === 'Enter') saveName() }}
+              autoFocus
+              className="text-base font-bold text-slate-800 border-b border-blue-300 focus:outline-none min-w-0 flex-shrink"
+            />
+          ) : (
+            <button onClick={() => setEditingName(true)} className="group flex items-center gap-1.5 text-left min-w-0 flex-shrink">
+              <span className="text-base font-bold text-slate-800 leading-tight truncate">{entry.playerName}</span>
+              <Pencil className="w-3 h-3 text-slate-300 group-hover:text-slate-500 flex-shrink-0" />
+            </button>
+          )}
+          <FirmasStatusChip status={entry.status} onChange={s => onChangeStatus(entry, s)} size="md" />
+          {entry.status === 'firmado' ? (
+            <span className="text-[11px] text-green-600 font-medium hidden sm:inline">🎉 {entry.signedAt ? fmtDate(entry.signedAt) : ''}</span>
+          ) : (
+            <>
               {entry.statusUpdatedAt && (
-                <span className="text-[11px] text-slate-400">
+                <span className="text-[11px] text-slate-400 hidden sm:inline">
                   desde {relativeDate(entry.statusUpdatedAt) || fmtDate(entry.statusUpdatedAt)}
                 </span>
               )}
               {aging && (
-                <span className={`text-[11px] font-medium ${aging.overdue ? 'text-red-500' : aging.warn ? 'text-amber-600' : 'text-slate-400'}`}>
-                  {aging.overdue ? '⚠ ' : ''}sin tocar {aging.days}d
-                  <span className="opacity-60"> / {aging.limit}d</span>
+                <span className={`text-[11px] font-medium hidden sm:inline ${aging.overdue ? 'text-red-500' : aging.warn ? 'text-amber-600' : 'text-slate-400'}`}>
+                  {aging.overdue ? '⚠ ' : ''}sin tocar {aging.days}d<span className="opacity-60">/{aging.limit}d</span>
                 </span>
               )}
-            </div>
-          </div>
-          <button onClick={onClose} aria-label="Cerrar" className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg flex-shrink-0">
+            </>
+          )}
+          <button onClick={onClose} aria-label="Cerrar" className="ml-auto p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg flex-shrink-0">
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* body */}
-        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
-          {/* firmado 🎉 */}
-          {entry.status === 'firmado' && (
-            <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-xs text-green-700 font-medium">
-              🎉 Firmado{entry.signedAt ? ` el ${fmtDate(entry.signedAt)}` : ''}
-            </div>
-          )}
+        {/* body: dos columnas en escritorio */}
+        <div className="flex-1 overflow-y-auto px-4 py-3">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-6 gap-y-4">
 
-          {/* próxima acción */}
-          {entry.status !== 'firmado' && (
-            <div>
-              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Próxima acción</label>
-              {editingAction ? (
-                <div className="mt-1.5 border border-blue-200 rounded-lg p-2.5 bg-blue-50/40 space-y-2">
-                  <input
-                    value={actionLabel}
-                    onChange={e => setActionLabel(e.target.value)}
-                    placeholder="Llamar, reunión, enviar propuesta…"
-                    autoFocus
-                    className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-                  />
-                  <div className="flex gap-2">
-                    <input
-                      type="date"
-                      value={actionDate}
-                      onChange={e => setActionDate(e.target.value)}
-                      className="flex-1 text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-                    />
-                    <select value={actionAssignee} onChange={e => setActionAssignee(e.target.value)} className={SELECT_CLS}>
-                      {profiles.map(p => <option key={p.id} value={p.id}>{p.avatar || p.name}</option>)}
-                    </select>
-                  </div>
-                  <div className="flex justify-end gap-1.5">
-                    <button onClick={() => setEditingAction(false)} className="px-2.5 py-1 rounded-lg text-[11px] text-slate-500 hover:bg-slate-100">Cancelar</button>
-                    <button onClick={saveAction} className="px-3 py-1 rounded-lg bg-primary text-white text-[11px] font-medium hover:bg-primary/90">Guardar</button>
-                  </div>
-                </div>
-              ) : entry.nextAction || entry.nextActionDate ? (
-                <div className={`mt-1.5 border rounded-lg px-3 py-2.5 ${actionOverdue ? 'border-red-200 bg-red-50/60' : 'border-blue-200 bg-blue-50/50'}`}>
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="text-xs font-semibold text-slate-800 truncate">📌 {entry.nextAction ?? 'Acción'}</div>
-                      <div className={`text-[11px] ${actionOverdue ? 'text-red-600 font-semibold' : 'text-slate-500'}`}>
+            {/* ── Columna izquierda: datos ── */}
+            <div className="space-y-3.5 min-w-0">
+              {/* próxima acción */}
+              {entry.status !== 'firmado' && (
+                <div>
+                  <label className={LABEL_CLS}>Próxima acción</label>
+                  {editingAction ? (
+                    <div className="mt-1 border border-blue-200 rounded-lg p-2 bg-blue-50/40 space-y-1.5">
+                      <input
+                        value={actionLabel}
+                        onChange={e => setActionLabel(e.target.value)}
+                        placeholder="Llamar, reunión, enviar propuesta…"
+                        autoFocus
+                        className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                      />
+                      <div className="flex gap-1.5">
+                        <input
+                          type="date"
+                          value={actionDate}
+                          onChange={e => setActionDate(e.target.value)}
+                          className="flex-1 text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                        />
+                        <select value={actionAssignee} onChange={e => setActionAssignee(e.target.value)} className={SELECT_CLS}>
+                          {profiles.map(p => <option key={p.id} value={p.id}>{p.avatar || p.name}</option>)}
+                        </select>
+                        <button onClick={() => setEditingAction(false)} className="px-2 py-1 rounded-lg text-[11px] text-slate-500 hover:bg-slate-100">✕</button>
+                        <button onClick={saveAction} className="px-2.5 py-1 rounded-lg bg-primary text-white text-[11px] font-medium hover:bg-primary/90">OK</button>
+                      </div>
+                    </div>
+                  ) : entry.nextAction || entry.nextActionDate ? (
+                    <div className={`mt-1 flex items-center gap-2 border rounded-lg px-2.5 py-1.5 ${actionOverdue ? 'border-red-200 bg-red-50/60' : 'border-blue-200 bg-blue-50/50'}`}>
+                      <span className="text-xs font-semibold text-slate-800 truncate">📌 {entry.nextAction ?? 'Acción'}</span>
+                      <span className={`text-[11px] flex-shrink-0 ${actionOverdue ? 'text-red-600 font-semibold' : 'text-slate-500'}`}>
                         {entry.nextActionDate ? fmtDate(entry.nextActionDate) : 'sin fecha'}
                         {actionOverdue ? ' · vencida' : entry.nextActionDate === todayISO() ? ' · hoy' : ''}
                         {actionAssigneeProfile ? ` · ${actionAssigneeProfile.avatar || actionAssigneeProfile.name}` : ''}
-                      </div>
-                    </div>
-                    <div className="flex gap-1 flex-shrink-0">
-                      <button onClick={completeAction} className="px-2 py-1 rounded-lg bg-green-600 text-white text-[11px] font-medium hover:bg-green-700" title="Marcar hecha (queda en el historial)">✓ Hecha</button>
-                      <button
-                        onClick={() => { setActionLabel(entry.nextAction ?? ''); setActionDate(entry.nextActionDate ?? ''); setActionAssignee(entry.nextActionAssignee ?? currentProfile.id); setEditingAction(true) }}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white"
-                        aria-label="Editar próxima acción"
-                      >
-                        <Pencil className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  onClick={() => { setActionLabel(''); setActionDate(''); setActionAssignee(currentProfile.id); setEditingAction(true) }}
-                  className="mt-1.5 w-full border border-dashed border-slate-300 rounded-lg px-3 py-2 text-[11px] text-slate-400 hover:text-slate-600 hover:border-slate-400 transition-colors text-left"
-                >
-                  + Programar próxima acción (aparece en el Dashboard el día que toca)
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* zona */}
-          <div>
-            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Zona</label>
-            <select
-              value={entry.zone}
-              onChange={e => void onPatch(entry, { zone: e.target.value })}
-              className={`mt-1 w-full ${SELECT_CLS}`}
-            >
-              {zoneOptions.map(z => <option key={z} value={z}>{z}</option>)}
-            </select>
-          </div>
-
-          {/* encargados */}
-          <div>
-            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Encargados</label>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {profiles.map(p => {
-                const active = entry.managers.includes(p.id)
-                const c = scoutColor(p.avatar || p.name)
-                return (
-                  <button
-                    key={p.id}
-                    onClick={() => toggleManager(p.id)}
-                    className={`px-2 py-1 rounded-full text-[11px] font-semibold border transition-colors ${
-                      active ? `${c.bg} ${c.text} ${c.border}` : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    {p.avatar || p.name}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* vínculo con jugador de Captación */}
-          <div>
-            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Jugador de Captación</label>
-            {sp ? (
-              <div className="mt-1.5 border border-slate-200 rounded-lg px-3 py-2.5 bg-slate-50">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold text-slate-800 truncate">{sp.fullName}</div>
-                    <div className="text-[11px] text-slate-500">
-                      {[
-                        sp.team,
-                        sp.birthdate ? sp.birthdate.slice(0, 4) : null,
-                        sp.position1,
-                        `${spReports.length} informe${spReports.length !== 1 ? 's' : ''}`,
-                      ].filter(Boolean).join(' · ')}
-                    </div>
-                    {sp.assessment && (
-                      <span className={`mt-1 inline-flex items-center gap-1 text-[11px] font-semibold ${ASSESSMENT_CONFIG[sp.assessment].text}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${ASSESSMENT_DOT[sp.assessment]}`} />
-                        {sp.assessment}
                       </span>
-                    )}
-                  </div>
-                  <div className="flex flex-col gap-1 flex-shrink-0">
+                      <span className="ml-auto flex gap-1 flex-shrink-0">
+                        <button onClick={completeAction} className="px-2 py-0.5 rounded-md bg-green-600 text-white text-[11px] font-medium hover:bg-green-700" title="Marcar hecha (queda en el historial)">✓</button>
+                        <button
+                          onClick={() => { setActionLabel(entry.nextAction ?? ''); setActionDate(entry.nextActionDate ?? ''); setActionAssignee(entry.nextActionAssignee ?? currentProfile.id); setEditingAction(true) }}
+                          className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-white"
+                          aria-label="Editar próxima acción"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                      </span>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => { setActionLabel(''); setActionDate(''); setActionAssignee(currentProfile.id); setEditingAction(true) }}
+                      className="mt-1 w-full border border-dashed border-slate-300 rounded-lg px-2.5 py-1.5 text-[11px] text-slate-400 hover:text-slate-600 hover:border-slate-400 transition-colors text-left"
+                    >
+                      + Programar próxima acción (sale en el Dashboard el día que toca)
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* zona */}
+              <div className="flex items-center gap-2">
+                <label className={`${LABEL_CLS} w-16 flex-shrink-0`}>Zona</label>
+                <select
+                  value={entry.zone}
+                  onChange={e => void onPatch(entry, { zone: e.target.value })}
+                  className={`flex-1 min-w-0 ${SELECT_CLS}`}
+                >
+                  {zoneOptions.map(z => <option key={z} value={z}>{z}</option>)}
+                </select>
+              </div>
+
+              {/* encargados */}
+              <div>
+                <label className={LABEL_CLS}>Encargados</label>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {profiles.map(p => {
+                    const active = entry.managers.includes(p.id)
+                    const c = scoutColor(p.avatar || p.name)
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => toggleManager(p.id)}
+                        className={`px-1.5 py-0.5 rounded-full text-[10.5px] font-semibold border transition-colors ${
+                          active ? `${c.bg} ${c.text} ${c.border}` : 'bg-white text-slate-300 border-slate-200 hover:border-slate-300 hover:text-slate-500'
+                        }`}
+                        title={p.name}
+                      >
+                        {p.avatar || p.name}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* vínculo con jugador de Captación — compacto */}
+              <div>
+                <label className={LABEL_CLS}>Jugador de Captación</label>
+                {sp ? (
+                  <div className="mt-1 flex items-center gap-2 border border-slate-200 rounded-lg px-2.5 py-1.5 bg-slate-50">
+                    <div className="min-w-0 flex-1 text-xs">
+                      <span className="font-semibold text-slate-800">{sp.fullName}</span>
+                      <span className="text-slate-400">
+                        {' · '}
+                        {[
+                          sp.team,
+                          sp.birthdate ? sp.birthdate.slice(0, 4) : null,
+                          sp.position1,
+                          `${spReports.length} inf.`,
+                          sp.assessment,
+                        ].filter(Boolean).join(' · ')}
+                      </span>
+                    </div>
                     <button
                       onClick={() => onOpenScoutingPlayer(sp.id)}
-                      className="text-[11px] font-medium text-primary hover:underline text-right"
+                      className="text-[11px] font-medium text-primary hover:underline flex-shrink-0"
                     >
                       Ver ficha
                     </button>
                     <button
                       onClick={() => void onPatch(entry, { scoutingPlayerId: undefined })}
-                      className="text-[11px] text-slate-400 hover:text-red-500 text-right"
+                      className="p-0.5 text-slate-300 hover:text-red-400 flex-shrink-0"
+                      title="Quitar vínculo"
+                      aria-label="Quitar vínculo"
                     >
-                      Quitar vínculo
+                      <X className="w-3 h-3" />
                     </button>
                   </div>
-                </div>
-              </div>
-            ) : (
-              <div className="mt-1.5">
-                <FirmasLinkSearch
-                  scoutingPlayers={scoutingPlayers}
-                  onSelect={p => void onPatch(entry, { scoutingPlayerId: p.id })}
-                  placeholder="Vincular con jugador de Captación…"
-                />
-                <p className="mt-1 text-[11px] text-slate-400">Sin vínculo: busca por nombre o club para conectarlo con su ficha de scouting.</p>
-              </div>
-            )}
-          </div>
-
-          {/* notas */}
-          <div>
-            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Notas</label>
-            <textarea
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              onBlur={saveNotes}
-              rows={3}
-              placeholder="Notas sobre el proceso de captación…"
-              className="mt-1 w-full text-xs border border-slate-200 rounded-lg px-2.5 py-2 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-y"
-            />
-          </div>
-
-          {/* historial */}
-          <div>
-            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">
-              Historial {sortedComments.length > 0 && <span className="text-slate-300">· {sortedComments.length}</span>}
-            </label>
-            <div className="mt-1.5 space-y-1.5">
-              {sortedComments.length === 0 && (
-                <p className="text-[11px] text-slate-400">Sin actividad todavía.</p>
-              )}
-              {sortedComments.map(c => (
-                c.kind === 'estatus' ? (
-                  <div key={c.id} className="flex items-center gap-1.5 px-1 text-[10.5px] text-slate-400">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
-                    <span>{c.text}</span>
-                    <span className="opacity-70">· {c.author?.split(' ')[0]} · {fmtDate(c.date)}</span>
-                  </div>
                 ) : (
-                  <div key={c.id} className="group border border-slate-100 rounded-lg px-2.5 py-2 bg-slate-50/60">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs">{FIRMAS_KIND_META[c.kind ?? 'nota']?.icon ?? '📝'}</span>
-                      <span className="text-[11px] font-semibold text-slate-600">{c.author || '—'}</span>
-                      {c.outcome && (
-                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${c.outcome === 'contesto' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
-                          {c.outcome === 'contesto' ? 'contestó' : 'no contestó'}
-                        </span>
-                      )}
-                      <span className="text-[10.5px] text-slate-400">{fmtDate(c.date)}</span>
-                      {(isAdmin || c.authorId === currentProfile.id) && (
-                        <button
-                          onClick={() => deleteComment(c.id)}
-                          aria-label="Eliminar apunte"
-                          className="ml-auto opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-opacity"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      )}
-                    </div>
-                    <p className="mt-0.5 text-xs text-slate-700 whitespace-pre-wrap break-words">{c.text}</p>
+                  <div className="mt-1">
+                    <FirmasLinkSearch
+                      scoutingPlayers={scoutingPlayers}
+                      onSelect={p => void onPatch(entry, { scoutingPlayerId: p.id })}
+                      placeholder="Vincular con jugador de Captación…"
+                    />
                   </div>
-                )
-              ))}
+                )}
+              </div>
 
-              {/* composer: tipo con un toque + resultado rápido */}
-              <div className="border border-slate-200 rounded-lg p-2 bg-white space-y-1.5">
+              {/* notas */}
+              <div>
+                <label className={LABEL_CLS}>Notas</label>
+                <textarea
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  onBlur={saveNotes}
+                  rows={3}
+                  placeholder="Notas sobre el proceso de captación…"
+                  className="mt-1 w-full text-xs border border-slate-200 rounded-lg px-2.5 py-2 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-y"
+                />
+              </div>
+            </div>
+
+            {/* ── Columna derecha: historial ── */}
+            <div className="min-w-0">
+              <label className={LABEL_CLS}>
+                Historial {sortedComments.length > 0 && <span className="text-slate-300">· {sortedComments.length}</span>}
+              </label>
+
+              {/* composer arriba: tipo con un toque + resultado rápido */}
+              <div className="mt-1 border border-slate-200 rounded-lg p-2 bg-white space-y-1.5">
                 <div className="flex items-center gap-1 flex-wrap">
                   {Object.entries(FIRMAS_KIND_META).map(([k, meta]) => (
                     <button
@@ -2758,7 +2747,7 @@ function FirmasDetailPanel({
                       }`}
                       title={meta.label}
                     >
-                      {meta.icon} <span className="hidden sm:inline">{meta.label}</span>
+                      {meta.icon} <span className="hidden xl:inline">{meta.label}</span>
                     </button>
                   ))}
                   {(commentKind === 'llamada' || commentKind === 'whatsapp') && (
@@ -2783,7 +2772,7 @@ function FirmasDetailPanel({
                     value={newComment}
                     onChange={e => setNewComment(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') addComment() }}
-                    placeholder={commentKind === 'nota' ? 'Añadir nota…' : `${FIRMAS_KIND_META[commentKind].label}: ¿qué pasó? (opcional si marcas resultado)`}
+                    placeholder={commentKind === 'nota' ? 'Añadir nota…' : `${FIRMAS_KIND_META[commentKind].label}: ¿qué pasó?`}
                     className="flex-1 text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                   />
                   <button
@@ -2796,12 +2785,75 @@ function FirmasDetailPanel({
                   </button>
                 </div>
               </div>
+
+              {/* lista: recientes primero */}
+              <div className="mt-2 space-y-1.5">
+                {sortedComments.length === 0 && (
+                  <p className="text-[11px] text-slate-400">Sin actividad todavía.</p>
+                )}
+                {sortedComments.map(c => (
+                  c.kind === 'estatus' ? (
+                    <div key={c.id} className="flex items-center gap-1.5 px-1 text-[10.5px] text-slate-400">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+                      <span>{c.text}</span>
+                      <span className="opacity-70">· {c.author?.split(' ')[0]} · {fmtDate(c.date)}</span>
+                    </div>
+                  ) : editingCommentId === c.id ? (
+                    <div key={c.id} className="border border-blue-200 rounded-lg px-2.5 py-2 bg-blue-50/30">
+                      <textarea
+                        value={editingCommentText}
+                        onChange={e => setEditingCommentText(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveCommentEdit() } if (e.key === 'Escape') setEditingCommentId(null) }}
+                        autoFocus
+                        rows={2}
+                        className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-y"
+                      />
+                      <div className="mt-1 flex justify-end gap-1.5">
+                        <button onClick={() => setEditingCommentId(null)} className="px-2 py-0.5 rounded-md text-[11px] text-slate-500 hover:bg-slate-100">Cancelar</button>
+                        <button onClick={saveCommentEdit} className="px-2.5 py-0.5 rounded-md bg-primary text-white text-[11px] font-medium hover:bg-primary/90">Guardar</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div key={c.id} className="group border border-slate-100 rounded-lg px-2.5 py-2 bg-slate-50/60">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs">{FIRMAS_KIND_META[c.kind ?? 'nota']?.icon ?? '📝'}</span>
+                        <span className="text-[11px] font-semibold text-slate-600">{c.author || '—'}</span>
+                        {c.outcome && (
+                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${c.outcome === 'contesto' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                            {c.outcome === 'contesto' ? 'contestó' : 'no contestó'}
+                          </span>
+                        )}
+                        <span className="text-[10.5px] text-slate-400">{relativeDate(c.date) || fmtDate(c.date)}</span>
+                        {(isAdmin || c.authorId === currentProfile.id) && (
+                          <span className="ml-auto flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => { setEditingCommentId(c.id); setEditingCommentText(c.text) }}
+                              aria-label="Editar apunte"
+                              className="p-0.5 text-slate-300 hover:text-blue-500"
+                            >
+                              <Pencil className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={() => deleteComment(c.id)}
+                              aria-label="Eliminar apunte"
+                              className="p-0.5 text-slate-300 hover:text-red-500"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-0.5 text-xs text-slate-700 whitespace-pre-wrap break-words">{c.text}</p>
+                    </div>
+                  )
+                ))}
+              </div>
             </div>
           </div>
         </div>
 
         {/* footer */}
-        <div className="border-t border-slate-200 px-4 py-2.5 flex items-center gap-2">
+        <div className="border-t border-slate-200 px-4 py-2 flex items-center gap-2">
           {entry.trelloUrl && (
             <a
               href={entry.trelloUrl}
