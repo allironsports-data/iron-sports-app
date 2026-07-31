@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion, ClubLog, PlayerMeeting, PlayerActivity, MemberStatus, Postpartido, FirmasEntry } from '../types'
+import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion, ClubLog, PlayerMeeting, PlayerActivity, MemberStatus, Postpartido, FirmasEntry, BoulemaPlayer } from '../types'
 
 // ── helpers ──────────────────────────────────────────────────
 
@@ -1069,6 +1069,73 @@ export async function updateBoulemaPeticion(p: BoulemaPeticion): Promise<void> {
 
 export async function deleteBoulemaPeticion(id: string): Promise<void> {
   const { error } = await supabase.from('boulema_peticiones').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── Boulema · jugadores (mantenimiento light) ────────────────
+
+function dbToBoulemaPlayer(row: Record<string, unknown>): BoulemaPlayer {
+  return {
+    id: row.id as string,
+    fullName: row.full_name as string,
+    birthYear: (row.birth_year as string) ?? undefined,
+    position: (row.position as string) ?? undefined,
+    team: (row.team as string) ?? undefined,
+    country: (row.country as string) ?? undefined,
+    nationality: (row.nationality as string) ?? undefined,
+    contacto: (row.contacto as string) ?? undefined,
+    manager: (row.manager as string) ?? undefined,
+    notes: (row.notes as string) ?? undefined,
+    createdAt: row.created_at as string,
+    updatedAt: (row.updated_at as string) ?? (row.created_at as string),
+  }
+}
+
+export async function fetchBoulemaPlayers(): Promise<BoulemaPlayer[]> {
+  // la tabla puede no existir aún (migración pendiente)
+  try {
+    const { data, error } = await supabase.from('boulema_players').select('*').order('full_name')
+    if (error) return []
+    return (data ?? []).map(dbToBoulemaPlayer)
+  } catch {
+    return []
+  }
+}
+
+export async function createBoulemaPlayer(p: Omit<BoulemaPlayer, 'id' | 'createdAt' | 'updatedAt'>): Promise<BoulemaPlayer> {
+  const { data, error } = await supabase.from('boulema_players').insert({
+    full_name: p.fullName,
+    birth_year: p.birthYear ?? null,
+    position: p.position ?? null,
+    team: p.team ?? null,
+    country: p.country ?? null,
+    nationality: p.nationality ?? null,
+    contacto: p.contacto ?? null,
+    manager: p.manager ?? null,
+    notes: p.notes ?? null,
+  }).select().single()
+  if (error) throw error
+  return dbToBoulemaPlayer(data)
+}
+
+export async function updateBoulemaPlayer(p: BoulemaPlayer): Promise<void> {
+  const { error } = await supabase.from('boulema_players').update({
+    full_name: p.fullName,
+    birth_year: p.birthYear ?? null,
+    position: p.position ?? null,
+    team: p.team ?? null,
+    country: p.country ?? null,
+    nationality: p.nationality ?? null,
+    contacto: p.contacto ?? null,
+    manager: p.manager ?? null,
+    notes: p.notes ?? null,
+    updated_at: new Date().toISOString(),
+  }).eq('id', p.id)
+  if (error) throw error
+}
+
+export async function deleteBoulemaPlayer(id: string): Promise<void> {
+  const { error } = await supabase.from('boulema_players').delete().eq('id', id)
   if (error) throw error
 }
 

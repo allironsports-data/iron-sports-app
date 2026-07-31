@@ -381,6 +381,9 @@ export function Distribution({
   const [posFilters, setPosFilters] = useState<string[]>([])   // jugadores tab
   const [yearFilters, setYearFilters] = useState<string[]>([])
   const [activityFilter, setActivityFilter] = useState(false)
+  // Ocultar jugadores que ya han firmado en algún sitio (negociación «cerrado»)
+  const [hideClosed, setHideClosed] = useState<boolean>(() => sessionStorage.getItem('dist_hide_closed') === '1')
+  useEffect(() => { sessionStorage.setItem('dist_hide_closed', hideClosed ? '1' : '0') }, [hideClosed])
   const [showAddNeed, setShowAddNeed] = useState(false)
   const [groupByTier, setGroupByTier] = useState(false)
   // solicitudes filters
@@ -418,8 +421,13 @@ export function Distribution({
         negotiations.some(n => n.playerId === e.playerId && n.status !== 'descartado')
       )
     }
+    if (hideClosed) {
+      result = result.filter(e =>
+        !negotiations.some(n => n.playerId === e.playerId && n.status === 'cerrado')
+      )
+    }
     return result
-  }, [seasonEntries, search, players, posFilters, yearFilters, activityFilter, negotiations])
+  }, [seasonEntries, search, players, posFilters, yearFilters, activityFilter, hideClosed, negotiations])
 
   const distributionYears = useMemo(() => {
     const years = new Set<string>()
@@ -896,7 +904,7 @@ export function Distribution({
 
           {/* ── JUGADORES TAB ── */}
           {tab === 'jugadores' && (() => {
-            const playersActiveFilters = posFilters.length + yearFilters.length + (activityFilter ? 1 : 0)
+            const playersActiveFilters = posFilters.length + yearFilters.length + (activityFilter ? 1 : 0) + (hideClosed ? 1 : 0)
             const playersFilterControls = (
               <>
                 <MultiSelect
@@ -912,9 +920,14 @@ export function Distribution({
                   onChange={setYearFilters}
                 />
                 <FilterCheck label="Con actividad" checked={activityFilter} onClick={() => setActivityFilter(!activityFilter)} />
+                <FilterCheck
+                  label={`Ocultar cerrados${(() => { const n = seasonEntries.filter(e => negotiations.some(x => x.playerId === e.playerId && x.status === 'cerrado')).length; return n > 0 ? ` (${n})` : '' })()}`}
+                  checked={hideClosed}
+                  onClick={() => setHideClosed(!hideClosed)}
+                />
                 {playersActiveFilters > 0 && (
                   <button
-                    onClick={() => { setPosFilters([]); setYearFilters([]); setActivityFilter(false) }}
+                    onClick={() => { setPosFilters([]); setYearFilters([]); setActivityFilter(false); setHideClosed(false) }}
                     className="flex items-center gap-1.5 text-xs bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg font-medium transition-colors"
                   >
                     <SlidersHorizontal className="w-3 h-3" />

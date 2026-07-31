@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { TaskDetailPanel } from "../components/TaskDetailPanel";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { EmptyState } from "../components/EmptyState";
@@ -106,39 +106,7 @@ const ACTIVITY_TYPES_DASH = [
   'Email', 'Visita presencial', 'Partido', 'Transferencia', 'Nota general',
 ] as const;
 
-// ── Estado del equipo (panel "¿con qué está cada uno?") ──────
-const STATUS_LOCATIONS = ['Oficina', 'Casa', 'Viaje', 'Partido', 'Vacaciones'];
-const STATUS_STALE_HOURS = 24;
-// Modo estricto: si true, al entrar con el estado caducado se abre el editor
-// automáticamente y no se puede cerrar hasta guardar. Empezamos en modo suave;
-// cambiar a true si el equipo no adopta la costumbre.
-const STATUS_STRICT_MODE = false;
-
-function hoursSince(iso?: string): number | null {
-  if (!iso) return null;
-  return (Date.now() - new Date(iso).getTime()) / 3600000;
-}
-
-function statusAgoLabel(iso?: string): string {
-  const h = hoursSince(iso);
-  if (h === null) return 'sin estado';
-  const m = Math.floor(h * 60);
-  if (m < 1) return 'ahora';
-  if (m < 60) return `hace ${m} min`;
-  if (h < 48) return `hace ${Math.floor(h)} h`;
-  return `hace ${Math.floor(h / 24)} d`;
-}
-
-/** Color del punto de estado de un miembro */
-function statusDotColor(s: MemberStatus | undefined, hasTaskInProgress: boolean): string {
-  const h = hoursSince(s?.updatedAt);
-  if (h === null || h > STATUS_STALE_HOURS) return 'bg-red-400';
-  if (s?.locationType === 'Vacaciones') return 'bg-slate-300';
-  if (s?.locationType === 'Viaje' || s?.locationType === 'Partido') return 'bg-amber-400';
-  if (hasTaskInProgress) return 'bg-blue-500';
-  return 'bg-emerald-500';
-}
-
+// ── Estado del equipo: la tarea en curso sale sola del tablero ──
 export function Dashboard({
   view = 'tareas',
   onViewChange,
@@ -182,21 +150,13 @@ export function Dashboard({
   const [showFirmasToday, setShowFirmasToday] = useState(false);
   const [showAddGeneralTask, setShowAddGeneralTask] = useState(false);
 
-  // ── Estado del equipo: editor "Mi estado" ──
-  const [statusEditorOpen, setStatusEditorOpen] = useState(false);
-  const [stSaving, setStSaving] = useState(false);
-  const [stForm, setStForm] = useState({ locationType: '', locationDetail: '', currentTaskId: '', eventNote: '', note: '' });
+  // ── Estado del equipo (automático: tarea en curso + nota opcional) ──
   // Panel plegado por defecto para no comer pantalla; recuerda tu elección
   const [statusPanelOpen, setStatusPanelOpen] = useState<boolean>(() => sessionStorage.getItem('dash_status_open') === '1');
   useEffect(() => { sessionStorage.setItem('dash_status_open', statusPanelOpen ? '1' : '0'); }, [statusPanelOpen]);
-  // Tarea rápida desde el editor de estado
-  const [stQuickTaskOpen, setStQuickTaskOpen] = useState(false);
-  const [stNewTaskTitle, setStNewTaskTitle] = useState('');
-  const [stNewTaskPlayerId, setStNewTaskPlayerId] = useState('general');
-  const [stNewTaskDue, setStNewTaskDue] = useState('');
-  const [stCreatingTask, setStCreatingTask] = useState(false);
-  // Qué hacer con la tarea en curso anterior al cambiarla por otra
-  const [stPrevTaskAction, setStPrevTaskAction] = useState<'keep' | 'completar' | 'pendiente'>('keep');
+  // Nota rápida propia ("si hace falta añadir algo")
+  const [myNoteEditing, setMyNoteEditing] = useState(false);
+  const [myNoteDraft, setMyNoteDraft] = useState('');
 
   // ── Postpartidos ──
   const [showAddPostpartido, setShowAddPostpartido] = useState(false);
@@ -541,9 +501,6 @@ export function Dashboard({
   const statusProfiles = profiles.filter(p => !p.hidden_from_status);
   const hiddenStatusProfiles = profiles.filter(p => p.hidden_from_status);
   const myStatus = memberStatuses.find(s => s.profileId === currentProfile.id);
-  const myStatusStale = !currentProfile.hidden_from_status
-    && (hoursSince(myStatus?.updatedAt) ?? Infinity) > STATUS_STALE_HOURS;
-  const staleStatusCount = statusProfiles.filter(p => (hoursSince(memberStatuses.find(s => s.profileId === p.id)?.updatedAt) ?? Infinity) > STATUS_STALE_HOURS).length;
 
   // Tarea "en progreso" más reciente de un miembro — el panel la muestra
   // automáticamente aunque no la haya elegido en su estado.
@@ -552,110 +509,16 @@ export function Dashboard({
       .filter(t => t.status === 'en_progreso' && t.assigneeId === profileId)
       .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))[0];
 
-  function openStatusEditor() {
-    // Tarea en curso: la del estado si sigue abierta; si no, coge automáticamente
-    // tu tarea "en progreso" del tablero (la más reciente).
-    const explicit = myStatus?.currentTaskId ? tasks.find(t => t.id === myStatus.currentTaskId) : undefined;
-    const effectiveTaskId = explicit && explicit.status !== 'completada'
-      ? explicit.id
-      : (inProgressTaskFor(currentProfile.id)?.id ?? '');
-    setStForm({
-      locationType: myStatus?.locationType ?? '',
-      locationDetail: myStatus?.locationDetail ?? '',
-      currentTaskId: effectiveTaskId,
-      eventNote: myStatus?.eventNote ?? '',
-      note: myStatus?.note ?? '',
-    });
-    setStQuickTaskOpen(false);
-    setStNewTaskTitle(''); setStNewTaskPlayerId('general'); setStNewTaskDue('');
-    setStPrevTaskAction('keep');
-    setStatusEditorOpen(true);
-  }
-
-  // Modo estricto: al entrar con el estado caducado, abrir el editor automáticamente.
-  // Se comprueba una sola vez, cuando los estados ya han cargado (evita el falso
-  // positivo de comprobar antes de que llegue la fase 2 de datos).
-  const strictCheckedRef = useRef(false);
-  useEffect(() => {
-    if (!STATUS_STRICT_MODE || strictCheckedRef.current || !onUpdateMemberStatus) return;
-    if (memberStatuses.length === 0) return; // aún cargando (o tabla vacía en el primer despliegue)
-    strictCheckedRef.current = true;
-    if ((hoursSince(memberStatuses.find(s => s.profileId === currentProfile.id)?.updatedAt) ?? Infinity) > STATUS_STALE_HOURS) {
-      openStatusEditor();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [memberStatuses]);
-
-  // Crear una tarea nueva desde el editor de estado y dejarla seleccionada como "en curso"
-  async function createStatusQuickTask() {
-    if (!onAddGeneralTask || !stNewTaskTitle.trim() || stCreatingTask) return;
-    setStCreatingTask(true);
-    try {
-      const player = stNewTaskPlayerId !== 'general' ? players.find(p => p.id === stNewTaskPlayerId) : undefined;
-      const t: Task = {
-        id: 't' + Date.now(),
-        playerId: stNewTaskPlayerId || 'general',
-        title: stNewTaskTitle.trim(),
-        description: '',
-        assigneeId: currentProfile.id,
-        watchers: player?.managedBy?.filter(id => id !== currentProfile.id).slice(0, 2) ?? [],
-        priority: 'media',
-        status: 'en_progreso',
-        createdAt: new Date().toISOString(),
-        dueDate: stNewTaskDue || undefined,
-        comments: [],
-      };
-      const result = await Promise.resolve(onAddGeneralTask(t));
-      const saved = result && typeof result === 'object' && 'id' in result ? (result as Task) : undefined;
-      setStForm(f => ({ ...f, currentTaskId: saved?.id ?? f.currentTaskId }));
-      setStQuickTaskOpen(false);
-      setStNewTaskTitle(''); setStNewTaskPlayerId('general'); setStNewTaskDue('');
-      showToast('Tarea creada y puesta en curso');
-    } catch {
-      showToast('No se pudo crear la tarea. Inténtalo de nuevo.', 'error');
-    } finally {
-      setStCreatingTask(false);
-    }
-  }
-
-  async function saveMyStatus() {
+  // Guardar mi nota rápida (lo único editable del panel: la tarea sale sola)
+  async function saveMyNote() {
+    setMyNoteEditing(false);
     if (!onUpdateMemberStatus) return;
-    setStSaving(true);
+    const v = myNoteDraft.trim();
+    if (v === (myStatus?.note ?? '')) return;
     try {
-      await onUpdateMemberStatus({
-        profileId: currentProfile.id,
-        locationType: stForm.locationType || undefined,
-        locationDetail: stForm.locationDetail.trim() || undefined,
-        currentTaskId: stForm.currentTaskId || undefined,
-        eventNote: stForm.eventNote.trim() || undefined,
-        note: stForm.note.trim() || undefined,
-      });
-      // La tarea elegida pasa a "En progreso" para que el panel y el tablero cuadren
-      const t = stForm.currentTaskId ? tasks.find(x => x.id === stForm.currentTaskId) : undefined;
-      if (t && t.status === 'pendiente' && onUpdateTask) {
-        await Promise.resolve(onUpdateTask({ ...t, status: 'en_progreso' }));
-      }
-      // La tarea en curso anterior: se hace lo que hayas elegido en el editor
-      // ('keep' = sigue en progreso, sin tocarla)
-      const prevTask = myStatus?.currentTaskId && myStatus.currentTaskId !== stForm.currentTaskId
-        ? tasks.find(x => x.id === myStatus.currentTaskId)
-        : undefined;
-      if (prevTask && prevTask.status === 'en_progreso' && stPrevTaskAction !== 'keep' && onUpdateTask) {
-        await Promise.resolve(onUpdateTask({
-          ...prevTask,
-          status: stPrevTaskAction === 'completar' ? 'completada' : 'pendiente',
-        }));
-      }
-      setStatusEditorOpen(false);
-      showToast(
-        prevTask && stPrevTaskAction === 'completar' ? `Estado actualizado · «${prevTask.title}» completada`
-          : prevTask && stPrevTaskAction === 'pendiente' ? `Estado actualizado · «${prevTask.title}» vuelve a pendiente`
-          : 'Estado actualizado'
-      );
+      await onUpdateMemberStatus({ profileId: currentProfile.id, note: v || undefined });
     } catch {
-      showToast('No se pudo guardar el estado. Inténtalo de nuevo.', 'error');
-    } finally {
-      setStSaving(false);
+      showToast('No se pudo guardar la nota. Inténtalo de nuevo.', 'error');
     }
   }
 
@@ -1144,22 +1007,6 @@ export function Dashboard({
           </div>
         </div>
 
-          {/* ── Aviso suave: mi estado caducado ── */}
-          {onUpdateMemberStatus && myStatusStale && !STATUS_STRICT_MODE && (
-            <div className="mb-3 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5">
-              <span className="text-sm">⏰</span>
-              <span className="text-xs font-semibold text-amber-800 flex-1">
-                {myStatus ? `Tu estado lleva ${statusAgoLabel(myStatus.updatedAt).replace('hace ', '')} sin actualizar` : 'Aún no has puesto tu estado de hoy'}
-              </span>
-              <button
-                onClick={openStatusEditor}
-                className="text-xs font-bold text-amber-800 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-3 py-1.5 transition-colors flex-shrink-0"
-              >
-                Actualizar ahora
-              </button>
-            </div>
-          )}
-
           {/* ── Panel de estado del equipo (plegable; sustituye a los 4 stats) ── */}
           <div className="mb-3 bg-white border border-slate-200 rounded-xl overflow-hidden">
             {/* Barra plegada: un vistazo del equipo en ~40px */}
@@ -1171,31 +1018,21 @@ export function Dashboard({
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex-shrink-0">Equipo</span>
               <div className="flex items-center gap-2 flex-1 overflow-x-auto py-0.5">
                 {statusProfiles.map(p => {
-                  const s = memberStatuses.find(x => x.profileId === p.id);
-                  const explicitTask = s?.currentTaskId ? tasks.find(t => t.id === s.currentTaskId) : undefined;
-                  const curTask = explicitTask && explicitTask.status !== 'completada' ? explicitTask : inProgressTaskFor(p.id);
-                  const taskActive = !!curTask && curTask.status !== 'completada';
-                  const stale = (hoursSince(s?.updatedAt) ?? Infinity) > STATUS_STALE_HOURS;
-                  const locText = s ? [s.locationType, s.locationDetail].filter(Boolean).join(' — ') : 'sin estado';
+                  const curTask = inProgressTaskFor(p.id);
                   return (
                     <span
                       key={p.id}
-                      className={`relative flex-shrink-0 ${stale ? 'ring-2 ring-red-300 rounded-full' : ''}`}
-                      title={`${p.name.split(' ')[0]} · ${locText}${taskActive ? ` · ▶ ${curTask!.title}` : ''}`}
+                      className="relative flex-shrink-0"
+                      title={`${p.name.split(' ')[0]} · ${curTask ? `▶ ${curTask.title}` : 'sin tarea en curso'}`}
                     >
                       <span className="w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-bold text-white" style={{ background: PRIMARY }}>
                         {p.avatar}
                       </span>
-                      <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${statusDotColor(s, taskActive)}`} />
+                      <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${curTask ? 'bg-blue-500' : 'bg-slate-300'}`} />
                     </span>
                   );
                 })}
               </div>
-              {staleStatusCount > 0 && (
-                <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 rounded-full px-2 py-0.5 flex-shrink-0">
-                  {staleStatusCount} sin actualizar
-                </span>
-              )}
               <ChevronDown className={`w-4 h-4 text-slate-400 flex-shrink-0 transition-transform ${statusPanelOpen ? 'rotate-180' : ''}`} />
             </button>
 
@@ -1205,28 +1042,22 @@ export function Dashboard({
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2">
                   {statusProfiles.map(p => {
                     const s = memberStatuses.find(x => x.profileId === p.id);
-                    const explicitTask = s?.currentTaskId ? tasks.find(t => t.id === s.currentTaskId) : undefined;
-                    const curTask = explicitTask && explicitTask.status !== 'completada' ? explicitTask : inProgressTaskFor(p.id);
-                    const taskActive = !!curTask && curTask.status !== 'completada';
-                    const stale = (hoursSince(s?.updatedAt) ?? Infinity) > STATUS_STALE_HOURS;
+                    const curTask = inProgressTaskFor(p.id);
+                    const taskPlayer = curTask && curTask.playerId !== 'general' ? players.find(x => x.id === curTask.playerId) : undefined;
                     const isMe = p.id === currentProfile.id;
-                    const dot = statusDotColor(s, taskActive);
-                    const locText = s ? [s.locationType, s.locationDetail].filter(Boolean).join(' — ') : '';
                     return (
                       <div
                         key={p.id}
-                        onClick={() => { if (isMe && onUpdateMemberStatus) openStatusEditor(); else onSelectProfile?.(p.id); }}
-                        className={`cursor-pointer text-left rounded-xl border px-3 py-2 transition-all hover:shadow-sm ${
-                          stale ? 'bg-red-50/40 border-red-200' : 'bg-white border-slate-200 hover:border-slate-300'
-                        } ${isMe ? 'ring-1 ring-blue-200' : ''}`}
-                        title={isMe ? 'Actualizar mi estado' : `Ver detalle de ${p.name.split(' ')[0]}`}
+                        onClick={() => onSelectProfile?.(p.id)}
+                        className={`cursor-pointer text-left rounded-xl border px-3 py-2 transition-all hover:shadow-sm bg-white border-slate-200 hover:border-slate-300 ${isMe ? 'ring-1 ring-blue-200' : ''}`}
+                        title={`Ver detalle de ${p.name.split(' ')[0]}`}
                       >
                         <div className="flex items-center gap-2 mb-1">
                           <span className="relative flex-shrink-0">
                             <span className="w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-bold text-white" style={{ background: PRIMARY }}>
                               {p.avatar}
                             </span>
-                            <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${dot}`} />
+                            <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${curTask ? 'bg-blue-500' : 'bg-slate-300'}`} />
                           </span>
                           <span className="text-xs font-bold text-slate-800 truncate flex-1">
                             {p.name.split(' ')[0]}{isMe && <span className="font-normal text-slate-400"> (yo)</span>}
@@ -1243,19 +1074,32 @@ export function Dashboard({
                               <EyeOff className="w-3 h-3" />
                             </span>
                           )}
-                          <span className={`text-[10px] flex-shrink-0 ${stale ? 'text-red-500 font-bold' : 'text-slate-400'}`}>
-                            {stale && s ? `${statusAgoLabel(s.updatedAt)} ⚠️` : statusAgoLabel(s?.updatedAt)}
-                          </span>
                         </div>
-                        <div className={`text-[11px] truncate ${locText ? 'text-slate-600' : 'text-slate-300 italic'}`}>
-                          📍 {locText || 'Sin actualizar'}
+                        {/* Tarea en curso — automática, del tablero */}
+                        <div className={`text-[11px] truncate ${curTask ? 'text-blue-600 font-semibold' : 'text-slate-300 italic'}`}>
+                          ▶ {curTask ? `${curTask.title}${taskPlayer ? ` · ${taskPlayer.name.split(' ')[0]}` : ''}` : 'Ninguna tarea en curso'}
                         </div>
-                        <div className={`text-[11px] truncate ${taskActive ? 'text-blue-600 font-semibold' : 'text-slate-300 italic'}`}>
-                          ▶ {taskActive ? curTask!.title : (s?.note || 'Ninguna tarea en curso')}
-                        </div>
-                        <div className={`text-[11px] truncate ${s?.eventNote ? 'text-purple-600' : 'text-slate-300 italic'}`}>
-                          📅 {s?.eventNote || 'Sin eventos hoy'}
-                        </div>
+                        {/* Nota opcional — lo único editable (solo la tuya) */}
+                        {isMe && myNoteEditing ? (
+                          <input
+                            value={myNoteDraft}
+                            onChange={e => setMyNoteDraft(e.target.value)}
+                            onBlur={() => void saveMyNote()}
+                            onKeyDown={e => { if (e.key === 'Enter') void saveMyNote(); if (e.key === 'Escape') setMyNoteEditing(false); }}
+                            onClick={e => e.stopPropagation()}
+                            autoFocus
+                            placeholder="Nota rápida (ej. «en Elche hasta el jueves»)"
+                            className="mt-0.5 w-full text-[11px] border border-blue-200 rounded-md px-1.5 py-0.5 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                          />
+                        ) : (
+                          <div
+                            onClick={isMe && onUpdateMemberStatus ? (e) => { e.stopPropagation(); setMyNoteDraft(s?.note ?? ''); setMyNoteEditing(true); } : undefined}
+                            className={`text-[11px] truncate ${s?.note ? 'text-slate-600' : 'text-slate-300 italic'} ${isMe && onUpdateMemberStatus ? 'hover:text-slate-800' : ''}`}
+                            title={isMe && onUpdateMemberStatus ? 'Editar mi nota' : undefined}
+                          >
+                            💬 {s?.note || (isMe && onUpdateMemberStatus ? 'Añadir nota…' : '—')}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -2874,213 +2718,6 @@ export function Dashboard({
       />
 
       {/* ── Editor "Mi estado" ── */}
-      {statusEditorOpen && onUpdateMemberStatus && (() => {
-        const myOpenTasks = tasks
-          .filter(t => t.status !== 'completada' && (t.assigneeId === currentProfile.id || (t.watchers ?? []).includes(currentProfile.id)))
-          .sort((a, b) => (a.status === 'en_progreso' ? -1 : 0) - (b.status === 'en_progreso' ? -1 : 0) || a.title.localeCompare(b.title));
-        const canClose = !STATUS_STRICT_MODE || !myStatusStale;
-        return (
-          <div
-            className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
-            onClick={() => { if (canClose) setStatusEditorOpen(false); }}
-          >
-            <div
-              className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto"
-              onClick={e => e.stopPropagation()}
-            >
-              <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-slate-100">
-                <span className="w-7 h-7 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0" style={{ background: PRIMARY }}>
-                  {currentProfile.avatar}
-                </span>
-                <h3 className="text-sm font-bold text-slate-800 flex-1">Mi estado</h3>
-                <span className="text-[10px] text-slate-400">{myStatus ? `últ. act. ${statusAgoLabel(myStatus.updatedAt)}` : 'sin estado aún'}</span>
-                {canClose && (
-                  <button onClick={() => setStatusEditorOpen(false)} aria-label="Cerrar" className="text-slate-400 hover:text-slate-600 p-1">
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-              <div className="px-5 py-4 space-y-4">
-                {STATUS_STRICT_MODE && myStatusStale && (
-                  <p className="text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-3 py-2">
-                    Tu estado está caducado — actualízalo para seguir usando la app.
-                  </p>
-                )}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">📍 ¿Dónde estás?</label>
-                  <div className="flex gap-1.5 flex-wrap">
-                    {STATUS_LOCATIONS.map(loc => (
-                      <button
-                        key={loc}
-                        onClick={() => setStForm(f => ({ ...f, locationType: f.locationType === loc ? '' : loc }))}
-                        className={`px-3 py-1.5 rounded-full border text-xs transition-colors ${
-                          stForm.locationType === loc
-                            ? 'bg-primary border-primary text-white font-semibold'
-                            : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-                        }`}
-                      >
-                        {loc}
-                      </button>
-                    ))}
-                  </div>
-                  <input
-                    value={stForm.locationDetail}
-                    onChange={e => setStForm(f => ({ ...f, locationDetail: e.target.value }))}
-                    placeholder="Detalle opcional: ciudad, club… (ej. «Elche»)"
-                    className="mt-2 w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">▶ Tarea en curso</label>
-                  <select
-                    value={stForm.currentTaskId}
-                    onChange={e => setStForm(f => ({ ...f, currentTaskId: e.target.value }))}
-                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
-                  >
-                    <option value="">— Ninguna / disponible —</option>
-                    {myOpenTasks.map(t => (
-                      <option key={t.id} value={t.id}>
-                        {t.title}{t.status === 'en_progreso' ? ' (en progreso)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="flex items-center justify-between mt-1">
-                    <p className="text-[10px] text-slate-400">Al elegirla pasará a "En progreso" en el tablero.</p>
-                    {onAddGeneralTask && !stQuickTaskOpen && (
-                      <button
-                        onClick={() => setStQuickTaskOpen(true)}
-                        className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold flex-shrink-0"
-                      >
-                        + Nueva tarea
-                      </button>
-                    )}
-                  </div>
-                  {/* Crear tarea rápida sin salir del editor */}
-                  {stQuickTaskOpen && onAddGeneralTask && (
-                    <div className="mt-2 bg-slate-50 border border-slate-200 rounded-lg p-2.5 space-y-2">
-                      <input
-                        autoFocus
-                        value={stNewTaskTitle}
-                        onChange={e => setStNewTaskTitle(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') createStatusQuickTask(); }}
-                        placeholder="¿Qué vas a hacer?"
-                        className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
-                      />
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Jugador</label>
-                          <select
-                            value={stNewTaskPlayerId}
-                            onChange={e => setStNewTaskPlayerId(e.target.value)}
-                            className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
-                          >
-                            <option value="general">— General —</option>
-                            {[...players].sort((a, b) => a.name.localeCompare(b.name)).map(p => (
-                              <option key={p.id} value={p.id}>{p.name}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Fecha límite (opc.)</label>
-                          <input
-                            type="date"
-                            value={stNewTaskDue}
-                            onChange={e => setStNewTaskDue(e.target.value)}
-                            className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
-                          />
-                        </div>
-                      </div>
-                      <div className="flex justify-end gap-2">
-                        <button
-                          onClick={() => { setStQuickTaskOpen(false); setStNewTaskTitle(''); }}
-                          className="px-2.5 py-1.5 text-[11px] text-slate-500 hover:text-slate-700"
-                        >
-                          Cancelar
-                        </button>
-                        <button
-                          onClick={createStatusQuickTask}
-                          disabled={!stNewTaskTitle.trim() || stCreatingTask}
-                          className="px-3 py-1.5 text-[11px] font-bold text-white bg-primary hover:bg-primary/90 rounded-lg disabled:opacity-50 transition-colors"
-                        >
-                          {stCreatingTask ? 'Creando…' : 'Crear y poner en curso'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  {/* ¿Qué hacemos con la tarea en curso anterior? */}
-                  {(() => {
-                    const prevTask = myStatus?.currentTaskId && myStatus.currentTaskId !== stForm.currentTaskId
-                      ? tasks.find(t => t.id === myStatus.currentTaskId)
-                      : undefined;
-                    if (!prevTask || prevTask.status !== 'en_progreso') return null;
-                    const OPTS: { v: typeof stPrevTaskAction; label: string }[] = [
-                      { v: 'completar', label: '✓ Completada' },
-                      { v: 'keep', label: 'Sigue en progreso' },
-                      { v: 'pendiente', label: 'Vuelve a pendiente' },
-                    ];
-                    return (
-                      <div className="mt-2 bg-blue-50/60 border border-blue-200 rounded-lg px-3 py-2.5">
-                        <p className="text-[11px] font-semibold text-slate-700 mb-1.5 truncate">
-                          ¿Y la anterior, «{prevTask.title}»?
-                        </p>
-                        <div className="flex gap-1.5 flex-wrap">
-                          {OPTS.map(o => (
-                            <button
-                              key={o.v}
-                              onClick={() => setStPrevTaskAction(o.v)}
-                              className={`px-2.5 py-1 rounded-full border text-[11px] transition-colors ${
-                                stPrevTaskAction === o.v
-                                  ? o.v === 'completar'
-                                    ? 'bg-emerald-600 border-emerald-600 text-white font-semibold'
-                                    : 'bg-primary border-primary text-white font-semibold'
-                                  : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-                              }`}
-                            >
-                              {o.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">📅 Evento de hoy</label>
-                  <input
-                    value={stForm.eventNote}
-                    onChange={e => setStForm(f => ({ ...f, eventNote: e.target.value }))}
-                    placeholder="Ej. «Reunión Levante · 18:00» o «Elche vs Castellón · 20:30»"
-                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">💬 Nota (opcional)</label>
-                  <input
-                    value={stForm.note}
-                    onChange={e => setStForm(f => ({ ...f, note: e.target.value }))}
-                    placeholder="Ej. «Disponible a partir de las 17h»"
-                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200"
-                  />
-                </div>
-              </div>
-              <div className="flex justify-end gap-2 px-5 py-3.5 border-t border-slate-100">
-                {canClose && (
-                  <button onClick={() => setStatusEditorOpen(false)} className="px-4 py-2 text-xs text-slate-500 hover:text-slate-700 rounded-lg">
-                    Cancelar
-                  </button>
-                )}
-                <button
-                  onClick={saveMyStatus}
-                  disabled={stSaving}
-                  className="px-5 py-2 text-xs font-bold text-white bg-primary hover:bg-primary/90 rounded-lg transition-colors disabled:opacity-60"
-                >
-                  {stSaving ? 'Guardando…' : 'Actualizar estado'}
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
 
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>

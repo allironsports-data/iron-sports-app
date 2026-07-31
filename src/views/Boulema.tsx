@@ -1,10 +1,10 @@
 import React, { useState } from 'react'
 import {
   Search, X, Plus, LogOut, Trash2, Send,
-  FileText, Pencil, Inbox, TrendingUp, Eye,
+  FileText, Pencil, Inbox, TrendingUp, Eye, Users,
 } from 'lucide-react'
 import logoImg from '../assets/logo.jpeg'
-import type { ScoutingPlayer, ScoutingReport, BoulemaPeticion } from '../types'
+import type { ScoutingPlayer, ScoutingReport, BoulemaPeticion, BoulemaPlayer } from '../types'
 import type { Profile } from '../contexts/AuthContext'
 import { ToastStack } from '../components/ToastStack'
 import { useToast } from '../hooks/useToast'
@@ -513,6 +513,112 @@ function RespondWithInformeModal({
   )
 }
 
+// ── Modal de jugador de Boulema (mantenimiento light) ────────
+function BoulemaPlayerModal({ profiles, initial, onClose, onSave }: {
+  profiles: Profile[]
+  initial?: BoulemaPlayer
+  onClose: () => void
+  onSave: (p: Omit<BoulemaPlayer, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>
+}) {
+  const [fullName, setFullName] = useState(initial?.fullName ?? '')
+  const [birthYear, setBirthYear] = useState(initial?.birthYear ?? '')
+  const [position, setPosition] = useState(initial?.position ?? '')
+  const [team, setTeam] = useState(initial?.team ?? '')
+  const [country, setCountry] = useState(initial?.country ?? '')
+  const [nationality, setNationality] = useState(initial?.nationality ?? '')
+  const [contacto, setContacto] = useState(initial?.contacto ?? '')
+  const [manager, setManager] = useState(initial?.manager ?? '')
+  const [notes, setNotes] = useState(initial?.notes ?? '')
+  const [saving, setSaving] = useState(false)
+  useEscapeKey(onClose)
+
+  const canSave = fullName.trim().length >= 2 && !saving
+
+  const save = async () => {
+    if (!canSave) return
+    setSaving(true)
+    try {
+      await onSave({
+        fullName: fullName.trim(),
+        birthYear: birthYear.trim() || undefined,
+        position: position || undefined,
+        team: team.trim() || undefined,
+        country: country.trim() || undefined,
+        nationality: nationality.trim() || undefined,
+        contacto: contacto.trim() || undefined,
+        manager: manager || undefined,
+        notes: notes.trim() || undefined,
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const INPUT = 'w-full px-3 py-2 text-xs border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30'
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-5 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold text-slate-800">{initial ? 'Editar jugador' : 'Añadir jugador de Boulema'}</h3>
+          <button onClick={onClose} aria-label="Cerrar" className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="mt-4 space-y-3">
+          <div>
+            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Nombre *</label>
+            <input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Nombre del jugador" autoFocus className={`mt-1 ${INPUT}`} />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Año nac.</label>
+              <input value={birthYear} onChange={e => setBirthYear(e.target.value)} placeholder="2008" className={`mt-1 ${INPUT}`} />
+            </div>
+            <div>
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Posición</label>
+              <select value={position} onChange={e => setPosition(e.target.value)} className={`mt-1 ${INPUT}`}>
+                <option value="">—</option>
+                {POSITIONS_SCOUTING.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Club</label>
+              <input value={team} onChange={e => setTeam(e.target.value)} className={`mt-1 ${INPUT}`} />
+            </div>
+            <div>
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">País (donde juega)</label>
+              <input value={country} onChange={e => setCountry(e.target.value)} className={`mt-1 ${INPUT}`} />
+            </div>
+            <div>
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Nacionalidad</label>
+              <input value={nationality} onChange={e => setNationality(e.target.value)} className={`mt-1 ${INPUT}`} />
+            </div>
+            <div>
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Encargado AIS</label>
+              <select value={manager} onChange={e => setManager(e.target.value)} className={`mt-1 ${INPUT}`}>
+                <option value="">—</option>
+                {profiles.map(p => <option key={p.id} value={p.avatar}>{p.avatar} · {p.name.split(' ')[0]}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Contacto</label>
+            <input value={contacto} onChange={e => setContacto(e.target.value)} placeholder="Teléfono, persona…" className={`mt-1 ${INPUT}`} />
+          </div>
+          <div>
+            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Notas</label>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} className={`mt-1 ${INPUT} resize-y`} />
+          </div>
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <button onClick={onClose} className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:bg-slate-100 transition-colors">Cancelar</button>
+          <button onClick={() => void save()} disabled={!canSave} className="px-4 py-1.5 rounded-lg bg-primary text-white text-xs font-medium disabled:opacity-40 hover:bg-primary/90 transition-colors">
+            {saving ? 'Guardando…' : initial ? 'Guardar' : 'Añadir'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Vista principal ──────────────────────────────────────────
 
 interface Props {
@@ -526,6 +632,10 @@ interface Props {
   onDeleteBoulemaPeticion: (id: string) => Promise<void>
   onAddPlayer: (p: ScoutingPlayer) => void
   onAddReport: (r: ScoutingReport) => void
+  boulemaPlayers: BoulemaPlayer[]
+  onAddBoulemaPlayer: (p: Omit<BoulemaPlayer, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>
+  onUpdateBoulemaPlayer: (p: BoulemaPlayer) => Promise<void>
+  onDeleteBoulemaPlayer: (id: string) => Promise<void>
   onGoToSection: (s: 'tareas' | 'distribucion' | 'captacion') => void
   onOpenScoutingPlayer: (id: string) => void
   onLogout: () => void
@@ -543,6 +653,10 @@ export function Boulema({
   onDeleteBoulemaPeticion,
   onAddPlayer,
   onAddReport,
+  boulemaPlayers,
+  onAddBoulemaPlayer,
+  onUpdateBoulemaPlayer,
+  onDeleteBoulemaPlayer,
   onGoToSection,
   onOpenScoutingPlayer,
   onLogout,
@@ -551,6 +665,15 @@ export function Boulema({
   const { toasts, showToast, dismissToast } = useToast()
 
   // ── estado local ──
+  // ── pestañas de la sección ──
+  const [bouTab, setBouTab] = useState<'peticiones' | 'mantenimiento'>('peticiones')
+
+  // ── mantenimiento light ──
+  const [mantSearch, setMantSearch] = useState('')
+  const [showAddMantPlayer, setShowAddMantPlayer] = useState(false)
+  const [editingMantPlayer, setEditingMantPlayer] = useState<BoulemaPlayer | null>(null)
+  const [confirmDeleteMantId, setConfirmDeleteMantId] = useState<string | null>(null)
+
   // (movido desde Captacion.tsx)
   const [showAddBoulema, setShowAddBoulema] = useState(false)
   const [editingPeticion, setEditingPeticion] = useState<BoulemaPeticion | null>(null)
@@ -613,9 +736,33 @@ export function Boulema({
             Boulema
           </button>
         </div>
+
+        {/* Sub-pestañas de Boulema */}
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center gap-1 py-1.5 border-t border-slate-100 bg-slate-50/60 overflow-x-auto scrollbar-none">
+          {([
+            { id: 'peticiones' as const, label: 'Peticiones', icon: <Inbox className="w-3.5 h-3.5" /> },
+            { id: 'mantenimiento' as const, label: 'Mantenimiento', icon: <Users className="w-3.5 h-3.5" /> },
+          ]).map(t => (
+            <button
+              key={t.id}
+              onClick={() => setBouTab(t.id)}
+              className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                bouTab === t.id ? 'bg-primary text-white' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
+              }`}
+            >
+              {t.icon}
+              {t.label}
+              {t.id === 'mantenimiento' && boulemaPlayers.length > 0 && (
+                <span className={`min-w-[16px] text-center text-[10px] font-bold rounded-full px-1 ${bouTab === t.id ? 'bg-white/25 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                  {boulemaPlayers.length}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
       </header>
 
-      {(() => {
+      {bouTab === 'peticiones' && (() => {
 
         // Derived filter values
         const bouAllYears = [...new Set(boulemaPeticiones.map(p => p.birthYear).filter(Boolean) as string[])].sort()
@@ -958,6 +1105,146 @@ export function Boulema({
           </div>
         )
       })()}
+
+      {/* ── MANTENIMIENTO (light) ── */}
+      {bouTab === 'mantenimiento' && (() => {
+        const q = mantSearch.toLowerCase().trim()
+        const filtered = boulemaPlayers.filter(p =>
+          !q ||
+          p.fullName.toLowerCase().includes(q) ||
+          (p.team?.toLowerCase().includes(q)) ||
+          (p.country?.toLowerCase().includes(q))
+        )
+        return (
+          <div className="flex-1 max-w-4xl mx-auto w-full px-3 sm:px-6 py-4 space-y-3">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Users className="w-5 h-5 text-slate-400" />
+                <h2 className="text-base font-semibold text-slate-800">Mantenimiento</h2>
+                <span className="text-xs font-medium px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full">{filtered.length}</span>
+              </div>
+              <button
+                onClick={() => setShowAddMantPlayer(true)}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-primary text-white rounded-xl hover:bg-primary/90 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Añadir jugador</span>
+              </button>
+            </div>
+
+            {boulemaPlayers.length > 0 && (
+              <div className="relative max-w-xs">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                <input
+                  value={mantSearch}
+                  onChange={e => setMantSearch(e.target.value)}
+                  placeholder="Buscar jugador, club, país..."
+                  className="w-full pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                />
+              </div>
+            )}
+
+            {boulemaPlayers.length === 0 ? (
+              <div className="bg-white border border-dashed border-slate-200 rounded-2xl py-12 text-center">
+                <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <p className="text-sm text-slate-400 font-medium">Aún no hay jugadores de Boulema</p>
+                <p className="text-xs text-slate-300 mt-1">Versión light del mantenimiento: nombre, club, país, contacto y notas</p>
+              </div>
+            ) : filtered.length === 0 ? (
+              <p className="text-xs text-slate-400 text-center py-8">Sin resultados con la búsqueda</p>
+            ) : (
+              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                {/* Escritorio: tabla */}
+                <div className="hidden sm:block overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200">
+                        {['Jugador', 'Año', 'Posición', 'Club', 'País', 'Enc.', 'Notas', ''].map((h, i) => (
+                          <th key={i} className="text-left px-3 py-2 text-[10.5px] font-bold uppercase tracking-wide text-slate-400 whitespace-nowrap">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filtered.map(p => (
+                        <tr key={p.id} onClick={() => setEditingMantPlayer(p)} className="cursor-pointer hover:bg-slate-50/60 transition-colors">
+                          <td className="px-3 py-2 font-medium text-slate-800">{p.fullName}</td>
+                          <td className="px-3 py-2 text-slate-500 tabular-nums">{p.birthYear ?? '—'}</td>
+                          <td className="px-3 py-2 text-slate-500">{p.position ?? '—'}</td>
+                          <td className="px-3 py-2 text-slate-500">{p.team ?? '—'}</td>
+                          <td className="px-3 py-2 text-slate-500">{p.country ?? '—'}</td>
+                          <td className="px-3 py-2 text-slate-500 font-mono text-xs">{p.manager ?? '—'}</td>
+                          <td className="px-3 py-2 text-slate-400 text-xs max-w-[220px] truncate">{p.notes ?? ''}</td>
+                          <td className="px-2 py-2" onClick={e => e.stopPropagation()}>
+                            {confirmDeleteMantId === p.id ? (
+                              <span className="flex items-center gap-1">
+                                <button onClick={() => setConfirmDeleteMantId(null)} className="text-[11px] px-2 py-0.5 border border-slate-200 rounded text-slate-500 hover:bg-slate-50">No</button>
+                                <button
+                                  onClick={async () => {
+                                    try { await onDeleteBoulemaPlayer(p.id); setConfirmDeleteMantId(null); showToast('Jugador eliminado') }
+                                    catch { showToast('No se pudo eliminar', 'error') }
+                                  }}
+                                  className="text-[11px] px-2 py-0.5 bg-red-500 text-white rounded hover:bg-red-600"
+                                >
+                                  Sí
+                                </button>
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => setConfirmDeleteMantId(p.id)}
+                                className="p-1 rounded text-slate-300 hover:text-red-400 hover:bg-red-50 transition-colors"
+                                aria-label="Eliminar jugador"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {/* Móvil: lista */}
+                <div className="sm:hidden divide-y divide-slate-100">
+                  {filtered.map(p => (
+                    <button key={p.id} onClick={() => setEditingMantPlayer(p)} className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left active:bg-slate-50">
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold text-slate-800 truncate">{p.fullName}</span>
+                        <span className="block text-[11px] text-slate-400 truncate">
+                          {[p.team, p.birthYear, p.country].filter(Boolean).join(' · ') || '—'}
+                        </span>
+                      </span>
+                      {p.manager && <span className="flex-shrink-0 text-[10px] font-mono font-bold bg-slate-100 text-slate-600 rounded px-1.5 py-0.5">{p.manager}</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })()}
+
+      {/* Modales de jugador de Boulema */}
+      {showAddMantPlayer && (
+        <BoulemaPlayerModal
+          profiles={profiles}
+          onClose={() => setShowAddMantPlayer(false)}
+          onSave={async (p) => {
+            try { await onAddBoulemaPlayer(p); setShowAddMantPlayer(false); showToast('Jugador añadido') }
+            catch { showToast('No se pudo crear (¿has ejecutado la migración SQL?)', 'error') }
+          }}
+        />
+      )}
+      {editingMantPlayer && (
+        <BoulemaPlayerModal
+          profiles={profiles}
+          initial={editingMantPlayer}
+          onClose={() => setEditingMantPlayer(null)}
+          onSave={async (p) => {
+            try { await onUpdateBoulemaPlayer({ ...editingMantPlayer, ...p }); setEditingMantPlayer(null); showToast('Jugador actualizado') }
+            catch { showToast('No se pudo guardar', 'error') }
+          }}
+        />
+      )}
 
       {/* AddBoulemaModal — nueva petición */}
       {showAddBoulema && (

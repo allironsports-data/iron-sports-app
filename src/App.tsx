@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, lazy } from 'react'
 import { useAuth } from './contexts/AuthContext'
-import type { Player, Task, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion, MemberStatus, Postpartido, FirmasEntry } from './types'
+import type { Player, Task, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion, MemberStatus, Postpartido, FirmasEntry, BoulemaPlayer } from './types'
 import * as db from './lib/db'
 import { supabase } from './lib/supabase'
 import type { Profile } from './contexts/AuthContext'
@@ -93,6 +93,7 @@ export default function App() {
   const [matchPlayers, setMatchPlayers] = useState<ScoutingMatchPlayer[]>([])
   const [boulemaPeticiones, setBoulemaPeticiones] = useState<BoulemaPeticion[]>([])
   const [firmasEntries, setFirmasEntries] = useState<FirmasEntry[]>([])
+  const [boulemaPlayers, setBoulemaPlayers] = useState<BoulemaPlayer[]>([])
 
   // ── Persist nav state to sessionStorage ───────────────────
   useEffect(() => {
@@ -158,7 +159,8 @@ export default function App() {
         db.fetchMemberStatuses().catch(() => [] as MemberStatus[]),
         db.fetchPostpartidos().catch(() => [] as Postpartido[]),
         db.fetchFirmasEntries().catch(() => [] as FirmasEntry[]),
-      ]).then(([cl, de, ng, sp, sr, sm, mp, bp, ms, pp, fe]) => {
+        db.fetchBoulemaPlayers().catch(() => [] as BoulemaPlayer[]),
+      ]).then(([cl, de, ng, sp, sr, sm, mp, bp, ms, pp, fe, bpl]) => {
         if (cancelled) return
         setClubs(cl as Club[])
         setDistEntries(de as DistributionEntry[])
@@ -171,6 +173,7 @@ export default function App() {
         setMemberStatuses(ms as MemberStatus[])
         setPostpartidos(pp as Postpartido[])
         setFirmasEntries(fe as FirmasEntry[])
+        setBoulemaPlayers(bpl as BoulemaPlayer[])
       }).catch((err: unknown) => {
         // No bloquea la app: Distribución/Captación mostrarán listas vacías
         console.error('Error cargando datos secundarios:', err)
@@ -617,6 +620,20 @@ export default function App() {
     setFirmasEntries(prev => prev.filter(x => x.id !== id))
   }
 
+  // ── Boulema · jugadores (mantenimiento light) ───────────────
+  const handleAddBoulemaPlayer = async (p: Omit<BoulemaPlayer, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const saved = await db.createBoulemaPlayer(p)
+    setBoulemaPlayers(prev => [...prev, saved].sort((a, b) => a.fullName.localeCompare(b.fullName)))
+  }
+  const handleUpdateBoulemaPlayer = async (p: BoulemaPlayer) => {
+    await db.updateBoulemaPlayer(p)
+    setBoulemaPlayers(prev => prev.map(x => x.id === p.id ? p : x))
+  }
+  const handleDeleteBoulemaPlayer = async (id: string) => {
+    await db.deleteBoulemaPlayer(id)
+    setBoulemaPlayers(prev => prev.filter(x => x.id !== id))
+  }
+
   const handleAddBoulemaPeticion = async (p: Omit<BoulemaPeticion, 'id' | 'createdAt'>) => {
     const saved = await db.createBoulemaPeticion(p)
     setBoulemaPeticiones(prev => [saved, ...prev])
@@ -799,6 +816,10 @@ export default function App() {
         onDeleteBoulemaPeticion={handleDeleteBoulemaPeticion}
         onAddPlayer={handleAddScoutingPlayer}
         onAddReport={handleAddScoutingReport}
+        boulemaPlayers={boulemaPlayers}
+        onAddBoulemaPlayer={handleAddBoulemaPlayer}
+        onUpdateBoulemaPlayer={handleUpdateBoulemaPlayer}
+        onDeleteBoulemaPlayer={handleDeleteBoulemaPlayer}
         onGoToSection={(s) => setMainSection(s)}
         onOpenScoutingPlayer={(id) => { setCaptacionOpenPlayerId(id); setMainSection('captacion') }}
         onLogout={signOut}

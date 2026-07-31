@@ -321,6 +321,22 @@ export interface BoulemaPeticion {
   createdAt: string
 }
 
+// Jugador de Boulema (mantenimiento light — réplica ligera del nuestro)
+export interface BoulemaPlayer {
+  id: string
+  fullName: string
+  birthYear?: string
+  position?: string
+  team?: string
+  country?: string
+  nationality?: string
+  contacto?: string
+  manager?: string      // avatar del encargado en AIS
+  notes?: string
+  createdAt: string
+  updatedAt: string
+}
+
 export interface ScoutingMatch {
   id: string
   date: string              // "YYYY-MM-DD"
