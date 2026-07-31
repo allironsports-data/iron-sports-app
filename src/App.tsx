@@ -250,6 +250,60 @@ export default function App() {
           return prev
         })
       })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'scouting_match_players' }, (payload: { new: Record<string, unknown> }) => {
+        // Un scout ha añadido a un jugador al campograma: si está en el pipeline
+        // de Firmar y soy su encargado, acaba de haber contacto visual — avisar
+        const row = payload.new as Record<string, unknown>
+        const playerId = row.player_id as string
+        const matchId = row.match_id as string
+        setScoutingMatches((prevM) => {
+          setFirmasEntries((prevFe) => {
+            const e = prevFe.find((x) => x.scoutingPlayerId === playerId && x.status !== 'firmado' && x.managers.includes(profile.id))
+            if (e) {
+              const m = prevM.find((x) => x.id === matchId)
+              addNotification(
+                `Firmar · ${e.playerName}: le han visto en ${m ? `${m.homeTeam} vs ${m.awayTeam}` : 'un partido'} — buen momento para llamar`,
+                'task_new'
+              )
+            }
+            return prevFe
+          })
+          return prevM
+        })
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'scouting_matches' }, (payload: { new: Record<string, unknown> }) => {
+        // Partido nuevo: avisar a los encargados de jugadores del pipeline cuyo equipo juega
+        const row = payload.new as Record<string, unknown>
+        const home = (row.home_team as string) ?? ''
+        const away = (row.away_team as string) ?? ''
+        const date = (row.date as string) ?? ''
+        const NOISE = new Set(['cf','cd','ud','fc','sd','ad','ce','sad','club','juv','juvenil','cadete','cad','inf','infantil','alevin','a','b','c','equipo','filial'])
+        const normTeam = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(t => t && !NOISE.has(t)).join(' ')
+        const alike = (a: string, b: string) => {
+          const na = normTeam(a), nb = normTeam(b)
+          return !!na && !!nb && (na === nb || na.includes(nb) || nb.includes(na))
+        }
+        // leer estado actual sin cerrar sobre valores viejos
+        setScoutingPlayers((prevSp) => {
+          setFirmasEntries((prevFe) => {
+            prevFe
+              .filter((e) => e.status !== 'firmado' && e.managers.includes(profile.id) && e.scoutingPlayerId)
+              .forEach((e) => {
+                const sp = prevSp.find((p) => p.id === e.scoutingPlayerId)
+                if (!sp?.team) return
+                if (alike(sp.team, home) || alike(sp.team, away)) {
+                  addNotification(
+                    `Firmar · ${e.playerName}: partido nuevo de su equipo — ${home} vs ${away}${date ? ` (${date})` : ''}`,
+                    'task_new'
+                  )
+                }
+              })
+            return prevFe
+          })
+          return prevSp
+        })
+      })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'captacion_firmas' }, (payload: { new: Record<string, unknown> }) => {
         // Aviso a los encargados taggeados cuando otro añade un apunte o cambia el estatus
         const row = payload.new as Record<string, unknown>
@@ -781,6 +835,9 @@ export default function App() {
         onOpenPlayerConsumed={() => setCaptacionOpenPlayerId(null)}
         openFirmasEntryId={captacionOpenFirmasId}
         onOpenFirmasEntryConsumed={() => setCaptacionOpenFirmasId(null)}
+        players={players}
+        onCreatePlayer={handleAddPlayer}
+        boulemaPeticiones={boulemaPeticiones}
         firmasEntries={firmasEntries}
         onCreateFirmasEntry={handleCreateFirmasEntry}
         onUpdateFirmasEntry={handleUpdateFirmasEntry}

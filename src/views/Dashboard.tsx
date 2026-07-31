@@ -529,6 +529,9 @@ export function Dashboard({
     }, {} as Record<string, { key: string; name: string; matches: ScoutingMatch[] }>)
   ).sort((a, b) => a.name.localeCompare(b.name));
 
+  // ── Firmar: iconos por tipo de acción (coherentes con el historial) ──
+  const FIRMAS_KIND_ICON: Record<string, string> = { llamada: "📞", whatsapp: "💬", reunion: "🤝", entorno: "👪", nota: "📝" };
+
   // ── Firmar: próximas acciones que tocan hoy (o están vencidas) ──
   const firmasActionsToday = (firmasEntries ?? [])
     .filter((e) => e.nextActionDate && e.nextActionDate <= todayStr && e.status !== 'firmado')
@@ -988,7 +991,7 @@ export function Dashboard({
                       className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs text-slate-700 hover:bg-violet-100/40 transition-colors"
                     >
                       <span className="font-semibold">{e.playerName}</span>
-                      <span className="text-slate-500 truncate">{e.nextAction ?? "Acción"}</span>
+                      <span className="text-slate-500 truncate">{FIRMAS_KIND_ICON[e.nextActionKind ?? ""] ?? "📌"} {e.nextAction ?? "Acción"}</span>
                       {assignee && (
                         <span className="flex-shrink-0 px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 font-mono font-bold text-[10px]">
                           {assignee.avatar || assignee.name.split(" ")[0]}

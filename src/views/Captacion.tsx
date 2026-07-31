@@ -7,7 +7,7 @@ import {
   PenLine, MapPin, MessageSquare, ExternalLink, LayoutGrid,
 } from 'lucide-react'
 import logoImg from '../assets/logo.jpeg'
-import type { ScoutingPlayer, ScoutingReport, ScoutingAssessment, ScoutingMatch, ScoutingMatchPlayer, FirmasEntry, FirmasStatus, FirmasComment } from '../types'
+import type { Player, ScoutingPlayer, ScoutingReport, ScoutingAssessment, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion, FirmasEntry, FirmasStatus, FirmasComment } from '../types'
 import type { Profile } from '../contexts/AuthContext'
 import * as db from '../lib/db'
 import { ConfirmModal } from '../components/ConfirmModal'
@@ -1690,7 +1690,7 @@ function FirmasHoverCard({ entry, sp, reports, profiles, pos }: {
         )}
         {entry.nextActionDate && (
           <span className={`rounded px-1.5 py-0.5 ${entry.nextActionDate < todayISO() ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
-            📌 {entry.nextAction ?? 'Acción'} · {fmtDate(entry.nextActionDate)}
+            {FIRMAS_KIND_META[entry.nextActionKind ?? '']?.icon ?? '📌'} {entry.nextAction ?? 'Acción'} · {fmtDate(entry.nextActionDate)}
           </span>
         )}
       </div>
@@ -1710,6 +1710,7 @@ function FirmasHoverCard({ entry, sp, reports, profiles, pos }: {
 
 function FirmasTab({
   entries, profiles, currentProfile, scoutingPlayers, scoutingReports, scoutingMatches,
+  matchPlayers, boulemaPeticiones, players, onCreatePlayer,
   onCreate, onUpdate, onDelete, onOpenScoutingPlayer, showToast, headerHeight,
   openEntryId, onOpenEntryConsumed,
 }: {
@@ -1719,6 +1720,10 @@ function FirmasTab({
   scoutingPlayers: ScoutingPlayer[]
   scoutingReports: ScoutingReport[]
   scoutingMatches: ScoutingMatch[]
+  matchPlayers: ScoutingMatchPlayer[]
+  boulemaPeticiones: BoulemaPeticion[]
+  players: Player[]
+  onCreatePlayer: (p: Player) => Promise<Player>
   onCreate: (e: Omit<FirmasEntry, 'id' | 'createdAt' | 'updatedAt'>) => Promise<FirmasEntry>
   onUpdate: (e: FirmasEntry) => Promise<void>
   onDelete: (id: string) => Promise<void>
@@ -1768,6 +1773,7 @@ function FirmasTab({
   const [showAdd, setShowAdd] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<FirmasEntry | null>(null)
   const [showAlerts, setShowAlerts] = useState(false)
+  const [showAgenda, setShowAgenda] = useState(false)
 
   // ── hover card (solo escritorio) ──
   const [hover, setHover] = useState<{ id: string; x: number; y: number } | null>(null)
@@ -1837,15 +1843,57 @@ function FirmasTab({
   const alerts = useMemo(() => {
     const out: { icon: string; text: string; entryId: string; tone: 'blue' | 'green' | 'amber' | 'red' }[] = []
     const today = todayISO()
-    const plus7 = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)
+    const plus30 = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)
+    const minus14 = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10)
     const since14 = new Date(Date.now() - 14 * 86400000).toISOString()
+    const since90 = new Date(Date.now() - 90 * 86400000).toISOString()
     const in30 = Date.now() + 30 * 86400000
     const in180 = Date.now() + 180 * 86400000
 
     const active = entries.filter(e => e.status !== 'firmado')
 
-    // partidos de Captación próximos (≤7 días) donde juega el equipo del jugador
-    const upcoming = scoutingMatches.filter(m => m.date >= today && m.date <= plus7)
+    // caliente sin próxima acción programada — el olvido más caro
+    active.filter(e => e.status === 'caliente' && !e.nextActionDate).forEach(e => {
+      out.push({ icon: '🔥', tone: 'red', entryId: e.id, text: `${e.playerName} está caliente sin próxima acción programada — ponle fecha` })
+    })
+
+    // alta sin encargado
+    active.filter(e => e.managers.length === 0).forEach(e => {
+      out.push({ icon: '👤', tone: 'red', entryId: e.id, text: `${e.playerName} no tiene encargado asignado` })
+    })
+
+    // incoherencia con el assessment de scouting
+    active.forEach(e => {
+      const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
+      if (!sp?.assessment) return
+      if (sp.assessment === 'Descartado') {
+        out.push({ icon: '🚫', tone: 'red', entryId: e.id, text: `${e.playerName}: en scouting está Descartado — ¿sacarlo del pipeline?` })
+      } else if (sp.assessment === 'Llamar' && e.status === 'frio') {
+        out.push({ icon: '🌡️', tone: 'amber', entryId: e.id, text: `${e.playerName}: en scouting está en «Llamar» pero aquí está frío — ¿subirlo?` })
+      }
+    })
+
+    // frío que se calienta solo: 2+ informes «Llamar» en 90 días
+    active.filter(e => e.status === 'frio' && e.scoutingPlayerId).forEach(e => {
+      const n = (reportsByPlayer[e.scoutingPlayerId!] ?? [])
+        .filter(r => (r.fecha ?? r.createdAt) >= since90 && normConclusion(r.conclusion) === 'Llamar').length
+      if (n >= 2) out.push({ icon: '📈', tone: 'amber', entryId: e.id, text: `${e.playerName} acumula ${n} informes «Llamar» recientes — candidato a recalentar` })
+    })
+
+    // le vieron en un partido (añadido al campograma, últimos 14 días)
+    const recentMatches = new Map(scoutingMatches.filter(m => m.date <= today && m.date >= minus14).map(m => [m.id, m]))
+    const seenByPlayer: Record<string, ScoutingMatch> = {}
+    matchPlayers.forEach(mp => {
+      const m = recentMatches.get(mp.matchId)
+      if (m && (!seenByPlayer[mp.playerId] || m.date > seenByPlayer[mp.playerId].date)) seenByPlayer[mp.playerId] = m
+    })
+    active.forEach(e => {
+      const m = e.scoutingPlayerId ? seenByPlayer[e.scoutingPlayerId] : undefined
+      if (m) out.push({ icon: '👀', tone: 'green', entryId: e.id, text: `A ${e.playerName} le vieron el ${fmtDate(m.date)} en ${m.homeTeam} vs ${m.awayTeam} — buen momento para llamar` })
+    })
+
+    // partidos de Captación registrados (≤30 días vista) donde juega su equipo
+    const upcoming = scoutingMatches.filter(m => m.date >= today && m.date <= plus30).sort((a, b) => a.date.localeCompare(b.date))
     active.forEach(e => {
       const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
       if (!sp?.team) return
@@ -1866,6 +1914,22 @@ function FirmasTab({
           icon: '📄', tone: 'green', entryId: e.id,
           text: `Informe nuevo de ${e.playerName}${r.persona ? ` (${r.persona})` : ''}${r.conclusion ? ` — conclusión: ${normConclusion(r.conclusion)}` : ''}`,
         })
+      }
+    })
+
+    // también está en Boulema: petición de informe sobre el mismo jugador
+    active.forEach(e => {
+      const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
+      const names = new Set([normSearch(e.playerName), ...(sp ? [normSearch(sp.fullName)] : [])])
+      const pet = boulemaPeticiones.find(p => names.has(normSearch(p.playerName)))
+      if (pet) out.push({ icon: '📥', tone: 'blue', entryId: e.id, text: `Hay una petición en Boulema sobre ${e.playerName} (pedida por ${pet.requestedBy})` })
+    })
+
+    // cambio de club en su ficha de scouting
+    active.forEach(e => {
+      const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
+      if (sp?.team && e.knownTeam && !teamsAlike(e.knownTeam, sp.team)) {
+        out.push({ icon: '🔁', tone: 'amber', entryId: e.id, text: `${e.playerName} cambió de club: ${e.knownTeam} → ${sp.team} — revisa la zona (confírmalo en su panel)` })
       }
     })
 
@@ -1908,8 +1972,25 @@ function FirmasTab({
       out.push({ icon: '👥', tone: 'red', entryId: l[0].id, text: `${l[0].playerName} está ${l.length} veces en el pipeline (${l.map(x => x.zone).join(' y ')})` })
     })
 
-    return out.slice(0, 30)
-  }, [entries, spById, scoutingMatches, reportsByPlayer])
+    // firmado que aún no está en Mantenimiento
+    entries.filter(e => e.status === 'firmado').forEach(e => {
+      const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
+      const nm = normSearch(sp?.fullName ?? e.playerName)
+      if (!players.some(p => normSearch(p.name) === nm)) {
+        out.push({ icon: '🎉', tone: 'green', entryId: e.id, text: `${e.playerName} está firmado y aún no está en Mantenimiento — créalo desde su panel` })
+      }
+    })
+
+    const rank = { red: 0, amber: 1, blue: 2, green: 3 }
+    return out.sort((a, b) => rank[a.tone] - rank[b.tone]).slice(0, 40)
+  }, [entries, spById, scoutingMatches, matchPlayers, reportsByPlayer, boulemaPeticiones, players])
+
+  // ── agenda: todas las próximas acciones pendientes, por fecha ──
+  const agenda = useMemo(() =>
+    entries
+      .filter(e => e.status !== 'firmado' && e.nextActionDate)
+      .sort((a, b) => (a.nextActionDate ?? '').localeCompare(b.nextActionDate ?? '')),
+  [entries])
 
   const patch = async (e: FirmasEntry, changes: Partial<FirmasEntry>) => {
     try {
@@ -1993,7 +2074,7 @@ function FirmasTab({
               className={`flex-shrink-0 font-medium ${actionOverdue ? 'text-red-500' : actionToday ? 'text-blue-600' : 'text-slate-400'}`}
               title={`${e.nextAction ?? 'Próxima acción'} · ${fmtDate(e.nextActionDate)}`}
             >
-              📌 {actionOverdue ? 'vencida' : actionToday ? 'hoy' : new Date(e.nextActionDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+              {FIRMAS_KIND_META[e.nextActionKind ?? '']?.icon ?? '📌'} {actionOverdue ? 'vencida' : actionToday ? 'hoy' : new Date(e.nextActionDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
             </span>
           )}
           {e.comments.filter(c => c.kind !== 'estatus').length > 0 && (
@@ -2084,6 +2165,53 @@ function FirmasTab({
                       <span>{a.text}</span>
                     </button>
                   ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Agenda: todas las próximas acciones programadas, por fecha */}
+          {agenda.length > 0 && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg overflow-hidden">
+              <button
+                onClick={() => setShowAgenda(v => !v)}
+                className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-blue-100/50 transition-colors"
+              >
+                <span className="text-sm">📌</span>
+                <span className="text-xs font-semibold text-blue-800">Agenda · {agenda.length} próxima{agenda.length !== 1 ? 's' : ''} acci{agenda.length !== 1 ? 'ones' : 'ón'}</span>
+                {agenda.some(e => (e.nextActionDate ?? '') < todayISO()) && (
+                  <span className="text-[10.5px] font-semibold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600">
+                    {agenda.filter(e => (e.nextActionDate ?? '') < todayISO()).length} vencida{agenda.filter(e => (e.nextActionDate ?? '') < todayISO()).length !== 1 ? 's' : ''}
+                  </span>
+                )}
+                <ChevronDown className={`w-4 h-4 text-blue-600 ml-auto flex-shrink-0 transition-transform ${showAgenda ? 'rotate-180' : ''}`} />
+              </button>
+              {showAgenda && (
+                <div className="border-t border-blue-200 divide-y divide-blue-100 max-h-64 overflow-y-auto">
+                  {agenda.map(e => {
+                    const overdue = (e.nextActionDate ?? '') < todayISO()
+                    const isToday = e.nextActionDate === todayISO()
+                    const assignee = e.nextActionAssignee ? profiles.find(p => p.id === e.nextActionAssignee) : undefined
+                    return (
+                      <button
+                        key={e.id}
+                        onClick={() => setPanelId(e.id)}
+                        className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-blue-100/40 transition-colors"
+                      >
+                        <span className={`flex-shrink-0 font-semibold tabular-nums ${overdue ? 'text-red-600' : isToday ? 'text-blue-700' : 'text-slate-500'}`}>
+                          {overdue ? '⚠ ' : ''}{isToday ? 'hoy' : new Date(e.nextActionDate!).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                        </span>
+                        <span className="flex-shrink-0">{FIRMAS_KIND_META[e.nextActionKind ?? '']?.icon ?? '📌'}</span>
+                        <span className="font-semibold truncate">{e.playerName}</span>
+                        <span className="text-slate-500 truncate">{e.nextAction ?? ''}</span>
+                        {assignee && (
+                          <span className="ml-auto flex-shrink-0 px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-mono font-bold text-[10px]">
+                            {assignee.avatar || assignee.name.split(' ')[0]}
+                          </span>
+                        )}
+                      </button>
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -2332,6 +2460,9 @@ function FirmasTab({
           spById={spById}
           reportsByPlayer={reportsByPlayer}
           zones={zones}
+          players={players}
+          onCreatePlayer={onCreatePlayer}
+          showToast={showToast}
           headerHeight={headerHeight}
           onClose={() => setPanelId(null)}
           onPatch={patch}
@@ -2395,6 +2526,7 @@ function FirmasTab({
 // Media pantalla en escritorio, dos columnas: datos | historial.
 function FirmasDetailPanel({
   entry, profiles, currentProfile, scoutingPlayers, spById, reportsByPlayer,
+  players, onCreatePlayer, showToast,
   zones, headerHeight, onClose, onPatch, onChangeStatus, onOpenScoutingPlayer, onRequestDelete,
 }: {
   entry: FirmasEntry
@@ -2403,6 +2535,9 @@ function FirmasDetailPanel({
   scoutingPlayers: ScoutingPlayer[]
   spById: Record<string, ScoutingPlayer>
   reportsByPlayer: Record<string, ScoutingReport[]>
+  players: Player[]
+  onCreatePlayer: (p: Player) => Promise<Player>
+  showToast: ShowToast
   zones: string[]
   headerHeight: number
   onClose: () => void
@@ -2434,6 +2569,7 @@ function FirmasDetailPanel({
   const [actionLabel, setActionLabel] = useState(entry.nextAction ?? '')
   const [actionDate, setActionDate] = useState(entry.nextActionDate ?? '')
   const [actionAssignee, setActionAssignee] = useState(entry.nextActionAssignee ?? currentProfile.id)
+  const [actionKind, setActionKind] = useState<string>(entry.nextActionKind ?? 'llamada')
 
   const zoneOptions = useMemo(() => {
     const base = [...FIRMAS_ZONE_ORDER]
@@ -2441,6 +2577,51 @@ function FirmasDetailPanel({
     if (!base.includes(entry.zone)) base.push(entry.zone)
     return base
   }, [zones, entry.zone])
+
+  // known_team: al abrir la ficha se sincroniza en silencio la primera vez
+  useEffect(() => {
+    if (sp?.team && !entry.knownTeam) void onPatch(entry, { knownTeam: sp.team })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sp?.id])
+
+  // ── crear en Mantenimiento al firmar ──
+  const existsInMaintenance = players.some(p => normSearch(p.name) === normSearch(sp?.fullName ?? entry.playerName))
+  const createInMaintenance = async () => {
+    try {
+      await onCreatePlayer({
+        id: crypto.randomUUID(), // lo genera la BBDD; el tipo lo exige
+        name: sp?.fullName ?? entry.playerName,
+        birthDate: sp?.birthdate ?? '',
+        positions: [sp?.position1, sp?.position2].filter(Boolean) as string[],
+        nationality: sp?.nationality ?? '',
+        photo: '',
+        clubs: sp?.team ? [{ name: sp.team, type: 'principal' as const }] : [],
+        managedBy: entry.managers,
+        representationContract: { start: (entry.signedAt ?? new Date().toISOString()).slice(0, 10), end: '' },
+        clubContract: { endDate: sp?.clubContract ?? '' },
+        contractHistory: [],
+        clubInterests: [],
+        performance: [],
+        matchReports: [],
+        videoSessions: [],
+        info: { family: '', personality: '' },
+        links: [],
+      })
+      const log: FirmasComment = {
+        id: crypto.randomUUID(),
+        text: '→ Creado como jugador de Mantenimiento',
+        date: new Date().toISOString(),
+        author: currentProfile.name,
+        authorId: currentProfile.id,
+        kind: 'nota',
+      }
+      void onPatch(entry, { comments: [...entry.comments, log] })
+      showToast('Creado en Mantenimiento — completa su ficha cuando quieras')
+    } catch (err) {
+      console.error(err)
+      showToast('No se pudo crear en Mantenimiento', 'error')
+    }
+  }
 
   const saveName = () => {
     setEditingName(false)
@@ -2500,6 +2681,7 @@ function FirmasDetailPanel({
       nextAction: actionLabel.trim() || undefined,
       nextActionDate: actionDate || undefined,
       nextActionAssignee: actionAssignee || undefined,
+      nextActionKind: actionKind || undefined,
     })
     setEditingAction(false)
   }
@@ -2511,10 +2693,11 @@ function FirmasDetailPanel({
       date: new Date().toISOString(),
       author: currentProfile.name,
       authorId: currentProfile.id,
-      kind: 'nota',
+      // coherencia con el historial: una llamada hecha queda como llamada
+      kind: (entry.nextActionKind as FirmasComment['kind']) ?? 'nota',
     }
     void onPatch(entry, {
-      nextAction: undefined, nextActionDate: undefined, nextActionAssignee: undefined,
+      nextAction: undefined, nextActionDate: undefined, nextActionAssignee: undefined, nextActionKind: undefined,
       comments: [...entry.comments, log],
     })
     setActionLabel(''); setActionDate('')
@@ -2579,12 +2762,43 @@ function FirmasDetailPanel({
 
             {/* ── Columna izquierda: datos ── */}
             <div className="space-y-3.5 min-w-0">
+              {/* firmado 🎉 → traspaso a Mantenimiento */}
+              {entry.status === 'firmado' && (
+                <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 flex items-center gap-2 flex-wrap">
+                  <span className="text-xs text-green-700 font-medium">🎉 Firmado{entry.signedAt ? ` el ${fmtDate(entry.signedAt)}` : ''}</span>
+                  {existsInMaintenance ? (
+                    <span className="ml-auto text-[11px] text-green-600 font-medium">Ya en Mantenimiento ✓</span>
+                  ) : (
+                    <button
+                      onClick={() => void createInMaintenance()}
+                      className="ml-auto px-2.5 py-1 rounded-lg bg-green-600 text-white text-[11px] font-semibold hover:bg-green-700 transition-colors"
+                    >
+                      Crear en Mantenimiento
+                    </button>
+                  )}
+                </div>
+              )}
+
               {/* próxima acción */}
               {entry.status !== 'firmado' && (
                 <div>
                   <label className={LABEL_CLS}>Próxima acción</label>
                   {editingAction ? (
                     <div className="mt-1 border border-blue-200 rounded-lg p-2 bg-blue-50/40 space-y-1.5">
+                      <div className="flex items-center gap-1 flex-wrap">
+                        {Object.entries(FIRMAS_KIND_META).map(([k, meta]) => (
+                          <button
+                            key={k}
+                            onClick={() => setActionKind(k)}
+                            className={`px-1.5 py-0.5 rounded-md text-[11px] transition-colors ${
+                              actionKind === k ? 'bg-primary/10 text-primary font-semibold ring-1 ring-primary/30' : 'text-slate-400 hover:bg-white'
+                            }`}
+                            title={meta.label}
+                          >
+                            {meta.icon} <span className="hidden xl:inline">{meta.label}</span>
+                          </button>
+                        ))}
+                      </div>
                       <input
                         value={actionLabel}
                         onChange={e => setActionLabel(e.target.value)}
@@ -2608,7 +2822,7 @@ function FirmasDetailPanel({
                     </div>
                   ) : entry.nextAction || entry.nextActionDate ? (
                     <div className={`mt-1 flex items-center gap-2 border rounded-lg px-2.5 py-1.5 ${actionOverdue ? 'border-red-200 bg-red-50/60' : 'border-blue-200 bg-blue-50/50'}`}>
-                      <span className="text-xs font-semibold text-slate-800 truncate">📌 {entry.nextAction ?? 'Acción'}</span>
+                      <span className="text-xs font-semibold text-slate-800 truncate">{FIRMAS_KIND_META[entry.nextActionKind ?? '']?.icon ?? '📌'} {entry.nextAction ?? 'Acción'}</span>
                       <span className={`text-[11px] flex-shrink-0 ${actionOverdue ? 'text-red-600 font-semibold' : 'text-slate-500'}`}>
                         {entry.nextActionDate ? fmtDate(entry.nextActionDate) : 'sin fecha'}
                         {actionOverdue ? ' · vencida' : entry.nextActionDate === todayISO() ? ' · hoy' : ''}
@@ -2617,7 +2831,7 @@ function FirmasDetailPanel({
                       <span className="ml-auto flex gap-1 flex-shrink-0">
                         <button onClick={completeAction} className="px-2 py-0.5 rounded-md bg-green-600 text-white text-[11px] font-medium hover:bg-green-700" title="Marcar hecha (queda en el historial)">✓</button>
                         <button
-                          onClick={() => { setActionLabel(entry.nextAction ?? ''); setActionDate(entry.nextActionDate ?? ''); setActionAssignee(entry.nextActionAssignee ?? currentProfile.id); setEditingAction(true) }}
+                          onClick={() => { setActionLabel(entry.nextAction ?? ''); setActionDate(entry.nextActionDate ?? ''); setActionAssignee(entry.nextActionAssignee ?? currentProfile.id); setActionKind(entry.nextActionKind ?? 'llamada'); setEditingAction(true) }}
                           className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-white"
                           aria-label="Editar próxima acción"
                         >
@@ -2627,7 +2841,7 @@ function FirmasDetailPanel({
                     </div>
                   ) : (
                     <button
-                      onClick={() => { setActionLabel(''); setActionDate(''); setActionAssignee(currentProfile.id); setEditingAction(true) }}
+                      onClick={() => { setActionLabel(''); setActionDate(''); setActionAssignee(currentProfile.id); setActionKind('llamada'); setEditingAction(true) }}
                       className="mt-1 w-full border border-dashed border-slate-300 rounded-lg px-2.5 py-1.5 text-[11px] text-slate-400 hover:text-slate-600 hover:border-slate-400 transition-colors text-left"
                     >
                       + Programar próxima acción (sale en el Dashboard el día que toca)
@@ -2674,6 +2888,17 @@ function FirmasDetailPanel({
               {/* vínculo con jugador de Captación — compacto */}
               <div>
                 <label className={LABEL_CLS}>Jugador de Captación</label>
+                {sp?.team && entry.knownTeam && !teamsAlike(entry.knownTeam, sp.team) && (
+                  <div className="mt-1 mb-1 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 text-[11px] text-amber-800">
+                    <span>🔁 Cambio de club: <b>{entry.knownTeam}</b> → <b>{sp.team}</b>. Revisa la zona.</span>
+                    <button
+                      onClick={() => void onPatch(entry, { knownTeam: sp.team })}
+                      className="ml-auto flex-shrink-0 px-2 py-0.5 rounded-md bg-amber-600 text-white text-[10.5px] font-semibold hover:bg-amber-700"
+                    >
+                      Entendido
+                    </button>
+                  </div>
+                )}
                 {sp ? (
                   <div className="mt-1 flex items-center gap-2 border border-slate-200 rounded-lg px-2.5 py-1.5 bg-slate-50">
                     <div className="min-w-0 flex-1 text-xs">
@@ -2696,7 +2921,7 @@ function FirmasDetailPanel({
                       Ver ficha
                     </button>
                     <button
-                      onClick={() => void onPatch(entry, { scoutingPlayerId: undefined })}
+                      onClick={() => void onPatch(entry, { scoutingPlayerId: undefined, knownTeam: undefined })}
                       className="p-0.5 text-slate-300 hover:text-red-400 flex-shrink-0"
                       title="Quitar vínculo"
                       aria-label="Quitar vínculo"
@@ -2708,7 +2933,7 @@ function FirmasDetailPanel({
                   <div className="mt-1">
                     <FirmasLinkSearch
                       scoutingPlayers={scoutingPlayers}
-                      onSelect={p => void onPatch(entry, { scoutingPlayerId: p.id })}
+                      onSelect={p => void onPatch(entry, { scoutingPlayerId: p.id, knownTeam: p.team })}
                       placeholder="Vincular con jugador de Captación…"
                     />
                   </div>
@@ -2911,6 +3136,7 @@ function FirmasAddModal({
       zone: zoneValue,
       status,
       scoutingPlayerId: linked?.id,
+      knownTeam: linked?.team,
       managers,
       notes: undefined,
       comments: [],
@@ -3061,6 +3287,10 @@ interface Props {
   /** Abrir una entrada del pipeline Firmar (navegación desde el Dashboard) */
   openFirmasEntryId?: string | null
   onOpenFirmasEntryConsumed?: () => void
+  /** Para los avisos del pipeline Firmar y el alta en Mantenimiento al firmar */
+  players: Player[]
+  onCreatePlayer: (p: Player) => Promise<Player>
+  boulemaPeticiones: BoulemaPeticion[]
   firmasEntries: FirmasEntry[]
   onCreateFirmasEntry: (e: Omit<FirmasEntry, 'id' | 'createdAt' | 'updatedAt'>) => Promise<FirmasEntry>
   onUpdateFirmasEntry: (e: FirmasEntry) => Promise<void>
@@ -3166,6 +3396,9 @@ export function Captacion({
   onOpenPlayerConsumed,
   openFirmasEntryId,
   onOpenFirmasEntryConsumed,
+  players,
+  onCreatePlayer,
+  boulemaPeticiones,
   firmasEntries,
   onCreateFirmasEntry,
   onUpdateFirmasEntry,
@@ -4092,6 +4325,10 @@ export function Captacion({
           scoutingPlayers={scoutingPlayers}
           scoutingReports={scoutingReports}
           scoutingMatches={scoutingMatches}
+          matchPlayers={matchPlayers}
+          boulemaPeticiones={boulemaPeticiones}
+          players={players}
+          onCreatePlayer={onCreatePlayer}
           openEntryId={openFirmasEntryId}
           onOpenEntryConsumed={onOpenFirmasEntryConsumed}
           onCreate={onCreateFirmasEntry}
