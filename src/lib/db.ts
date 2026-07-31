@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion, ClubLog, PlayerMeeting, PlayerActivity, MemberStatus, Postpartido } from '../types'
+import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion, ClubLog, PlayerMeeting, PlayerActivity, MemberStatus, Postpartido, FirmasEntry } from '../types'
 
 // ── helpers ──────────────────────────────────────────────────
 
@@ -896,6 +896,87 @@ export async function updateScoutingMatch(m: ScoutingMatch): Promise<void> {
 
 export async function deleteScoutingMatch(id: string): Promise<void> {
   const { error } = await supabase.from('scouting_matches').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── Captación · Firmar (pipeline de firmas) ──────────────────
+
+function dbToFirmasEntry(row: Record<string, unknown>): FirmasEntry {
+  return {
+    id: row.id as string,
+    playerName: row.player_name as string,
+    zone: (row.zone as string) ?? 'Otros',
+    status: (row.status as FirmasEntry['status']) ?? 'llamar',
+    scoutingPlayerId: (row.scouting_player_id as string) ?? undefined,
+    managers: (row.managers as string[]) ?? [],
+    notes: (row.notes as string) ?? undefined,
+    comments: (row.comments as FirmasEntry['comments']) ?? [],
+    trelloUrl: (row.trello_url as string) ?? undefined,
+    sortPos: (row.sort_pos as number) ?? 0,
+    statusUpdatedAt: (row.status_updated_at as string) ?? undefined,
+    createdAt: row.created_at as string,
+    updatedAt: (row.updated_at as string) ?? (row.created_at as string),
+  }
+}
+
+export async function fetchFirmasEntries(): Promise<FirmasEntry[]> {
+  // try/catch: la tabla puede no existir aún (migración pendiente) — la app no debe romper
+  try {
+    const all: FirmasEntry[] = []
+    const pageSize = 1000
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase
+        .from('captacion_firmas').select('*').order('sort_pos')
+        .range(from, from + pageSize - 1)
+      if (error) return all.length ? all : []
+      const page = (data ?? []).map(dbToFirmasEntry)
+      all.push(...page)
+      if (page.length < pageSize) break
+      from += pageSize
+    }
+    return all
+  } catch {
+    return []
+  }
+}
+
+export async function createFirmasEntry(e: Omit<FirmasEntry, 'id' | 'createdAt' | 'updatedAt'>): Promise<FirmasEntry> {
+  const { data, error } = await supabase.from('captacion_firmas').insert({
+    player_name: e.playerName,
+    zone: e.zone,
+    status: e.status,
+    scouting_player_id: e.scoutingPlayerId ?? null,
+    managers: e.managers ?? [],
+    notes: e.notes ?? null,
+    comments: e.comments ?? [],
+    trello_url: e.trelloUrl ?? null,
+    sort_pos: e.sortPos ?? 0,
+    status_updated_at: e.statusUpdatedAt ?? null,
+  }).select().single()
+  if (error) throw error
+  return dbToFirmasEntry(data)
+}
+
+export async function updateFirmasEntry(e: FirmasEntry): Promise<void> {
+  const { error } = await supabase.from('captacion_firmas').update({
+    player_name: e.playerName,
+    zone: e.zone,
+    status: e.status,
+    scouting_player_id: e.scoutingPlayerId ?? null,
+    managers: e.managers ?? [],
+    notes: e.notes ?? null,
+    comments: e.comments ?? [],
+    trello_url: e.trelloUrl ?? null,
+    sort_pos: e.sortPos ?? 0,
+    status_updated_at: e.statusUpdatedAt ?? null,
+    updated_at: new Date().toISOString(),
+  }).eq('id', e.id)
+  if (error) throw error
+}
+
+export async function deleteFirmasEntry(id: string): Promise<void> {
+  const { error } = await supabase.from('captacion_firmas').delete().eq('id', id)
   if (error) throw error
 }
 

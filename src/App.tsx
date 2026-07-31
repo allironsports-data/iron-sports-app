@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, lazy } from 'react'
 import { useAuth } from './contexts/AuthContext'
-import type { Player, Task, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion, MemberStatus, Postpartido } from './types'
+import type { Player, Task, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion, MemberStatus, Postpartido, FirmasEntry } from './types'
 import * as db from './lib/db'
 import { supabase } from './lib/supabase'
 import type { Profile } from './contexts/AuthContext'
@@ -87,6 +87,7 @@ export default function App() {
   const [scoutingMatches, setScoutingMatches] = useState<ScoutingMatch[]>([])
   const [matchPlayers, setMatchPlayers] = useState<ScoutingMatchPlayer[]>([])
   const [boulemaPeticiones, setBoulemaPeticiones] = useState<BoulemaPeticion[]>([])
+  const [firmasEntries, setFirmasEntries] = useState<FirmasEntry[]>([])
 
   // ── Persist nav state to sessionStorage ───────────────────
   useEffect(() => {
@@ -151,7 +152,8 @@ export default function App() {
         db.fetchBoulemaPeticiones().catch(() => [] as BoulemaPeticion[]),
         db.fetchMemberStatuses().catch(() => [] as MemberStatus[]),
         db.fetchPostpartidos().catch(() => [] as Postpartido[]),
-      ]).then(([cl, de, ng, sp, sr, sm, mp, bp, ms, pp]) => {
+        db.fetchFirmasEntries().catch(() => [] as FirmasEntry[]),
+      ]).then(([cl, de, ng, sp, sr, sm, mp, bp, ms, pp, fe]) => {
         if (cancelled) return
         setClubs(cl as Club[])
         setDistEntries(de as DistributionEntry[])
@@ -163,6 +165,7 @@ export default function App() {
         setBoulemaPeticiones(bp as BoulemaPeticion[])
         setMemberStatuses(ms as MemberStatus[])
         setPostpartidos(pp as Postpartido[])
+        setFirmasEntries(fe as FirmasEntry[])
       }).catch((err: unknown) => {
         // No bloquea la app: Distribución/Captación mostrarán listas vacías
         console.error('Error cargando datos secundarios:', err)
@@ -301,6 +304,8 @@ export default function App() {
         debouncedRefetch('member_status', () => db.fetchMemberStatuses().then((d) => setMemberStatuses(d)).catch(() => {})))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'postpartidos' }, () =>
         debouncedRefetch('postpartidos', () => db.fetchPostpartidos().then((d) => setPostpartidos(d)).catch(() => {})))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'captacion_firmas' }, () =>
+        debouncedRefetch('captacion_firmas', () => db.fetchFirmasEntries().then((d) => setFirmasEntries(d)).catch(() => {})))
       .subscribe()
     return () => {
       Object.values(timers).forEach(clearTimeout)
@@ -522,6 +527,21 @@ export default function App() {
     setMatchPlayers(prev => prev.filter(x => !(x.matchId === matchId && x.playerId === playerId)))
   }
 
+  // ── Captación · Firmar (pipeline de firmas) ─────────────────
+  const handleCreateFirmasEntry = async (e: Omit<FirmasEntry, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const saved = await db.createFirmasEntry(e)
+    setFirmasEntries(prev => [...prev, saved])
+    return saved
+  }
+  const handleUpdateFirmasEntry = async (e: FirmasEntry) => {
+    await db.updateFirmasEntry(e)
+    setFirmasEntries(prev => prev.map(x => x.id === e.id ? e : x))
+  }
+  const handleDeleteFirmasEntry = async (id: string) => {
+    await db.deleteFirmasEntry(id)
+    setFirmasEntries(prev => prev.filter(x => x.id !== id))
+  }
+
   const handleAddBoulemaPeticion = async (p: Omit<BoulemaPeticion, 'id' | 'createdAt'>) => {
     const saved = await db.createBoulemaPeticion(p)
     setBoulemaPeticiones(prev => [saved, ...prev])
@@ -715,6 +735,10 @@ export default function App() {
         onAddBoulemaPeticion={handleAddBoulemaPeticion}
         onUpdateBoulemaPeticion={handleUpdateBoulemaPeticion}
         onDeleteBoulemaPeticion={handleDeleteBoulemaPeticion}
+        firmasEntries={firmasEntries}
+        onCreateFirmasEntry={handleCreateFirmasEntry}
+        onUpdateFirmasEntry={handleUpdateFirmasEntry}
+        onDeleteFirmasEntry={handleDeleteFirmasEntry}
       />
     )
   }

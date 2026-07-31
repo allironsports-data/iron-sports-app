@@ -335,6 +335,36 @@ export interface ScoutingMatch {
   createdAt: string
 }
 
+// ── CAPTACIÓN · FIRMAR (pipeline de firmas, ex-Trello) ──────
+// Jugadores en proceso de captación activa (conseguir la firma),
+// organizados por zona geográfica y estatus de contacto.
+
+export type FirmasStatus = 'llamar' | 'caliente' | 'templado' | 'frio' | 'decidir'
+
+export interface FirmasComment {
+  id: string
+  text: string
+  date: string        // ISO timestamp
+  author?: string     // nombre visible (importado de Trello o del perfil)
+  authorId?: string   // profiles.id si el autor es un usuario de la app
+}
+
+export interface FirmasEntry {
+  id: string
+  playerName: string
+  zone: string                 // área geográfica (texto libre)
+  status: FirmasStatus
+  scoutingPlayerId?: string    // vínculo con scouting_players
+  managers: string[]           // profiles.id de los encargados
+  notes?: string
+  comments: FirmasComment[]
+  trelloUrl?: string           // tarjeta original de Trello (import)
+  sortPos: number
+  statusUpdatedAt?: string
+  createdAt: string
+  updatedAt: string
+}
+
 // ── POSTPARTIDOS ────────────────────────────────────────────
 // Informe postpartido: partido (Captación) + jugador (nuestro o texto
 // libre) + responsable. La tarea asociada (taskId) lleva el estado.

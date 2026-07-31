@@ -4,9 +4,10 @@ import {
   FileText, Calendar, ChevronRight,
   TrendingUp, Eye, Maximize2, Minimize2, Pencil,
   BarChart2, ClipboardList, Users, Inbox, Send, Target, Sun,
+  PenLine, MapPin, Link2, MessageSquare, ExternalLink, LayoutGrid,
 } from 'lucide-react'
 import logoImg from '../assets/logo.jpeg'
-import type { ScoutingPlayer, ScoutingReport, ScoutingAssessment, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion } from '../types'
+import type { ScoutingPlayer, ScoutingReport, ScoutingAssessment, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion, FirmasEntry, FirmasStatus, FirmasComment } from '../types'
 import type { Profile } from '../contexts/AuthContext'
 import * as db from '../lib/db'
 import { ConfirmModal } from '../components/ConfirmModal'
@@ -22,7 +23,7 @@ type ShowToast = (message: string, variant?: 'success' | 'error' | 'info') => vo
 
 // ── Constants ────────────────────────────────────────────────
 
-type CaptacionTab = 'jugadores' | 'conclusiones' | 'informes' | 'estadisticas' | 'partidos' | 'pretemporada' | 'boulema'
+type CaptacionTab = 'jugadores' | 'firmar' | 'conclusiones' | 'informes' | 'estadisticas' | 'partidos' | 'pretemporada' | 'boulema'
 
 const ASSESSMENT_CONFIG: Record<ScoutingAssessment, { label: string; bg: string; text: string; border: string }> = {
   Llamar:     { label: 'Llamar',     bg: 'bg-amber-100',   text: 'text-amber-700',   border: 'border-amber-200' },
@@ -1502,6 +1503,983 @@ function ConclusionesTab({ players, reports, threshold, onThresholdChange, isAdm
   )
 }
 
+// ── CAPTACIÓN · FIRMAR (pipeline de firmas, ex-Trello) ───────
+// Segunda parte de Captación: conseguir que el jugador firme.
+// Jugadores por zona geográfica y estatus de contacto
+// (llamar / caliente / templado / frío / decidir), con encargados,
+// comentarios y vínculo al jugador de scouting.
+
+const FIRMAS_STATUSES: FirmasStatus[] = ['llamar', 'caliente', 'templado', 'frio', 'decidir']
+
+const FIRMAS_CONFIG: Record<FirmasStatus, { label: string; dot: string; bg: string; text: string; border: string; col: string }> = {
+  llamar:   { label: 'Llamar',   dot: 'bg-amber-500',  bg: 'bg-amber-100',  text: 'text-amber-700',  border: 'border-amber-200',  col: 'border-t-amber-400' },
+  caliente: { label: 'Caliente', dot: 'bg-red-500',    bg: 'bg-red-100',    text: 'text-red-600',    border: 'border-red-200',    col: 'border-t-red-400' },
+  templado: { label: 'Templado', dot: 'bg-yellow-500', bg: 'bg-yellow-100', text: 'text-yellow-700', border: 'border-yellow-200', col: 'border-t-yellow-400' },
+  frio:     { label: 'Frío',     dot: 'bg-sky-500',    bg: 'bg-sky-100',    text: 'text-sky-700',    border: 'border-sky-200',    col: 'border-t-sky-400' },
+  decidir:  { label: 'Decidir',  dot: 'bg-violet-500', bg: 'bg-violet-100', text: 'text-violet-700', border: 'border-violet-200', col: 'border-t-violet-400' },
+}
+
+// Orden canónico de zonas (las del Trello); las nuevas van después, alfabéticas
+const FIRMAS_ZONE_ORDER = [
+  'Valencia',
+  'Andalucia / Murcia',
+  'Catalunya / Aragon / Baleares / Canarias',
+  'Madrid',
+  'CyL/Cantabria/Asturias',
+  'Cantabria/Galicia/Euskadi',
+  'Europa/Resto Mundo',
+]
+
+function normSearch(s: string): string {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+}
+
+// Chip de estatus con desplegable para cambiarlo inline
+function FirmasStatusChip({ status, onChange, size = 'sm' }: {
+  status: FirmasStatus
+  onChange: (s: FirmasStatus) => void
+  size?: 'sm' | 'md'
+}) {
+  const [open, setOpen] = useState(false)
+  const cfg = FIRMAS_CONFIG[status]
+  return (
+    <div className="relative inline-block" onClick={e => e.stopPropagation()}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className={`inline-flex items-center gap-1.5 rounded-full border font-semibold transition-colors ${cfg.bg} ${cfg.text} ${cfg.border} ${
+          size === 'sm' ? 'px-2 py-0.5 text-[11px]' : 'px-2.5 py-1 text-xs'
+        }`}
+      >
+        <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+        {cfg.label}
+        <ChevronDown className="w-3 h-3 opacity-60" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-slate-200 rounded-lg shadow-lg py-1 min-w-[130px]">
+            {FIRMAS_STATUSES.map(s => (
+              <button
+                key={s}
+                onClick={() => { setOpen(false); if (s !== status) onChange(s) }}
+                className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left hover:bg-slate-50 ${s === status ? 'font-semibold text-slate-800' : 'text-slate-600'}`}
+              >
+                <span className={`w-2 h-2 rounded-full ${FIRMAS_CONFIG[s].dot}`} />
+                {FIRMAS_CONFIG[s].label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// Avatares de encargados (iniciales)
+function FirmasManagers({ managerIds, profiles, max = 3 }: { managerIds: string[]; profiles: Profile[]; max?: number }) {
+  const mgrs = managerIds.map(id => profiles.find(p => p.id === id)).filter(Boolean) as Profile[]
+  if (mgrs.length === 0) return null
+  return (
+    <span className="inline-flex items-center -space-x-1">
+      {mgrs.slice(0, max).map(p => {
+        const c = scoutColor(p.avatar || p.name)
+        return (
+          <span
+            key={p.id}
+            title={p.name}
+            className={`w-5 h-5 rounded-full border border-white flex items-center justify-center text-[8.5px] font-bold ${c.bg} ${c.text}`}
+          >
+            {(p.avatar || p.name.slice(0, 2)).slice(0, 3).toUpperCase()}
+          </span>
+        )
+      })}
+      {mgrs.length > max && (
+        <span className="w-5 h-5 rounded-full border border-white bg-slate-100 text-slate-500 flex items-center justify-center text-[8.5px] font-bold">
+          +{mgrs.length - max}
+        </span>
+      )}
+    </span>
+  )
+}
+
+// Buscador de jugador de scouting para vincular
+function FirmasLinkSearch({ scoutingPlayers, onSelect, placeholder }: {
+  scoutingPlayers: ScoutingPlayer[]
+  onSelect: (p: ScoutingPlayer) => void
+  placeholder?: string
+}) {
+  const [q, setQ] = useState('')
+  const results = useMemo(() => {
+    const n = normSearch(q)
+    if (n.length < 2) return []
+    return scoutingPlayers
+      .filter(p => normSearch(p.fullName).includes(n) || (p.team && normSearch(p.team).includes(n)))
+      .slice(0, 8)
+  }, [q, scoutingPlayers])
+  return (
+    <div className="relative">
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+        <input
+          value={q}
+          onChange={e => setQ(e.target.value)}
+          placeholder={placeholder ?? 'Buscar en jugadores de Captación…'}
+          className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+        />
+      </div>
+      {results.length > 0 && (
+        <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-white border border-slate-200 rounded-lg shadow-lg py-1 max-h-56 overflow-y-auto">
+          {results.map(p => (
+            <button
+              key={p.id}
+              onClick={() => { onSelect(p); setQ('') }}
+              className="w-full text-left px-3 py-1.5 hover:bg-slate-50"
+            >
+              <span className="text-xs font-medium text-slate-800">{p.fullName}</span>
+              <span className="text-[11px] text-slate-400 ml-1.5">
+                {[p.team, p.birthdate ? p.birthdate.slice(0, 4) : null].filter(Boolean).join(' · ') || '—'}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function FirmasTab({
+  entries, profiles, currentProfile, scoutingPlayers, scoutingReports,
+  onCreate, onUpdate, onDelete, onOpenScoutingPlayer, showToast, headerHeight,
+}: {
+  entries: FirmasEntry[]
+  profiles: Profile[]
+  currentProfile: Profile
+  scoutingPlayers: ScoutingPlayer[]
+  scoutingReports: ScoutingReport[]
+  onCreate: (e: Omit<FirmasEntry, 'id' | 'createdAt' | 'updatedAt'>) => Promise<FirmasEntry>
+  onUpdate: (e: FirmasEntry) => Promise<void>
+  onDelete: (id: string) => Promise<void>
+  onOpenScoutingPlayer: (id: string) => void
+  showToast: ShowToast
+  headerHeight: number
+}) {
+  // ── vista y filtros ──
+  const [view, setView] = useState<'estatus' | 'zona'>(
+    () => (sessionStorage.getItem('capt_firmas_view') as 'estatus' | 'zona') ?? 'estatus'
+  )
+  useEffect(() => { sessionStorage.setItem('capt_firmas_view', view) }, [view])
+
+  const [search, setSearch] = useState('')
+  const debSearch = useDebounce(search, 250)
+  const [zoneFilter, setZoneFilter] = useState<string>('all')
+  const [statusFilter, setStatusFilter] = useState<FirmasStatus | 'all'>('all')
+  const [managerFilter, setManagerFilter] = useState<string>('all')
+
+  // ── panel y modales ──
+  const [panelId, setPanelId] = useState<string | null>(null)
+  const [showAdd, setShowAdd] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState<FirmasEntry | null>(null)
+
+  const panelEntry = entries.find(e => e.id === panelId) ?? null
+  useEscapeKey(() => setPanelId(null), !!panelEntry && !confirmDelete)
+
+  const spById = useMemo(() => {
+    const m: Record<string, ScoutingPlayer> = {}
+    scoutingPlayers.forEach(p => { m[p.id] = p })
+    return m
+  }, [scoutingPlayers])
+
+  const reportCountByPlayer = useMemo(() => {
+    const m: Record<string, number> = {}
+    scoutingReports.forEach(r => { m[r.playerId] = (m[r.playerId] ?? 0) + 1 })
+    return m
+  }, [scoutingReports])
+
+  // Zonas presentes, en orden canónico + extras alfabéticas
+  const zones = useMemo(() => {
+    const present = [...new Set(entries.map(e => e.zone))]
+    const canonical = FIRMAS_ZONE_ORDER.filter(z => present.includes(z))
+    const extra = present.filter(z => !FIRMAS_ZONE_ORDER.includes(z)).sort((a, b) => a.localeCompare(b))
+    return [...canonical, ...extra]
+  }, [entries])
+
+  // Encargados presentes (para el filtro)
+  const managerOptions = useMemo(() => {
+    const ids = new Set(entries.flatMap(e => e.managers))
+    return profiles.filter(p => ids.has(p.id))
+  }, [entries, profiles])
+
+  const filtered = useMemo(() => {
+    const n = normSearch(debSearch)
+    return entries.filter(e => {
+      if (zoneFilter !== 'all' && e.zone !== zoneFilter) return false
+      if (statusFilter !== 'all' && e.status !== statusFilter) return false
+      if (managerFilter !== 'all' && !e.managers.includes(managerFilter)) return false
+      if (n) {
+        const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
+        const hay = normSearch([e.playerName, sp?.fullName ?? '', sp?.team ?? ''].join(' '))
+        if (!hay.includes(n)) return false
+      }
+      return true
+    })
+  }, [entries, debSearch, zoneFilter, statusFilter, managerFilter, spById])
+
+  const byStatus = useMemo(() => {
+    const m: Record<FirmasStatus, FirmasEntry[]> = { llamar: [], caliente: [], templado: [], frio: [], decidir: [] }
+    filtered.forEach(e => m[e.status].push(e))
+    FIRMAS_STATUSES.forEach(s => m[s].sort((a, b) => a.sortPos - b.sortPos || a.playerName.localeCompare(b.playerName)))
+    return m
+  }, [filtered])
+
+  const patch = async (e: FirmasEntry, changes: Partial<FirmasEntry>) => {
+    try {
+      await onUpdate({ ...e, ...changes })
+    } catch (err) {
+      console.error(err)
+      showToast('No se pudo guardar el cambio', 'error')
+    }
+  }
+
+  const changeStatus = (e: FirmasEntry, s: FirmasStatus) => {
+    void patch(e, { status: s, statusUpdatedAt: new Date().toISOString() })
+    showToast(`${e.playerName} → ${FIRMAS_CONFIG[s].label}`)
+  }
+
+  const clearFilters = () => { setSearch(''); setZoneFilter('all'); setStatusFilter('all'); setManagerFilter('all') }
+
+  // Info secundaria de una entrada: club + año del jugador vinculado
+  const subInfo = (e: FirmasEntry): string => {
+    const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
+    if (!sp) return e.zone
+    return [sp.team, sp.birthdate ? sp.birthdate.slice(0, 4) : null].filter(Boolean).join(' · ') || e.zone
+  }
+
+  // ── tarjeta (vista estatus) ──
+  const card = (e: FirmasEntry) => {
+    const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
+    return (
+      <button
+        key={e.id}
+        onClick={() => setPanelId(e.id)}
+        className="w-full text-left bg-white border border-slate-200 rounded-lg px-2.5 py-2 hover:border-slate-300 hover:shadow-sm transition-all"
+      >
+        <div className="flex items-start justify-between gap-1.5">
+          <span className="text-xs font-semibold text-slate-800 leading-snug">{e.playerName}</span>
+          <FirmasManagers managerIds={e.managers} profiles={profiles} />
+        </div>
+        <div className="mt-1 flex items-center gap-2 text-[11px] text-slate-400">
+          <span className="inline-flex items-center gap-1 min-w-0">
+            <MapPin className="w-3 h-3 flex-shrink-0" />
+            <span className="truncate">{e.zone}</span>
+          </span>
+          {sp && (
+            <span className="inline-flex items-center gap-1 text-blue-500 flex-shrink-0" title={`Vinculado: ${sp.fullName}`}>
+              <Link2 className="w-3 h-3" />
+              {sp.birthdate ? sp.birthdate.slice(2, 4) : ''}
+            </span>
+          )}
+          {e.comments.length > 0 && (
+            <span className="inline-flex items-center gap-0.5 flex-shrink-0">
+              <MessageSquare className="w-3 h-3" />
+              {e.comments.length}
+            </span>
+          )}
+        </div>
+      </button>
+    )
+  }
+
+  // ── fila (vista zona) ──
+  const row = (e: FirmasEntry) => {
+    return (
+      <div
+        key={e.id}
+        onClick={() => setPanelId(e.id)}
+        className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50/70 cursor-pointer transition-colors"
+      >
+        <FirmasStatusChip status={e.status} onChange={s => changeStatus(e, s)} />
+        <span className="text-sm font-medium text-slate-800 truncate">{e.playerName}</span>
+        <span className="text-xs text-slate-400 truncate hidden sm:inline">{subInfo(e)}</span>
+        <span className="ml-auto flex items-center gap-2 flex-shrink-0">
+          {e.comments.length > 0 && (
+            <span className="inline-flex items-center gap-0.5 text-[11px] text-slate-400">
+              <MessageSquare className="w-3 h-3" />
+              {e.comments.length}
+            </span>
+          )}
+          <FirmasManagers managerIds={e.managers} profiles={profiles} />
+          <ChevronRight className="w-3.5 h-3.5 text-slate-300" />
+        </span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex-1 w-full px-3 sm:px-6 py-4 space-y-3">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-semibold text-slate-800">Firmar</h2>
+          <p className="text-xs text-slate-400">Captación activa: jugadores en proceso de conseguir la firma, por zona y estatus</p>
+        </div>
+        <button
+          onClick={() => setShowAdd(true)}
+          className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-medium hover:bg-primary/90 transition-colors"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          Añadir jugador
+        </button>
+      </div>
+
+      {entries.length === 0 ? (
+        <EmptyState
+          icon={<PenLine className="w-10 h-10" />}
+          title="Aún no hay jugadores en el pipeline de firmas"
+          subtitle="Si acabas de activar esta función, recuerda ejecutar la migración SQL en Supabase y el snippet de importación del Trello"
+        />
+      ) : (
+        <>
+          {/* Estadísticas */}
+          <div className="flex border border-slate-200 rounded-lg bg-white overflow-hidden divide-x divide-slate-200">
+            <div className="flex-1 px-4 py-2">
+              <div className="text-lg font-bold text-slate-800 leading-tight">{filtered.length}</div>
+              <div className="text-[11px] text-slate-400">Jugadores</div>
+            </div>
+            {FIRMAS_STATUSES.map(s => (
+              <div key={s} className="flex-1 px-4 py-2">
+                <div className={`text-lg font-bold leading-tight ${FIRMAS_CONFIG[s].text}`}>{byStatus[s].length}</div>
+                <div className="text-[11px] text-slate-400">{FIRMAS_CONFIG[s].label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Filtros + toggle de vista */}
+          <div className="bg-white border border-slate-200 rounded-lg px-3 py-2.5 flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 min-w-[150px] max-w-xs">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Buscar jugador, club..."
+                className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              />
+              {search && (
+                <button onClick={() => setSearch('')} aria-label="Limpiar búsqueda" className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+            <select value={zoneFilter} onChange={e => setZoneFilter(e.target.value)} className={SELECT_CLS}>
+              <option value="all">Todas las zonas</option>
+              {zones.map(z => <option key={z} value={z}>{z}</option>)}
+            </select>
+            {view === 'zona' && (
+              <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as FirmasStatus | 'all')} className={SELECT_CLS}>
+                <option value="all">Todos los estatus</option>
+                {FIRMAS_STATUSES.map(s => <option key={s} value={s}>{FIRMAS_CONFIG[s].label}</option>)}
+              </select>
+            )}
+            <select value={managerFilter} onChange={e => setManagerFilter(e.target.value)} className={SELECT_CLS}>
+              <option value="all">Todos los encargados</option>
+              {managerOptions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            {(search || zoneFilter !== 'all' || statusFilter !== 'all' || managerFilter !== 'all') && (
+              <button
+                onClick={clearFilters}
+                className="text-xs text-slate-500 border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white hover:bg-slate-50 transition-colors"
+              >
+                Limpiar
+              </button>
+            )}
+            <div className="ml-auto flex items-center rounded-lg border border-slate-200 overflow-hidden">
+              <button
+                onClick={() => setView('estatus')}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors ${view === 'estatus' ? 'bg-primary text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Estatus</span>
+              </button>
+              <button
+                onClick={() => setView('zona')}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors ${view === 'zona' ? 'bg-primary text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+              >
+                <MapPin className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Zona</span>
+              </button>
+            </div>
+          </div>
+
+          {/* ── Vista por ESTATUS (tablero) ── */}
+          {view === 'estatus' && (
+            <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 sm:mx-0 sm:px-0 lg:grid lg:grid-cols-5 lg:overflow-visible">
+              {FIRMAS_STATUSES.map(s => (
+                <div key={s} className={`flex-shrink-0 w-[240px] lg:w-auto bg-slate-50 border border-slate-200 border-t-2 ${FIRMAS_CONFIG[s].col} rounded-lg`}>
+                  <div className="flex items-center gap-1.5 px-2.5 py-2">
+                    <span className={`w-2 h-2 rounded-full ${FIRMAS_CONFIG[s].dot}`} />
+                    <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">{FIRMAS_CONFIG[s].label}</span>
+                    <span className="text-[11px] text-slate-400 font-medium">{byStatus[s].length}</span>
+                  </div>
+                  <div className="px-2 pb-2 space-y-1.5 max-h-[65vh] overflow-y-auto">
+                    {byStatus[s].length === 0 ? (
+                      <div className="text-[11px] text-slate-400 text-center py-4">—</div>
+                    ) : byStatus[s].map(card)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ── Vista por ZONA ── */}
+          {view === 'zona' && (
+            <div className="space-y-3">
+              {zones
+                .filter(z => zoneFilter === 'all' || z === zoneFilter)
+                .map(z => {
+                  const zoneEntries = filtered.filter(e => e.zone === z)
+                  if (zoneEntries.length === 0) return null
+                  return (
+                    <div key={z} className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                      <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 border-b border-slate-200">
+                        <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                        <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">{z}</span>
+                        <span className="text-[11px] text-slate-400 font-medium">{zoneEntries.length}</span>
+                        <span className="ml-auto flex items-center gap-2">
+                          {FIRMAS_STATUSES.map(s => {
+                            const n = zoneEntries.filter(e => e.status === s).length
+                            if (n === 0) return null
+                            return (
+                              <span key={s} className="inline-flex items-center gap-1 text-[10.5px] text-slate-500">
+                                <span className={`w-1.5 h-1.5 rounded-full ${FIRMAS_CONFIG[s].dot}`} />
+                                {n}
+                              </span>
+                            )
+                          })}
+                        </span>
+                      </div>
+                      <div className="divide-y divide-slate-100">
+                        {FIRMAS_STATUSES.flatMap(s =>
+                          zoneEntries
+                            .filter(e => e.status === s)
+                            .sort((a, b) => a.sortPos - b.sortPos || a.playerName.localeCompare(b.playerName))
+                            .map(row)
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── Panel de detalle ── */}
+      {panelEntry && (
+        <FirmasDetailPanel
+          key={panelEntry.id}
+          entry={panelEntry}
+          profiles={profiles}
+          currentProfile={currentProfile}
+          scoutingPlayers={scoutingPlayers}
+          spById={spById}
+          reportCountByPlayer={reportCountByPlayer}
+          zones={zones}
+          headerHeight={headerHeight}
+          onClose={() => setPanelId(null)}
+          onPatch={patch}
+          onChangeStatus={changeStatus}
+          onOpenScoutingPlayer={onOpenScoutingPlayer}
+          onRequestDelete={() => setConfirmDelete(panelEntry)}
+        />
+      )}
+
+      {/* ── Confirmar borrado ── */}
+      {confirmDelete && (
+        <ConfirmModal
+          open
+          title="Eliminar jugador del pipeline"
+          message={`¿Seguro que quieres eliminar a ${confirmDelete.playerName} del pipeline de firmas? Se perderán sus comentarios.`}
+          confirmLabel="Eliminar"
+          variant="danger"
+          onConfirm={async () => {
+            try {
+              await onDelete(confirmDelete.id)
+              setConfirmDelete(null)
+              setPanelId(null)
+              showToast('Jugador eliminado del pipeline')
+            } catch (err) {
+              console.error(err)
+              showToast('No se pudo eliminar', 'error')
+            }
+          }}
+          onCancel={() => setConfirmDelete(null)}
+        />
+      )}
+
+      {/* ── Modal de alta ── */}
+      {showAdd && (
+        <FirmasAddModal
+          profiles={profiles}
+          currentProfile={currentProfile}
+          scoutingPlayers={scoutingPlayers}
+          zones={zones.length > 0 ? zones : FIRMAS_ZONE_ORDER}
+          existing={entries}
+          onClose={() => setShowAdd(false)}
+          onCreate={async (draft) => {
+            try {
+              const maxPos = Math.max(0, ...entries.filter(e => e.zone === draft.zone && e.status === draft.status).map(e => e.sortPos))
+              const saved = await onCreate({ ...draft, sortPos: maxPos + 1 })
+              setShowAdd(false)
+              setPanelId(saved.id)
+              showToast(`${draft.playerName} añadido al pipeline`)
+            } catch (err) {
+              console.error(err)
+              showToast('No se pudo crear (¿has ejecutado la migración SQL?)', 'error')
+            }
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ── Panel de detalle de una entrada del pipeline ─────────────
+function FirmasDetailPanel({
+  entry, profiles, currentProfile, scoutingPlayers, spById, reportCountByPlayer,
+  zones, headerHeight, onClose, onPatch, onChangeStatus, onOpenScoutingPlayer, onRequestDelete,
+}: {
+  entry: FirmasEntry
+  profiles: Profile[]
+  currentProfile: Profile
+  scoutingPlayers: ScoutingPlayer[]
+  spById: Record<string, ScoutingPlayer>
+  reportCountByPlayer: Record<string, number>
+  zones: string[]
+  headerHeight: number
+  onClose: () => void
+  onPatch: (e: FirmasEntry, changes: Partial<FirmasEntry>) => Promise<void>
+  onChangeStatus: (e: FirmasEntry, s: FirmasStatus) => void
+  onOpenScoutingPlayer: (id: string) => void
+  onRequestDelete: () => void
+}) {
+  const isAdmin = currentProfile.is_admin
+  const sp = entry.scoutingPlayerId ? spById[entry.scoutingPlayerId] : undefined
+
+  const [name, setName] = useState(entry.playerName)
+  const [notes, setNotes] = useState(entry.notes ?? '')
+  const [newComment, setNewComment] = useState('')
+  const [editingName, setEditingName] = useState(false)
+
+  const zoneOptions = useMemo(() => {
+    const base = [...FIRMAS_ZONE_ORDER]
+    zones.forEach(z => { if (!base.includes(z)) base.push(z) })
+    if (!base.includes(entry.zone)) base.push(entry.zone)
+    return base
+  }, [zones, entry.zone])
+
+  const saveName = () => {
+    setEditingName(false)
+    const v = name.trim()
+    if (v && v !== entry.playerName) void onPatch(entry, { playerName: v })
+    else setName(entry.playerName)
+  }
+
+  const saveNotes = () => {
+    const v = notes.trim()
+    if (v !== (entry.notes ?? '')) void onPatch(entry, { notes: v || undefined })
+  }
+
+  const toggleManager = (pid: string) => {
+    const managers = entry.managers.includes(pid)
+      ? entry.managers.filter(m => m !== pid)
+      : [...entry.managers, pid]
+    void onPatch(entry, { managers })
+  }
+
+  const addComment = () => {
+    const text = newComment.trim()
+    if (!text) return
+    const c: FirmasComment = {
+      id: crypto.randomUUID(),
+      text,
+      date: new Date().toISOString(),
+      author: currentProfile.name,
+      authorId: currentProfile.id,
+    }
+    setNewComment('')
+    void onPatch(entry, { comments: [...entry.comments, c] })
+  }
+
+  const deleteComment = (id: string) => {
+    void onPatch(entry, { comments: entry.comments.filter(c => c.id !== id) })
+  }
+
+  const sortedComments = [...entry.comments].sort((a, b) => a.date.localeCompare(b.date))
+
+  return (
+    <>
+      <div className="fixed inset-x-0 bottom-0 bg-black/20 z-30" style={{ top: headerHeight }} onClick={onClose} />
+      <div
+        className="fixed right-0 w-full sm:w-[440px] bg-white shadow-2xl z-40 flex flex-col border-l border-slate-200"
+        style={{ top: headerHeight, height: `calc(100vh - ${headerHeight}px)` }}
+      >
+        {/* header */}
+        <div className="flex items-start gap-2 px-4 py-3 border-b border-slate-200">
+          <div className="flex-1 min-w-0">
+            {editingName ? (
+              <input
+                value={name}
+                onChange={e => setName(e.target.value)}
+                onBlur={saveName}
+                onKeyDown={e => { if (e.key === 'Enter') saveName() }}
+                autoFocus
+                className="w-full text-base font-bold text-slate-800 border-b border-blue-300 focus:outline-none"
+              />
+            ) : (
+              <button onClick={() => setEditingName(true)} className="group flex items-center gap-1.5 text-left">
+                <span className="text-base font-bold text-slate-800 leading-tight">{entry.playerName}</span>
+                <Pencil className="w-3 h-3 text-slate-300 group-hover:text-slate-500 flex-shrink-0" />
+              </button>
+            )}
+            <div className="mt-1 flex items-center gap-2 flex-wrap">
+              <FirmasStatusChip status={entry.status} onChange={s => onChangeStatus(entry, s)} size="md" />
+              {entry.statusUpdatedAt && (
+                <span className="text-[11px] text-slate-400">
+                  desde {relativeDate(entry.statusUpdatedAt) || fmtDate(entry.statusUpdatedAt)}
+                </span>
+              )}
+            </div>
+          </div>
+          <button onClick={onClose} aria-label="Cerrar" className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg flex-shrink-0">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* body */}
+        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+          {/* zona */}
+          <div>
+            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Zona</label>
+            <select
+              value={entry.zone}
+              onChange={e => void onPatch(entry, { zone: e.target.value })}
+              className={`mt-1 w-full ${SELECT_CLS}`}
+            >
+              {zoneOptions.map(z => <option key={z} value={z}>{z}</option>)}
+            </select>
+          </div>
+
+          {/* encargados */}
+          <div>
+            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Encargados</label>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {profiles.map(p => {
+                const active = entry.managers.includes(p.id)
+                const c = scoutColor(p.avatar || p.name)
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => toggleManager(p.id)}
+                    className={`px-2 py-1 rounded-full text-[11px] font-semibold border transition-colors ${
+                      active ? `${c.bg} ${c.text} ${c.border}` : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    {p.avatar || p.name}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* vínculo con jugador de Captación */}
+          <div>
+            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Jugador de Captación</label>
+            {sp ? (
+              <div className="mt-1.5 border border-slate-200 rounded-lg px-3 py-2.5 bg-slate-50">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-slate-800 truncate">{sp.fullName}</div>
+                    <div className="text-[11px] text-slate-500">
+                      {[
+                        sp.team,
+                        sp.birthdate ? sp.birthdate.slice(0, 4) : null,
+                        sp.position1,
+                        `${reportCountByPlayer[sp.id] ?? 0} informe${(reportCountByPlayer[sp.id] ?? 0) !== 1 ? 's' : ''}`,
+                      ].filter(Boolean).join(' · ')}
+                    </div>
+                    {sp.assessment && (
+                      <span className={`mt-1 inline-flex items-center gap-1 text-[11px] font-semibold ${ASSESSMENT_CONFIG[sp.assessment].text}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${ASSESSMENT_DOT[sp.assessment]}`} />
+                        {sp.assessment}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-1 flex-shrink-0">
+                    <button
+                      onClick={() => onOpenScoutingPlayer(sp.id)}
+                      className="text-[11px] font-medium text-primary hover:underline text-right"
+                    >
+                      Ver ficha
+                    </button>
+                    <button
+                      onClick={() => void onPatch(entry, { scoutingPlayerId: undefined })}
+                      className="text-[11px] text-slate-400 hover:text-red-500 text-right"
+                    >
+                      Quitar vínculo
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-1.5">
+                <FirmasLinkSearch
+                  scoutingPlayers={scoutingPlayers}
+                  onSelect={p => void onPatch(entry, { scoutingPlayerId: p.id })}
+                  placeholder="Vincular con jugador de Captación…"
+                />
+                <p className="mt-1 text-[11px] text-slate-400">Sin vínculo: busca por nombre o club para conectarlo con su ficha de scouting.</p>
+              </div>
+            )}
+          </div>
+
+          {/* notas */}
+          <div>
+            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Notas</label>
+            <textarea
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              onBlur={saveNotes}
+              rows={3}
+              placeholder="Notas sobre el proceso de captación…"
+              className="mt-1 w-full text-xs border border-slate-200 rounded-lg px-2.5 py-2 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-y"
+            />
+          </div>
+
+          {/* comentarios */}
+          <div>
+            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">
+              Comentarios {sortedComments.length > 0 && <span className="text-slate-300">· {sortedComments.length}</span>}
+            </label>
+            <div className="mt-1.5 space-y-2">
+              {sortedComments.length === 0 && (
+                <p className="text-[11px] text-slate-400">Sin comentarios todavía.</p>
+              )}
+              {sortedComments.map(c => (
+                <div key={c.id} className="group border border-slate-100 rounded-lg px-2.5 py-2 bg-slate-50/60">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-semibold text-slate-600">{c.author || '—'}</span>
+                    <span className="text-[10.5px] text-slate-400">{fmtDate(c.date)}</span>
+                    {(isAdmin || c.authorId === currentProfile.id) && (
+                      <button
+                        onClick={() => deleteComment(c.id)}
+                        aria-label="Eliminar comentario"
+                        className="ml-auto opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-opacity"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                  <p className="mt-0.5 text-xs text-slate-700 whitespace-pre-wrap break-words">{c.text}</p>
+                </div>
+              ))}
+              <div className="flex gap-1.5">
+                <input
+                  value={newComment}
+                  onChange={e => setNewComment(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') addComment() }}
+                  placeholder="Añadir comentario…"
+                  className="flex-1 text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                />
+                <button
+                  onClick={addComment}
+                  disabled={!newComment.trim()}
+                  aria-label="Enviar comentario"
+                  className="px-2.5 py-1.5 rounded-lg bg-primary text-white disabled:opacity-40 hover:bg-primary/90 transition-colors"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* footer */}
+        <div className="border-t border-slate-200 px-4 py-2.5 flex items-center gap-2">
+          {entry.trelloUrl && (
+            <a
+              href={entry.trelloUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-600"
+            >
+              <ExternalLink className="w-3 h-3" />
+              Tarjeta Trello
+            </a>
+          )}
+          <button
+            onClick={onRequestDelete}
+            className="ml-auto inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-red-500 transition-colors"
+          >
+            <Trash2 className="w-3 h-3" />
+            Eliminar
+          </button>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ── Modal de alta en el pipeline ─────────────────────────────
+function FirmasAddModal({
+  profiles, currentProfile, scoutingPlayers, zones, existing, onClose, onCreate,
+}: {
+  profiles: Profile[]
+  currentProfile: Profile
+  scoutingPlayers: ScoutingPlayer[]
+  zones: string[]
+  existing: FirmasEntry[]
+  onClose: () => void
+  onCreate: (e: Omit<FirmasEntry, 'id' | 'createdAt' | 'updatedAt' | 'sortPos'> & { sortPos: number }) => Promise<void>
+}) {
+  const [name, setName] = useState('')
+  const [zone, setZone] = useState(zones[0] ?? 'Otros')
+  const [newZone, setNewZone] = useState('')
+  const [status, setStatus] = useState<FirmasStatus>('llamar')
+  const [managers, setManagers] = useState<string[]>([currentProfile.id])
+  const [linked, setLinked] = useState<ScoutingPlayer | null>(null)
+  const [saving, setSaving] = useState(false)
+  useEscapeKey(onClose)
+
+  const zoneValue = zone === '__nueva__' ? newZone.trim() : zone
+  const duplicate = existing.some(e => normSearch(e.playerName) === normSearch(linked?.fullName ?? name))
+  const canSave = (linked || isValidName(name.trim())) && zoneValue && !saving
+
+  const save = async () => {
+    if (!canSave) return
+    setSaving(true)
+    await onCreate({
+      playerName: (name.trim() || linked?.fullName) ?? '',
+      zone: zoneValue,
+      status,
+      scoutingPlayerId: linked?.id,
+      managers,
+      notes: undefined,
+      comments: [],
+      trelloUrl: undefined,
+      statusUpdatedAt: new Date().toISOString(),
+      sortPos: 0, // recalculado por el llamador
+    })
+    setSaving(false)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-5" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold text-slate-800">Añadir jugador al pipeline</h3>
+          <button onClick={onClose} aria-label="Cerrar" className="p-1 text-slate-400 hover:text-slate-600 rounded-lg">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {/* vincular con scouting (opcional, rellena el nombre) */}
+          <div>
+            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Jugador de Captación (opcional)</label>
+            {linked ? (
+              <div className="mt-1 flex items-center justify-between gap-2 border border-slate-200 rounded-lg px-3 py-2 bg-slate-50">
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-slate-800 truncate">{linked.fullName}</div>
+                  <div className="text-[11px] text-slate-400">
+                    {[linked.team, linked.birthdate ? linked.birthdate.slice(0, 4) : null].filter(Boolean).join(' · ') || '—'}
+                  </div>
+                </div>
+                <button onClick={() => setLinked(null)} className="text-[11px] text-slate-400 hover:text-red-500 flex-shrink-0">Quitar</button>
+              </div>
+            ) : (
+              <div className="mt-1">
+                <FirmasLinkSearch
+                  scoutingPlayers={scoutingPlayers}
+                  onSelect={p => { setLinked(p); if (!name.trim()) setName(p.fullName) }}
+                />
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Nombre *</label>
+            <input
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Nombre del jugador"
+              className="mt-1 w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+            />
+            {duplicate && (
+              <p className="mt-1 text-[11px] text-amber-600">Ya hay un jugador con este nombre en el pipeline.</p>
+            )}
+          </div>
+
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Zona</label>
+              <select value={zone} onChange={e => setZone(e.target.value)} className={`mt-1 w-full ${SELECT_CLS}`}>
+                {zones.map(z => <option key={z} value={z}>{z}</option>)}
+                <option value="__nueva__">+ Nueva zona…</option>
+              </select>
+              {zone === '__nueva__' && (
+                <input
+                  value={newZone}
+                  onChange={e => setNewZone(e.target.value)}
+                  placeholder="Nombre de la zona"
+                  className="mt-1.5 w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                />
+              )}
+            </div>
+            <div className="flex-1">
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Estatus</label>
+              <select value={status} onChange={e => setStatus(e.target.value as FirmasStatus)} className={`mt-1 w-full ${SELECT_CLS}`}>
+                {FIRMAS_STATUSES.map(s => <option key={s} value={s}>{FIRMAS_CONFIG[s].label}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Encargados</label>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {profiles.map(p => {
+                const active = managers.includes(p.id)
+                const c = scoutColor(p.avatar || p.name)
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => setManagers(prev => active ? prev.filter(m => m !== p.id) : [...prev, p.id])}
+                    className={`px-2 py-1 rounded-full text-[11px] font-semibold border transition-colors ${
+                      active ? `${c.bg} ${c.text} ${c.border}` : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    {p.avatar || p.name}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button onClick={onClose} className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:bg-slate-100 transition-colors">
+            Cancelar
+          </button>
+          <button
+            onClick={() => void save()}
+            disabled={!canSave}
+            className="px-4 py-1.5 rounded-lg bg-primary text-white text-xs font-medium disabled:opacity-40 hover:bg-primary/90 transition-colors"
+          >
+            {saving ? 'Guardando…' : 'Añadir'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Props ────────────────────────────────────────────────────
 
 interface Props {
@@ -1530,6 +2508,10 @@ interface Props {
   onAddBoulemaPeticion: (p: Omit<BoulemaPeticion, 'id' | 'createdAt'>) => Promise<void>
   onUpdateBoulemaPeticion: (p: BoulemaPeticion) => Promise<void>
   onDeleteBoulemaPeticion: (id: string) => Promise<void>
+  firmasEntries: FirmasEntry[]
+  onCreateFirmasEntry: (e: Omit<FirmasEntry, 'id' | 'createdAt' | 'updatedAt'>) => Promise<FirmasEntry>
+  onUpdateFirmasEntry: (e: FirmasEntry) => Promise<void>
+  onDeleteFirmasEntry: (id: string) => Promise<void>
 }
 
 // ── MatchFormPanel — isolated so keystrokes don't re-render the whole list ──
@@ -2044,6 +3026,10 @@ export function Captacion({
   onAddBoulemaPeticion,
   onUpdateBoulemaPeticion,
   onDeleteBoulemaPeticion,
+  firmasEntries,
+  onCreateFirmasEntry,
+  onUpdateFirmasEntry,
+  onDeleteFirmasEntry,
 }: Props) {
   const isAdmin = currentProfile.is_admin
 
@@ -2753,6 +3739,7 @@ export function Captacion({
         <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center gap-1 py-1.5 border-t border-slate-100 bg-slate-50/60 overflow-x-auto scrollbar-none">
           {([
             { id: 'jugadores' as CaptacionTab, label: 'Jugadores', labelMobile: 'Jugadores', icon: <Users className="w-3.5 h-3.5" /> },
+            { id: 'firmar' as CaptacionTab, label: 'Firmar', labelMobile: 'Firmar', icon: <PenLine className="w-3.5 h-3.5" /> },
             { id: 'conclusiones' as CaptacionTab, label: 'Conclusiones', labelMobile: 'Concl.', icon: <Target className="w-3.5 h-3.5" /> },
             { id: 'informes' as CaptacionTab, label: 'Informes recientes', labelMobile: 'Informes', icon: <FileText className="w-3.5 h-3.5" /> },
             { id: 'estadisticas' as CaptacionTab, label: 'Estadísticas', labelMobile: 'Stats', icon: <BarChart2 className="w-3.5 h-3.5" /> },
@@ -3056,6 +4043,23 @@ export function Captacion({
       )}
 
       {/* ── CONCLUSIONES TAB ─────────────────────────────────── */}
+      {/* ── FIRMAR TAB ───────────────────────────────────────── */}
+      {captTab === 'firmar' && (
+        <FirmasTab
+          entries={firmasEntries}
+          profiles={profiles}
+          currentProfile={currentProfile}
+          scoutingPlayers={scoutingPlayers}
+          scoutingReports={scoutingReports}
+          onCreate={onCreateFirmasEntry}
+          onUpdate={onUpdateFirmasEntry}
+          onDelete={onDeleteFirmasEntry}
+          onOpenScoutingPlayer={(id) => { setCaptTab('jugadores'); setPanelPlayerId(id) }}
+          showToast={showToast}
+          headerHeight={headerHeight}
+        />
+      )}
+
       {captTab === 'conclusiones' && (
         <div className="flex-1 w-full px-3 sm:px-6 py-4">
           <div className="max-w-6xl mx-auto">
