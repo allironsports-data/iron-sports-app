@@ -3,11 +3,11 @@ import {
   Search, X, Plus, LogOut, Trash2, ChevronDown,
   FileText, Calendar, ChevronRight,
   TrendingUp, Eye, Maximize2, Minimize2, Pencil,
-  BarChart2, ClipboardList, Users, Inbox, Send, Target, Sun,
-  PenLine, MapPin, Link2, MessageSquare, ExternalLink, LayoutGrid,
+  ClipboardList, Users, Inbox, Send, Target, Sun,
+  PenLine, MapPin, MessageSquare, ExternalLink, LayoutGrid,
 } from 'lucide-react'
 import logoImg from '../assets/logo.jpeg'
-import type { ScoutingPlayer, ScoutingReport, ScoutingAssessment, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion, FirmasEntry, FirmasStatus, FirmasComment } from '../types'
+import type { ScoutingPlayer, ScoutingReport, ScoutingAssessment, ScoutingMatch, ScoutingMatchPlayer, FirmasEntry, FirmasStatus, FirmasComment } from '../types'
 import type { Profile } from '../contexts/AuthContext'
 import * as db from '../lib/db'
 import { ConfirmModal } from '../components/ConfirmModal'
@@ -23,7 +23,7 @@ type ShowToast = (message: string, variant?: 'success' | 'error' | 'info') => vo
 
 // ── Constants ────────────────────────────────────────────────
 
-type CaptacionTab = 'jugadores' | 'firmar' | 'conclusiones' | 'informes' | 'estadisticas' | 'partidos' | 'pretemporada' | 'boulema'
+type CaptacionTab = 'jugadores' | 'firmar' | 'conclusiones' | 'informes' | 'partidos' | 'pretemporada'
 
 const ASSESSMENT_CONFIG: Record<ScoutingAssessment, { label: string; bg: string; text: string; border: string }> = {
   Llamar:     { label: 'Llamar',     bg: 'bg-amber-100',   text: 'text-amber-700',   border: 'border-amber-200' },
@@ -55,26 +55,6 @@ const POSITIONS_SCOUTING = [
   'Pivote', 'Mediocentro', 'Mediapunta',
   'Extremo derecho', 'Extremo izquierdo', 'Extremo', 'Delantero',
 ]
-
-const MONTHS_ES_FULL = [
-  { v: '1', l: 'Enero' }, { v: '2', l: 'Febrero' }, { v: '3', l: 'Marzo' },
-  { v: '4', l: 'Abril' }, { v: '5', l: 'Mayo' }, { v: '6', l: 'Junio' },
-  { v: '7', l: 'Julio' }, { v: '8', l: 'Agosto' }, { v: '9', l: 'Septiembre' },
-  { v: '10', l: 'Octubre' }, { v: '11', l: 'Noviembre' }, { v: '12', l: 'Diciembre' },
-]
-
-const BOULEMA_CONCLUSION_OPTIONS = [
-  '', 'Firmar', 'Seguir', 'Descartar', 'Más video, prioritario', 'Más video, no prioritario',
-] as const
-type BoulemaConclusionOption = typeof BOULEMA_CONCLUSION_OPTIONS[number]
-
-const BOULEMA_CONCLUSION_STYLE: Record<string, string> = {
-  'Firmar':                  'bg-green-100 text-green-700 border border-green-200',
-  'Seguir':                  'bg-blue-100 text-blue-700 border border-blue-200',
-  'Descartar':               'bg-red-100 text-red-600 border border-red-200',
-  'Más video, prioritario':  'bg-orange-100 text-orange-700 border border-orange-200',
-  'Más video, no prioritario': 'bg-slate-100 text-slate-600 border border-slate-200',
-}
 
 const CONCLUSION_OPTIONS = ['', 'Seguir', 'Llamar', 'Descartar'] as const
 type ConclusionOption = typeof CONCLUSION_OPTIONS[number]
@@ -295,19 +275,6 @@ function ActiveFilterChips({ chips, onClearAll }: { chips: FilterChip[]; onClear
       >
         Limpiar filtros
       </button>
-    </div>
-  )
-}
-
-function StatBar({ label, value, max, color = 'bg-blue-500' }: { label: string; value: number; max: number; color?: string }) {
-  const pct = max > 0 ? Math.round((value / max) * 100) : 0
-  return (
-    <div className="flex items-center gap-2 text-xs">
-      <div className="w-24 flex-shrink-0 text-slate-600 truncate">{label}</div>
-      <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
-        <div className={`h-full rounded-full ${color} transition-all`} style={{ width: `${pct}%` }} />
-      </div>
-      <div className="w-8 text-right text-slate-500 font-medium">{value}</div>
     </div>
   )
 }
@@ -1676,6 +1643,10 @@ function FirmasTab({
   const [managerFilter, setManagerFilter] = useState<string>('all')
 
   // ── panel y modales ──
+  // Vista por zonas: zona seleccionada (persistida)
+  const [selZone, setSelZone] = useState<string>(() => sessionStorage.getItem('capt_firmas_zone') ?? '')
+  useEffect(() => { if (selZone) sessionStorage.setItem('capt_firmas_zone', selZone) }, [selZone])
+
   const [panelId, setPanelId] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<FirmasEntry | null>(null)
@@ -1724,6 +1695,22 @@ function FirmasTab({
     })
   }, [entries, debSearch, zoneFilter, statusFilter, managerFilter, spById])
 
+  // Igual que `filtered` pero sin el filtro de zona — alimenta el selector
+  // de zonas de la vista por zonas (los contadores no se auto-ocultan)
+  const filteredNoZone = useMemo(() => {
+    const n = normSearch(debSearch)
+    return entries.filter(e => {
+      if (statusFilter !== 'all' && e.status !== statusFilter) return false
+      if (managerFilter !== 'all' && !e.managers.includes(managerFilter)) return false
+      if (n) {
+        const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
+        const hay = normSearch([e.playerName, sp?.fullName ?? '', sp?.team ?? ''].join(' '))
+        if (!hay.includes(n)) return false
+      }
+      return true
+    })
+  }, [entries, debSearch, statusFilter, managerFilter, spById])
+
   const byStatus = useMemo(() => {
     const m: Record<FirmasStatus, FirmasEntry[]> = { llamar: [], caliente: [], templado: [], frio: [], decidir: [] }
     filtered.forEach(e => m[e.status].push(e))
@@ -1747,13 +1734,6 @@ function FirmasTab({
 
   const clearFilters = () => { setSearch(''); setZoneFilter('all'); setStatusFilter('all'); setManagerFilter('all') }
 
-  // Info secundaria de una entrada: club + año del jugador vinculado
-  const subInfo = (e: FirmasEntry): string => {
-    const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
-    if (!sp) return e.zone
-    return [sp.team, sp.birthdate ? sp.birthdate.slice(0, 4) : null].filter(Boolean).join(' · ') || e.zone
-  }
-
   // ── tarjeta (vista estatus) ──
   const card = (e: FirmasEntry) => {
     const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
@@ -1768,16 +1748,11 @@ function FirmasTab({
           <FirmasManagers managerIds={e.managers} profiles={profiles} />
         </div>
         <div className="mt-1 flex items-center gap-2 text-[11px] text-slate-400">
-          <span className="inline-flex items-center gap-1 min-w-0">
-            <MapPin className="w-3 h-3 flex-shrink-0" />
-            <span className="truncate">{e.zone}</span>
+          <span className="truncate min-w-0">
+            {sp
+              ? [sp.team, sp.birthdate ? sp.birthdate.slice(0, 4) : null].filter(Boolean).join(' · ') || e.zone
+              : e.zone}
           </span>
-          {sp && (
-            <span className="inline-flex items-center gap-1 text-blue-500 flex-shrink-0" title={`Vinculado: ${sp.fullName}`}>
-              <Link2 className="w-3 h-3" />
-              {sp.birthdate ? sp.birthdate.slice(2, 4) : ''}
-            </span>
-          )}
           {e.comments.length > 0 && (
             <span className="inline-flex items-center gap-0.5 flex-shrink-0">
               <MessageSquare className="w-3 h-3" />
@@ -1789,27 +1764,27 @@ function FirmasTab({
     )
   }
 
-  // ── fila (vista zona) ──
-  const row = (e: FirmasEntry) => {
+  // Tablero de 5 columnas por estatus (compartido por ambas vistas)
+  const statusBoard = (list: FirmasEntry[]) => {
+    const groups: Record<FirmasStatus, FirmasEntry[]> = { llamar: [], caliente: [], templado: [], frio: [], decidir: [] }
+    list.forEach(e => groups[e.status].push(e))
+    FIRMAS_STATUSES.forEach(s => groups[s].sort((a, b) => a.sortPos - b.sortPos || a.playerName.localeCompare(b.playerName)))
     return (
-      <div
-        key={e.id}
-        onClick={() => setPanelId(e.id)}
-        className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50/70 cursor-pointer transition-colors"
-      >
-        <FirmasStatusChip status={e.status} onChange={s => changeStatus(e, s)} />
-        <span className="text-sm font-medium text-slate-800 truncate">{e.playerName}</span>
-        <span className="text-xs text-slate-400 truncate hidden sm:inline">{subInfo(e)}</span>
-        <span className="ml-auto flex items-center gap-2 flex-shrink-0">
-          {e.comments.length > 0 && (
-            <span className="inline-flex items-center gap-0.5 text-[11px] text-slate-400">
-              <MessageSquare className="w-3 h-3" />
-              {e.comments.length}
-            </span>
-          )}
-          <FirmasManagers managerIds={e.managers} profiles={profiles} />
-          <ChevronRight className="w-3.5 h-3.5 text-slate-300" />
-        </span>
+      <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 sm:mx-0 sm:px-0 lg:grid lg:grid-cols-5 lg:overflow-visible">
+        {FIRMAS_STATUSES.map(s => (
+          <div key={s} className={`flex-shrink-0 w-[240px] lg:w-auto bg-slate-50 border border-slate-200 border-t-2 ${FIRMAS_CONFIG[s].col} rounded-lg`}>
+            <div className="flex items-center gap-1.5 px-2.5 py-2">
+              <span className={`w-2 h-2 rounded-full ${FIRMAS_CONFIG[s].dot}`} />
+              <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">{FIRMAS_CONFIG[s].label}</span>
+              <span className="text-[11px] text-slate-400 font-medium">{groups[s].length}</span>
+            </div>
+            <div className="px-2 pb-2 space-y-1.5 max-h-[65vh] overflow-y-auto">
+              {groups[s].length === 0 ? (
+                <div className="text-[11px] text-slate-400 text-center py-4">—</div>
+              ) : groups[s].map(card)}
+            </div>
+          </div>
+        ))}
       </div>
     )
   }
@@ -1868,10 +1843,12 @@ function FirmasTab({
                 </button>
               )}
             </div>
-            <select value={zoneFilter} onChange={e => setZoneFilter(e.target.value)} className={SELECT_CLS}>
-              <option value="all">Todas las zonas</option>
-              {zones.map(z => <option key={z} value={z}>{z}</option>)}
-            </select>
+            {view === 'estatus' && (
+              <select value={zoneFilter} onChange={e => setZoneFilter(e.target.value)} className={SELECT_CLS}>
+                <option value="all">Todas las zonas</option>
+                {zones.map(z => <option key={z} value={z}>{z}</option>)}
+              </select>
+            )}
             {view === 'zona' && (
               <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as FirmasStatus | 'all')} className={SELECT_CLS}>
                 <option value="all">Todos los estatus</option>
@@ -1909,65 +1886,68 @@ function FirmasTab({
           </div>
 
           {/* ── Vista por ESTATUS (tablero) ── */}
-          {view === 'estatus' && (
-            <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 sm:mx-0 sm:px-0 lg:grid lg:grid-cols-5 lg:overflow-visible">
-              {FIRMAS_STATUSES.map(s => (
-                <div key={s} className={`flex-shrink-0 w-[240px] lg:w-auto bg-slate-50 border border-slate-200 border-t-2 ${FIRMAS_CONFIG[s].col} rounded-lg`}>
-                  <div className="flex items-center gap-1.5 px-2.5 py-2">
-                    <span className={`w-2 h-2 rounded-full ${FIRMAS_CONFIG[s].dot}`} />
-                    <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">{FIRMAS_CONFIG[s].label}</span>
-                    <span className="text-[11px] text-slate-400 font-medium">{byStatus[s].length}</span>
-                  </div>
-                  <div className="px-2 pb-2 space-y-1.5 max-h-[65vh] overflow-y-auto">
-                    {byStatus[s].length === 0 ? (
-                      <div className="text-[11px] text-slate-400 text-center py-4">—</div>
-                    ) : byStatus[s].map(card)}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          {view === 'estatus' && statusBoard(filtered)}
 
-          {/* ── Vista por ZONA ── */}
-          {view === 'zona' && (
-            <div className="space-y-3">
-              {zones
-                .filter(z => zoneFilter === 'all' || z === zoneFilter)
-                .map(z => {
-                  const zoneEntries = filtered.filter(e => e.zone === z)
-                  if (zoneEntries.length === 0) return null
-                  return (
-                    <div key={z} className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-                      <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 border-b border-slate-200">
-                        <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                        <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">{z}</span>
-                        <span className="text-[11px] text-slate-400 font-medium">{zoneEntries.length}</span>
-                        <span className="ml-auto flex items-center gap-2">
+          {/* ── Vista por ZONA: selector de zona + tablero de esa zona ── */}
+          {view === 'zona' && (() => {
+            const zonesAll = zones
+            const activeZone = zonesAll.includes(selZone) ? selZone : (zonesAll[0] ?? '')
+            const zoneEntries = filteredNoZone.filter(e => e.zone === activeZone)
+            return (
+              <div className="space-y-3">
+                {/* Selector de zonas con resumen */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                  {zonesAll.map(z => {
+                    const zEntries = filteredNoZone.filter(e => e.zone === z)
+                    const active = z === activeZone
+                    return (
+                      <button
+                        key={z}
+                        onClick={() => setSelZone(z)}
+                        className={`text-left rounded-lg border px-3 py-2 transition-all ${
+                          active
+                            ? 'border-primary bg-primary/5 ring-1 ring-primary/30'
+                            : 'border-slate-200 bg-white hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1">
+                          <span className={`text-xs font-semibold truncate ${active ? 'text-primary' : 'text-slate-700'}`}>{z}</span>
+                          <span className={`text-xs font-bold flex-shrink-0 ${active ? 'text-primary' : 'text-slate-400'}`}>{zEntries.length}</span>
+                        </div>
+                        <div className="mt-1 flex items-center gap-2">
                           {FIRMAS_STATUSES.map(s => {
-                            const n = zoneEntries.filter(e => e.status === s).length
+                            const n = zEntries.filter(e => e.status === s).length
                             if (n === 0) return null
                             return (
-                              <span key={s} className="inline-flex items-center gap-1 text-[10.5px] text-slate-500">
+                              <span key={s} className="inline-flex items-center gap-0.5 text-[10.5px] text-slate-500" title={FIRMAS_CONFIG[s].label}>
                                 <span className={`w-1.5 h-1.5 rounded-full ${FIRMAS_CONFIG[s].dot}`} />
                                 {n}
                               </span>
                             )
                           })}
-                        </span>
-                      </div>
-                      <div className="divide-y divide-slate-100">
-                        {FIRMAS_STATUSES.flatMap(s =>
-                          zoneEntries
-                            .filter(e => e.status === s)
-                            .sort((a, b) => a.sortPos - b.sortPos || a.playerName.localeCompare(b.playerName))
-                            .map(row)
-                        )}
-                      </div>
+                          {zEntries.length === 0 && <span className="text-[10.5px] text-slate-300">sin jugadores</span>}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Tablero de la zona seleccionada */}
+                {activeZone ? (
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                      <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">{activeZone}</span>
+                      <span className="text-[11px] text-slate-400">{zoneEntries.length} jugador{zoneEntries.length !== 1 ? 'es' : ''}</span>
                     </div>
-                  )
-                })}
-            </div>
-          )}
+                    {statusBoard(zoneEntries)}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 text-center py-6">No hay zonas todavía</p>
+                )}
+              </div>
+            )
+          })()}
         </>
       )}
 
@@ -2489,7 +2469,7 @@ interface Props {
   profiles: Profile[]
   currentProfile: Profile
   onBack: () => void
-  onGoToSection: (s: 'tareas' | 'jugadores' | 'distribucion') => void
+  onGoToSection: (s: 'tareas' | 'jugadores' | 'distribucion' | 'boulema') => void
   onLogout: () => void
   onAdmin?: () => void
   onAddPlayer: (p: ScoutingPlayer) => void
@@ -2504,10 +2484,9 @@ interface Props {
   matchPlayers: ScoutingMatchPlayer[]
   onAddMatchPlayer: (matchId: string, playerId: string) => Promise<void>
   onRemoveMatchPlayer: (matchId: string, playerId: string) => Promise<void>
-  boulemaPeticiones: BoulemaPeticion[]
-  onAddBoulemaPeticion: (p: Omit<BoulemaPeticion, 'id' | 'createdAt'>) => Promise<void>
-  onUpdateBoulemaPeticion: (p: BoulemaPeticion) => Promise<void>
-  onDeleteBoulemaPeticion: (id: string) => Promise<void>
+  /** Abrir la ficha de un jugador al montar (navegación desde otra sección, p. ej. Boulema) */
+  openPlayerId?: string | null
+  onOpenPlayerConsumed?: () => void
   firmasEntries: FirmasEntry[]
   onCreateFirmasEntry: (e: Omit<FirmasEntry, 'id' | 'createdAt' | 'updatedAt'>) => Promise<FirmasEntry>
   onUpdateFirmasEntry: (e: FirmasEntry) => Promise<void>
@@ -2586,419 +2565,6 @@ function MatchFormPanel({ initial, profiles, onSave, onCancel, showToast }: {
   )
 }
 
-// ── AddBoulemaModal ───────────────────────────────────────────
-
-function AddBoulemaModal({
-  profiles,
-  currentProfile,
-  boulemaPeticiones,
-  initial,
-  onClose,
-  onSave,
-}: {
-  profiles: Profile[]
-  currentProfile: Profile
-  boulemaPeticiones: BoulemaPeticion[]
-  initial?: BoulemaPeticion
-  onClose: () => void
-  onSave: (p: Omit<BoulemaPeticion, 'id' | 'createdAt'>) => Promise<void>
-}) {
-  const [playerName, setPlayerName] = useState(initial?.playerName ?? '')
-  const [position, setPosition] = useState(initial?.position ?? '')
-  const [birthYear, setBirthYear] = useState(initial?.birthYear ?? '')
-  const [birthMonth, setBirthMonth] = useState(initial?.birthMonth ?? '')
-  const [team, setTeam] = useState(initial?.team ?? '')
-  const [country, setCountry] = useState(initial?.country ?? '')
-  const [nationality, setNationality] = useState(initial?.nationality ?? '')
-  const [offeredBy, setOfferedBy] = useState(initial?.offeredBy ?? '')
-  const [requestedFrom, setRequestedFrom] = useState<string[]>(
-    initial?.requestedFrom.length ? initial.requestedFrom : [currentProfile.avatar]
-  )
-  const [notes, setNotes] = useState(initial?.notes ?? '')
-
-  function toggleAssignee(avatar: string) {
-    setRequestedFrom(prev =>
-      prev.includes(avatar) ? prev.filter(a => a !== avatar) : [...prev, avatar]
-    )
-  }
-
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
-
-  useEscapeKey(onClose)
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!playerName.trim() || saving) return
-    setSaving(true)
-    setError('')
-    try {
-      await onSave({
-        playerName: playerName.trim(),
-        position: position.trim() || undefined,
-        birthYear: birthYear.trim() || undefined,
-        birthMonth: birthMonth.trim() || undefined,
-        team: team.trim() || undefined,
-        country: country.trim() || undefined,
-        nationality: nationality.trim() || undefined,
-        offeredBy: offeredBy.trim() || undefined,
-        requestedFrom: requestedFrom.length ? requestedFrom : [currentProfile.avatar],
-        notes: notes.trim() || undefined,
-        requestedBy: currentProfile.avatar,
-        reportIds: initial?.reportIds ?? [],
-      })
-    } catch {
-      setError('Error al guardar la petición. Inténtalo de nuevo.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
-          <h2 className="text-base font-semibold text-slate-800 flex items-center gap-2">
-            <Send className="w-4 h-4 text-slate-400" />
-            {initial ? 'Editar petición' : 'Añadir petición de informe'}
-          </h2>
-          <button onClick={onClose} aria-label="Cerrar" className="p-2.5 sm:p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-5 space-y-3">
-          <FormRow label="Jugador *">
-            <input
-              value={playerName}
-              onChange={e => setPlayerName(e.target.value)}
-              placeholder="Nombre del jugador"
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
-              required
-              autoFocus
-            />
-          </FormRow>
-
-          <FormRow label="Posición">
-            <select
-              value={position}
-              onChange={e => setPosition(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-            >
-              <option value="">—</option>
-              {POSITIONS_SCOUTING.map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </FormRow>
-
-          <div className="grid grid-cols-2 gap-2">
-            <FormRow label="Año nac.">
-              <input
-                value={birthYear}
-                onChange={e => setBirthYear(e.target.value)}
-                placeholder="2007"
-                maxLength={4}
-                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-              />
-            </FormRow>
-            <FormRow label="Mes nac.">
-              <select
-                value={birthMonth}
-                onChange={e => setBirthMonth(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-              >
-                <option value="">—</option>
-                {MONTHS_ES_FULL.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
-              </select>
-            </FormRow>
-          </div>
-
-          <FormRow label="Equipo">
-            <input
-              value={team}
-              onChange={e => setTeam(e.target.value)}
-              placeholder="Club actual"
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-            />
-          </FormRow>
-
-          <div className="grid grid-cols-2 gap-2">
-            <FormRow label="País (donde juega)">
-              <input
-                value={country}
-                onChange={e => setCountry(e.target.value)}
-                placeholder="Senegal"
-                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-              />
-            </FormRow>
-            <FormRow label="Nacionalidad">
-              <input
-                value={nationality}
-                onChange={e => setNationality(e.target.value)}
-                placeholder="Senegalesa"
-                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-              />
-            </FormRow>
-          </div>
-
-          <FormRow label="Ofrecido por">
-            <input
-              value={offeredBy}
-              onChange={e => setOfferedBy(e.target.value)}
-              placeholder="Agente, intermediario..."
-              list="offeredby-suggestions"
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-            />
-            <datalist id="offeredby-suggestions">
-              {boulemaPeticiones
-                .map(p => p.offeredBy)
-                .filter((v): v is string => !!v)
-                .filter((v, i, arr) => arr.indexOf(v) === i)
-                .map(v => <option key={v} value={v} />)}
-            </datalist>
-          </FormRow>
-
-          <FormRow label="Pedir informe a">
-            <div className="flex flex-wrap gap-2 pt-0.5">
-              {profiles.map(p => {
-                const selected = requestedFrom.includes(p.avatar)
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => toggleAssignee(p.avatar)}
-                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-sm transition-colors ${
-                      selected
-                        ? 'bg-primary text-white border-primary'
-                        : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    <span className="font-mono font-bold text-xs">{p.avatar}</span>
-                    <span className="text-xs">{p.name.split(' ')[0]}</span>
-                  </button>
-                )
-              })}
-            </div>
-            {requestedFrom.length === 0 && (
-              <p className="text-xs text-red-500 mt-1">Selecciona al menos una persona</p>
-            )}
-          </FormRow>
-
-          <FormRow label="Notas / contexto">
-            <textarea
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              placeholder="Información adicional sobre el jugador o contexto de la petición..."
-              rows={3}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-y"
-            />
-          </FormRow>
-
-          {error && <p className="text-xs text-red-500">{error}</p>}
-
-          <div className="flex gap-2 pt-2 sticky bottom-0 bg-white -mx-5 -mb-5 px-5 pb-5 safe-area-bottom">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 py-2 text-sm font-medium border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={!playerName.trim() || saving}
-              className="flex-1 py-2 text-sm font-medium bg-primary text-white rounded-xl hover:bg-primary/90 disabled:opacity-40 transition-colors inline-flex items-center justify-center gap-2"
-            >
-              {saving && <Spinner />}
-              {saving ? 'Guardando…' : initial ? 'Guardar cambios' : 'Añadir petición'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
-}
-
-// ── RespondWithInformeModal ───────────────────────────────────
-
-function RespondWithInformeModal({
-  peticion,
-  profiles,
-  currentProfile,
-  scoutingPlayers,
-  boulemaPeticiones,
-  onClose,
-  onAddPlayer,
-  onAddReport,
-  onLinkReport,
-  showToast,
-}: {
-  peticion: BoulemaPeticion
-  profiles: Profile[]
-  currentProfile: Profile
-  scoutingPlayers: ScoutingPlayer[]
-  boulemaPeticiones: BoulemaPeticion[]
-  onClose: () => void
-  onAddPlayer: (p: ScoutingPlayer) => void
-  onAddReport: (r: ScoutingReport) => void
-  onLinkReport: (peticionId: string, reportId: string) => Promise<void>
-  showToast?: ShowToast
-}) {
-  // Try to find existing player by name match
-  const existingPlayer = scoutingPlayers.find(
-    p => p.fullName.toLowerCase().trim() === peticion.playerName.toLowerCase().trim()
-  )
-
-  const [text, setText] = useState('')
-  const [title, setTitle] = useState('')
-  const [conclusion, setConclusion] = useState<BoulemaConclusionOption>('')
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
-
-  useEscapeKey(onClose)
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!text.trim() || saving) return
-    // Verificar que la petición sigue existiendo (estado no obsoleto)
-    if (!boulemaPeticiones.some(p => p.id === peticion.id)) {
-      showToast?.('La petición ya no existe', 'error')
-      onClose()
-      return
-    }
-    setSaving(true)
-    setError('')
-    try {
-      let playerId = existingPlayer?.id ?? ''
-
-      if (!playerId) {
-        // Create a new ScoutingPlayer with the peticion data
-        const birthdate = peticion.birthYear
-          ? `${peticion.birthYear}-${String(peticion.birthMonth ?? '01').padStart(2, '0')}-01`
-          : undefined
-        const newPlayer = await db.createScoutingPlayer({
-          fullName: peticion.playerName,
-          position1: peticion.position ?? undefined,
-          birthdate,
-          team: peticion.team ?? undefined,
-        })
-        playerId = newPlayer.id
-        onAddPlayer(newPlayer)
-      }
-
-      const report = await db.createScoutingReport({
-        playerId,
-        fecha: new Date().toISOString().slice(0, 10),
-        titulo: title.trim() || undefined,
-        texto: text.trim(),
-        conclusion: conclusion || undefined,
-        persona: currentProfile.avatar,
-      })
-      onAddReport(report)
-      // Link this report back to the petición
-      await onLinkReport(peticion.id, report.id)
-      showToast?.('Informe guardado')
-      onClose()
-    } catch {
-      setError('Error al guardar el informe. Inténtalo de nuevo.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const authorName = personaToName(peticion.requestedBy, profiles)
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
-          <h2 className="text-base font-semibold text-slate-800 flex items-center gap-2">
-            <FileText className="w-4 h-4 text-slate-400" />
-            Crear informe
-          </h2>
-          <button onClick={onClose} aria-label="Cerrar" className="p-2.5 sm:p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Context banner */}
-        <div className="mx-5 mt-4 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2.5 text-xs">
-          <div className="font-semibold text-blue-800 mb-0.5">
-            {peticion.playerName}
-            {peticion.position && <span className="font-normal text-blue-600 ml-1.5">· {peticion.position}</span>}
-            {peticion.birthYear && <span className="font-normal text-blue-500 ml-1.5">{peticion.birthYear}</span>}
-            {peticion.team && <span className="font-normal text-blue-500 ml-1.5 italic">{peticion.team}</span>}
-          </div>
-          <div className="text-blue-500">
-            Pedido por <span className="font-mono font-semibold">{peticion.requestedBy}</span>
-            {authorName && authorName !== peticion.requestedBy && ` · ${authorName.split(' ')[0]}`}
-          </div>
-          {existingPlayer ? (
-            <div className="mt-1 text-[11px] text-blue-400">✓ Jugador encontrado en la base de datos</div>
-          ) : (
-            <div className="mt-1 text-[11px] text-blue-400">Se creará un nuevo jugador en captación</div>
-          )}
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-5 space-y-3">
-          <FormRow label="Título (opcional)">
-            <input
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              placeholder="Título del informe"
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
-            />
-          </FormRow>
-
-          <FormRow label="Informe *">
-            <textarea
-              value={text}
-              onChange={e => setText(e.target.value)}
-              placeholder="Escribe aquí tu informe sobre el jugador..."
-              rows={6}
-              required
-              autoFocus
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 resize-y"
-            />
-          </FormRow>
-
-          <FormRow label="Conclusión">
-            <select
-              value={conclusion}
-              onChange={e => setConclusion(e.target.value as BoulemaConclusionOption)}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-            >
-              <option value="">Sin conclusión</option>
-              {BOULEMA_CONCLUSION_OPTIONS.filter(Boolean).map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </FormRow>
-
-          {error && <p className="text-xs text-red-500">{error}</p>}
-
-          <div className="flex gap-2 pt-2 sticky bottom-0 bg-white -mx-5 -mb-5 px-5 pb-5 safe-area-bottom">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 py-2 text-sm font-medium border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={!text.trim() || saving}
-              className="flex-1 py-2 text-sm font-medium bg-primary text-white rounded-xl hover:bg-primary/90 disabled:opacity-40 transition-colors inline-flex items-center justify-center gap-2"
-            >
-              {saving && <Spinner />}
-              {saving ? 'Guardando…' : 'Guardar informe'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
-}
-
 // ── Main component ───────────────────────────────────────────
 
 export function Captacion({
@@ -3022,10 +2588,8 @@ export function Captacion({
   matchPlayers,
   onAddMatchPlayer,
   onRemoveMatchPlayer,
-  boulemaPeticiones,
-  onAddBoulemaPeticion,
-  onUpdateBoulemaPeticion,
-  onDeleteBoulemaPeticion,
+  openPlayerId,
+  onOpenPlayerConsumed,
   firmasEntries,
   onCreateFirmasEntry,
   onUpdateFirmasEntry,
@@ -3038,6 +2602,16 @@ export function Captacion({
 
   // ── section tab ── (must be before header-height effect)
   const [captTab, setCaptTab] = useState<CaptacionTab>('jugadores')
+
+  // Navegación externa: abrir la ficha de un jugador concreto (p. ej. desde Boulema)
+  useEffect(() => {
+    if (openPlayerId) {
+      setCaptTab('jugadores')
+      setPanelPlayerId(openPlayerId)
+      onOpenPlayerConsumed?.()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openPlayerId])
 
   // ── umbral de candidatos (compartido: badge de pestaña + Conclusiones) ──
   const [conclThreshold, setConclThreshold] = useState<number>(() => {
@@ -3135,24 +2709,6 @@ export function Captacion({
   const PAGE_SIZE = 50
   const [page, setPage] = useState(0)
 
-  // ── boulema ──
-  const [showAddBoulema, setShowAddBoulema] = useState(false)
-  const [editingPeticion, setEditingPeticion] = useState<BoulemaPeticion | null>(null)
-  const [respondingPeticion, setRespondingPeticion] = useState<BoulemaPeticion | null>(null)
-  const [confirmDeletePeticion, setConfirmDeletePeticion] = useState<string | null>(null)
-  const [bouSearch, setBouSearch] = useState('')
-  const [bouPosFilter, setBouPosFilter] = useState('all')
-  const [bouYearFilter, setBouYearFilter] = useState('all')
-  const [bouOfferedFilter, setBouOfferedFilter] = useState('all')
-  const [expandedNoteIds, setExpandedNoteIds] = useState<Set<string>>(new Set())
-  function toggleNotes(id: string) {
-    setExpandedNoteIds(prev => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
-  }
-
   const panelPlayer = panelPlayerId ? scoutingPlayers.find(p => p.id === panelPlayerId) ?? null : null
   const panelReports = useMemo(() => {
     if (!panelPlayerId) return []
@@ -3189,117 +2745,16 @@ export function Captacion({
 
   useEffect(() => { setPage(0) }, [debouncedSearch, assessFilter, categoriaFilter, posFilter])
 
+  // Ranking de informes por explorador (usado en la pestaña Informes;
+  // las estadísticas completas viven ahora en Admin → Stats Captación)
+  const reportsByPersonaRanked = useMemo(() => {
+    const byPersona: Record<string, number> = {}
+    scoutingReports.forEach(r => { const k = r.persona ?? '—'; byPersona[k] = (byPersona[k] ?? 0) + 1 })
+    return Object.entries(byPersona).sort((a, b) => b[1] - a[1])
+  }, [scoutingReports])
+
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
   const paginated = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
-
-  // ── statistics ──
-  const stats = useMemo(() => {
-    // Reports per persona
-    const byPersona: Record<string, number> = {}
-    scoutingReports.forEach(r => {
-      const k = r.persona ?? '—'
-      byPersona[k] = (byPersona[k] ?? 0) + 1
-    })
-    const personaRanked = Object.entries(byPersona).sort((a, b) => b[1] - a[1])
-
-    // Conclusions («Firmar» legado se cuenta como «Llamar»)
-    const byConclusion: Record<string, number> = {}
-    scoutingReports.forEach(r => {
-      const k = normConclusion(r.conclusion) ?? 'Sin conclusión'
-      byConclusion[k] = (byConclusion[k] ?? 0) + 1
-    })
-
-    // Assessment distribution (players)
-    const byAssessment: Record<string, number> = {}
-    scoutingPlayers.forEach(p => {
-      const k = p.assessment ?? 'Sin valorar'
-      byAssessment[k] = (byAssessment[k] ?? 0) + 1
-    })
-
-    // Positions most scouted (from player position1)
-    const byPosition: Record<string, number> = {}
-    scoutingReports.forEach(r => {
-      const p = scoutingPlayers.find(pl => pl.id === r.playerId)
-      const pos = p?.position1 ?? '—'
-      byPosition[pos] = (byPosition[pos] ?? 0) + 1
-    })
-    const positionRanked = Object.entries(byPosition).sort((a, b) => b[1] - a[1]).slice(0, 8)
-
-    // Monthly activity last 12 months
-    const now = new Date()
-    const months: { label: string; count: number }[] = []
-    for (let i = 11; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-      const label = `${MONTHS_ES[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`
-      const count = scoutingReports.filter(r => (r.fecha ?? r.createdAt).startsWith(key)).length
-      months.push({ label, count })
-    }
-
-    // Players with most reports
-    const reportsByPlayer: Record<string, number> = {}
-    scoutingReports.forEach(r => { reportsByPlayer[r.playerId] = (reportsByPlayer[r.playerId] ?? 0) + 1 })
-    const topPlayers = Object.entries(reportsByPlayer)
-      .sort((a, b) => b[1] - a[1]).slice(0, 30)
-      .map(([id, count]) => ({ name: scoutingPlayers.find(p => p.id === id)?.fullName ?? id, count }))
-
-    return { byPersona, personaRanked, byConclusion, byAssessment, positionRanked, months, topPlayers }
-  }, [scoutingReports, scoutingPlayers])
-
-  // ── match statistics ──
-  const matchStats = useMemo(() => {
-    // Partidos por persona
-    const byPersona: Record<string, number> = {}
-    scoutingMatches.forEach(m => {
-      const k = m.assignedTo ?? '—'
-      byPersona[k] = (byPersona[k] ?? 0) + 1
-    })
-    const personaRanked = Object.entries(byPersona).sort((a, b) => b[1] - a[1])
-
-    // Vídeo vs campo
-    let video = 0, campo = 0
-    scoutingMatches.forEach(m => { m.viewMode === 'campo' ? campo++ : video++ })
-
-    // Vistos vs pendientes
-    const visto = scoutingMatches.filter(m => m.status === 'visto').length
-    const pendiente = scoutingMatches.length - visto
-
-    // Competiciones más vistas
-    const byCompetition: Record<string, number> = {}
-    scoutingMatches.forEach(m => {
-      const k = m.competition ?? 'Sin categoría'
-      byCompetition[k] = (byCompetition[k] ?? 0) + 1
-    })
-    const competitionRanked = Object.entries(byCompetition).sort((a, b) => b[1] - a[1]).slice(0, 10)
-
-    // Equipos más vistos (local + visitante)
-    const byTeam: Record<string, number> = {}
-    scoutingMatches.forEach(m => {
-      byTeam[m.homeTeam] = (byTeam[m.homeTeam] ?? 0) + 1
-      byTeam[m.awayTeam] = (byTeam[m.awayTeam] ?? 0) + 1
-    })
-    const teamRanked = Object.entries(byTeam).sort((a, b) => b[1] - a[1]).slice(0, 15)
-
-    // Actividad mensual de partidos (últimos 12 meses)
-    const now = new Date()
-    const matchMonths: { label: string; count: number }[] = []
-    for (let i = 11; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-      const label = `${MONTHS_ES[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`
-      const count = scoutingMatches.filter(m => m.date.startsWith(key)).length
-      matchMonths.push({ label, count })
-    }
-
-    // Pendientes por persona
-    const pendienteByPersona: Record<string, number> = {}
-    scoutingMatches.filter(m => m.status !== 'visto' && m.assignedTo).forEach(m => {
-      const k = m.assignedTo!
-      pendienteByPersona[k] = (pendienteByPersona[k] ?? 0) + 1
-    })
-
-    return { byPersona, personaRanked, video, campo, visto, pendiente, competitionRanked, teamRanked, matchMonths, pendienteByPersona }
-  }, [scoutingMatches])
 
   // ── filtered matches ──
   const filteredMatches = useMemo(() => {
@@ -3694,8 +3149,7 @@ export function Captacion({
     closePanel,
     hasPanel &&
       !showAddPlayer && !showEditPlayer && !showAddReportForm &&
-      editingReportCount === 0 &&
-      !showAddBoulema && !editingPeticion && !respondingPeticion
+      editingReportCount === 0
   )
 
   return (
@@ -3733,6 +3187,13 @@ export function Captacion({
             <Eye className="w-3.5 h-3.5" />
             Captación
           </button>
+          <button
+            onClick={() => onGoToSection('boulema')}
+            className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
+          >
+            <Inbox className="w-3.5 h-3.5" />
+            Boulema
+          </button>
         </div>
 
         {/* Captación sub-tabs */}
@@ -3742,10 +3203,8 @@ export function Captacion({
             { id: 'firmar' as CaptacionTab, label: 'Firmar', labelMobile: 'Firmar', icon: <PenLine className="w-3.5 h-3.5" /> },
             { id: 'conclusiones' as CaptacionTab, label: 'Conclusiones', labelMobile: 'Concl.', icon: <Target className="w-3.5 h-3.5" /> },
             { id: 'informes' as CaptacionTab, label: 'Informes recientes', labelMobile: 'Informes', icon: <FileText className="w-3.5 h-3.5" /> },
-            { id: 'estadisticas' as CaptacionTab, label: 'Estadísticas', labelMobile: 'Stats', icon: <BarChart2 className="w-3.5 h-3.5" /> },
             { id: 'partidos' as CaptacionTab, label: 'Partidos', labelMobile: 'Partidos', icon: <ClipboardList className="w-3.5 h-3.5" /> },
             { id: 'pretemporada' as CaptacionTab, label: 'Pretemporada', labelMobile: 'Pretemp.', icon: <Sun className="w-3.5 h-3.5" /> },
-            { id: 'boulema' as CaptacionTab, label: 'Boulema', labelMobile: 'Boulema', icon: <Inbox className="w-3.5 h-3.5" /> },
           ]).map(t => (
             <button
               key={t.id}
@@ -4085,7 +3544,7 @@ export function Captacion({
               <Users className="w-4 h-4 text-slate-400" /> Informes por explorador
             </h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-              {stats.personaRanked.map(([persona, count]) => {
+              {reportsByPersonaRanked.map(([persona, count]) => {
                 const name = personaToName(persona, profiles)
                 return (
                   <div key={persona} className="bg-slate-50 rounded-lg px-3 py-2 text-center">
@@ -4169,301 +3628,6 @@ export function Captacion({
       )}
 
       {/* ── ESTADÍSTICAS TAB ──────────────────────────────── */}
-      {captTab === 'estadisticas' && (
-        <div className="flex-1 max-w-5xl mx-auto w-full px-3 sm:px-6 py-4 space-y-4">
-          {/* Summary row */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[
-              { label: 'Total informes', value: scoutingReports.length },
-              { label: 'Total jugadores', value: scoutingPlayers.length },
-              { label: 'Exploradores activos', value: stats.personaRanked.length },
-              { label: 'Partidos vistos', value: scoutingMatches.length },
-            ].map(s => (
-              <div key={s.label} className="bg-white border border-slate-200 rounded-xl p-4 text-center">
-                <div className="text-2xl font-bold text-slate-800">{s.value}</div>
-                <div className="text-xs text-slate-500 mt-0.5">{s.label}</div>
-              </div>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Reports by author */}
-            <div className="bg-white border border-slate-200 rounded-xl p-4">
-              <h3 className="text-sm font-semibold text-slate-700 mb-3">Informes por explorador</h3>
-              <div className="space-y-2">
-                {stats.personaRanked.slice(0, 8).map(([persona, count]) => {
-                  const name = personaToName(persona, profiles)
-                  return (
-                    <StatBar
-                      key={persona}
-                      label={name && name !== persona ? `${persona} · ${name.split(' ')[0]}` : persona}
-                      value={count}
-                      max={stats.personaRanked[0]?.[1] ?? 1}
-                      color="bg-blue-500"
-                    />
-                  )
-                })}
-              </div>
-            </div>
-
-            {/* Conclusions */}
-            <div className="bg-white border border-slate-200 rounded-xl p-4">
-              <h3 className="text-sm font-semibold text-slate-700 mb-3">Distribución de conclusiones</h3>
-              <div className="space-y-2">
-                {Object.entries(stats.byConclusion)
-                  .sort((a, b) => b[1] - a[1])
-                  .map(([conclusion, count]) => (
-                    <StatBar
-                      key={conclusion}
-                      label={conclusion}
-                      value={count}
-                      max={Math.max(...Object.values(stats.byConclusion))}
-                      color={
-                        conclusion === 'Seguir' ? 'bg-blue-500' :
-                        conclusion === 'Firmar' || conclusion === 'Llamar' ? 'bg-green-500' :
-                        conclusion === 'Descartar' ? 'bg-red-400' :
-                        'bg-slate-300'
-                      }
-                    />
-                  ))}
-              </div>
-            </div>
-
-            {/* Positions most scouted */}
-            <div className="bg-white border border-slate-200 rounded-xl p-4">
-              <h3 className="text-sm font-semibold text-slate-700 mb-3">Posiciones más vistas</h3>
-              <div className="space-y-2">
-                {stats.positionRanked.map(([pos, count]) => (
-                  <StatBar
-                    key={pos}
-                    label={pos}
-                    value={count}
-                    max={stats.positionRanked[0]?.[1] ?? 1}
-                    color="bg-violet-500"
-                  />
-                ))}
-              </div>
-            </div>
-
-            {/* Assessment distribution */}
-            <div className="bg-white border border-slate-200 rounded-xl p-4">
-              <h3 className="text-sm font-semibold text-slate-700 mb-3">Assessment de jugadores</h3>
-              <div className="space-y-2">
-                {Object.entries(stats.byAssessment)
-                  .sort((a, b) => b[1] - a[1])
-                  .map(([assessment, count]) => (
-                    <StatBar
-                      key={assessment}
-                      label={assessment}
-                      value={count}
-                      max={Math.max(...Object.values(stats.byAssessment))}
-                      color={
-                        assessment === 'Llamar' ? 'bg-amber-400' :
-                        assessment === 'Seguir' ? 'bg-blue-500' :
-                        assessment === 'Basque' ? 'bg-violet-500' :
-                        assessment === 'Visto' ? 'bg-slate-400' :
-                        assessment === 'Descartado' ? 'bg-red-400' :
-                        'bg-orange-400'
-                      }
-                    />
-                  ))}
-              </div>
-            </div>
-
-            {/* Monthly trend */}
-            <div className="bg-white border border-slate-200 rounded-xl p-4 md:col-span-2">
-              <h3 className="text-sm font-semibold text-slate-700 mb-3">Actividad mensual (últimos 12 meses)</h3>
-              <div className="overflow-x-auto scrollbar-none">
-              <div className="flex items-end gap-1 h-24 min-w-[440px]">
-                {stats.months.map(({ label, count }) => {
-                  const maxCount = Math.max(...stats.months.map(m => m.count), 1)
-                  const pct = Math.round((count / maxCount) * 100)
-                  return (
-                    <div key={label} className="flex-1 flex flex-col items-center gap-1">
-                      <div className="text-[9px] text-slate-500 font-medium">{count || ''}</div>
-                      <div className="w-full bg-slate-100 rounded-t" style={{ height: '60px' }}>
-                        <div
-                          className="w-full bg-primary rounded-t transition-all"
-                          style={{ height: `${pct}%`, marginTop: `${100 - pct}%` }}
-                        />
-                      </div>
-                      <div className="text-[9px] text-slate-400 whitespace-nowrap">{label}</div>
-                    </div>
-                  )
-                })}
-              </div>
-              </div>
-            </div>
-
-            {/* Top players by reports */}
-            <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col">
-              <h3 className="text-sm font-semibold text-slate-700 mb-3">
-                Jugadores más seguidos
-                <span className="ml-2 text-xs font-normal text-slate-400">top {stats.topPlayers.length}</span>
-              </h3>
-              <div className="overflow-y-auto max-h-72 space-y-2 pr-1">
-                {stats.topPlayers.map(({ name, count }) => (
-                  <StatBar
-                    key={name}
-                    label={name}
-                    value={count}
-                    max={stats.topPlayers[0]?.count ?? 1}
-                    color="bg-emerald-500"
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* ── ESTADÍSTICAS DE PARTIDOS ── */}
-          <div className="mt-6">
-            <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide mb-3 flex items-center gap-2">
-              <ClipboardList className="w-4 h-4 text-slate-400" /> Estadísticas de partidos
-            </h2>
-            {scoutingMatches.length === 0 ? (
-              <p className="text-xs text-slate-400">No hay partidos registrados aún.</p>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-
-                {/* KPIs rápidos */}
-                <div className="bg-white border border-slate-200 rounded-xl p-4 md:col-span-2 xl:col-span-3">
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
-                    {[
-                      { label: 'Total partidos', value: scoutingMatches.length, color: 'text-slate-800' },
-                      { label: 'Vistos', value: matchStats.visto, color: 'text-emerald-600' },
-                      { label: 'Pendientes', value: matchStats.pendiente, color: 'text-amber-600' },
-                      { label: 'En campo', value: matchStats.campo, color: 'text-violet-600' },
-                    ].map(({ label, value, color }) => (
-                      <div key={label}>
-                        <div className={`text-2xl font-bold ${color}`}>{value}</div>
-                        <div className="text-xs text-slate-400 mt-0.5">{label}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Partidos por scout */}
-                <div className="bg-white border border-slate-200 rounded-xl p-4">
-                  <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-1.5">
-                    <Users className="w-3.5 h-3.5 text-slate-400" /> Partidos por explorador
-                  </h3>
-                  <div className="space-y-2">
-                    {matchStats.personaRanked.map(([persona, count]) => {
-                      const name = personaToName(persona, profiles)
-                      return (
-                        <StatBar
-                          key={persona}
-                          label={name && name !== persona ? `${persona} · ${name.split(' ')[0]}` : persona}
-                          value={count}
-                          max={matchStats.personaRanked[0]?.[1] ?? 1}
-                          color="bg-blue-500"
-                        />
-                      )
-                    })}
-                  </div>
-                  {/* Pendientes por persona */}
-                  {Object.keys(matchStats.pendienteByPersona).length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-slate-100">
-                      <div className="text-[11px] font-semibold text-amber-600 uppercase mb-2">Pendientes de ver</div>
-                      {Object.entries(matchStats.pendienteByPersona).map(([persona, count]) => (
-                        <StatBar
-                          key={persona}
-                          label={persona}
-                          value={count}
-                          max={Math.max(...Object.values(matchStats.pendienteByPersona))}
-                          color="bg-amber-400"
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Vídeo vs Campo */}
-                <div className="bg-white border border-slate-200 rounded-xl p-4">
-                  <h3 className="text-sm font-semibold text-slate-700 mb-3">Modo de visualización</h3>
-                  <div className="space-y-2">
-                    <StatBar label="📹 Vídeo" value={matchStats.video} max={scoutingMatches.length} color="bg-blue-400" />
-                    <StatBar label="🏟️ Campo" value={matchStats.campo} max={scoutingMatches.length} color="bg-emerald-500" />
-                  </div>
-                  <div className="mt-3 flex gap-2">
-                    {matchStats.video > 0 && (
-                      <div className="flex-1 text-center bg-blue-50 rounded-lg py-2">
-                        <div className="text-sm font-bold text-blue-700">{Math.round((matchStats.video / scoutingMatches.length) * 100)}%</div>
-                        <div className="text-[11px] text-blue-500">vídeo</div>
-                      </div>
-                    )}
-                    {matchStats.campo > 0 && (
-                      <div className="flex-1 text-center bg-emerald-50 rounded-lg py-2">
-                        <div className="text-sm font-bold text-emerald-700">{Math.round((matchStats.campo / scoutingMatches.length) * 100)}%</div>
-                        <div className="text-[11px] text-emerald-500">campo</div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Competiciones más vistas */}
-                <div className="bg-white border border-slate-200 rounded-xl p-4">
-                  <h3 className="text-sm font-semibold text-slate-700 mb-3">Competiciones más vistas</h3>
-                  <div className="space-y-2">
-                    {matchStats.competitionRanked.map(([comp, count]) => (
-                      <StatBar
-                        key={comp}
-                        label={comp}
-                        value={count}
-                        max={matchStats.competitionRanked[0]?.[1] ?? 1}
-                        color="bg-violet-500"
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                {/* Equipos más vistos */}
-                <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col">
-                  <h3 className="text-sm font-semibold text-slate-700 mb-3">Equipos más vistos</h3>
-                  <div className="overflow-y-auto max-h-64 space-y-2 pr-1">
-                    {matchStats.teamRanked.map(([team, count]) => (
-                      <StatBar
-                        key={team}
-                        label={team}
-                        value={count}
-                        max={matchStats.teamRanked[0]?.[1] ?? 1}
-                        color="bg-orange-400"
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                {/* Actividad mensual de partidos */}
-                <div className="bg-white border border-slate-200 rounded-xl p-4 md:col-span-2">
-                  <h3 className="text-sm font-semibold text-slate-700 mb-3">Partidos por mes (últimos 12 meses)</h3>
-                  <div className="overflow-x-auto scrollbar-none">
-                  <div className="flex items-end gap-1 h-24 min-w-[440px]">
-                    {matchStats.matchMonths.map(({ label, count }) => {
-                      const maxCount = Math.max(...matchStats.matchMonths.map(m => m.count), 1)
-                      const pct = Math.round((count / maxCount) * 100)
-                      return (
-                        <div key={label} className="flex-1 flex flex-col items-center gap-1">
-                          <div className="text-[9px] text-slate-500 font-medium">{count || ''}</div>
-                          <div className="w-full bg-slate-100 rounded-t" style={{ height: '60px' }}>
-                            <div
-                              className="w-full bg-orange-400 rounded-t transition-all"
-                              style={{ height: `${pct}%`, marginTop: `${100 - pct}%` }}
-                            />
-                          </div>
-                          <div className="text-[9px] text-slate-400 whitespace-nowrap">{label}</div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                  </div>
-                </div>
-
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* ── PARTIDOS TAB ──────────────────────────────────── */}
       {captTab === 'partidos' && (
         <div className="flex-1 w-full px-3 sm:px-6 py-4 space-y-3">
@@ -4924,401 +4088,6 @@ export function Captacion({
       })()}
 
       {/* ── BOULEMA TAB ──────────────────────────────────────── */}
-      {captTab === 'boulema' && (() => {
-        // Derived filter values
-        const bouAllYears = [...new Set(boulemaPeticiones.map(p => p.birthYear).filter(Boolean) as string[])].sort()
-        const bouAllPositions = [...new Set(boulemaPeticiones.map(p => p.position).filter(Boolean) as string[])].sort()
-        const bouAllOfferedBy = [...new Set(boulemaPeticiones.map(p => p.offeredBy).filter(Boolean) as string[])].sort()
-
-        const filteredPeticiones = boulemaPeticiones
-          .slice()
-          .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-          .filter(p => {
-            if (bouPosFilter !== 'all' && p.position !== bouPosFilter) return false
-            if (bouYearFilter !== 'all' && p.birthYear !== bouYearFilter) return false
-            if (bouOfferedFilter !== 'all' && p.offeredBy !== bouOfferedFilter) return false
-            if (bouSearch.trim()) {
-              const q = bouSearch.toLowerCase()
-              if (
-                !p.playerName.toLowerCase().includes(q) &&
-                !(p.team?.toLowerCase().includes(q)) &&
-                !(p.offeredBy?.toLowerCase().includes(q)) &&
-                !(p.notes?.toLowerCase().includes(q))
-              ) return false
-            }
-            return true
-          })
-
-        return (
-          <div className="flex-1 max-w-3xl mx-auto w-full px-3 sm:px-6 py-4 space-y-3">
-            {/* Header */}
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div className="flex items-center gap-2">
-                <Inbox className="w-5 h-5 text-slate-400" />
-                <h2 className="text-base font-semibold text-slate-800">Boulema</h2>
-                <span className="text-xs font-medium px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full">
-                  {filteredPeticiones.length}{filteredPeticiones.length !== boulemaPeticiones.length ? `/${boulemaPeticiones.length}` : ''}
-                </span>
-              </div>
-              <button
-                onClick={() => setShowAddBoulema(true)}
-                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-primary text-white rounded-xl hover:bg-primary/90 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Añadir petición</span>
-              </button>
-            </div>
-
-            {/* Search + Filters */}
-            <div className="flex flex-wrap items-center gap-2">
-              {/* Search */}
-              <div className="relative flex-1 min-w-[180px]">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                <input
-                  value={bouSearch}
-                  onChange={e => setBouSearch(e.target.value)}
-                  placeholder="Buscar jugador, club, ofrecido por..."
-                  className="w-full pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-                />
-                {bouSearch && (
-                  <button onClick={() => setBouSearch('')} aria-label="Limpiar búsqueda" className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-
-              {/* Position filter */}
-              {bouAllPositions.length > 0 && (
-                <select
-                  value={bouPosFilter}
-                  onChange={e => setBouPosFilter(e.target.value)}
-                  className="px-2.5 py-1.5 text-xs font-medium border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-                >
-                  <option value="all">Posición</option>
-                  {bouAllPositions.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
-              )}
-
-              {/* Year filter */}
-              {bouAllYears.length > 0 && (
-                <select
-                  value={bouYearFilter}
-                  onChange={e => setBouYearFilter(e.target.value)}
-                  className="px-2.5 py-1.5 text-xs font-medium border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-                >
-                  <option value="all">Año nac.</option>
-                  {bouAllYears.map(y => <option key={y} value={y}>{y}</option>)}
-                </select>
-              )}
-
-              {/* Offered by filter */}
-              {bouAllOfferedBy.length > 0 && (
-                <select
-                  value={bouOfferedFilter}
-                  onChange={e => setBouOfferedFilter(e.target.value)}
-                  className="px-2.5 py-1.5 text-xs font-medium border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-                >
-                  <option value="all">Ofrecido por</option>
-                  {bouAllOfferedBy.map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
-              )}
-
-            </div>
-
-            {/* Chips de filtros activos (boulema) */}
-            {(() => {
-              const chips: FilterChip[] = []
-              if (bouSearch.trim()) chips.push({ key: 'search', label: `Búsqueda: "${bouSearch.trim()}"`, onRemove: () => setBouSearch('') })
-              if (bouPosFilter !== 'all') chips.push({ key: 'pos', label: `Posición: ${bouPosFilter}`, onRemove: () => setBouPosFilter('all') })
-              if (bouYearFilter !== 'all') chips.push({ key: 'year', label: `Año: ${bouYearFilter}`, onRemove: () => setBouYearFilter('all') })
-              if (bouOfferedFilter !== 'all') chips.push({ key: 'offered', label: `Ofrecido por: ${bouOfferedFilter}`, onRemove: () => setBouOfferedFilter('all') })
-              if (chips.length === 0) return null
-              return (
-                <ActiveFilterChips
-                  chips={chips}
-                  onClearAll={() => { setBouSearch(''); setBouPosFilter('all'); setBouYearFilter('all'); setBouOfferedFilter('all') }}
-                />
-              )
-            })()}
-
-            {/* Peticiones list */}
-            <div className="space-y-2">
-              {boulemaPeticiones.length === 0 ? (
-                <div className="bg-white border border-dashed border-slate-200 rounded-2xl py-12 text-center">
-                  <Inbox className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                  <p className="text-sm text-slate-400 font-medium">Sin peticiones de informe</p>
-                  <p className="text-xs text-slate-300 mt-1">Añade una petición para pedir un informe sobre un jugador</p>
-                </div>
-              ) : filteredPeticiones.length === 0 ? (
-                <p className="text-xs text-slate-400 text-center py-8">Sin resultados con los filtros actuales</p>
-              ) : (
-                filteredPeticiones.map(p => {
-                  const requesterProfile = profiles.find(pr => pr.avatar === p.requestedBy)
-                  const rel = relativeDate(p.createdAt)
-                  const isConfirming = confirmDeletePeticion === p.id
-                  // Reports explicitly linked via reportIds
-                  const explicitLinkedReports = p.reportIds
-                    .map(id => scoutingReports.find(r => r.id === id))
-                    .filter((r): r is NonNullable<typeof r> => !!r)
-                  // Auto-detect: find any report for the same player (by name) written by someone in requestedFrom
-                  const matchingScoutPlayer = scoutingPlayers.find(
-                    sp => sp.fullName.trim().toLowerCase() === p.playerName.trim().toLowerCase()
-                  )
-                  const autoDetectedReports = matchingScoutPlayer
-                    ? scoutingReports.filter(r =>
-                        r.playerId === matchingScoutPlayer.id &&
-                        r.persona != null && p.requestedFrom.includes(r.persona) &&
-                        !explicitLinkedReports.some(lr => lr.id === r.id)
-                      )
-                    : []
-                  const linkedReports = [...explicitLinkedReports, ...autoDetectedReports]
-                  const allDone = linkedReports.length > 0 && p.requestedFrom.every(
-                    av => linkedReports.some(r => r.persona === av)
-                  )
-                  const monthLabel = p.birthMonth ? MONTHS_ES_FULL.find(m => m.v === p.birthMonth)?.l?.slice(0, 3) : undefined
-                  const notesFirstLine = p.notes?.split('\n')[0] ?? ''
-                  const notesHasMore = (p.notes?.split('\n').length ?? 0) > 1 || (p.notes?.length ?? 0) > notesFirstLine.length
-                  const notesExpanded = expandedNoteIds.has(p.id)
-                  const currentUserDone = linkedReports.some(r => r.persona === currentProfile.avatar)
-
-                  return (
-                    <div
-                      key={p.id}
-                      className={`bg-white border rounded-xl px-4 py-3 transition-colors ${allDone ? 'border-green-200 bg-green-50/30' : 'border-slate-200 hover:border-slate-300'}`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          {/* Player name + chips: NOMBRE / POSICIÓN / FECHA / CLUB / PAÍS / NACIONALIDAD */}
-                          <div className="flex flex-wrap items-center gap-1.5 mb-1">
-                            <span className="font-semibold text-slate-800 text-sm">{p.playerName}</span>
-                            {p.position && (
-                              <span className="text-[11px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{p.position}</span>
-                            )}
-                            {(p.birthYear || monthLabel) && (
-                              <span className="text-[11px] text-slate-400 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded font-mono">
-                                {[monthLabel, p.birthYear].filter(Boolean).join('/')}
-                              </span>
-                            )}
-                            {p.team && (
-                              <span className="text-[11px] text-slate-500 italic">{p.team}</span>
-                            )}
-                            {p.country && (
-                              <span className="text-[11px] text-slate-500 italic">{p.country}</span>
-                            )}
-                            {p.nationality && (
-                              <span className="text-[11px] text-violet-600 bg-violet-50 border border-violet-100 px-1.5 py-0.5 rounded">{p.nationality}</span>
-                            )}
-                          </div>
-
-                          {/* Offered by */}
-                          {p.offeredBy && (
-                            <div className="text-[11px] text-slate-500 mb-1">
-                              <span className="text-slate-400">Ofrecido por</span>{' '}
-                              <span className="font-medium text-slate-600">{p.offeredBy}</span>
-                            </div>
-                          )}
-
-                          {/* Assignment — multi-destinatario */}
-                          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 mb-1">
-                            <span className="text-slate-400">Pedido por</span>
-                            <span className="font-mono font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
-                              {p.requestedBy}
-                              {requesterProfile && (
-                                <span className="font-sans font-normal ml-1 text-slate-400">· {requesterProfile.name.split(' ')[0]}</span>
-                              )}
-                            </span>
-                            <span className="text-slate-400">→</span>
-                            {p.requestedFrom.map(av => {
-                              const pr = profiles.find(x => x.avatar === av)
-                              const done = linkedReports.some(r => r.persona === av)
-                              return (
-                                <span key={av} className={`font-mono font-semibold px-1.5 py-0.5 rounded border text-[11px] ${
-                                  done
-                                    ? 'bg-green-50 text-green-700 border-green-200'
-                                    : 'bg-blue-50 text-blue-700 border-blue-100'
-                                }`}>
-                                  {av}
-                                  {pr && <span className="font-sans font-normal ml-1 opacity-70">· {pr.name.split(' ')[0]}</span>}
-                                  {done && <span className="ml-1">✓</span>}
-                                </span>
-                              )
-                            })}
-                          </div>
-
-                          {/* Notes — truncadas con "ver más" inline */}
-                          {p.notes && (
-                            <div className="mb-1.5 text-xs text-slate-500 leading-relaxed">
-                              {notesExpanded ? (
-                                <span className="whitespace-pre-wrap">{p.notes}{' '}
-                                  <button onClick={() => toggleNotes(p.id)} className="text-blue-500 hover:text-blue-700 whitespace-nowrap">ver menos ▲</button>
-                                </span>
-                              ) : (
-                                <span>
-                                  {notesFirstLine}
-                                  {notesHasMore && (
-                                    <>{' '}<button onClick={() => toggleNotes(p.id)} className="text-blue-500 hover:text-blue-700 whitespace-nowrap">ver más ▼</button></>
-                                  )}
-                                </span>
-                              )}
-                            </div>
-                          )}
-
-                          {/* Informes acumulados + botón crear */}
-                          <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                            {linkedReports.map(report => {
-                              const reportDate = report.createdAt
-                                ? new Date(report.createdAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
-                                : ''
-                              return (
-                                <div
-                                  key={report.id}
-                                  onClick={() => { setCaptTab('jugadores'); const pl = scoutingPlayers.find(x => x.id === report.playerId); if (pl) setPanelPlayerId(pl.id) }}
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-green-100 text-green-700 border border-green-200 rounded-lg cursor-pointer hover:bg-green-200 transition-colors"
-                                >
-                                  <FileText className="w-3 h-3" />
-                                  <span className="font-mono font-bold">{report.persona ?? '?'}</span>
-                                  {reportDate && <span className="text-green-600 opacity-80">{reportDate}</span>}
-                                  {report.conclusion && (
-                                    <span className={`ml-0.5 px-1.5 py-0.5 rounded text-[11px] ${BOULEMA_CONCLUSION_STYLE[report.conclusion] ?? 'bg-slate-100 text-slate-600'}`}>
-                                      {report.conclusion}
-                                    </span>
-                                  )}
-                                </div>
-                              )
-                            })}
-                            {!currentUserDone && (
-                              <button
-                                onClick={() => setRespondingPeticion(p)}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
-                              >
-                                <FileText className="w-3 h-3" />
-                                Crear informe
-                              </button>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Right: date + actions */}
-                        <div className="flex-shrink-0 flex flex-col items-end gap-1">
-                          {rel && (
-                            <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-full ${
-                              rel === 'hoy' ? 'bg-green-100 text-green-700' :
-                              rel === 'ayer' ? 'bg-blue-50 text-blue-600' :
-                              'bg-slate-100 text-slate-500'
-                            }`}>
-                              {rel}
-                            </span>
-                          )}
-                          <div className="text-[11px] text-slate-400">{fmtDate(p.createdAt)}</div>
-                          <div className="flex items-center gap-1 mt-1">
-                            {isConfirming ? (
-                              <>
-                                <button
-                                  onClick={() => setConfirmDeletePeticion(null)}
-                                  className="text-[11px] px-2 py-0.5 border border-slate-200 rounded text-slate-500 hover:bg-slate-50"
-                                >
-                                  Cancelar
-                                </button>
-                                <button
-                                  onClick={async () => {
-                                    try {
-                                      await onDeleteBoulemaPeticion(p.id)
-                                      setConfirmDeletePeticion(null)
-                                      showToast('Petición eliminada')
-                                    } catch {
-                                      showToast('Error al eliminar la petición', 'error')
-                                    }
-                                  }}
-                                  className="text-[11px] px-2 py-0.5 bg-red-500 text-white rounded hover:bg-red-600"
-                                >
-                                  Eliminar
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                <button
-                                  onClick={() => setEditingPeticion(p)}
-                                  className="p-2 sm:p-1 rounded text-slate-300 hover:text-blue-500 hover:bg-blue-50 transition-colors"
-                                  title="Editar petición"
-                                  aria-label="Editar petición"
-                                >
-                                  <Pencil className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  onClick={() => setConfirmDeletePeticion(p.id)}
-                                  className="p-2 sm:p-1 rounded text-slate-300 hover:text-red-400 hover:bg-red-50 transition-colors"
-                                  title="Eliminar petición"
-                                  aria-label="Eliminar petición"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })
-              )}
-            </div>
-          </div>
-        )
-      })()}
-
-      {/* AddBoulemaModal — nueva petición */}
-      {showAddBoulema && (
-        <AddBoulemaModal
-          profiles={profiles}
-          currentProfile={currentProfile}
-          boulemaPeticiones={boulemaPeticiones}
-          onClose={() => setShowAddBoulema(false)}
-          onSave={async (peticion) => {
-            await onAddBoulemaPeticion(peticion)
-            setShowAddBoulema(false)
-            showToast('Petición añadida')
-          }}
-        />
-      )}
-
-      {/* EditBoulemaModal — editar petición existente */}
-      {editingPeticion && (
-        <AddBoulemaModal
-          profiles={profiles}
-          currentProfile={currentProfile}
-          boulemaPeticiones={boulemaPeticiones}
-          initial={editingPeticion}
-          onClose={() => setEditingPeticion(null)}
-          onSave={async (updated) => {
-            await onUpdateBoulemaPeticion({ ...editingPeticion, ...updated })
-            setEditingPeticion(null)
-            showToast('Petición actualizada')
-          }}
-        />
-      )}
-
-      {/* RespondWithInformeModal — crear informe desde petición */}
-      {respondingPeticion && (
-        <RespondWithInformeModal
-          peticion={respondingPeticion}
-          profiles={profiles}
-          currentProfile={currentProfile}
-          scoutingPlayers={scoutingPlayers}
-          boulemaPeticiones={boulemaPeticiones}
-          showToast={showToast}
-          onClose={() => setRespondingPeticion(null)}
-          onAddPlayer={onAddPlayer}
-          onAddReport={onAddReport}
-          onLinkReport={async (peticionId, reportId) => {
-            const peticion = boulemaPeticiones.find(x => x.id === peticionId)
-            if (peticion) await onUpdateBoulemaPeticion({
-              ...peticion,
-              reportIds: [...peticion.reportIds.filter(id => id !== reportId), reportId],
-            })
-          }}
-        />
-      )}
-
       {/* ── Side panel (persists across tabs) ─────────────────── */}
       {hasPanel && (
         <>

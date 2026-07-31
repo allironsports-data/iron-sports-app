@@ -19,6 +19,7 @@ const ClubDetail       = lazy(() => import('./views/ClubDetail').then(m => ({ de
 const Captacion        = lazy(() => import('./views/Captacion').then(m => ({ default: m.Captacion })))
 const Contactos        = lazy(() => import('./views/Contactos').then(m => ({ default: m.Contactos })))
 const TeamMemberDetail = lazy(() => import('./views/TeamMemberDetail').then(m => ({ default: m.TeamMemberDetail })))
+const Boulema          = lazy(() => import('./views/Boulema').then(m => ({ default: m.Boulema })))
 
 export interface AppNotification {
   id: string
@@ -57,8 +58,8 @@ export default function App() {
     () => sessionStorage.getItem('nav_profileId')
   )
   // four main sections
-  const [mainSection, setMainSection] = useState<'tareas' | 'jugadores' | 'distribucion' | 'captacion'>(
-    () => (sessionStorage.getItem('nav_section') as 'tareas' | 'jugadores' | 'distribucion' | 'captacion') ?? 'tareas'
+  const [mainSection, setMainSection] = useState<'tareas' | 'jugadores' | 'distribucion' | 'captacion' | 'boulema'>(
+    () => (sessionStorage.getItem('nav_section') as 'tareas' | 'jugadores' | 'distribucion' | 'captacion' | 'boulema') ?? 'tareas'
   )
   // where to return after closing PlayerDetail
   const [playerReturnToClub, setPlayerReturnToClub] = useState(false)
@@ -80,6 +81,9 @@ export default function App() {
 
   // Postpartidos
   const [postpartidos, setPostpartidos] = useState<Postpartido[]>([])
+
+  // Navegación externa a una ficha de Captación (p. ej. desde Boulema)
+  const [captacionOpenPlayerId, setCaptacionOpenPlayerId] = useState<string | null>(null)
 
   // Captación state
   const [scoutingPlayers, setScoutingPlayers] = useState<ScoutingPlayer[]>([])
@@ -622,6 +626,10 @@ export default function App() {
         profiles={profiles}
         tasks={tasks}
         players={players}
+        scoutingPlayers={scoutingPlayers}
+        scoutingReports={scoutingReports}
+        scoutingMatches={scoutingMatches}
+        firmasEntries={firmasEntries}
         onBack={() => setShowAdmin(false)}
         onRefresh={handleRefreshProfiles}
         onLogout={signOut}
@@ -707,6 +715,27 @@ export default function App() {
     />
   ) : null
 
+  if (mainSection === 'boulema') {
+    return (
+      <Boulema
+        profiles={profiles}
+        currentProfile={profile}
+        scoutingPlayers={scoutingPlayers}
+        scoutingReports={scoutingReports}
+        boulemaPeticiones={boulemaPeticiones}
+        onAddBoulemaPeticion={handleAddBoulemaPeticion}
+        onUpdateBoulemaPeticion={handleUpdateBoulemaPeticion}
+        onDeleteBoulemaPeticion={handleDeleteBoulemaPeticion}
+        onAddPlayer={handleAddScoutingPlayer}
+        onAddReport={handleAddScoutingReport}
+        onGoToSection={(s) => setMainSection(s)}
+        onOpenScoutingPlayer={(id) => { setCaptacionOpenPlayerId(id); setMainSection('captacion') }}
+        onLogout={signOut}
+        onAdmin={profile.is_admin ? () => { setMainSection('tareas'); setShowAdmin(true) } : undefined}
+      />
+    )
+  }
+
   if (mainSection === 'captacion') {
     return (
       <Captacion
@@ -731,10 +760,8 @@ export default function App() {
         matchPlayers={matchPlayers}
         onAddMatchPlayer={handleAddMatchPlayer}
         onRemoveMatchPlayer={handleRemoveMatchPlayer}
-        boulemaPeticiones={boulemaPeticiones}
-        onAddBoulemaPeticion={handleAddBoulemaPeticion}
-        onUpdateBoulemaPeticion={handleUpdateBoulemaPeticion}
-        onDeleteBoulemaPeticion={handleDeleteBoulemaPeticion}
+        openPlayerId={captacionOpenPlayerId}
+        onOpenPlayerConsumed={() => setCaptacionOpenPlayerId(null)}
         firmasEntries={firmasEntries}
         onCreateFirmasEntry={handleCreateFirmasEntry}
         onUpdateFirmasEntry={handleUpdateFirmasEntry}
@@ -769,6 +796,7 @@ export default function App() {
             onBack={() => setMainSection('tareas')}
             onGoToJugadores={() => setMainSection('jugadores')}
             onGoToCaptacion={() => setMainSection('captacion')}
+            onGoToBoulema={() => setMainSection('boulema')}
             onLogout={signOut}
             onAdmin={profile.is_admin ? () => { setMainSection('tareas'); setShowAdmin(true) } : undefined}
             onSelectPlayer={(id) => navigateToPlayer(id, false)}

@@ -42,14 +42,14 @@ import {
   ExternalLink,
   RotateCcw,
   Check,
-} from "lucide-react";
+  Inbox } from "lucide-react";
 import { POSITIONS, POSITION_CODES, positionLabel } from "../lib/positions";
 
 const PRIMARY = "hsl(220,72%,26%)";
 
 interface Props {
   view?: 'tareas' | 'jugadores';   // which section to show
-  onViewChange?: (v: 'tareas' | 'jugadores' | 'distribucion' | 'captacion') => void;
+  onViewChange?: (v: 'tareas' | 'jugadores' | 'distribucion' | 'captacion' | 'boulema') => void;
   players: Player[];
   tasks: Task[];
   profiles: Profile[];
@@ -836,6 +836,13 @@ export function Dashboard({
               >
                 <Eye className="w-3.5 h-3.5" />
                 Captación
+              </button>
+              <button
+                onClick={() => { setInternalTab(null); onViewChange('boulema'); }}
+                className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
+              >
+                <Inbox className="w-3.5 h-3.5" />
+                Boulema
               </button>
             </div>
 

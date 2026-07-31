@@ -4,6 +4,7 @@ import {
   ChevronRight, X, Check, Pencil, Trash2, LogOut,
   TrendingUp, AlertCircle, CircleDot, Flag, ChevronDown,
   Eye, List, LayoutGrid, SlidersHorizontal, Maximize2, Minimize2, CheckSquare,
+  Inbox,
 } from 'lucide-react'
 import logoImg from '../assets/logo.jpeg'
 import type { Player, Club, ClubNeed, DistributionEntry, ClubNegotiation, ClubNegotiationUpdate } from '../types'
@@ -166,6 +167,7 @@ interface Props {
   onBack: () => void          // go to Tareas
   onGoToJugadores?: () => void
   onGoToCaptacion?: () => void
+  onGoToBoulema?: () => void
   onLogout: () => void
   onAdmin?: () => void
   onSelectPlayer?: (id: string) => void
@@ -190,7 +192,7 @@ interface Props {
 
 export function Distribution({
   players, clubs, entries, negotiations, currentProfile, profiles,
-  onBack, onGoToCaptacion, onLogout, onAdmin, onSelectPlayer, onSelectClub,
+  onBack, onGoToCaptacion, onGoToBoulema, onLogout, onAdmin, onSelectPlayer, onSelectClub,
   onCreateClub, onUpdateClub, onDeleteClub,
   onCreateEntry, onUpdateEntry, onDeleteEntry,
   onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation,
@@ -782,6 +784,13 @@ export function Distribution({
           >
             <Eye className="w-3.5 h-3.5" />
             Captación
+          </button>
+          <button
+            onClick={onGoToBoulema}
+            className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
+          >
+            <Inbox className="w-3.5 h-3.5" />
+            Boulema
           </button>
         </div>
 

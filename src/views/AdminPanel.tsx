@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import logoImg from '../assets/logo.jpeg'
 import type { Profile } from '../contexts/AuthContext'
-import type { Task, Player } from '../types'
+import type { Task, Player, ScoutingPlayer, ScoutingReport, ScoutingMatch, FirmasEntry } from '../types'
+import { CaptacionStats } from './CaptacionStats'
 import { updateProfile } from '../lib/db'
 import { supabase } from '../lib/supabase'
-import { ArrowLeft, LogOut, Shield, UserPlus, Check, X, Edit3, Copy, Trash2, KeyRound, AlertTriangle, BarChart3, Users, ChevronDown, ChevronRight, Clock, CheckCircle2, Circle } from 'lucide-react'
+import { ArrowLeft, LogOut, Shield, UserPlus, Check, X, Edit3, Copy, Trash2, KeyRound, AlertTriangle, BarChart3, Users, ChevronDown, ChevronRight, Clock, CheckCircle2, Circle, Eye } from 'lucide-react'
 
 
 function generatePassword() {
@@ -16,20 +17,25 @@ interface Props {
   profiles: Profile[]
   tasks: Task[]
   players: Player[]
+  scoutingPlayers: ScoutingPlayer[]
+  scoutingReports: ScoutingReport[]
+  scoutingMatches: ScoutingMatch[]
+  firmasEntries: FirmasEntry[]
   onBack: () => void
   onRefresh: () => Promise<void>
   onLogout: () => void
   onOpenTable?: () => void
 }
 
-type AdminTab = 'equipo' | 'tareas'
+type AdminTab = 'equipo' | 'tareas' | 'captacion'
 
-export function AdminPanel({ profiles, tasks, players, onBack, onRefresh, onLogout, onOpenTable }: Props) {
+export function AdminPanel({ profiles, tasks, players, scoutingPlayers, scoutingReports, scoutingMatches, firmasEntries, onBack, onRefresh, onLogout, onOpenTable }: Props) {
   const [tab, setTab] = useState<AdminTab>('equipo')
 
   const tabs: { id: AdminTab; label: string; icon: React.ReactNode }[] = [
     { id: 'equipo', label: 'Equipo', icon: <Users className="w-4 h-4" /> },
     { id: 'tareas', label: 'Seguimiento', icon: <BarChart3 className="w-4 h-4" /> },
+    { id: 'captacion', label: 'Stats Captación', icon: <Eye className="w-4 h-4" /> },
   ]
 
   return (
@@ -63,6 +69,15 @@ export function AdminPanel({ profiles, tasks, players, onBack, onRefresh, onLogo
       <main className="max-w-5xl mx-auto px-4 py-6">
         {tab === 'equipo' && <TeamTab profiles={profiles} players={players} onRefresh={onRefresh} onOpenTable={onOpenTable} />}
         {tab === 'tareas' && <TaskTrackingTab profiles={profiles} tasks={tasks} players={players} />}
+        {tab === 'captacion' && (
+          <CaptacionStats
+            scoutingPlayers={scoutingPlayers}
+            scoutingReports={scoutingReports}
+            scoutingMatches={scoutingMatches}
+            firmasEntries={firmasEntries}
+            profiles={profiles}
+          />
+        )}
       </main>
     </div>
   )
