@@ -32,9 +32,12 @@ function StatBar({ label, value, max, color = 'bg-blue-500' }: { label: string; 
   )
 }
 
-const FIRMAS_STATUSES: FirmasStatus[] = ['llamar', 'caliente', 'templado', 'frio', 'decidir']
-const FIRMAS_LABEL: Record<FirmasStatus, string> = { llamar: 'Llamar', caliente: 'Caliente', templado: 'Templado', frio: 'Frío', decidir: 'Decidir' }
-const FIRMAS_BAR: Record<FirmasStatus, string> = { llamar: 'bg-amber-400', caliente: 'bg-red-500', templado: 'bg-yellow-400', frio: 'bg-sky-400', decidir: 'bg-violet-400' }
+const FIRMAS_STATUSES: FirmasStatus[] = ['llamar', 'caliente', 'templado', 'frio', 'decidir', 'firmado']
+const FIRMAS_LABEL: Record<FirmasStatus, string> = { llamar: 'Llamar', caliente: 'Caliente', templado: 'Templado', frio: 'Frío', decidir: 'Decidir', firmado: 'Firmado' }
+const FIRMAS_BAR: Record<FirmasStatus, string> = { llamar: 'bg-amber-400', caliente: 'bg-red-500', templado: 'bg-yellow-400', frio: 'bg-sky-400', decidir: 'bg-violet-400', firmado: 'bg-green-500' }
+
+// Cadencia máxima por estatus (misma regla que el semáforo de la pestaña Firmar)
+const FIRMAS_AGING_DAYS: Partial<Record<FirmasStatus, number>> = { caliente: 10, templado: 50, frio: 90 }
 
 interface Props {
   scoutingPlayers: ScoutingPlayer[]
@@ -167,24 +170,31 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
 
   // ── pipeline de firmas ──
   const firmasStats = useMemo(() => {
-    const byStatus: Record<FirmasStatus, number> = { llamar: 0, caliente: 0, templado: 0, frio: 0, decidir: 0 }
-    const byZone: Record<string, number> = {}
+    const byStatus: Record<FirmasStatus, number> = { llamar: 0, caliente: 0, templado: 0, frio: 0, decidir: 0, firmado: 0 }
+    const byZone: Record<string, { activos: number; firmados: number }> = {}
     const byManager: Record<string, number> = {}
-    const cutoff = Date.now() - 30 * 86400000
     let stale = 0, linked = 0
     firmasEntries.forEach(e => {
       byStatus[e.status]++
-      byZone[e.zone] = (byZone[e.zone] ?? 0) + 1
+      const z = (byZone[e.zone] ??= { activos: 0, firmados: 0 })
+      if (e.status === 'firmado') z.firmados++; else z.activos++
       e.managers.forEach(m => { byManager[m] = (byManager[m] ?? 0) + 1 })
       if (e.scoutingPlayerId) linked++
-      const lastTouch = [e.updatedAt, e.statusUpdatedAt, ...e.comments.map(c => c.date)].filter(Boolean).sort().pop()
-      if (!lastTouch || new Date(lastTouch).getTime() < cutoff) stale++
+      // desatendido según la cadencia del estatus (caliente 10d, templado 50d, frío 90d)
+      const limit = FIRMAS_AGING_DAYS[e.status]
+      if (limit) {
+        const lastTouch = [e.updatedAt, e.statusUpdatedAt, e.createdAt, ...e.comments.map(c => c.date)].filter(Boolean).sort().pop()
+        const days = lastTouch ? Math.floor((Date.now() - new Date(lastTouch).getTime()) / 86400000) : Infinity
+        if (days > limit) stale++
+      }
     })
-    const zoneRanked = Object.entries(byZone).sort((a, b) => b[1] - a[1])
+    const zoneRanked = Object.entries(byZone).sort((a, b) => (b[1].activos + b[1].firmados) - (a[1].activos + a[1].firmados))
     const managerRanked = Object.entries(byManager)
       .map(([id, n]) => [profiles.find(p => p.id === id)?.name ?? '—', n] as [string, number])
       .sort((a, b) => b[1] - a[1])
-    return { byStatus, zoneRanked, managerRanked, stale, linked }
+    const total = firmasEntries.length
+    const firmados = byStatus.firmado
+    return { byStatus, zoneRanked, managerRanked, stale, linked, total, firmados, conversion: total > 0 ? firmados / total : 0 }
   }, [firmasEntries, profiles])
 
   return (
@@ -492,12 +502,14 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="bg-white border border-slate-200 rounded-xl p-4 md:col-span-2">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-4 text-center">
                 {[
-                  { label: 'Jugadores en pipeline', value: firmasEntries.length, color: 'text-slate-800' },
-                  { label: 'Vinculados a Captación', value: firmasStats.linked, color: 'text-blue-600' },
+                  { label: 'En pipeline', value: firmasStats.total - firmasStats.firmados, color: 'text-slate-800' },
+                  { label: 'Firmados 🎉', value: firmasStats.firmados, color: 'text-green-600' },
+                  { label: 'Conversión', value: `${Math.round(firmasStats.conversion * 100)}%`, color: 'text-green-600' },
+                  { label: 'Vinculados', value: firmasStats.linked, color: 'text-blue-600' },
                   { label: 'Calientes', value: firmasStats.byStatus.caliente, color: 'text-red-600' },
-                  { label: 'Sin tocar +30 días', value: firmasStats.stale, color: 'text-amber-600' },
+                  { label: 'Desatendidos', value: firmasStats.stale, color: 'text-amber-600' },
                 ].map(({ label, value, color }) => (
                   <div key={label}>
                     <div className={`text-2xl font-bold ${color}`}>{value}</div>
@@ -505,6 +517,7 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
                   </div>
                 ))}
               </div>
+              <p className="mt-2 text-[11px] text-slate-400 text-center">Desatendidos: calientes sin tocar +10 días, templados +50, fríos +90</p>
             </div>
 
             <div className="bg-white border border-slate-200 rounded-xl p-4">
@@ -523,12 +536,30 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
             </div>
 
             <div className="bg-white border border-slate-200 rounded-xl p-4">
-              <h3 className="text-sm font-semibold text-slate-700 mb-3">Por zona</h3>
-              <div className="space-y-2">
-                {firmasStats.zoneRanked.map(([zone, count]) => (
-                  <StatBar key={zone} label={zone} value={count} max={firmasStats.zoneRanked[0]?.[1] ?? 1} color="bg-emerald-500" />
-                ))}
-              </div>
+              <h3 className="text-sm font-semibold text-slate-700 mb-3">Por zona (activos · firmados · conversión)</h3>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-[10px] uppercase text-slate-400 border-b border-slate-100">
+                    <th className="text-left py-1 font-semibold">Zona</th>
+                    <th className="text-right py-1 font-semibold">Activos</th>
+                    <th className="text-right py-1 font-semibold">Firmados</th>
+                    <th className="text-right py-1 font-semibold">Conv.</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {firmasStats.zoneRanked.map(([zone, z]) => {
+                    const tot = z.activos + z.firmados
+                    return (
+                      <tr key={zone}>
+                        <td className="py-1.5 text-slate-700 truncate max-w-[160px]">{zone}</td>
+                        <td className="py-1.5 text-right text-slate-600 tabular-nums">{z.activos}</td>
+                        <td className="py-1.5 text-right tabular-nums font-semibold text-green-600">{z.firmados || '—'}</td>
+                        <td className="py-1.5 text-right tabular-nums text-slate-500">{tot > 0 && z.firmados > 0 ? `${Math.round(z.firmados / tot * 100)}%` : '—'}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
 
             <div className="bg-white border border-slate-200 rounded-xl p-4 md:col-span-2">

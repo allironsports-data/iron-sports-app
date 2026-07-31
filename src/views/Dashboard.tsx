@@ -8,7 +8,7 @@ import { useEscapeKey } from "../hooks/useEscapeKey";
 import { useDebounce } from "../hooks/useDebounce";
 import { isValidName, isValidBirthDate } from "../lib/validate";
 import logoImg from '../assets/logo.jpeg';
-import type { Player, Task, TaskLabel, PlayerActivity, ScoutingMatch, MemberStatus, Postpartido } from "../types";
+import type { Player, Task, TaskLabel, PlayerActivity, ScoutingMatch, MemberStatus, Postpartido, FirmasEntry } from "../types";
 import { calcAge, clubsLabel } from "../types";
 import { createPlayerActivity, fetchActivitiesByAuthor, createScoutingMatch } from "../lib/db";
 import type { Profile } from "../contexts/AuthContext";
@@ -50,6 +50,9 @@ const PRIMARY = "hsl(220,72%,26%)";
 interface Props {
   view?: 'tareas' | 'jugadores';   // which section to show
   onViewChange?: (v: 'tareas' | 'jugadores' | 'distribucion' | 'captacion' | 'boulema') => void;
+  /** Pipeline de firmas — para el aviso de próximas acciones de hoy */
+  firmasEntries?: FirmasEntry[];
+  onOpenFirmar?: (entryId: string) => void;
   players: Player[];
   tasks: Task[];
   profiles: Profile[];
@@ -139,6 +142,8 @@ function statusDotColor(s: MemberStatus | undefined, hasTaskInProgress: boolean)
 export function Dashboard({
   view = 'tareas',
   onViewChange,
+  firmasEntries,
+  onOpenFirmar,
   players,
   tasks,
   profiles,
@@ -174,6 +179,7 @@ export function Dashboard({
   const [search, setSearch] = useState("");
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [showMatchesToday, setShowMatchesToday] = useState(false);
+  const [showFirmasToday, setShowFirmasToday] = useState(false);
   const [showAddGeneralTask, setShowAddGeneralTask] = useState(false);
 
   // ── Estado del equipo: editor "Mi estado" ──
@@ -522,6 +528,11 @@ export function Dashboard({
       return acc;
     }, {} as Record<string, { key: string; name: string; matches: ScoutingMatch[] }>)
   ).sort((a, b) => a.name.localeCompare(b.name));
+
+  // ── Firmar: próximas acciones que tocan hoy (o están vencidas) ──
+  const firmasActionsToday = (firmasEntries ?? [])
+    .filter((e) => e.nextActionDate && e.nextActionDate <= todayStr && e.status !== 'firmado')
+    .sort((a, b) => (a.nextActionDate ?? '').localeCompare(b.nextActionDate ?? ''));
 
   // ── Estado del equipo: datos derivados ──
   const statusProfiles = profiles.filter(p => !p.hidden_from_status);
@@ -944,6 +955,52 @@ export function Dashboard({
                     return `${p.name} (${dayMonth})`;
                   }).join(", ")}
                 </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Próximas acciones de Firmar para hoy (Captación → Firmar) */}
+        {firmasActionsToday.length > 0 && (
+          <div className="mb-4 bg-violet-50 border border-violet-200 rounded-lg overflow-hidden">
+            <button
+              onClick={() => setShowFirmasToday((v) => !v)}
+              className="w-full flex items-center gap-2 p-3 text-left hover:bg-violet-100/50 transition-colors"
+            >
+              <span className="text-sm flex-shrink-0">📌</span>
+              <span className="text-sm font-semibold text-violet-800">
+                {firmasActionsToday.length} acci{firmasActionsToday.length !== 1 ? "ones" : "ón"} de Firmar para hoy
+              </span>
+              <span className="hidden sm:inline text-xs text-violet-600/70 font-normal truncate">
+                {firmasActionsToday.slice(0, 3).map((e) => e.playerName).join(" · ")}{firmasActionsToday.length > 3 ? " · …" : ""}
+              </span>
+              <ChevronDown className={`w-4 h-4 text-violet-600 ml-auto flex-shrink-0 transition-transform ${showFirmasToday ? "rotate-180" : ""}`} />
+            </button>
+            {showFirmasToday && (
+              <div className="border-t border-violet-200 divide-y divide-violet-100">
+                {firmasActionsToday.map((e) => {
+                  const assignee = e.nextActionAssignee ? profiles.find((p) => p.id === e.nextActionAssignee) : undefined;
+                  const overdue = (e.nextActionDate ?? "") < todayStr;
+                  return (
+                    <button
+                      key={e.id}
+                      onClick={() => onOpenFirmar?.(e.id)}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs text-slate-700 hover:bg-violet-100/40 transition-colors"
+                    >
+                      <span className="font-semibold">{e.playerName}</span>
+                      <span className="text-slate-500 truncate">{e.nextAction ?? "Acción"}</span>
+                      {assignee && (
+                        <span className="flex-shrink-0 px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 font-mono font-bold text-[10px]">
+                          {assignee.avatar || assignee.name.split(" ")[0]}
+                        </span>
+                      )}
+                      {overdue && (
+                        <span className="flex-shrink-0 px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 text-[10px] font-semibold">vencida</span>
+                      )}
+                      <span className="ml-auto text-[11px] text-violet-500 flex-shrink-0">Abrir →</span>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>

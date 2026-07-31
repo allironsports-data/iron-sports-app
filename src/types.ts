@@ -339,7 +339,10 @@ export interface ScoutingMatch {
 // Jugadores en proceso de captación activa (conseguir la firma),
 // organizados por zona geográfica y estatus de contacto.
 
-export type FirmasStatus = 'llamar' | 'caliente' | 'templado' | 'frio' | 'decidir'
+export type FirmasStatus = 'llamar' | 'caliente' | 'templado' | 'frio' | 'decidir' | 'firmado'
+
+/** Tipo de apunte en el historial: nota libre, contacto tipado o cambio de estatus (automático) */
+export type FirmasCommentKind = 'nota' | 'llamada' | 'whatsapp' | 'reunion' | 'entorno' | 'estatus'
 
 export interface FirmasComment {
   id: string
@@ -347,6 +350,8 @@ export interface FirmasComment {
   date: string        // ISO timestamp
   author?: string     // nombre visible (importado de Trello o del perfil)
   authorId?: string   // profiles.id si el autor es un usuario de la app
+  kind?: FirmasCommentKind   // sin valor = nota (comentarios importados de Trello)
+  outcome?: 'contesto' | 'no_contesto'  // resultado rápido en llamada/whatsapp
 }
 
 export interface FirmasEntry {
@@ -361,6 +366,10 @@ export interface FirmasEntry {
   trelloUrl?: string           // tarjeta original de Trello (import)
   sortPos: number
   statusUpdatedAt?: string
+  nextAction?: string          // próxima acción ("Llamar", "Reunión"…)
+  nextActionDate?: string      // "YYYY-MM-DD"
+  nextActionAssignee?: string  // profiles.id
+  signedAt?: string            // ISO — cuándo pasó a «firmado»
   createdAt: string
   updatedAt: string
 }

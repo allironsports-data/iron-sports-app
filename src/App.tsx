@@ -84,6 +84,7 @@ export default function App() {
 
   // Navegación externa a una ficha de Captación (p. ej. desde Boulema)
   const [captacionOpenPlayerId, setCaptacionOpenPlayerId] = useState<string | null>(null)
+  const [captacionOpenFirmasId, setCaptacionOpenFirmasId] = useState<string | null>(null)
 
   // Captación state
   const [scoutingPlayers, setScoutingPlayers] = useState<ScoutingPlayer[]>([])
@@ -762,6 +763,8 @@ export default function App() {
         onRemoveMatchPlayer={handleRemoveMatchPlayer}
         openPlayerId={captacionOpenPlayerId}
         onOpenPlayerConsumed={() => setCaptacionOpenPlayerId(null)}
+        openFirmasEntryId={captacionOpenFirmasId}
+        onOpenFirmasEntryConsumed={() => setCaptacionOpenFirmasId(null)}
         firmasEntries={firmasEntries}
         onCreateFirmasEntry={handleCreateFirmasEntry}
         onUpdateFirmasEntry={handleUpdateFirmasEntry}
@@ -856,6 +859,8 @@ export default function App() {
       onUpdatePostpartido={handleUpdatePostpartido}
       onDeletePostpartido={handleDeletePostpartido}
       onAddScoutingMatch={handleAddScoutingMatch}
+      firmasEntries={firmasEntries}
+      onOpenFirmar={(id) => { setCaptacionOpenFirmasId(id); setMainSection('captacion') }}
     />
   )
 }

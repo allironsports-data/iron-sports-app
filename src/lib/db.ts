@@ -914,6 +914,10 @@ function dbToFirmasEntry(row: Record<string, unknown>): FirmasEntry {
     trelloUrl: (row.trello_url as string) ?? undefined,
     sortPos: (row.sort_pos as number) ?? 0,
     statusUpdatedAt: (row.status_updated_at as string) ?? undefined,
+    nextAction: (row.next_action as string) ?? undefined,
+    nextActionDate: (row.next_action_date as string) ?? undefined,
+    nextActionAssignee: (row.next_action_assignee as string) ?? undefined,
+    signedAt: (row.signed_at as string) ?? undefined,
     createdAt: row.created_at as string,
     updatedAt: (row.updated_at as string) ?? (row.created_at as string),
   }
@@ -953,6 +957,10 @@ export async function createFirmasEntry(e: Omit<FirmasEntry, 'id' | 'createdAt' 
     trello_url: e.trelloUrl ?? null,
     sort_pos: e.sortPos ?? 0,
     status_updated_at: e.statusUpdatedAt ?? null,
+    next_action: e.nextAction ?? null,
+    next_action_date: e.nextActionDate ?? null,
+    next_action_assignee: e.nextActionAssignee ?? null,
+    signed_at: e.signedAt ?? null,
   }).select().single()
   if (error) throw error
   return dbToFirmasEntry(data)
@@ -970,6 +978,10 @@ export async function updateFirmasEntry(e: FirmasEntry): Promise<void> {
     trello_url: e.trelloUrl ?? null,
     sort_pos: e.sortPos ?? 0,
     status_updated_at: e.statusUpdatedAt ?? null,
+    next_action: e.nextAction ?? null,
+    next_action_date: e.nextActionDate ?? null,
+    next_action_assignee: e.nextActionAssignee ?? null,
+    signed_at: e.signedAt ?? null,
     updated_at: new Date().toISOString(),
   }).eq('id', e.id)
   if (error) throw error

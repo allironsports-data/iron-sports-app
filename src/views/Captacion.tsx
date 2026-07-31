@@ -1472,11 +1472,11 @@ function ConclusionesTab({ players, reports, threshold, onThresholdChange, isAdm
 
 // ── CAPTACIÓN · FIRMAR (pipeline de firmas, ex-Trello) ───────
 // Segunda parte de Captación: conseguir que el jugador firme.
-// Jugadores por zona geográfica y estatus de contacto
-// (llamar / caliente / templado / frío / decidir), con encargados,
-// comentarios y vínculo al jugador de scouting.
+// Jugadores por zona geográfica y estatus de contacto, con encargados,
+// historial de contactos tipados, próxima acción, semáforo de
+// desatención y avisos cruzados con el resto de la app.
 
-const FIRMAS_STATUSES: FirmasStatus[] = ['llamar', 'caliente', 'templado', 'frio', 'decidir']
+const FIRMAS_STATUSES: FirmasStatus[] = ['llamar', 'caliente', 'templado', 'frio', 'decidir', 'firmado']
 
 const FIRMAS_CONFIG: Record<FirmasStatus, { label: string; dot: string; bg: string; text: string; border: string; col: string }> = {
   llamar:   { label: 'Llamar',   dot: 'bg-amber-500',  bg: 'bg-amber-100',  text: 'text-amber-700',  border: 'border-amber-200',  col: 'border-t-amber-400' },
@@ -1484,6 +1484,20 @@ const FIRMAS_CONFIG: Record<FirmasStatus, { label: string; dot: string; bg: stri
   templado: { label: 'Templado', dot: 'bg-yellow-500', bg: 'bg-yellow-100', text: 'text-yellow-700', border: 'border-yellow-200', col: 'border-t-yellow-400' },
   frio:     { label: 'Frío',     dot: 'bg-sky-500',    bg: 'bg-sky-100',    text: 'text-sky-700',    border: 'border-sky-200',    col: 'border-t-sky-400' },
   decidir:  { label: 'Decidir',  dot: 'bg-violet-500', bg: 'bg-violet-100', text: 'text-violet-700', border: 'border-violet-200', col: 'border-t-violet-400' },
+  firmado:  { label: 'Firmado',  dot: 'bg-green-500',  bg: 'bg-green-100',  text: 'text-green-700',  border: 'border-green-200',  col: 'border-t-green-500' },
+}
+
+// Cadencia máxima de actualización por estatus (días). Superarla = desatendido.
+// (Pedido por Pablo: caliente cada 10 días, templado cada 50, frío cada 90.)
+const FIRMAS_AGING_DAYS: Partial<Record<FirmasStatus, number>> = { caliente: 10, templado: 50, frio: 90 }
+
+// Tipos de apunte del historial (bajo esfuerzo: un toque para elegir tipo)
+const FIRMAS_KIND_META: Record<string, { icon: string; label: string }> = {
+  nota:     { icon: '📝', label: 'Nota' },
+  llamada:  { icon: '📞', label: 'Llamada' },
+  whatsapp: { icon: '💬', label: 'WhatsApp' },
+  reunion:  { icon: '🤝', label: 'Reunión' },
+  entorno:  { icon: '👪', label: 'Entorno' },
 }
 
 // Orden canónico de zonas (las del Trello); las nuevas van después, alfabéticas
@@ -1499,6 +1513,24 @@ const FIRMAS_ZONE_ORDER = [
 
 function normSearch(s: string): string {
   return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+}
+
+// Última vez que una entrada se "tocó" (cualquier edición, comentario o cambio de estatus)
+function firmasLastTouch(e: FirmasEntry): string {
+  const candidates = [e.updatedAt, e.statusUpdatedAt, e.createdAt, ...e.comments.map(c => c.date)].filter(Boolean) as string[]
+  return candidates.sort().pop() ?? e.createdAt
+}
+
+function daysSinceISO(iso: string): number {
+  return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)
+}
+
+/** Semáforo de desatención: null si el estatus no tiene cadencia */
+function firmasAging(e: FirmasEntry): { days: number; limit: number; overdue: boolean; warn: boolean } | null {
+  const limit = FIRMAS_AGING_DAYS[e.status]
+  if (!limit) return null
+  const days = daysSinceISO(firmasLastTouch(e))
+  return { days, limit, overdue: days > limit, warn: days > limit * 0.7 && days <= limit }
 }
 
 // Chip de estatus con desplegable para cambiarlo inline
@@ -1533,6 +1565,7 @@ function FirmasStatusChip({ status, onChange, size = 'sm' }: {
               >
                 <span className={`w-2 h-2 rounded-full ${FIRMAS_CONFIG[s].dot}`} />
                 {FIRMAS_CONFIG[s].label}
+                {s === 'firmado' && <span className="ml-auto">🎉</span>}
               </button>
             ))}
           </div>
@@ -1614,25 +1647,90 @@ function FirmasLinkSearch({ scoutingPlayers, onSelect, placeholder }: {
   )
 }
 
+// Ficha rápida al pasar el ratón por una tarjeta (solo dispositivos con hover)
+function FirmasHoverCard({ entry, sp, reports, profiles, pos }: {
+  entry: FirmasEntry
+  sp?: ScoutingPlayer
+  reports: ScoutingReport[]
+  profiles: Profile[]
+  pos: { x: number; y: number }
+}) {
+  const lastReport = reports[0]
+  const lastComment = [...entry.comments].reverse().find(c => c.kind !== 'estatus')
+  const cfg = FIRMAS_CONFIG[entry.status]
+  // clamp para no salirse de la ventana
+  const left = Math.min(pos.x, window.innerWidth - 300)
+  const top = Math.min(pos.y, window.innerHeight - 230)
+  return (
+    <div
+      className="fixed z-[70] w-[280px] bg-white border border-slate-200 rounded-xl shadow-2xl p-3 pointer-events-none"
+      style={{ left, top }}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-sm font-bold text-slate-800 truncate">{sp?.fullName ?? entry.playerName}</div>
+          <div className="text-[11px] text-slate-500 truncate">
+            {sp
+              ? [sp.position1, sp.birthdate ? sp.birthdate.slice(0, 4) : null, sp.team].filter(Boolean).join(' · ')
+              : entry.zone}
+          </div>
+        </div>
+        <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold flex-shrink-0 ${cfg.bg} ${cfg.text} ${cfg.border}`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+          {cfg.label}
+        </span>
+      </div>
+      <div className="mt-1.5 flex items-center gap-2 flex-wrap text-[11px] text-slate-500">
+        <span className="bg-slate-100 rounded px-1.5 py-0.5">{entry.zone}</span>
+        {sp && (
+          <span className="bg-slate-100 rounded px-1.5 py-0.5">
+            {reports.length} informe{reports.length !== 1 ? 's' : ''}
+            {lastReport?.conclusion ? ` · últ. "${normConclusion(lastReport.conclusion)}"` : ''}
+          </span>
+        )}
+        {entry.nextActionDate && (
+          <span className={`rounded px-1.5 py-0.5 ${entry.nextActionDate < todayISO() ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
+            📌 {entry.nextAction ?? 'Acción'} · {fmtDate(entry.nextActionDate)}
+          </span>
+        )}
+      </div>
+      {lastComment && (
+        <div className="mt-2 bg-slate-50 rounded-lg px-2 py-1.5 text-[11px] text-slate-600">
+          {FIRMAS_KIND_META[lastComment.kind ?? 'nota']?.icon} {lastComment.text.length > 90 ? lastComment.text.slice(0, 90) + '…' : lastComment.text}
+          <span className="text-slate-400"> · {lastComment.author?.split(' ')[0]} · {relativeDate(lastComment.date) || fmtDate(lastComment.date)}</span>
+        </div>
+      )}
+      <div className="mt-2 flex items-center justify-between">
+        <FirmasManagers managerIds={entry.managers} profiles={profiles} />
+        <span className="text-[10.5px] text-slate-400">clic para abrir el panel</span>
+      </div>
+    </div>
+  )
+}
+
 function FirmasTab({
-  entries, profiles, currentProfile, scoutingPlayers, scoutingReports,
+  entries, profiles, currentProfile, scoutingPlayers, scoutingReports, scoutingMatches,
   onCreate, onUpdate, onDelete, onOpenScoutingPlayer, showToast, headerHeight,
+  openEntryId, onOpenEntryConsumed,
 }: {
   entries: FirmasEntry[]
   profiles: Profile[]
   currentProfile: Profile
   scoutingPlayers: ScoutingPlayer[]
   scoutingReports: ScoutingReport[]
+  scoutingMatches: ScoutingMatch[]
   onCreate: (e: Omit<FirmasEntry, 'id' | 'createdAt' | 'updatedAt'>) => Promise<FirmasEntry>
   onUpdate: (e: FirmasEntry) => Promise<void>
   onDelete: (id: string) => Promise<void>
   onOpenScoutingPlayer: (id: string) => void
   showToast: ShowToast
   headerHeight: number
+  openEntryId?: string | null
+  onOpenEntryConsumed?: () => void
 }) {
   // ── vista y filtros ──
-  const [view, setView] = useState<'estatus' | 'zona'>(
-    () => (sessionStorage.getItem('capt_firmas_view') as 'estatus' | 'zona') ?? 'estatus'
+  const [view, setView] = useState<'estatus' | 'zona' | 'encargado'>(
+    () => (sessionStorage.getItem('capt_firmas_view') as 'estatus' | 'zona' | 'encargado') ?? 'estatus'
   )
   useEffect(() => { sessionStorage.setItem('capt_firmas_view', view) }, [view])
 
@@ -1641,18 +1739,34 @@ function FirmasTab({
   const [zoneFilter, setZoneFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<FirmasStatus | 'all'>('all')
   const [managerFilter, setManagerFilter] = useState<string>('all')
+  const [overdueOnly, setOverdueOnly] = useState(false)
 
-  // ── panel y modales ──
   // Vista por zonas: zona seleccionada (persistida)
   const [selZone, setSelZone] = useState<string>(() => sessionStorage.getItem('capt_firmas_zone') ?? '')
   useEffect(() => { if (selZone) sessionStorage.setItem('capt_firmas_zone', selZone) }, [selZone])
 
+  // ── panel y modales ──
   const [panelId, setPanelId] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<FirmasEntry | null>(null)
+  const [showAlerts, setShowAlerts] = useState(false)
+
+  // ── hover card (solo escritorio) ──
+  const [hover, setHover] = useState<{ id: string; x: number; y: number } | null>(null)
+  const hoverTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  const canHover = typeof window !== 'undefined' && window.matchMedia?.('(hover: hover)').matches
 
   const panelEntry = entries.find(e => e.id === panelId) ?? null
   useEscapeKey(() => setPanelId(null), !!panelEntry && !confirmDelete)
+
+  // Navegación externa (p. ej. desde el aviso del Dashboard)
+  useEffect(() => {
+    if (openEntryId) {
+      setPanelId(openEntryId)
+      onOpenEntryConsumed?.()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openEntryId])
 
   const spById = useMemo(() => {
     const m: Record<string, ScoutingPlayer> = {}
@@ -1660,9 +1774,10 @@ function FirmasTab({
     return m
   }, [scoutingPlayers])
 
-  const reportCountByPlayer = useMemo(() => {
-    const m: Record<string, number> = {}
-    scoutingReports.forEach(r => { m[r.playerId] = (m[r.playerId] ?? 0) + 1 })
+  const reportsByPlayer = useMemo(() => {
+    const m: Record<string, ScoutingReport[]> = {}
+    scoutingReports.forEach(r => { (m[r.playerId] ??= []).push(r) })
+    Object.values(m).forEach(list => list.sort((a, b) => (b.fecha ?? b.createdAt).localeCompare(a.fecha ?? a.createdAt)))
     return m
   }, [scoutingReports])
 
@@ -1674,49 +1789,116 @@ function FirmasTab({
     return [...canonical, ...extra]
   }, [entries])
 
-  // Encargados presentes (para el filtro)
+  // Encargados presentes (para el filtro y la vista por encargado)
   const managerOptions = useMemo(() => {
     const ids = new Set(entries.flatMap(e => e.managers))
     return profiles.filter(p => ids.has(p.id))
   }, [entries, profiles])
 
-  const filtered = useMemo(() => {
+  const matchesFilters = useCallback((e: FirmasEntry, ignoreZone = false) => {
+    if (!ignoreZone && zoneFilter !== 'all' && e.zone !== zoneFilter) return false
+    if (statusFilter !== 'all' && e.status !== statusFilter) return false
+    if (managerFilter !== 'all' && !e.managers.includes(managerFilter)) return false
+    if (overdueOnly && !firmasAging(e)?.overdue) return false
     const n = normSearch(debSearch)
-    return entries.filter(e => {
-      if (zoneFilter !== 'all' && e.zone !== zoneFilter) return false
-      if (statusFilter !== 'all' && e.status !== statusFilter) return false
-      if (managerFilter !== 'all' && !e.managers.includes(managerFilter)) return false
-      if (n) {
-        const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
-        const hay = normSearch([e.playerName, sp?.fullName ?? '', sp?.team ?? ''].join(' '))
-        if (!hay.includes(n)) return false
-      }
-      return true
-    })
-  }, [entries, debSearch, zoneFilter, statusFilter, managerFilter, spById])
+    if (n) {
+      const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
+      const hay = normSearch([e.playerName, sp?.fullName ?? '', sp?.team ?? ''].join(' '))
+      if (!hay.includes(n)) return false
+    }
+    return true
+  }, [zoneFilter, statusFilter, managerFilter, overdueOnly, debSearch, spById])
 
-  // Igual que `filtered` pero sin el filtro de zona — alimenta el selector
-  // de zonas de la vista por zonas (los contadores no se auto-ocultan)
-  const filteredNoZone = useMemo(() => {
-    const n = normSearch(debSearch)
-    return entries.filter(e => {
-      if (statusFilter !== 'all' && e.status !== statusFilter) return false
-      if (managerFilter !== 'all' && !e.managers.includes(managerFilter)) return false
-      if (n) {
-        const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
-        const hay = normSearch([e.playerName, sp?.fullName ?? '', sp?.team ?? ''].join(' '))
-        if (!hay.includes(n)) return false
-      }
-      return true
-    })
-  }, [entries, debSearch, statusFilter, managerFilter, spById])
+  const filtered = useMemo(() => entries.filter(e => matchesFilters(e)), [entries, matchesFilters])
+  // Igual pero sin filtro de zona — alimenta el selector de zonas
+  const filteredNoZone = useMemo(() => entries.filter(e => matchesFilters(e, true)), [entries, matchesFilters])
 
   const byStatus = useMemo(() => {
-    const m: Record<FirmasStatus, FirmasEntry[]> = { llamar: [], caliente: [], templado: [], frio: [], decidir: [] }
+    const m: Record<FirmasStatus, FirmasEntry[]> = { llamar: [], caliente: [], templado: [], frio: [], decidir: [], firmado: [] }
     filtered.forEach(e => m[e.status].push(e))
     FIRMAS_STATUSES.forEach(s => m[s].sort((a, b) => a.sortPos - b.sortPos || a.playerName.localeCompare(b.playerName)))
     return m
   }, [filtered])
+
+  const overdueCount = useMemo(() => entries.filter(e => firmasAging(e)?.overdue).length, [entries])
+
+  // ── avisos cruzados con el resto de la app ──
+  const alerts = useMemo(() => {
+    const out: { icon: string; text: string; entryId: string; tone: 'blue' | 'green' | 'amber' | 'red' }[] = []
+    const today = todayISO()
+    const plus7 = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)
+    const since14 = new Date(Date.now() - 14 * 86400000).toISOString()
+    const in30 = Date.now() + 30 * 86400000
+    const in180 = Date.now() + 180 * 86400000
+
+    const active = entries.filter(e => e.status !== 'firmado')
+
+    // partidos de Captación próximos (≤7 días) donde juega el equipo del jugador
+    const upcoming = scoutingMatches.filter(m => m.date >= today && m.date <= plus7)
+    active.forEach(e => {
+      const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
+      if (!sp?.team) return
+      const m = upcoming.find(m => teamsAlike(sp.team, m.homeTeam) || teamsAlike(sp.team, m.awayTeam))
+      if (m) out.push({
+        icon: '🏟️', tone: 'blue', entryId: e.id,
+        text: `${e.playerName}: su equipo juega ${m.homeTeam} vs ${m.awayTeam} el ${fmtDate(m.date)}${m.assignedTo ? ` (lo ve ${m.assignedTo})` : ''}`,
+      })
+    })
+
+    // informes nuevos (≤14 días) sobre jugadores del pipeline
+    active.forEach(e => {
+      if (!e.scoutingPlayerId) return
+      const recent = (reportsByPlayer[e.scoutingPlayerId] ?? []).filter(r => (r.fecha ?? r.createdAt) >= since14)
+      if (recent.length > 0) {
+        const r = recent[0]
+        out.push({
+          icon: '📄', tone: 'green', entryId: e.id,
+          text: `Informe nuevo de ${e.playerName}${r.persona ? ` (${r.persona})` : ''}${r.conclusion ? ` — conclusión: ${normConclusion(r.conclusion)}` : ''}`,
+        })
+      }
+    })
+
+    // cumpleaños próximos (≤30 días) — 16 y 18 destacados.
+    // Se omiten las fechas placeholder AAAA-02-28 (solo se conocía el año).
+    active.forEach(e => {
+      const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
+      if (!sp?.birthdate || sp.birthdate.endsWith('-02-28')) return
+      const [by, bm, bd] = sp.birthdate.split('-').map(Number)
+      const now = new Date()
+      let next = new Date(now.getFullYear(), bm - 1, bd)
+      if (next.getTime() < now.getTime() - 86400000) next = new Date(now.getFullYear() + 1, bm - 1, bd)
+      if (next.getTime() > in30) return
+      const turns = next.getFullYear() - by
+      const key = turns === 16 || turns === 18
+      out.push({
+        icon: '🎂', tone: key ? 'amber' : 'blue', entryId: e.id,
+        text: `${e.playerName} cumple ${turns} el ${fmtDate(next.toISOString())}${key ? ' — edad clave para firmar' : ''}`,
+      })
+    })
+
+    // contrato de club que expira pronto (≤6 meses)
+    active.forEach(e => {
+      const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
+      if (!sp?.clubContract) return
+      let d: Date | null = null
+      const ddmmyyyy = sp.clubContract.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+      if (ddmmyyyy) d = new Date(+ddmmyyyy[3], +ddmmyyyy[2] - 1, +ddmmyyyy[1])
+      else if (/^\d{4}-\d{2}-\d{2}/.test(sp.clubContract)) d = new Date(sp.clubContract)
+      if (!d || isNaN(d.getTime())) return
+      if (d.getTime() > Date.now() && d.getTime() <= in180) {
+        out.push({ icon: '📃', tone: 'amber', entryId: e.id, text: `El contrato de club de ${e.playerName} acaba el ${fmtDate(d.toISOString())}` })
+      }
+    })
+
+    // duplicados: mismo jugador de scouting en más de una entrada
+    const byLink: Record<string, FirmasEntry[]> = {}
+    entries.forEach(e => { if (e.scoutingPlayerId) (byLink[e.scoutingPlayerId] ??= []).push(e) })
+    Object.values(byLink).filter(l => l.length > 1).forEach(l => {
+      out.push({ icon: '👥', tone: 'red', entryId: l[0].id, text: `${l[0].playerName} está ${l.length} veces en el pipeline (${l.map(x => x.zone).join(' y ')})` })
+    })
+
+    return out.slice(0, 30)
+  }, [entries, spById, scoutingMatches, reportsByPlayer])
 
   const patch = async (e: FirmasEntry, changes: Partial<FirmasEntry>) => {
     try {
@@ -1728,24 +1910,66 @@ function FirmasTab({
   }
 
   const changeStatus = (e: FirmasEntry, s: FirmasStatus) => {
-    void patch(e, { status: s, statusUpdatedAt: new Date().toISOString() })
-    showToast(`${e.playerName} → ${FIRMAS_CONFIG[s].label}`)
+    const now = new Date().toISOString()
+    // el cambio queda registrado en el historial automáticamente
+    const log: FirmasComment = {
+      id: crypto.randomUUID(),
+      text: `${FIRMAS_CONFIG[e.status].label} → ${FIRMAS_CONFIG[s].label}`,
+      date: now,
+      author: currentProfile.name,
+      authorId: currentProfile.id,
+      kind: 'estatus',
+    }
+    void patch(e, {
+      status: s,
+      statusUpdatedAt: now,
+      signedAt: s === 'firmado' ? (e.signedAt ?? now) : e.signedAt,
+      comments: [...e.comments, log],
+    })
+    showToast(s === 'firmado' ? `🎉 ${e.playerName} firmado` : `${e.playerName} → ${FIRMAS_CONFIG[s].label}`)
   }
 
-  const clearFilters = () => { setSearch(''); setZoneFilter('all'); setStatusFilter('all'); setManagerFilter('all') }
+  const clearFilters = () => { setSearch(''); setZoneFilter('all'); setStatusFilter('all'); setManagerFilter('all'); setOverdueOnly(false) }
 
-  // ── tarjeta (vista estatus) ──
-  const card = (e: FirmasEntry) => {
+  const startHover = (e: FirmasEntry, ev: React.MouseEvent) => {
+    if (!canHover) return
+    const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect()
+    if (hoverTimer.current) clearTimeout(hoverTimer.current)
+    hoverTimer.current = setTimeout(() => setHover({ id: e.id, x: rect.right + 8, y: rect.top }), 350)
+  }
+  const endHover = () => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current)
+    setHover(null)
+  }
+
+  // ── tarjeta ──
+  const card = (e: FirmasEntry, showStatusDot = false) => {
     const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
+    const aging = firmasAging(e)
+    const actionOverdue = !!e.nextActionDate && e.nextActionDate < todayISO() && e.status !== 'firmado'
+    const actionToday = e.nextActionDate === todayISO()
     return (
       <button
         key={e.id}
-        onClick={() => setPanelId(e.id)}
+        onClick={() => { endHover(); setPanelId(e.id) }}
+        onMouseEnter={ev => startHover(e, ev)}
+        onMouseLeave={endHover}
         className="w-full text-left bg-white border border-slate-200 rounded-lg px-2.5 py-2 hover:border-slate-300 hover:shadow-sm transition-all"
       >
         <div className="flex items-start justify-between gap-1.5">
-          <span className="text-xs font-semibold text-slate-800 leading-snug">{e.playerName}</span>
-          <FirmasManagers managerIds={e.managers} profiles={profiles} />
+          <span className="text-xs font-semibold text-slate-800 leading-snug flex items-center gap-1.5 min-w-0">
+            {showStatusDot && <span className={`w-2 h-2 rounded-full flex-shrink-0 ${FIRMAS_CONFIG[e.status].dot}`} title={FIRMAS_CONFIG[e.status].label} />}
+            <span className="truncate">{e.playerName}</span>
+          </span>
+          <span className="flex items-center gap-1 flex-shrink-0">
+            {aging?.overdue && (
+              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" title={`Desatendido: ${aging.days} días sin tocar (límite ${aging.limit})`} />
+            )}
+            {aging && !aging.overdue && aging.warn && (
+              <span className="w-2 h-2 rounded-full bg-amber-400" title={`${aging.days} días sin tocar (límite ${aging.limit})`} />
+            )}
+            <FirmasManagers managerIds={e.managers} profiles={profiles} />
+          </span>
         </div>
         <div className="mt-1 flex items-center gap-2 text-[11px] text-slate-400">
           <span className="truncate min-w-0">
@@ -1753,10 +1977,18 @@ function FirmasTab({
               ? [sp.team, sp.birthdate ? sp.birthdate.slice(0, 4) : null].filter(Boolean).join(' · ') || e.zone
               : e.zone}
           </span>
-          {e.comments.length > 0 && (
+          {e.nextActionDate && e.status !== 'firmado' && (
+            <span
+              className={`flex-shrink-0 font-medium ${actionOverdue ? 'text-red-500' : actionToday ? 'text-blue-600' : 'text-slate-400'}`}
+              title={`${e.nextAction ?? 'Próxima acción'} · ${fmtDate(e.nextActionDate)}`}
+            >
+              📌 {actionOverdue ? 'vencida' : actionToday ? 'hoy' : new Date(e.nextActionDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+            </span>
+          )}
+          {e.comments.filter(c => c.kind !== 'estatus').length > 0 && (
             <span className="inline-flex items-center gap-0.5 flex-shrink-0">
               <MessageSquare className="w-3 h-3" />
-              {e.comments.length}
+              {e.comments.filter(c => c.kind !== 'estatus').length}
             </span>
           )}
         </div>
@@ -1764,15 +1996,15 @@ function FirmasTab({
     )
   }
 
-  // Tablero de 5 columnas por estatus (compartido por ambas vistas)
+  // Tablero de columnas por estatus (compartido por vistas estatus y zona)
   const statusBoard = (list: FirmasEntry[]) => {
-    const groups: Record<FirmasStatus, FirmasEntry[]> = { llamar: [], caliente: [], templado: [], frio: [], decidir: [] }
+    const groups: Record<FirmasStatus, FirmasEntry[]> = { llamar: [], caliente: [], templado: [], frio: [], decidir: [], firmado: [] }
     list.forEach(e => groups[e.status].push(e))
     FIRMAS_STATUSES.forEach(s => groups[s].sort((a, b) => a.sortPos - b.sortPos || a.playerName.localeCompare(b.playerName)))
     return (
-      <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 sm:mx-0 sm:px-0 lg:grid lg:grid-cols-5 lg:overflow-visible">
+      <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 sm:mx-0 sm:px-0 xl:grid xl:grid-cols-6 xl:overflow-visible">
         {FIRMAS_STATUSES.map(s => (
-          <div key={s} className={`flex-shrink-0 w-[240px] lg:w-auto bg-slate-50 border border-slate-200 border-t-2 ${FIRMAS_CONFIG[s].col} rounded-lg`}>
+          <div key={s} className={`flex-shrink-0 w-[240px] xl:w-auto bg-slate-50 border border-slate-200 border-t-2 ${FIRMAS_CONFIG[s].col} rounded-lg`}>
             <div className="flex items-center gap-1.5 px-2.5 py-2">
               <span className={`w-2 h-2 rounded-full ${FIRMAS_CONFIG[s].dot}`} />
               <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">{FIRMAS_CONFIG[s].label}</span>
@@ -1781,13 +2013,15 @@ function FirmasTab({
             <div className="px-2 pb-2 space-y-1.5 max-h-[65vh] overflow-y-auto">
               {groups[s].length === 0 ? (
                 <div className="text-[11px] text-slate-400 text-center py-4">—</div>
-              ) : groups[s].map(card)}
+              ) : groups[s].map(e => card(e))}
             </div>
           </div>
         ))}
       </div>
     )
   }
+
+  const hoverEntry = hover ? entries.find(e => e.id === hover.id) : null
 
   return (
     <div className="flex-1 w-full px-3 sm:px-6 py-4 space-y-3">
@@ -1813,18 +2047,57 @@ function FirmasTab({
         />
       ) : (
         <>
+          {/* Avisos cruzados */}
+          {alerts.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg overflow-hidden">
+              <button
+                onClick={() => setShowAlerts(v => !v)}
+                className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-amber-100/50 transition-colors"
+              >
+                <span className="text-sm">🔔</span>
+                <span className="text-xs font-semibold text-amber-800">{alerts.length} aviso{alerts.length !== 1 ? 's' : ''}</span>
+                <span className="hidden sm:inline text-[11px] text-amber-700/70 truncate">
+                  {alerts.slice(0, 2).map(a => a.text.split(':')[0]).join(' · ')}{alerts.length > 2 ? ' · …' : ''}
+                </span>
+                <ChevronDown className={`w-4 h-4 text-amber-600 ml-auto flex-shrink-0 transition-transform ${showAlerts ? 'rotate-180' : ''}`} />
+              </button>
+              {showAlerts && (
+                <div className="border-t border-amber-200 divide-y divide-amber-100 max-h-64 overflow-y-auto">
+                  {alerts.map((a, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setPanelId(a.entryId)}
+                      className="w-full flex items-start gap-2 px-3 py-2 text-left text-xs text-slate-700 hover:bg-amber-100/40 transition-colors"
+                    >
+                      <span className="flex-shrink-0">{a.icon}</span>
+                      <span>{a.text}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Estadísticas */}
-          <div className="flex border border-slate-200 rounded-lg bg-white overflow-hidden divide-x divide-slate-200">
-            <div className="flex-1 px-4 py-2">
+          <div className="flex border border-slate-200 rounded-lg bg-white overflow-x-auto divide-x divide-slate-200 scrollbar-none">
+            <div className="flex-1 min-w-[80px] px-3 py-2">
               <div className="text-lg font-bold text-slate-800 leading-tight">{filtered.length}</div>
               <div className="text-[11px] text-slate-400">Jugadores</div>
             </div>
             {FIRMAS_STATUSES.map(s => (
-              <div key={s} className="flex-1 px-4 py-2">
+              <div key={s} className="flex-1 min-w-[74px] px-3 py-2">
                 <div className={`text-lg font-bold leading-tight ${FIRMAS_CONFIG[s].text}`}>{byStatus[s].length}</div>
                 <div className="text-[11px] text-slate-400">{FIRMAS_CONFIG[s].label}</div>
               </div>
             ))}
+            <button
+              onClick={() => setOverdueOnly(v => !v)}
+              className={`flex-1 min-w-[96px] px-3 py-2 text-left transition-colors ${overdueOnly ? 'bg-red-50' : 'hover:bg-slate-50'}`}
+              title="Caliente sin tocar +10 días, templado +50, frío +90"
+            >
+              <div className={`text-lg font-bold leading-tight ${overdueCount > 0 ? 'text-red-600' : 'text-slate-300'}`}>{overdueCount}</div>
+              <div className={`text-[11px] ${overdueOnly ? 'text-red-500 font-semibold' : 'text-slate-400'}`}>⚠ Desatendidos</div>
+            </button>
           </div>
 
           {/* Filtros + toggle de vista */}
@@ -1849,17 +2122,19 @@ function FirmasTab({
                 {zones.map(z => <option key={z} value={z}>{z}</option>)}
               </select>
             )}
-            {view === 'zona' && (
+            {view !== 'estatus' && (
               <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as FirmasStatus | 'all')} className={SELECT_CLS}>
                 <option value="all">Todos los estatus</option>
                 {FIRMAS_STATUSES.map(s => <option key={s} value={s}>{FIRMAS_CONFIG[s].label}</option>)}
               </select>
             )}
-            <select value={managerFilter} onChange={e => setManagerFilter(e.target.value)} className={SELECT_CLS}>
-              <option value="all">Todos los encargados</option>
-              {managerOptions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-            {(search || zoneFilter !== 'all' || statusFilter !== 'all' || managerFilter !== 'all') && (
+            {view !== 'encargado' && (
+              <select value={managerFilter} onChange={e => setManagerFilter(e.target.value)} className={SELECT_CLS}>
+                <option value="all">Todos los encargados</option>
+                {managerOptions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            )}
+            {(search || zoneFilter !== 'all' || statusFilter !== 'all' || managerFilter !== 'all' || overdueOnly) && (
               <button
                 onClick={clearFilters}
                 className="text-xs text-slate-500 border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white hover:bg-slate-50 transition-colors"
@@ -1881,6 +2156,13 @@ function FirmasTab({
               >
                 <MapPin className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Zona</span>
+              </button>
+              <button
+                onClick={() => setView('encargado')}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors ${view === 'encargado' ? 'bg-primary text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Encargado</span>
               </button>
             </div>
           </div>
@@ -1948,7 +2230,73 @@ function FirmasTab({
               </div>
             )
           })()}
+
+          {/* ── Vista por ENCARGADO ── */}
+          {view === 'encargado' && (() => {
+            const noManager = filtered.filter(e => e.managers.length === 0)
+            const cols = managerOptions
+              .map(p => ({ profile: p, list: filtered.filter(e => e.managers.includes(p.id)) }))
+              .filter(c => c.list.length > 0)
+              .sort((a, b) => b.list.length - a.list.length)
+            return (
+              <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 sm:mx-0 sm:px-0">
+                {cols.map(({ profile: p, list }) => {
+                  const c = scoutColor(p.avatar || p.name)
+                  const calientes = list.filter(e => e.status === 'caliente').length
+                  const overdue = list.filter(e => firmasAging(e)?.overdue).length
+                  return (
+                    <div key={p.id} className="flex-shrink-0 w-[250px] bg-slate-50 border border-slate-200 rounded-lg">
+                      <div className="flex items-center gap-1.5 px-2.5 py-2">
+                        <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[8.5px] font-bold ${c.bg} ${c.text}`}>
+                          {(p.avatar || p.name.slice(0, 2)).slice(0, 3).toUpperCase()}
+                        </span>
+                        <span className="text-xs font-bold text-slate-700 truncate">{p.name.split(' ')[0]}</span>
+                        <span className="text-[11px] text-slate-400 font-medium">{list.length}</span>
+                        <span className="ml-auto flex items-center gap-1.5">
+                          {calientes > 0 && (
+                            <span className="inline-flex items-center gap-0.5 text-[10.5px] text-red-600 font-semibold" title="Calientes">
+                              <span className="w-1.5 h-1.5 rounded-full bg-red-500" />{calientes}
+                            </span>
+                          )}
+                          {overdue > 0 && <span className="text-[10.5px] text-red-500" title="Desatendidos">⚠ {overdue}</span>}
+                        </span>
+                      </div>
+                      <div className="px-2 pb-2 space-y-1.5 max-h-[65vh] overflow-y-auto">
+                        {list
+                          .slice()
+                          .sort((a, b) => FIRMAS_STATUSES.indexOf(a.status) - FIRMAS_STATUSES.indexOf(b.status) || a.playerName.localeCompare(b.playerName))
+                          .map(e => card(e, true))}
+                      </div>
+                    </div>
+                  )
+                })}
+                {/* Sin encargado — para repartir */}
+                <div className={`flex-shrink-0 w-[250px] rounded-lg border ${noManager.length > 0 ? 'bg-red-50/60 border-red-200' : 'bg-slate-50 border-slate-200'}`}>
+                  <div className="flex items-center gap-1.5 px-2.5 py-2">
+                    <span className={`text-xs font-bold ${noManager.length > 0 ? 'text-red-700' : 'text-slate-400'}`}>⚠ Sin encargado</span>
+                    <span className="text-[11px] text-slate-400 font-medium">{noManager.length}</span>
+                  </div>
+                  <div className="px-2 pb-2 space-y-1.5 max-h-[65vh] overflow-y-auto">
+                    {noManager.length === 0 ? (
+                      <div className="text-[11px] text-slate-400 text-center py-4">Todos repartidos ✓</div>
+                    ) : noManager.map(e => card(e, true))}
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
         </>
+      )}
+
+      {/* ── Hover card ── */}
+      {hoverEntry && hover && (
+        <FirmasHoverCard
+          entry={hoverEntry}
+          sp={hoverEntry.scoutingPlayerId ? spById[hoverEntry.scoutingPlayerId] : undefined}
+          reports={hoverEntry.scoutingPlayerId ? (reportsByPlayer[hoverEntry.scoutingPlayerId] ?? []) : []}
+          profiles={profiles}
+          pos={{ x: hover.x, y: hover.y }}
+        />
       )}
 
       {/* ── Panel de detalle ── */}
@@ -1960,7 +2308,7 @@ function FirmasTab({
           currentProfile={currentProfile}
           scoutingPlayers={scoutingPlayers}
           spById={spById}
-          reportCountByPlayer={reportCountByPlayer}
+          reportsByPlayer={reportsByPlayer}
           zones={zones}
           headerHeight={headerHeight}
           onClose={() => setPanelId(null)}
@@ -1976,7 +2324,7 @@ function FirmasTab({
         <ConfirmModal
           open
           title="Eliminar jugador del pipeline"
-          message={`¿Seguro que quieres eliminar a ${confirmDelete.playerName} del pipeline de firmas? Se perderán sus comentarios.`}
+          message={`¿Seguro que quieres eliminar a ${confirmDelete.playerName} del pipeline de firmas? Se perderá su historial.`}
           confirmLabel="Eliminar"
           variant="danger"
           onConfirm={async () => {
@@ -2023,7 +2371,7 @@ function FirmasTab({
 
 // ── Panel de detalle de una entrada del pipeline ─────────────
 function FirmasDetailPanel({
-  entry, profiles, currentProfile, scoutingPlayers, spById, reportCountByPlayer,
+  entry, profiles, currentProfile, scoutingPlayers, spById, reportsByPlayer,
   zones, headerHeight, onClose, onPatch, onChangeStatus, onOpenScoutingPlayer, onRequestDelete,
 }: {
   entry: FirmasEntry
@@ -2031,7 +2379,7 @@ function FirmasDetailPanel({
   currentProfile: Profile
   scoutingPlayers: ScoutingPlayer[]
   spById: Record<string, ScoutingPlayer>
-  reportCountByPlayer: Record<string, number>
+  reportsByPlayer: Record<string, ScoutingReport[]>
   zones: string[]
   headerHeight: number
   onClose: () => void
@@ -2042,11 +2390,23 @@ function FirmasDetailPanel({
 }) {
   const isAdmin = currentProfile.is_admin
   const sp = entry.scoutingPlayerId ? spById[entry.scoutingPlayerId] : undefined
+  const spReports = entry.scoutingPlayerId ? (reportsByPlayer[entry.scoutingPlayerId] ?? []) : []
+  const aging = firmasAging(entry)
 
   const [name, setName] = useState(entry.playerName)
   const [notes, setNotes] = useState(entry.notes ?? '')
-  const [newComment, setNewComment] = useState('')
   const [editingName, setEditingName] = useState(false)
+
+  // ── composer del historial (bajo esfuerzo) ──
+  const [newComment, setNewComment] = useState('')
+  const [commentKind, setCommentKind] = useState<string>('nota')
+  const [commentOutcome, setCommentOutcome] = useState<'contesto' | 'no_contesto' | null>(null)
+
+  // ── próxima acción ──
+  const [editingAction, setEditingAction] = useState(false)
+  const [actionLabel, setActionLabel] = useState(entry.nextAction ?? '')
+  const [actionDate, setActionDate] = useState(entry.nextActionDate ?? '')
+  const [actionAssignee, setActionAssignee] = useState(entry.nextActionAssignee ?? currentProfile.id)
 
   const zoneOptions = useMemo(() => {
     const base = [...FIRMAS_ZONE_ORDER]
@@ -2075,7 +2435,10 @@ function FirmasDetailPanel({
   }
 
   const addComment = () => {
-    const text = newComment.trim()
+    const kind = commentKind as FirmasComment['kind']
+    let text = newComment.trim()
+    // sin fricción: una llamada/whatsapp con resultado se puede registrar sin escribir nada
+    if (!text && commentOutcome) text = commentOutcome === 'contesto' ? 'Contestó' : 'No contestó'
     if (!text) return
     const c: FirmasComment = {
       id: crypto.randomUUID(),
@@ -2083,8 +2446,12 @@ function FirmasDetailPanel({
       date: new Date().toISOString(),
       author: currentProfile.name,
       authorId: currentProfile.id,
+      kind,
+      outcome: commentOutcome ?? undefined,
     }
     setNewComment('')
+    setCommentKind('nota')
+    setCommentOutcome(null)
     void onPatch(entry, { comments: [...entry.comments, c] })
   }
 
@@ -2092,7 +2459,35 @@ function FirmasDetailPanel({
     void onPatch(entry, { comments: entry.comments.filter(c => c.id !== id) })
   }
 
+  const saveAction = () => {
+    if (!actionLabel.trim() && !actionDate) { setEditingAction(false); return }
+    void onPatch(entry, {
+      nextAction: actionLabel.trim() || undefined,
+      nextActionDate: actionDate || undefined,
+      nextActionAssignee: actionAssignee || undefined,
+    })
+    setEditingAction(false)
+  }
+
+  const completeAction = () => {
+    const log: FirmasComment = {
+      id: crypto.randomUUID(),
+      text: `✓ Hecho: ${entry.nextAction ?? 'próxima acción'}`,
+      date: new Date().toISOString(),
+      author: currentProfile.name,
+      authorId: currentProfile.id,
+      kind: 'nota',
+    }
+    void onPatch(entry, {
+      nextAction: undefined, nextActionDate: undefined, nextActionAssignee: undefined,
+      comments: [...entry.comments, log],
+    })
+    setActionLabel(''); setActionDate('')
+  }
+
   const sortedComments = [...entry.comments].sort((a, b) => a.date.localeCompare(b.date))
+  const actionAssigneeProfile = entry.nextActionAssignee ? profiles.find(p => p.id === entry.nextActionAssignee) : undefined
+  const actionOverdue = !!entry.nextActionDate && entry.nextActionDate < todayISO()
 
   return (
     <>
@@ -2126,6 +2521,12 @@ function FirmasDetailPanel({
                   desde {relativeDate(entry.statusUpdatedAt) || fmtDate(entry.statusUpdatedAt)}
                 </span>
               )}
+              {aging && (
+                <span className={`text-[11px] font-medium ${aging.overdue ? 'text-red-500' : aging.warn ? 'text-amber-600' : 'text-slate-400'}`}>
+                  {aging.overdue ? '⚠ ' : ''}sin tocar {aging.days}d
+                  <span className="opacity-60"> / {aging.limit}d</span>
+                </span>
+              )}
             </div>
           </div>
           <button onClick={onClose} aria-label="Cerrar" className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg flex-shrink-0">
@@ -2135,6 +2536,76 @@ function FirmasDetailPanel({
 
         {/* body */}
         <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+          {/* firmado 🎉 */}
+          {entry.status === 'firmado' && (
+            <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-xs text-green-700 font-medium">
+              🎉 Firmado{entry.signedAt ? ` el ${fmtDate(entry.signedAt)}` : ''}
+            </div>
+          )}
+
+          {/* próxima acción */}
+          {entry.status !== 'firmado' && (
+            <div>
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Próxima acción</label>
+              {editingAction ? (
+                <div className="mt-1.5 border border-blue-200 rounded-lg p-2.5 bg-blue-50/40 space-y-2">
+                  <input
+                    value={actionLabel}
+                    onChange={e => setActionLabel(e.target.value)}
+                    placeholder="Llamar, reunión, enviar propuesta…"
+                    autoFocus
+                    className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="date"
+                      value={actionDate}
+                      onChange={e => setActionDate(e.target.value)}
+                      className="flex-1 text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                    />
+                    <select value={actionAssignee} onChange={e => setActionAssignee(e.target.value)} className={SELECT_CLS}>
+                      {profiles.map(p => <option key={p.id} value={p.id}>{p.avatar || p.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex justify-end gap-1.5">
+                    <button onClick={() => setEditingAction(false)} className="px-2.5 py-1 rounded-lg text-[11px] text-slate-500 hover:bg-slate-100">Cancelar</button>
+                    <button onClick={saveAction} className="px-3 py-1 rounded-lg bg-primary text-white text-[11px] font-medium hover:bg-primary/90">Guardar</button>
+                  </div>
+                </div>
+              ) : entry.nextAction || entry.nextActionDate ? (
+                <div className={`mt-1.5 border rounded-lg px-3 py-2.5 ${actionOverdue ? 'border-red-200 bg-red-50/60' : 'border-blue-200 bg-blue-50/50'}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-xs font-semibold text-slate-800 truncate">📌 {entry.nextAction ?? 'Acción'}</div>
+                      <div className={`text-[11px] ${actionOverdue ? 'text-red-600 font-semibold' : 'text-slate-500'}`}>
+                        {entry.nextActionDate ? fmtDate(entry.nextActionDate) : 'sin fecha'}
+                        {actionOverdue ? ' · vencida' : entry.nextActionDate === todayISO() ? ' · hoy' : ''}
+                        {actionAssigneeProfile ? ` · ${actionAssigneeProfile.avatar || actionAssigneeProfile.name}` : ''}
+                      </div>
+                    </div>
+                    <div className="flex gap-1 flex-shrink-0">
+                      <button onClick={completeAction} className="px-2 py-1 rounded-lg bg-green-600 text-white text-[11px] font-medium hover:bg-green-700" title="Marcar hecha (queda en el historial)">✓ Hecha</button>
+                      <button
+                        onClick={() => { setActionLabel(entry.nextAction ?? ''); setActionDate(entry.nextActionDate ?? ''); setActionAssignee(entry.nextActionAssignee ?? currentProfile.id); setEditingAction(true) }}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white"
+                        aria-label="Editar próxima acción"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { setActionLabel(''); setActionDate(''); setActionAssignee(currentProfile.id); setEditingAction(true) }}
+                  className="mt-1.5 w-full border border-dashed border-slate-300 rounded-lg px-3 py-2 text-[11px] text-slate-400 hover:text-slate-600 hover:border-slate-400 transition-colors text-left"
+                >
+                  + Programar próxima acción (aparece en el Dashboard el día que toca)
+                </button>
+              )}
+            </div>
+          )}
+
           {/* zona */}
           <div>
             <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Zona</label>
@@ -2182,7 +2653,7 @@ function FirmasDetailPanel({
                         sp.team,
                         sp.birthdate ? sp.birthdate.slice(0, 4) : null,
                         sp.position1,
-                        `${reportCountByPlayer[sp.id] ?? 0} informe${(reportCountByPlayer[sp.id] ?? 0) !== 1 ? 's' : ''}`,
+                        `${spReports.length} informe${spReports.length !== 1 ? 's' : ''}`,
                       ].filter(Boolean).join(' · ')}
                     </div>
                     {sp.assessment && (
@@ -2233,49 +2704,97 @@ function FirmasDetailPanel({
             />
           </div>
 
-          {/* comentarios */}
+          {/* historial */}
           <div>
             <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">
-              Comentarios {sortedComments.length > 0 && <span className="text-slate-300">· {sortedComments.length}</span>}
+              Historial {sortedComments.length > 0 && <span className="text-slate-300">· {sortedComments.length}</span>}
             </label>
-            <div className="mt-1.5 space-y-2">
+            <div className="mt-1.5 space-y-1.5">
               {sortedComments.length === 0 && (
-                <p className="text-[11px] text-slate-400">Sin comentarios todavía.</p>
+                <p className="text-[11px] text-slate-400">Sin actividad todavía.</p>
               )}
               {sortedComments.map(c => (
-                <div key={c.id} className="group border border-slate-100 rounded-lg px-2.5 py-2 bg-slate-50/60">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] font-semibold text-slate-600">{c.author || '—'}</span>
-                    <span className="text-[10.5px] text-slate-400">{fmtDate(c.date)}</span>
-                    {(isAdmin || c.authorId === currentProfile.id) && (
-                      <button
-                        onClick={() => deleteComment(c.id)}
-                        aria-label="Eliminar comentario"
-                        className="ml-auto opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-opacity"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    )}
+                c.kind === 'estatus' ? (
+                  <div key={c.id} className="flex items-center gap-1.5 px-1 text-[10.5px] text-slate-400">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+                    <span>{c.text}</span>
+                    <span className="opacity-70">· {c.author?.split(' ')[0]} · {fmtDate(c.date)}</span>
                   </div>
-                  <p className="mt-0.5 text-xs text-slate-700 whitespace-pre-wrap break-words">{c.text}</p>
-                </div>
+                ) : (
+                  <div key={c.id} className="group border border-slate-100 rounded-lg px-2.5 py-2 bg-slate-50/60">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs">{FIRMAS_KIND_META[c.kind ?? 'nota']?.icon ?? '📝'}</span>
+                      <span className="text-[11px] font-semibold text-slate-600">{c.author || '—'}</span>
+                      {c.outcome && (
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${c.outcome === 'contesto' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                          {c.outcome === 'contesto' ? 'contestó' : 'no contestó'}
+                        </span>
+                      )}
+                      <span className="text-[10.5px] text-slate-400">{fmtDate(c.date)}</span>
+                      {(isAdmin || c.authorId === currentProfile.id) && (
+                        <button
+                          onClick={() => deleteComment(c.id)}
+                          aria-label="Eliminar apunte"
+                          className="ml-auto opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-opacity"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                    <p className="mt-0.5 text-xs text-slate-700 whitespace-pre-wrap break-words">{c.text}</p>
+                  </div>
+                )
               ))}
-              <div className="flex gap-1.5">
-                <input
-                  value={newComment}
-                  onChange={e => setNewComment(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') addComment() }}
-                  placeholder="Añadir comentario…"
-                  className="flex-1 text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-                />
-                <button
-                  onClick={addComment}
-                  disabled={!newComment.trim()}
-                  aria-label="Enviar comentario"
-                  className="px-2.5 py-1.5 rounded-lg bg-primary text-white disabled:opacity-40 hover:bg-primary/90 transition-colors"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                </button>
+
+              {/* composer: tipo con un toque + resultado rápido */}
+              <div className="border border-slate-200 rounded-lg p-2 bg-white space-y-1.5">
+                <div className="flex items-center gap-1 flex-wrap">
+                  {Object.entries(FIRMAS_KIND_META).map(([k, meta]) => (
+                    <button
+                      key={k}
+                      onClick={() => { setCommentKind(k); if (k !== 'llamada' && k !== 'whatsapp') setCommentOutcome(null) }}
+                      className={`px-1.5 py-0.5 rounded-md text-[11px] transition-colors ${
+                        commentKind === k ? 'bg-primary/10 text-primary font-semibold ring-1 ring-primary/30' : 'text-slate-400 hover:bg-slate-100'
+                      }`}
+                      title={meta.label}
+                    >
+                      {meta.icon} <span className="hidden sm:inline">{meta.label}</span>
+                    </button>
+                  ))}
+                  {(commentKind === 'llamada' || commentKind === 'whatsapp') && (
+                    <span className="flex items-center gap-1 ml-auto">
+                      <button
+                        onClick={() => setCommentOutcome(o => o === 'contesto' ? null : 'contesto')}
+                        className={`px-1.5 py-0.5 rounded-md text-[10.5px] font-medium transition-colors ${commentOutcome === 'contesto' ? 'bg-green-100 text-green-700 ring-1 ring-green-300' : 'text-slate-400 hover:bg-slate-100'}`}
+                      >
+                        ✓ contestó
+                      </button>
+                      <button
+                        onClick={() => setCommentOutcome(o => o === 'no_contesto' ? null : 'no_contesto')}
+                        className={`px-1.5 py-0.5 rounded-md text-[10.5px] font-medium transition-colors ${commentOutcome === 'no_contesto' ? 'bg-red-100 text-red-600 ring-1 ring-red-200' : 'text-slate-400 hover:bg-slate-100'}`}
+                      >
+                        ✗ no contestó
+                      </button>
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-1.5">
+                  <input
+                    value={newComment}
+                    onChange={e => setNewComment(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') addComment() }}
+                    placeholder={commentKind === 'nota' ? 'Añadir nota…' : `${FIRMAS_KIND_META[commentKind].label}: ¿qué pasó? (opcional si marcas resultado)`}
+                    className="flex-1 text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                  />
+                  <button
+                    onClick={addComment}
+                    disabled={!newComment.trim() && !commentOutcome}
+                    aria-label="Guardar apunte"
+                    className="px-2.5 py-1.5 rounded-lg bg-primary text-white disabled:opacity-40 hover:bg-primary/90 transition-colors"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -2487,6 +3006,9 @@ interface Props {
   /** Abrir la ficha de un jugador al montar (navegación desde otra sección, p. ej. Boulema) */
   openPlayerId?: string | null
   onOpenPlayerConsumed?: () => void
+  /** Abrir una entrada del pipeline Firmar (navegación desde el Dashboard) */
+  openFirmasEntryId?: string | null
+  onOpenFirmasEntryConsumed?: () => void
   firmasEntries: FirmasEntry[]
   onCreateFirmasEntry: (e: Omit<FirmasEntry, 'id' | 'createdAt' | 'updatedAt'>) => Promise<FirmasEntry>
   onUpdateFirmasEntry: (e: FirmasEntry) => Promise<void>
@@ -2590,6 +3112,8 @@ export function Captacion({
   onRemoveMatchPlayer,
   openPlayerId,
   onOpenPlayerConsumed,
+  openFirmasEntryId,
+  onOpenFirmasEntryConsumed,
   firmasEntries,
   onCreateFirmasEntry,
   onUpdateFirmasEntry,
@@ -2612,6 +3136,11 @@ export function Captacion({
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openPlayerId])
+
+  // Navegación externa: abrir una entrada de Firmar (p. ej. desde el Dashboard)
+  useEffect(() => {
+    if (openFirmasEntryId) setCaptTab('firmar')
+  }, [openFirmasEntryId])
 
   // ── umbral de candidatos (compartido: badge de pestaña + Conclusiones) ──
   const [conclThreshold, setConclThreshold] = useState<number>(() => {
@@ -3510,6 +4039,9 @@ export function Captacion({
           currentProfile={currentProfile}
           scoutingPlayers={scoutingPlayers}
           scoutingReports={scoutingReports}
+          scoutingMatches={scoutingMatches}
+          openEntryId={openFirmasEntryId}
+          onOpenEntryConsumed={onOpenFirmasEntryConsumed}
           onCreate={onCreateFirmasEntry}
           onUpdate={onUpdateFirmasEntry}
           onDelete={onDeleteFirmasEntry}
