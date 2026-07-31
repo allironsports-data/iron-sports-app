@@ -1775,6 +1775,10 @@ function FirmasTab({
   const [showAlerts, setShowAlerts] = useState(false)
   const [showAgenda, setShowAgenda] = useState(false)
 
+  // ── versión móvil: estatus/encargado seleccionados en las píldoras ──
+  const [mobStatus, setMobStatus] = useState<FirmasStatus | 'all'>('all')
+  const [mobManager, setMobManager] = useState<string>('')
+
   // ── hover card (solo escritorio) ──
   const [hover, setHover] = useState<{ id: string; x: number; y: number } | null>(null)
   const hoverTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -2088,13 +2092,59 @@ function FirmasTab({
     )
   }
 
+  // ── fila compacta para la lista móvil ──
+  const mobileRow = (e: FirmasEntry, showStatusDot = true) => {
+    const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
+    const aging = firmasAging(e)
+    const actionOverdue = !!e.nextActionDate && e.nextActionDate < todayISO() && e.status !== 'firmado'
+    const actionToday = e.nextActionDate === todayISO()
+    return (
+      <button
+        key={e.id}
+        onClick={() => setPanelId(e.id)}
+        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left active:bg-slate-50 transition-colors"
+      >
+        {showStatusDot && (
+          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${FIRMAS_CONFIG[e.status].dot}`} title={FIRMAS_CONFIG[e.status].label} />
+        )}
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-slate-800 truncate leading-tight">{e.playerName}</span>
+          <span className="block text-[11px] text-slate-400 truncate">
+            {sp
+              ? [sp.team, sp.birthdate ? sp.birthdate.slice(0, 4) : null].filter(Boolean).join(' · ') || e.zone
+              : e.zone}
+            {e.nextActionDate && e.status !== 'firmado' && (
+              <span className={`ml-1.5 font-medium ${actionOverdue ? 'text-red-500' : actionToday ? 'text-blue-600' : 'text-slate-400'}`}>
+                {FIRMAS_KIND_META[e.nextActionKind ?? '']?.icon ?? '📌'} {actionOverdue ? 'vencida' : actionToday ? 'hoy' : new Date(e.nextActionDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+              </span>
+            )}
+          </span>
+        </span>
+        {aging?.overdue && <span className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" title={`${aging.days} días sin tocar`} />}
+        {!aging?.overdue && aging?.warn && <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />}
+        <FirmasManagers managerIds={e.managers} profiles={profiles} max={2} />
+        <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
+      </button>
+    )
+  }
+
+  const mobileList = (list: FirmasEntry[], showStatusDot = true) => (
+    list.length === 0 ? (
+      <div className="bg-white border border-slate-200 rounded-lg py-8 text-center text-xs text-slate-400">Sin jugadores</div>
+    ) : (
+      <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100 overflow-hidden">
+        {list.map(e => mobileRow(e, showStatusDot))}
+      </div>
+    )
+  )
+
   // Tablero de columnas por estatus (compartido por vistas estatus y zona)
   const statusBoard = (list: FirmasEntry[]) => {
     const groups: Record<FirmasStatus, FirmasEntry[]> = { llamar: [], caliente: [], templado: [], frio: [], decidir: [], firmado: [] }
     list.forEach(e => groups[e.status].push(e))
     FIRMAS_STATUSES.forEach(s => groups[s].sort((a, b) => a.sortPos - b.sortPos || a.playerName.localeCompare(b.playerName)))
     return (
-      <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 sm:mx-0 sm:px-0 xl:grid xl:grid-cols-6 xl:overflow-visible">
+      <div className="hidden sm:flex gap-3 overflow-x-auto pb-2 sm:mx-0 sm:px-0 xl:grid xl:grid-cols-6 xl:overflow-visible">
         {FIRMAS_STATUSES.map(s => (
           <div key={s} className={`flex-shrink-0 w-[240px] xl:w-auto bg-slate-50 border border-slate-200 border-t-2 ${FIRMAS_CONFIG[s].col} rounded-lg`}>
             <div className="flex items-center gap-1.5 px-2.5 py-2">
@@ -2293,8 +2343,47 @@ function FirmasTab({
             </div>
           </div>
 
-          {/* ── Vista por ESTATUS (tablero) ── */}
-          {view === 'estatus' && statusBoard(filtered)}
+          {/* ── Vista por ESTATUS: móvil = píldoras + lista · escritorio = tablero ── */}
+          {view === 'estatus' && (
+            <>
+              <div className="sm:hidden space-y-2">
+                <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-3 px-3 scrollbar-none">
+                  <button
+                    onClick={() => setMobStatus('all')}
+                    className={`flex-shrink-0 px-2.5 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                      mobStatus === 'all' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-500 border-slate-200'
+                    }`}
+                  >
+                    Todos {filtered.length}
+                  </button>
+                  {FIRMAS_STATUSES.map(s => {
+                    const n = filtered.filter(e => e.status === s).length
+                    return (
+                      <button
+                        key={s}
+                        onClick={() => setMobStatus(s)}
+                        className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                          mobStatus === s ? `${FIRMAS_CONFIG[s].bg} ${FIRMAS_CONFIG[s].text} ${FIRMAS_CONFIG[s].border} ring-1 ring-current` : 'bg-white text-slate-500 border-slate-200'
+                        }`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${FIRMAS_CONFIG[s].dot}`} />
+                        {FIRMAS_CONFIG[s].label} {n}
+                      </button>
+                    )
+                  })}
+                </div>
+                {mobileList(
+                  (mobStatus === 'all' ? [...filtered] : filtered.filter(e => e.status === mobStatus))
+                    .sort((a, b) =>
+                      FIRMAS_STATUSES.indexOf(a.status) - FIRMAS_STATUSES.indexOf(b.status) ||
+                      a.sortPos - b.sortPos || a.playerName.localeCompare(b.playerName)
+                    ),
+                  mobStatus === 'all'
+                )}
+              </div>
+              {statusBoard(filtered)}
+            </>
+          )}
 
           {/* ── Vista por ZONA: selector de zona + tablero de esa zona ── */}
           {view === 'zona' && (() => {
@@ -2372,6 +2461,24 @@ function FirmasTab({
                       )}
                       <span className="text-[11px] text-slate-400">{zoneEntries.length} jugador{zoneEntries.length !== 1 ? 'es' : ''}</span>
                     </div>
+                    <div className="sm:hidden space-y-2.5">
+                      {FIRMAS_STATUSES.map(s => {
+                        const l = zoneEntries
+                          .filter(e => e.status === s)
+                          .sort((a, b) => a.sortPos - b.sortPos || a.playerName.localeCompare(b.playerName))
+                        if (l.length === 0) return null
+                        return (
+                          <div key={s}>
+                            <div className="flex items-center gap-1.5 px-1 pb-1">
+                              <span className={`w-2 h-2 rounded-full ${FIRMAS_CONFIG[s].dot}`} />
+                              <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">{FIRMAS_CONFIG[s].label}</span>
+                              <span className="text-[11px] text-slate-400">{l.length}</span>
+                            </div>
+                            {mobileList(l, false)}
+                          </div>
+                        )
+                      })}
+                    </div>
                     {statusBoard(zoneEntries)}
                   </div>
                 ) : (
@@ -2388,8 +2495,45 @@ function FirmasTab({
               .map(p => ({ profile: p, list: filtered.filter(e => e.managers.includes(p.id)) }))
               .filter(c => c.list.length > 0)
               .sort((a, b) => b.list.length - a.list.length)
+            const effManager = cols.some(c => c.profile.id === mobManager) || mobManager === 'sin'
+              ? mobManager
+              : (cols[0]?.profile.id ?? 'sin')
+            const mobList = effManager === 'sin' ? noManager : (cols.find(c => c.profile.id === effManager)?.list ?? [])
             return (
-              <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 sm:mx-0 sm:px-0">
+              <>
+              <div className="sm:hidden space-y-2">
+                <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-3 px-3 scrollbar-none">
+                  {cols.map(({ profile: p, list }) => {
+                    const c = scoutColor(p.avatar || p.name)
+                    const active = effManager === p.id
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => setMobManager(p.id)}
+                        className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                          active ? `${c.bg} ${c.text} ${c.border} ring-1 ring-current` : 'bg-white text-slate-500 border-slate-200'
+                        }`}
+                      >
+                        {(p.avatar || p.name.slice(0, 2)).toUpperCase()} {list.length}
+                      </button>
+                    )
+                  })}
+                  <button
+                    onClick={() => setMobManager('sin')}
+                    className={`flex-shrink-0 px-2.5 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                      effManager === 'sin' ? 'bg-red-50 text-red-600 border-red-200 ring-1 ring-current' : 'bg-white text-slate-500 border-slate-200'
+                    }`}
+                  >
+                    ⚠ Sin encargado {noManager.length}
+                  </button>
+                </div>
+                {mobileList(
+                  [...mobList].sort((a, b) =>
+                    FIRMAS_STATUSES.indexOf(a.status) - FIRMAS_STATUSES.indexOf(b.status) || a.playerName.localeCompare(b.playerName)
+                  )
+                )}
+              </div>
+              <div className="hidden sm:flex gap-3 overflow-x-auto pb-2 sm:mx-0 sm:px-0">
                 {cols.map(({ profile: p, list }) => {
                   const c = scoutColor(p.avatar || p.name)
                   const calientes = list.filter(e => e.status === 'caliente').length
@@ -2433,6 +2577,7 @@ function FirmasTab({
                   </div>
                 </div>
               </div>
+              </>
             )
           })()}
         </>
@@ -2554,6 +2699,9 @@ function FirmasDetailPanel({
   const [name, setName] = useState(entry.playerName)
   const [notes, setNotes] = useState(entry.notes ?? '')
   const [editingName, setEditingName] = useState(false)
+
+  // móvil: el panel se divide en pestañas para evitar el scroll infinito
+  const [panelTab, setPanelTab] = useState<'datos' | 'historial'>('datos')
 
   // ── composer del historial (bajo esfuerzo) ──
   const [newComment, setNewComment] = useState('')
@@ -2756,12 +2904,40 @@ function FirmasDetailPanel({
           </button>
         </div>
 
-        {/* body: dos columnas en escritorio */}
+        {/* móvil: info de estatus + pestañas Datos/Historial */}
+        <div className="lg:hidden border-b border-slate-200">
+          {entry.status !== 'firmado' && (entry.statusUpdatedAt || aging) && (
+            <div className="px-4 pt-1.5 pb-0.5 flex items-center gap-2 text-[11px] text-slate-400 sm:hidden">
+              {entry.statusUpdatedAt && <span>desde {relativeDate(entry.statusUpdatedAt) || fmtDate(entry.statusUpdatedAt)}</span>}
+              {aging && (
+                <span className={aging.overdue ? 'text-red-500 font-medium' : aging.warn ? 'text-amber-600' : ''}>
+                  {aging.overdue ? '⚠ ' : ''}sin tocar {aging.days}d/{aging.limit}d
+                </span>
+              )}
+            </div>
+          )}
+          <div className="px-4 flex gap-4">
+            <button
+              onClick={() => setPanelTab('datos')}
+              className={`py-2 text-xs font-semibold border-b-2 transition-colors ${panelTab === 'datos' ? 'border-primary text-primary' : 'border-transparent text-slate-400'}`}
+            >
+              Datos
+            </button>
+            <button
+              onClick={() => setPanelTab('historial')}
+              className={`py-2 text-xs font-semibold border-b-2 transition-colors ${panelTab === 'historial' ? 'border-primary text-primary' : 'border-transparent text-slate-400'}`}
+            >
+              Historial{entry.comments.length > 0 ? ` · ${entry.comments.length}` : ''}
+            </button>
+          </div>
+        </div>
+
+        {/* body: dos columnas en escritorio, pestañas en móvil */}
         <div className="flex-1 overflow-y-auto px-4 py-3">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-6 gap-y-4">
 
             {/* ── Columna izquierda: datos ── */}
-            <div className="space-y-3.5 min-w-0">
+            <div className={`space-y-3.5 min-w-0 ${panelTab === 'datos' ? 'block' : 'hidden'} lg:block`}>
               {/* firmado 🎉 → traspaso a Mantenimiento */}
               {entry.status === 'firmado' && (
                 <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 flex items-center gap-2 flex-wrap">
@@ -2955,7 +3131,7 @@ function FirmasDetailPanel({
             </div>
 
             {/* ── Columna derecha: historial ── */}
-            <div className="min-w-0">
+            <div className={`min-w-0 ${panelTab === 'historial' ? 'block' : 'hidden'} lg:block`}>
               <label className={LABEL_CLS}>
                 Historial {sortedComments.length > 0 && <span className="text-slate-300">· {sortedComments.length}</span>}
               </label>
