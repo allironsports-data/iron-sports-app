@@ -69,3 +69,10 @@
     font-size: 16px !important;
   }
 }
+
+/* Barra de navegación inferior (móvil): deja hueco al final de la página */
+@media (max-width: 639px) {
+  body {
+    padding-bottom: calc(56px + env(safe-area-inset-bottom));
+  }
+}

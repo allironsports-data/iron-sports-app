@@ -19,7 +19,7 @@ import { useEscapeKey } from '../hooks/useEscapeKey'
 import { useDebounce } from '../hooks/useDebounce'
 import { isValidName } from '../lib/validate'
 
-type ShowToast = (message: string, variant?: 'success' | 'error' | 'info') => void
+type ShowToast = (message: string, variant?: 'success' | 'error' | 'info', action?: { label: string; fn: () => void }) => void
 
 // ── Constants ────────────────────────────────────────────────
 
@@ -75,6 +75,9 @@ const CONCLUSION_STYLE: Record<string, string> = {
 }
 
 const MONTHS_ES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+
+// Plantilla opcional de informe — homogeneiza sin obligar
+export const REPORT_TEMPLATE = 'FÍSICO:\n\nTÉCNICA:\n\nTÁCTICA:\n\nMENTALIDAD:\n\nCONTEXTO (equipo, rol, rival):\n\nCONCLUSIÓN:\n'
 
 // ── Competition options ──────────────────────────────────────
 
@@ -1774,6 +1777,10 @@ function FirmasTab({
   const [confirmDelete, setConfirmDelete] = useState<FirmasEntry | null>(null)
   const [showAlerts, setShowAlerts] = useState(false)
   const [showAgenda, setShowAgenda] = useState(false)
+  const [showResumen, setShowResumen] = useState(false)
+  const [dragOverCol, setDragOverCol] = useState<FirmasStatus | null>(null)
+  const [swipedId, setSwipedId] = useState<string | null>(null)
+  const touchStart = React.useRef<{ x: number; y: number } | null>(null)
 
   // ── versión móvil: estatus/encargado seleccionados en las píldoras ──
   const [mobStatus, setMobStatus] = useState<FirmasStatus | 'all'>('all')
@@ -2050,6 +2057,8 @@ function FirmasTab({
         onClick={() => { endHover(); setPanelId(e.id) }}
         onMouseEnter={ev => startHover(e, ev)}
         onMouseLeave={endHover}
+        draggable={canHover}
+        onDragStart={ev => { endHover(); ev.dataTransfer.setData('text/plain', e.id); ev.dataTransfer.effectAllowed = 'move' }}
         className="w-full text-left bg-white border border-slate-200 rounded-lg px-2.5 py-2 hover:border-slate-300 hover:shadow-sm transition-all"
       >
         <div className="flex items-start justify-between gap-1.5">
@@ -2098,10 +2107,44 @@ function FirmasTab({
     const aging = firmasAging(e)
     const actionOverdue = !!e.nextActionDate && e.nextActionDate < todayISO() && e.status !== 'firmado'
     const actionToday = e.nextActionDate === todayISO()
+    // deslizada: fila de estatus rápidos
+    if (swipedId === e.id) {
+      return (
+        <div key={e.id} className="flex items-center gap-1.5 px-3 py-2 bg-slate-50">
+          <span className="text-xs font-semibold text-slate-700 truncate flex-1 min-w-0">{e.playerName}</span>
+          {FIRMAS_STATUSES.map(s => (
+            <button
+              key={s}
+              onClick={() => { if (s !== e.status) changeStatus(e, s); setSwipedId(null) }}
+              className={`w-7 h-7 rounded-full flex items-center justify-center border transition-colors ${
+                s === e.status ? `${FIRMAS_CONFIG[s].bg} ${FIRMAS_CONFIG[s].border} ring-1 ring-current ${FIRMAS_CONFIG[s].text}` : 'bg-white border-slate-200'
+              }`}
+              title={FIRMAS_CONFIG[s].label}
+              aria-label={FIRMAS_CONFIG[s].label}
+            >
+              <span className={`w-2.5 h-2.5 rounded-full ${FIRMAS_CONFIG[s].dot}`} />
+            </button>
+          ))}
+          <button onClick={() => setSwipedId(null)} aria-label="Cerrar" className="p-1 text-slate-400"><X className="w-4 h-4" /></button>
+        </div>
+      )
+    }
     return (
       <button
         key={e.id}
         onClick={() => setPanelId(e.id)}
+        onTouchStart={ev => { touchStart.current = { x: ev.touches[0].clientX, y: ev.touches[0].clientY } }}
+        onTouchEnd={ev => {
+          const s0 = touchStart.current
+          touchStart.current = null
+          if (!s0) return
+          const dx = ev.changedTouches[0].clientX - s0.x
+          const dy = ev.changedTouches[0].clientY - s0.y
+          if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 2) {
+            ev.preventDefault()
+            setSwipedId(dx < 0 ? e.id : null)
+          }
+        }}
         className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left active:bg-slate-50 transition-colors"
       >
         {showStatusDot && (
@@ -2146,7 +2189,21 @@ function FirmasTab({
     return (
       <div className="hidden sm:flex gap-3 overflow-x-auto pb-2 sm:mx-0 sm:px-0 xl:grid xl:grid-cols-6 xl:overflow-visible">
         {FIRMAS_STATUSES.map(s => (
-          <div key={s} className={`flex-shrink-0 w-[240px] xl:w-auto bg-slate-50 border border-slate-200 border-t-2 ${FIRMAS_CONFIG[s].col} rounded-lg`}>
+          <div
+            key={s}
+            onDragOver={ev => { ev.preventDefault(); if (dragOverCol !== s) setDragOverCol(s) }}
+            onDragLeave={() => setDragOverCol(cur => cur === s ? null : cur)}
+            onDrop={ev => {
+              ev.preventDefault()
+              setDragOverCol(null)
+              const id = ev.dataTransfer.getData('text/plain')
+              const en = entries.find(x => x.id === id)
+              if (en && en.status !== s) changeStatus(en, s)
+            }}
+            className={`flex-shrink-0 w-[240px] xl:w-auto bg-slate-50 border border-t-2 ${FIRMAS_CONFIG[s].col} rounded-lg transition-colors ${
+              dragOverCol === s ? 'border-primary ring-2 ring-primary/30 bg-blue-50/50' : 'border-slate-200'
+            }`}
+          >
             <div className="flex items-center gap-1.5 px-2.5 py-2">
               <span className={`w-2 h-2 rounded-full ${FIRMAS_CONFIG[s].dot}`} />
               <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">{FIRMAS_CONFIG[s].label}</span>
@@ -2172,13 +2229,22 @@ function FirmasTab({
           <h2 className="text-sm font-semibold text-slate-800">Firmar</h2>
           <p className="text-xs text-slate-400">Captación activa: jugadores en proceso de conseguir la firma, por zona y estatus</p>
         </div>
-        <button
-          onClick={() => setShowAdd(true)}
-          className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-medium hover:bg-primary/90 transition-colors"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Añadir jugador
-        </button>
+        <div className="flex-shrink-0 flex items-center gap-1.5">
+          <button
+            onClick={() => setShowResumen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 text-xs font-medium hover:bg-slate-50 transition-colors"
+            title="Resumen semanal del pipeline, listo para copiar"
+          >
+            📋 <span className="hidden sm:inline">Resumen</span>
+          </button>
+          <button
+            onClick={() => setShowAdd(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-medium hover:bg-primary/90 transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Añadir jugador
+          </button>
+        </div>
       </div>
 
       {entries.length === 0 ? (
@@ -2640,6 +2706,63 @@ function FirmasTab({
         />
       )}
 
+      {/* ── Resumen semanal (copiable) ── */}
+      {showResumen && (() => {
+        const active = entries.filter(e => e.status !== 'firmado')
+        const calientes = active.filter(e => e.status === 'caliente')
+        const vencidas = active.filter(e => e.nextActionDate && e.nextActionDate < todayISO())
+        const desatendidos = active.filter(e => firmasAging(e)?.overdue)
+        const since7 = new Date(Date.now() - 7 * 86400000).toISOString()
+        const firmados7 = entries.filter(e => e.status === 'firmado' && (e.signedAt ?? '') >= since7)
+        const nombreEnc = (e: FirmasEntry) => e.managers.map(id => profiles.find(p => p.id === id)?.avatar).filter(Boolean).join('/')
+        const lines: string[] = []
+        lines.push(`📋 PIPELINE FIRMAR · ${new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })}`)
+        lines.push('')
+        lines.push(`Activos: ${active.length} · ${FIRMAS_STATUSES.filter(s => s !== 'firmado').map(s => `${entries.filter(e => e.status === s).length} ${FIRMAS_CONFIG[s].label.toLowerCase()}`).join(' · ')}`)
+        lines.push('')
+        lines.push(`🔥 CALIENTES (${calientes.length})`)
+        calientes.forEach(e => lines.push(`  · ${e.playerName} (${nombreEnc(e) || 'sin enc.'}) — ${e.nextAction ? `${e.nextAction} el ${e.nextActionDate ? fmtDate(e.nextActionDate) : 's/f'}` : '⚠ SIN PRÓXIMA ACCIÓN'}`))
+        if (vencidas.length) {
+          lines.push('')
+          lines.push(`⏰ ACCIONES VENCIDAS (${vencidas.length})`)
+          vencidas.forEach(e => lines.push(`  · ${e.playerName}: ${e.nextAction ?? 'acción'} (${e.nextActionDate ? fmtDate(e.nextActionDate) : ''}, ${nombreEnc(e) || '—'})`))
+        }
+        if (desatendidos.length) {
+          lines.push('')
+          lines.push(`🚨 DESATENDIDOS: ${desatendidos.length} (caliente +10d / templado +50d / frío +90d)`)
+          desatendidos.slice(0, 8).forEach(e => lines.push(`  · ${e.playerName} (${FIRMAS_CONFIG[e.status].label.toLowerCase()}, ${firmasAging(e)?.days}d sin tocar)`))
+          if (desatendidos.length > 8) lines.push(`  · … y ${desatendidos.length - 8} más`)
+        }
+        if (firmados7.length) {
+          lines.push('')
+          lines.push(`🎉 FIRMADOS ESTA SEMANA: ${firmados7.map(e => e.playerName).join(', ')}`)
+        }
+        const text = lines.join('\n')
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4" onClick={() => setShowResumen(false)}>
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-5 max-h-[85vh] flex flex-col" onClick={ev => ev.stopPropagation()}>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-bold text-slate-800">Resumen del pipeline</h3>
+                <button onClick={() => setShowResumen(false)} aria-label="Cerrar" className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"><X className="w-4 h-4" /></button>
+              </div>
+              <pre className="flex-1 overflow-y-auto text-[11.5px] leading-relaxed text-slate-700 bg-slate-50 border border-slate-200 rounded-lg p-3 whitespace-pre-wrap font-sans">{text}</pre>
+              <div className="mt-3 flex justify-end gap-2">
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(text)
+                      .then(() => showToast('Resumen copiado — pégalo en WhatsApp'))
+                      .catch(() => showToast('No se pudo copiar', 'error'))
+                  }}
+                  className="px-4 py-1.5 rounded-lg bg-primary text-white text-xs font-medium hover:bg-primary/90 transition-colors"
+                >
+                  📋 Copiar
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
       {/* ── Modal de alta ── */}
       {showAdd && (
         <FirmasAddModal
@@ -2812,7 +2935,9 @@ function FirmasDetailPanel({
   }
 
   const deleteComment = (id: string) => {
-    void onPatch(entry, { comments: entry.comments.filter(c => c.id !== id) })
+    const prev = entry.comments
+    void onPatch(entry, { comments: prev.filter(c => c.id !== id) })
+    showToast('Apunte eliminado', 'info', { label: 'Deshacer', fn: () => void onPatch(entry, { comments: prev }) })
   }
 
   const saveCommentEdit = () => {
@@ -2844,11 +2969,13 @@ function FirmasDetailPanel({
       // coherencia con el historial: una llamada hecha queda como llamada
       kind: (entry.nextActionKind as FirmasComment['kind']) ?? 'nota',
     }
+    const prev = { nextAction: entry.nextAction, nextActionDate: entry.nextActionDate, nextActionAssignee: entry.nextActionAssignee, nextActionKind: entry.nextActionKind, comments: entry.comments }
     void onPatch(entry, {
       nextAction: undefined, nextActionDate: undefined, nextActionAssignee: undefined, nextActionKind: undefined,
       comments: [...entry.comments, log],
     })
     setActionLabel(''); setActionDate('')
+    showToast('Acción marcada como hecha', 'success', { label: 'Deshacer', fn: () => void onPatch(entry, prev) })
   }
 
   // recientes primero
@@ -3680,6 +3807,12 @@ export function Captacion({
 
   // ── match filters ──
   const [matchSearch, setMatchSearch] = useState('')
+  // Vista de partidos: lista o agenda semanal
+  const [matchesView, setMatchesView] = useState<'lista' | 'semana'>(
+    () => (sessionStorage.getItem('capt_matches_view') as 'lista' | 'semana') ?? 'lista'
+  )
+  useEffect(() => { sessionStorage.setItem('capt_matches_view', matchesView) }, [matchesView])
+  const [matchWeekOffset, setMatchWeekOffset] = useState(0)
   const [matchPersonaFilter, setMatchPersonaFilter] = useState('all')
   const [matchCompFilter, setMatchCompFilter] = useState('all')
   const [matchModeFilter, setMatchModeFilter] = useState<'all' | 'video' | 'campo'>('all')
@@ -4159,7 +4292,7 @@ export function Captacion({
         </div>
 
         {/* Level 1: main sections */}
-        <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center border-t border-slate-100 overflow-x-auto scrollbar-none">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 hidden sm:flex items-center border-t border-slate-100 overflow-x-auto scrollbar-none">
           <button
             onClick={() => onGoToSection('tareas')}
             className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
@@ -4648,13 +4781,87 @@ export function Captacion({
               <h2 className="text-sm font-semibold text-slate-800">Partidos visualizados</h2>
               <p className="text-xs text-slate-400">{scoutingMatches.length} partido{scoutingMatches.length !== 1 ? 's' : ''} registrado{scoutingMatches.length !== 1 ? 's' : ''}</p>
             </div>
-            <button
-              onClick={openAddMatch}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" /> Añadir partido
-            </button>
+            <div className="flex items-center gap-1.5">
+              <div className="flex items-center rounded-lg border border-slate-200 overflow-hidden">
+                <button
+                  onClick={() => setMatchesView('lista')}
+                  className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium transition-colors ${matchesView === 'lista' ? 'bg-primary text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                >
+                  <ClipboardList className="w-3.5 h-3.5" /><span className="hidden sm:inline">Lista</span>
+                </button>
+                <button
+                  onClick={() => setMatchesView('semana')}
+                  className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium transition-colors ${matchesView === 'semana' ? 'bg-primary text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                >
+                  <Calendar className="w-3.5 h-3.5" /><span className="hidden sm:inline">Semana</span>
+                </button>
+              </div>
+              <button
+                onClick={openAddMatch}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" /> Añadir partido
+              </button>
+            </div>
           </div>
+
+          {/* ── Agenda semanal de partidos ── */}
+          {matchesView === 'semana' && (() => {
+            const base = new Date()
+            const dow0 = (base.getDay() + 6) % 7
+            base.setDate(base.getDate() - dow0 + matchWeekOffset * 7)
+            const days = Array.from({ length: 7 }, (_, i) => {
+              const d = new Date(base); d.setDate(base.getDate() + i)
+              return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+            })
+            const DOW = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
+            return (
+              <div className="bg-white border border-slate-200 rounded-xl p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <button onClick={() => setMatchWeekOffset(o => o - 1)} className="px-2 py-1 rounded-lg border border-slate-200 text-xs text-slate-500 hover:bg-slate-50">←</button>
+                  <span className="text-xs font-semibold text-slate-700">
+                    {new Date(days[0]).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} – {new Date(days[6]).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                    {matchWeekOffset === 0 && <span className="text-slate-400 font-normal"> · esta semana</span>}
+                  </span>
+                  {matchWeekOffset !== 0 && (
+                    <button onClick={() => setMatchWeekOffset(0)} className="text-[11px] text-blue-600 hover:underline">hoy</button>
+                  )}
+                  <button onClick={() => setMatchWeekOffset(o => o + 1)} className="px-2 py-1 rounded-lg border border-slate-200 text-xs text-slate-500 hover:bg-slate-50">→</button>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-7 gap-1.5">
+                  {days.map((d, i) => {
+                    const dayMatches = filteredMatches.filter(m => m.date === d).sort((a, b) => (a.time ?? '99').localeCompare(b.time ?? '99'))
+                    const isToday = d === todayISO()
+                    return (
+                      <div key={d} className={`rounded-lg border p-1.5 min-h-[64px] ${isToday ? 'border-blue-300 bg-blue-50/40' : 'border-slate-200 bg-slate-50/50'}`}>
+                        <div className={`text-[10px] font-bold uppercase mb-1 ${isToday ? 'text-blue-700' : 'text-slate-400'}`}>
+                          {DOW[i]} {parseInt(d.slice(8), 10)}
+                        </div>
+                        <div className="space-y-1">
+                          {dayMatches.map(m => (
+                            <div
+                              key={m.id}
+                              className={`rounded-md border px-1.5 py-1 bg-white ${m.status === 'visto' ? 'border-slate-200 opacity-70' : 'border-blue-200'}`}
+                              title={`${m.homeTeam} vs ${m.awayTeam}${m.competition ? ` · ${m.competition}` : ''}${m.assignedTo ? ` · lo ve ${m.assignedTo}` : ''}`}
+                            >
+                              <div className="text-[10.5px] font-medium text-slate-700 leading-tight">{m.homeTeam} – {m.awayTeam}</div>
+                              <div className="mt-0.5 flex items-center gap-1 text-[9.5px] text-slate-400">
+                                {m.time && <span>{m.time}</span>}
+                                {m.assignedTo && <span className="font-mono font-bold text-slate-500">{m.assignedTo}</span>}
+                                <span>{m.viewMode === 'campo' ? '🏟️' : '📹'}</span>
+                                {m.status === 'visto' && <span className="text-emerald-600">✓</span>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                <p className="mt-2 text-[10.5px] text-slate-400">La agenda respeta los filtros. Para editar o marcar visto un partido, usa la vista Lista.</p>
+              </div>
+            )
+          })()}
 
           {/* Add/edit match form */}
           {showAddMatch && (
@@ -4774,6 +4981,7 @@ export function Captacion({
               }
             />
           ) : (
+            matchesView === 'semana' ? null : (
             <>
               {/* ── Mobile card list (hidden on sm+) ── */}
               <div className="sm:hidden space-y-2">
@@ -4910,6 +5118,7 @@ export function Captacion({
                 </div>
               </div>
             </>
+            )
           )}
         </div>
       )}
@@ -5392,6 +5601,14 @@ export function Captacion({
                                   placeholder="Título (opcional)"
                                   className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                                 />
+                                {!reportText.trim() && (
+                                  <button
+                                    onClick={() => setReportText(REPORT_TEMPLATE)}
+                                    className="text-[11px] text-blue-600 hover:text-blue-700 font-medium"
+                                  >
+                                    📋 Usar plantilla (físico · técnica · táctica · mentalidad · contexto)
+                                  </button>
+                                )}
                                 <textarea
                                   value={reportText}
                                   onChange={e => setReportText(e.target.value)}

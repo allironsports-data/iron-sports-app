@@ -32,6 +32,14 @@ export function ToastStack({ toasts, onDismiss }: Props) {
           >
             <Icon className="w-4 h-4 flex-shrink-0 opacity-90" />
             <span>{t.message}</span>
+            {t.action && (
+              <button
+                onClick={() => { t.action!.fn(); onDismiss(t.id); }}
+                className="ml-1 px-2 py-0.5 rounded-md bg-white/20 hover:bg-white/30 text-xs font-bold transition-colors"
+              >
+                {t.action.label}
+              </button>
+            )}
             <button
               onClick={() => onDismiss(t.id)}
               className="ml-1 opacity-70 hover:opacity-100 transition-opacity"

@@ -356,7 +356,8 @@ export function Dashboard({
   // Activities per profile for the Equipo workload view (cached — week nav does NOT refetch)
   const [teamActivities, setTeamActivities] = useState<Record<string, PlayerActivity[]>>({});
   const [loadingTeamActivities, setLoadingTeamActivities] = useState(false);
-  const [misViewMode, setMisViewMode] = useState<'kanban' | 'compact' | 'table'>('kanban');
+  const [misViewMode, setMisViewMode] = useState<'kanban' | 'compact' | 'table' | 'semana'>('kanban');
+  const [taskWeekOffset, setTaskWeekOffset] = useState(0); // vista semana de tareas: 0 = esta semana
   const [taskSortCol, setTaskSortCol] = useState<'title' | 'player' | 'priority' | 'dueDate' | 'status'>('dueDate');
   const [taskSortDir, setTaskSortDir] = useState<'asc' | 'desc'>('asc');
   const [detailTask, setDetailTask] = useState<Task | null>(null);
@@ -491,6 +492,19 @@ export function Dashboard({
 
   // ── Firmar: iconos por tipo de acción (coherentes con el historial) ──
   const FIRMAS_KIND_ICON: Record<string, string> = { llamada: "📞", whatsapp: "💬", reunion: "🤝", entorno: "👪", nota: "📝" };
+
+  // ── Contratos de representación que expiran (≤6 meses, o vencidos hace <30 días) ──
+  const [showRepContracts, setShowRepContracts] = useState(false);
+  const repExpiring = players
+    .map(p => ({ p, end: p.representationContract?.end }))
+    .filter((x): x is { p: Player; end: string } => {
+      if (!x.end) return false;
+      const t = new Date(x.end).getTime();
+      if (isNaN(t)) return false;
+      const diff = t - Date.now();
+      return diff > -30 * 86400000 && diff <= 180 * 86400000;
+    })
+    .sort((a, b) => a.end.localeCompare(b.end));
 
   // ── Firmar: próximas acciones que tocan hoy (o están vencidas) ──
   const firmasActionsToday = (firmasEntries ?? [])
@@ -695,7 +709,7 @@ export function Dashboard({
         {onViewChange && (
           <>
             {/* Level 1: main sections */}
-            <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center border-t border-slate-100 overflow-x-auto scrollbar-none">
+            <div className="max-w-6xl mx-auto px-3 sm:px-6 hidden sm:flex items-center border-t border-slate-100 overflow-x-auto scrollbar-none">
               {/* Mantenimiento — always active while Dashboard is mounted */}
               <button className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 border-primary text-primary transition-colors">
                 Mantenimiento
@@ -821,6 +835,45 @@ export function Dashboard({
                     return `${p.name} (${dayMonth})`;
                   }).join(", ")}
                 </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Contratos de representación que expiran */}
+        {repExpiring.length > 0 && (
+          <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg overflow-hidden">
+            <button
+              onClick={() => setShowRepContracts(v => !v)}
+              className="w-full flex items-center gap-2 p-3 text-left hover:bg-amber-100/50 transition-colors"
+            >
+              <span className="text-sm flex-shrink-0">📃</span>
+              <span className="text-sm font-semibold text-amber-800">
+                {repExpiring.length} contrato{repExpiring.length !== 1 ? "s" : ""} de representación en sus últimos 6 meses
+              </span>
+              <span className="hidden sm:inline text-xs text-amber-700/70 font-normal truncate">
+                {repExpiring.slice(0, 3).map(x => x.p.name.split(" ")[0]).join(" · ")}{repExpiring.length > 3 ? " · …" : ""}
+              </span>
+              <ChevronDown className={`w-4 h-4 text-amber-600 ml-auto flex-shrink-0 transition-transform ${showRepContracts ? "rotate-180" : ""}`} />
+            </button>
+            {showRepContracts && (
+              <div className="border-t border-amber-200 divide-y divide-amber-100">
+                {repExpiring.map(({ p, end }) => {
+                  const expired = new Date(end).getTime() < Date.now();
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => onSelectPlayer(p.id)}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs text-slate-700 hover:bg-amber-100/40 transition-colors"
+                    >
+                      <span className="font-semibold">{p.name}</span>
+                      <span className={expired ? "text-red-600 font-semibold" : "text-slate-500"}>
+                        {expired ? "venció" : "vence"} el {new Date(end).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" })}
+                      </span>
+                      <span className="ml-auto text-[11px] text-amber-600 flex-shrink-0">Abrir ficha →</span>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1260,6 +1313,73 @@ export function Dashboard({
               // ── Agrupado por estado (kanban / compacto / tabla) ──
               const colPending    = filteredBoard.filter(t => t.status === 'pendiente');
               const colInProgress = filteredBoard.filter(t => t.status === 'en_progreso');
+              if (misViewMode === 'semana') {
+                // Lunes de la semana elegida
+                const base = new Date();
+                const day = (base.getDay() + 6) % 7; // 0 = lunes
+                base.setDate(base.getDate() - day + taskWeekOffset * 7);
+                const days = Array.from({ length: 7 }, (_, i) => {
+                  const d = new Date(base); d.setDate(base.getDate() + i);
+                  return d.toISOString().slice(0, 10);
+                });
+                const DOW = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+                const noDate = filteredBoard.filter(t => !t.dueDate);
+                const before = filteredBoard.filter(t => t.dueDate && t.dueDate < days[0]);
+                return (
+                  <div className="p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <button onClick={() => setTaskWeekOffset(o => o - 1)} className="px-2 py-1 rounded-lg border border-slate-200 text-xs text-slate-500 hover:bg-slate-50">←</button>
+                      <span className="text-xs font-semibold text-slate-700">
+                        {new Date(days[0]).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} – {new Date(days[6]).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                        {taskWeekOffset === 0 && <span className="text-slate-400 font-normal"> · esta semana</span>}
+                      </span>
+                      {taskWeekOffset !== 0 && (
+                        <button onClick={() => setTaskWeekOffset(0)} className="text-[11px] text-blue-600 hover:underline">hoy</button>
+                      )}
+                      <button onClick={() => setTaskWeekOffset(o => o + 1)} className="px-2 py-1 rounded-lg border border-slate-200 text-xs text-slate-500 hover:bg-slate-50">→</button>
+                      {before.length > 0 && taskWeekOffset === 0 && (
+                        <span className="ml-auto text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded-full px-2 py-0.5">{before.length} vencida{before.length !== 1 ? 's' : ''} anteriores</span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-7 gap-1.5">
+                      {days.map((d, i) => {
+                        const dayTasks = filteredBoard.filter(t => t.dueDate === d);
+                        const isToday = d === todayStr;
+                        if (dayTasks.length === 0 && (i === 5 || i === 6)) return null; // finde vacío fuera (móvil lo agradece)
+                        return (
+                          <div key={d} className={`rounded-lg border p-1.5 min-h-[70px] ${isToday ? 'border-blue-300 bg-blue-50/40' : 'border-slate-200 bg-slate-50/50'}`}>
+                            <div className={`text-[10px] font-bold uppercase mb-1 ${isToday ? 'text-blue-700' : 'text-slate-400'}`}>
+                              {DOW[i]} {new Date(d).getDate()}
+                            </div>
+                            <div className="space-y-1">
+                              {dayTasks.map(t => {
+                                const assignee = profiles.find(pr => pr.id === t.assigneeId);
+                                const tp = t.playerId !== 'general' ? players.find(x => x.id === t.playerId) : undefined;
+                                return (
+                                  <button
+                                    key={t.id}
+                                    onClick={() => setDetailTask(t)}
+                                    className={`w-full text-left rounded-md border px-1.5 py-1 bg-white hover:border-slate-300 transition-colors ${t.priority === 'alta' ? 'border-red-200' : 'border-slate-200'}`}
+                                  >
+                                    <div className="text-[11px] font-medium text-slate-700 leading-tight line-clamp-2">{t.title}</div>
+                                    <div className="mt-0.5 flex items-center gap-1 text-[9.5px] text-slate-400">
+                                      {assignee && <span className="font-mono font-bold">{assignee.avatar}</span>}
+                                      {tp && <span className="truncate">{tp.name.split(' ')[0]}</span>}
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {noDate.length > 0 && (
+                      <p className="mt-2 text-[11px] text-slate-400">{noDate.length} tarea{noDate.length !== 1 ? 's' : ''} sin fecha límite (visibles en las otras vistas)</p>
+                    )}
+                  </div>
+                );
+              }
               if (misViewMode === 'compact') {
                 return (
                   <CompactTaskList
@@ -2858,13 +2978,14 @@ function TaskListRow({
 
 /* ── ViewModeToggle: kanban / compact / table switcher ── */
 function ViewModeToggle({ mode, onChange }: {
-  mode: 'kanban' | 'compact' | 'table';
-  onChange: (m: 'kanban' | 'compact' | 'table') => void;
+  mode: 'kanban' | 'compact' | 'table' | 'semana';
+  onChange: (m: 'kanban' | 'compact' | 'table' | 'semana') => void;
 }) {
   const options = [
     { m: 'kanban' as const, Icon: LayoutGrid, label: 'Kanban' },
     { m: 'compact' as const, Icon: LayoutList, label: 'Compacto' },
     { m: 'table' as const, Icon: Table, label: 'Tabla' },
+    { m: 'semana' as const, Icon: Calendar, label: 'Semana' },
   ];
   return (
     <div className="flex items-center gap-0 bg-slate-100 rounded-lg p-0.5 flex-shrink-0">

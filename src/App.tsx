@@ -5,6 +5,8 @@ import * as db from './lib/db'
 import { supabase } from './lib/supabase'
 import type { Profile } from './contexts/AuthContext'
 import { LoginScreen } from './views/LoginScreen'
+import { SavingIndicator, BottomNav, GlobalSearch, SystemNotifPrompt, fireSystemNotification } from './components/GlobalExtras'
+import type { ReactNode } from 'react'
 import type { Club, DistributionEntry, ClubNegotiation } from './types'
 
 // Code-splitting por vista: en móvil solo se descarga el código de la
@@ -70,6 +72,8 @@ export default function App() {
   const [showTable, setShowTable] = useState(false)
   const [showContacts, setShowContacts] = useState(() => window.location.hash === '#contactos')
   const [notifications, setNotifications] = useState<AppNotification[]>([])
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [phase2Loading, setPhase2Loading] = useState(false)
 
   // Distribution state
   const [clubs, setClubs] = useState<Club[]>([])
@@ -95,6 +99,58 @@ export default function App() {
   const [firmasEntries, setFirmasEntries] = useState<FirmasEntry[]>([])
   const [boulemaPlayers, setBoulemaPlayers] = useState<BoulemaPlayer[]>([])
 
+  // ── Búsqueda global: ⌘K / Ctrl+K ──────────────────────────
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setSearchOpen(v => !v)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  // ── Título del documento según dónde estés ────────────────
+  useEffect(() => {
+    const names: Record<string, string> = { tareas: 'Mantenimiento', jugadores: 'Jugadores', distribucion: 'Distribución', captacion: 'Captación', boulema: 'Boulema' }
+    const player = selectedPlayerId ? players.find(p => p.id === selectedPlayerId) : undefined
+    document.title = player ? `${player.name} · AIS` : `${names[mainSection] ?? 'AIS'} · All Iron Sports`
+  }, [mainSection, selectedPlayerId, players])
+
+  // ── Rutas compartibles (hash): #/seccion, #/jugador/id, #/club/id, #/miembro/id ──
+  useEffect(() => {
+    if (showContacts) return  // #contactos se gestiona aparte
+    const h = selectedPlayerId ? `#/jugador/${selectedPlayerId}`
+      : selectedProfileId ? `#/miembro/${selectedProfileId}`
+      : selectedClubId ? `#/club/${selectedClubId}`
+      : `#/${mainSection}`
+    if (window.location.hash !== h) window.location.hash = h
+  }, [mainSection, selectedPlayerId, selectedClubId, selectedProfileId, showContacts])
+
+  useEffect(() => {
+    const apply = () => {
+      const h = window.location.hash
+      if (!h || h === '#contactos') return
+      const m = h.match(/^#\/(jugador|club|miembro)\/(.+)$/)
+      if (m) {
+        if (m[1] === 'jugador') { setSelectedProfileId(null); setSelectedPlayerId(m[2]) }
+        else if (m[1] === 'club') { setSelectedPlayerId(null); setSelectedProfileId(null); setSelectedClubId(m[2]); setMainSection('distribucion') }
+        else { setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(m[2]) }
+        return
+      }
+      const s = h.replace('#/', '')
+      if (['tareas', 'jugadores', 'distribucion', 'captacion', 'boulema'].includes(s)) {
+        setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(null)
+        setMainSection(s as typeof mainSection)
+      }
+    }
+    window.addEventListener('hashchange', apply)
+    apply() // enlace compartido al cargar
+    return () => window.removeEventListener('hashchange', apply)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // ── Persist nav state to sessionStorage ───────────────────
   useEffect(() => {
     if (selectedPlayerId)  sessionStorage.setItem('nav_playerId',  selectedPlayerId)
@@ -117,6 +173,8 @@ export default function App() {
       { id: 'n' + Date.now() + Math.random(), message: msg, type, playerId, ts: Date.now() },
       ...prev,
     ].slice(0, 50))
+    // Con permiso, también salta como notificación del sistema si la pestaña está en segundo plano
+    fireSystemNotification(msg)
   }, [])
 
   const dismissNotification = useCallback((id: string) => {
@@ -147,6 +205,7 @@ export default function App() {
       setDataLoading(false)
 
       // Fase 2 en background
+      setPhase2Loading(true)
       Promise.all([
         db.fetchClubs(),
         db.fetchDistributionEntries(),
@@ -174,9 +233,11 @@ export default function App() {
         setPostpartidos(pp as Postpartido[])
         setFirmasEntries(fe as FirmasEntry[])
         setBoulemaPlayers(bpl as BoulemaPlayer[])
+        setPhase2Loading(false)
       }).catch((err: unknown) => {
         // No bloquea la app: Distribución/Captación mostrarán listas vacías
         console.error('Error cargando datos secundarios:', err)
+        setPhase2Loading(false)
       })
     }).catch((err: unknown) => {
       if (cancelled) return
@@ -670,6 +731,43 @@ export default function App() {
     setMainSection('distribucion')
   }
 
+  // Extras globales: se añaden a todas las pantallas principales
+  const withExtras = (node: ReactNode) => (
+    <>
+      {node}
+      <SavingIndicator />
+      {phase2Loading && (
+        <div className="fixed bottom-16 sm:bottom-3 left-1/2 -translate-x-1/2 z-[45] pointer-events-none">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800/90 text-white text-[11px] font-medium shadow-lg">
+            <span className="w-2.5 h-2.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            Sincronizando datos…
+          </span>
+        </div>
+      )}
+      <BottomNav
+        current={mainSection}
+        onGo={(s) => { setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(null); setClubExpanded(false); setMainSection(s) }}
+        onSearch={() => setSearchOpen(true)}
+      />
+      <SystemNotifPrompt />
+      {searchOpen && (
+        <GlobalSearch
+          players={players}
+          scoutingPlayers={scoutingPlayers}
+          firmasEntries={firmasEntries}
+          clubs={clubs}
+          tasks={tasks}
+          onClose={() => setSearchOpen(false)}
+          onOpenPlayer={(id) => navigateToPlayer(id, false)}
+          onOpenScoutingPlayer={(id) => { setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(null); setCaptacionOpenPlayerId(id); setMainSection('captacion') }}
+          onOpenFirmasEntry={(id) => { setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(null); setCaptacionOpenFirmasId(id); setMainSection('captacion') }}
+          onOpenClub={navigateToClub}
+          onGoTareas={() => { setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(null); setMainSection('tareas') }}
+        />
+      )}
+    </>
+  )
+
   // ── routing ─────────────────────────────────────────────────
 
   if (showContacts && profile.is_admin) {
@@ -729,7 +827,7 @@ export default function App() {
   if (selectedProfileId) {
     const selectedProfileData = profiles.find(p => p.id === selectedProfileId)
     if (selectedProfileData) {
-      return (
+      return withExtras(
         <TeamMemberDetail
           profile={selectedProfileData}
           allProfiles={profiles}
@@ -745,7 +843,7 @@ export default function App() {
 
   if (selectedPlayer) {
     const playerTasks = tasks.filter((t) => t.playerId === selectedPlayer.id)
-    return (
+    return withExtras(
       <PlayerDetail
         player={selectedPlayer}
         players={players}
@@ -804,7 +902,7 @@ export default function App() {
   ) : null
 
   if (mainSection === 'boulema') {
-    return (
+    return withExtras(
       <Boulema
         profiles={profiles}
         currentProfile={profile}
@@ -829,7 +927,7 @@ export default function App() {
   }
 
   if (mainSection === 'captacion') {
-    return (
+    return withExtras(
       <Captacion
         scoutingPlayers={scoutingPlayers}
         scoutingReports={scoutingReports}
@@ -869,7 +967,7 @@ export default function App() {
 
   if (mainSection === 'distribucion' || selectedClub) {
     const splitOpen = !!selectedClub
-    return (
+    return withExtras(
       <div className="flex h-screen overflow-hidden">
         {/* Lista (se oculta en móvil cuando hay club abierto, y al ampliar) */}
         <div
@@ -922,7 +1020,7 @@ export default function App() {
   }
 
   // 'tareas' and 'jugadores' both use Dashboard with a view prop
-  return (
+  return withExtras(
     <Dashboard
       view={mainSection === 'jugadores' ? 'jugadores' : 'tareas'}
       onViewChange={(v) => setMainSection(v)}

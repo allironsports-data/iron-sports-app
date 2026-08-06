@@ -392,6 +392,33 @@ export function Distribution({
   const [needsAgeFilter, setNeedsAgeFilter] = useState('')
   const [needsSort, setNeedsSort] = useState<'recent' | 'club'>('recent')
 
+  // Última actividad de negociación por jugador (semáforo de olvido, como en Firmar):
+  // verde <15 días, ámbar 15-30, rojo >30, gris sin actividad ninguna
+  const lastNegActivity = useMemo(() => {
+    const m: Record<string, string> = {}
+    negotiations.forEach(n => {
+      const dates = [n.updatedAt, n.createdAt, ...(n.updates ?? []).map(u => u.date)].filter(Boolean) as string[]
+      const last = dates.sort().pop()
+      if (last && (!m[n.playerId] || last > m[n.playerId])) m[n.playerId] = last
+    })
+    return m
+  }, [negotiations])
+
+  const activityChip = (playerId: string) => {
+    const last = lastNegActivity[playerId]
+    if (!last) return <span className="text-[10.5px] text-slate-300">sin mov.</span>
+    const days = Math.floor((Date.now() - new Date(last).getTime()) / 86400000)
+    const cls = days > 30 ? 'text-red-600' : days > 14 ? 'text-amber-600' : 'text-emerald-600'
+    const dot = days > 30 ? 'bg-red-500' : days > 14 ? 'bg-amber-400' : 'bg-emerald-500'
+    const label = days === 0 ? 'hoy' : days === 1 ? 'ayer' : `${days}d`
+    return (
+      <span className={`inline-flex items-center gap-1 text-[10.5px] font-medium whitespace-nowrap ${cls}`} title={`Último movimiento de negociación hace ${days} día${days !== 1 ? 's' : ''}`}>
+        <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
+        {label}
+      </span>
+    )
+  }
+
   const seasonEntries = entries.filter(e => e.season === season)
 
   const filteredEntries = useMemo(() => {
@@ -775,7 +802,7 @@ export function Distribution({
         </div>
 
         {/* Level 1: main sections */}
-        <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center border-t border-slate-100 overflow-x-auto scrollbar-none">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 hidden sm:flex items-center border-t border-slate-100 overflow-x-auto scrollbar-none">
           <button
             onClick={onBack}
             className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
@@ -1063,6 +1090,7 @@ export function Distribution({
                                   {player.hiddenFromManagement && (
                                     <span className="text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full font-medium flex-shrink-0">Interm.</span>
                                   )}
+                                  <span className="ml-auto flex-shrink-0">{activityChip(entry.playerId)}</span>
                                 </div>
                               </td>
                               <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{player.positions[0] ?? '—'}</td>
@@ -1191,6 +1219,7 @@ export function Distribution({
                                       {STATUS_CONFIG[topStatus].label}
                                     </span>
                                   )}
+                                  {activityChip(entry.playerId)}
                                   {negCount > 0 && (
                                     <span className="text-xs text-slate-400">{negCount} club{negCount !== 1 ? 's' : ''}</span>
                                   )}

@@ -466,6 +466,15 @@ function RespondWithInformeModal({
           </FormRow>
 
           <FormRow label="Informe *">
+              {!text.trim() && (
+                <button
+                  type="button"
+                  onClick={() => setText('FÍSICO:\n\nTÉCNICA:\n\nTÁCTICA:\n\nMENTALIDAD:\n\nCONTEXTO (equipo, rol, rival):\n\nCONCLUSIÓN:\n')}
+                  className="text-[11px] text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  📋 Usar plantilla
+                </button>
+              )}
             <textarea
               value={text}
               onChange={e => setText(e.target.value)}
@@ -514,11 +523,13 @@ function RespondWithInformeModal({
 }
 
 // ── Modal de jugador de Boulema (mantenimiento light) ────────
-function BoulemaPlayerModal({ profiles, initial, onClose, onSave }: {
+function BoulemaPlayerModal({ profiles, initial, onClose, onSave, promote }: {
   profiles: Profile[]
   initial?: BoulemaPlayer
   onClose: () => void
   onSave: (p: Omit<BoulemaPlayer, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>
+  /** Pasar el jugador a Captación (solo en edición) */
+  promote?: { exists: boolean; run: () => Promise<void> }
 }) {
   const [fullName, setFullName] = useState(initial?.fullName ?? '')
   const [birthYear, setBirthYear] = useState(initial?.birthYear ?? '')
@@ -608,7 +619,21 @@ function BoulemaPlayerModal({ profiles, initial, onClose, onSave }: {
             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} className={`mt-1 ${INPUT} resize-y`} />
           </div>
         </div>
-        <div className="mt-5 flex justify-end gap-2">
+        <div className="mt-5 flex items-center gap-2">
+          {promote && (
+            promote.exists ? (
+              <span className="text-[11px] text-green-600 font-medium">Ya en Captación ✓</span>
+            ) : (
+              <button
+                onClick={() => void promote.run()}
+                className="px-2.5 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 text-[11px] font-semibold hover:bg-blue-100 transition-colors"
+                title="Crea su ficha en Captación (scouting) con estos datos"
+              >
+                → Pasar a Captación
+              </button>
+            )
+          )}
+          <span className="flex-1" />
           <button onClick={onClose} className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:bg-slate-100 transition-colors">Cancelar</button>
           <button onClick={() => void save()} disabled={!canSave} className="px-4 py-1.5 rounded-lg bg-primary text-white text-xs font-medium disabled:opacity-40 hover:bg-primary/90 transition-colors">
             {saving ? 'Guardando…' : initial ? 'Guardar' : 'Añadir'}
@@ -710,7 +735,7 @@ export function Boulema({
         </div>
 
         {/* Level 1: main sections */}
-        <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center border-t border-slate-100 overflow-x-auto scrollbar-none">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 hidden sm:flex items-center border-t border-slate-100 overflow-x-auto scrollbar-none">
           <button
             onClick={() => onGoToSection('tareas')}
             className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
@@ -1238,6 +1263,26 @@ export function Boulema({
         <BoulemaPlayerModal
           profiles={profiles}
           initial={editingMantPlayer}
+          promote={{
+            exists: scoutingPlayers.some(sp => sp.fullName.toLowerCase().trim() === editingMantPlayer.fullName.toLowerCase().trim()),
+            run: async () => {
+              try {
+                const saved = await db.createScoutingPlayer({
+                  fullName: editingMantPlayer.fullName,
+                  birthdate: editingMantPlayer.birthYear ? `${editingMantPlayer.birthYear}-02-28` : undefined,
+                  position1: editingMantPlayer.position,
+                  team: editingMantPlayer.team,
+                  nationality: editingMantPlayer.nationality,
+                  comentarios: editingMantPlayer.notes ? `Origen Boulema · ${editingMantPlayer.notes}` : 'Origen: Boulema',
+                })
+                onAddPlayer(saved)
+                setEditingMantPlayer(null)
+                showToast(`${editingMantPlayer.fullName} creado en Captación`)
+              } catch {
+                showToast('No se pudo crear en Captación', 'error')
+              }
+            },
+          }}
           onClose={() => setEditingMantPlayer(null)}
           onSave={async (p) => {
             try { await onUpdateBoulemaPlayer({ ...editingMantPlayer, ...p }); setEditingMantPlayer(null); showToast('Jugador actualizado') }
