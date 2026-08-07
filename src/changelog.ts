@@ -28,6 +28,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Avisos de contratos de representación que expiran, deshacer acciones, indicador de guardado y más',
       'Los jugadores ya cerrados desaparecen de clubes, pipeline y ofrecimientos (sus datos siguen en su ficha)',
       'La app avisa en la home cuando hay una versión nueva, con este panel de novedades',
+      'Botón «Añadir a Firmar» en la ficha de cada jugador de Captación: crea su tarjeta en el pipeline ya vinculada',
     ],
   },
 ]
