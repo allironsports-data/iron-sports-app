@@ -26,6 +26,8 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Estado del equipo automático: se muestra la tarea en curso de cada uno, sin actualizar nada a mano',
       'Enlaces compartibles: copia la URL de cualquier ficha y mándala por WhatsApp',
       'Avisos de contratos de representación que expiran, deshacer acciones, indicador de guardado y más',
+      'Los jugadores ya cerrados desaparecen de clubes, pipeline y ofrecimientos (sus datos siguen en su ficha)',
+      'La app avisa en la home cuando hay una versión nueva, con este panel de novedades',
     ],
   },
 ]

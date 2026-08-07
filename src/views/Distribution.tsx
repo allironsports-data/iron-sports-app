@@ -191,13 +191,24 @@ interface Props {
 // ── main component ────────────────────────────────────────────
 
 export function Distribution({
-  players, clubs, entries, negotiations, currentProfile, profiles,
+  players, clubs, entries, negotiations: negotiationsAll, currentProfile, profiles,
   onBack, onGoToCaptacion, onGoToBoulema, onLogout, onAdmin, onSelectPlayer, onSelectClub,
   onCreateClub, onUpdateClub, onDeleteClub,
   onCreateEntry, onUpdateEntry, onDeleteEntry,
   onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation,
   onCreatePlayer, splitActive = false, activeClubId,
 }: Props) {
+  // ── Jugador CERRADO = fuera de la UX de Distribución ────────
+  // Si un jugador ya firmó en algún club (alguna negociación «cerrado»),
+  // sus negociaciones abiertas en OTROS clubes están muertas: se ocultan
+  // de pipeline, clubes, solicitudes y contadores. Los datos no se borran
+  // (siguen en la BBDD y en la ficha del jugador); la negociación «cerrado»
+  // sí se conserva como historial.
+  const negotiations = useMemo(() => {
+    const closed = new Set(negotiationsAll.filter(n => n.status === 'cerrado').map(n => n.playerId))
+    return negotiationsAll.filter(n => n.status === 'cerrado' || !closed.has(n.playerId))
+  }, [negotiationsAll])
+
   // Rejilla de clubes: en pantalla partida usamos menos columnas
   const clubGridCls = splitActive
     ? 'grid grid-cols-1 2xl:grid-cols-2 gap-1.5'

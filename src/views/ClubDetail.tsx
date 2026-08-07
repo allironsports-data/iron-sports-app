@@ -114,7 +114,7 @@ function Avatar({ name, photo, size = 'sm' }: { name: string; photo?: string; si
 // ── main component ────────────────────────────────────────────
 
 export function ClubDetail({
-  club, players, entries, negotiations, currentProfile, profiles,
+  club, players, entries, negotiations: negotiationsAll, currentProfile, profiles,
   onBack, onLogout, onAdmin, onSelectPlayer,
   onUpdateClub, onDeleteClub,
   onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation,
@@ -139,6 +139,13 @@ export function ClubDetail({
   const { toasts, showToast, dismissToast } = useToast()
   const [updatingNegId, setUpdatingNegId] = useState<string | null>(null)
   const [confirmDeleteNeedIdx, setConfirmDeleteNeedIdx] = useState<number | null>(null)
+
+  // Jugadores ya cerrados en algún club: sus negociaciones abiertas aquí
+  // están muertas y no se muestran (quedan como datos en su ficha).
+  const negotiations = useMemo(() => {
+    const closed = new Set(negotiationsAll.filter(n => n.status === 'cerrado').map(n => n.playerId))
+    return negotiationsAll.filter(n => n.status === 'cerrado' || !closed.has(n.playerId))
+  }, [negotiationsAll])
 
   const clubNegs = negotiations.filter(n => n.clubId === club.id)
 
