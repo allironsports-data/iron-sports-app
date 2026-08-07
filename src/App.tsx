@@ -6,6 +6,7 @@ import { supabase } from './lib/supabase'
 import type { Profile } from './contexts/AuthContext'
 import { LoginScreen } from './views/LoginScreen'
 import { SavingIndicator, BottomNav, GlobalSearch, SystemNotifPrompt, fireSystemNotification } from './components/GlobalExtras'
+import { BUILD_ID } from './changelog'
 import type { ReactNode } from 'react'
 import type { Club, DistributionEntry, ClubNegotiation } from './types'
 
@@ -74,6 +75,7 @@ export default function App() {
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [searchOpen, setSearchOpen] = useState(false)
   const [phase2Loading, setPhase2Loading] = useState(false)
+  const [updateAvailable, setUpdateAvailable] = useState(false)
 
   // Distribution state
   const [clubs, setClubs] = useState<Club[]>([])
@@ -98,6 +100,35 @@ export default function App() {
   const [boulemaPeticiones, setBoulemaPeticiones] = useState<BoulemaPeticion[]>([])
   const [firmasEntries, setFirmasEntries] = useState<FirmasEntry[]>([])
   const [boulemaPlayers, setBoulemaPlayers] = useState<BoulemaPlayer[]>([])
+
+  // ── Detector de versión nueva de la app ───────────────────
+  // Compara el BUILD_ID compilado con /version.json (que cambia en cada
+  // deploy). Comprueba cada 5 min y al volver a la pestaña.
+  const updateNotifiedRef = useRef(false)
+  useEffect(() => {
+    if (BUILD_ID === 'dev') return
+    let cancelled = false
+    const check = async () => {
+      try {
+        const r = await fetch(`/version.json?t=${Date.now()}`, { cache: 'no-store' })
+        if (!r.ok) return
+        const j = (await r.json()) as { buildId?: string }
+        if (!cancelled && j.buildId && j.buildId !== BUILD_ID) {
+          setUpdateAvailable(true)
+          if (!updateNotifiedRef.current) {
+            updateNotifiedRef.current = true
+            addNotification('🚀 Hay una versión nueva de la app — recarga para ver las novedades', 'task_new')
+          }
+        }
+      } catch { /* sin red o respuesta no JSON: se reintenta en el siguiente ciclo */ }
+    }
+    const iv = setInterval(check, 5 * 60 * 1000)
+    const onVis = () => { if (document.visibilityState === 'visible') void check() }
+    document.addEventListener('visibilitychange', onVis)
+    const initial = setTimeout(check, 60 * 1000)
+    return () => { cancelled = true; clearInterval(iv); clearTimeout(initial); document.removeEventListener('visibilitychange', onVis) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // ── Búsqueda global: ⌘K / Ctrl+K ──────────────────────────
   useEffect(() => {
@@ -1053,6 +1084,7 @@ export default function App() {
       onAddScoutingMatch={handleAddScoutingMatch}
       firmasEntries={firmasEntries}
       onOpenFirmar={(id) => { setCaptacionOpenFirmasId(id); setMainSection('captacion') }}
+      updateAvailable={updateAvailable}
     />
   )
 }

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { TaskDetailPanel } from "../components/TaskDetailPanel";
+import { BUILD_ID, CHANGELOG } from "../changelog";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { EmptyState } from "../components/EmptyState";
 import { ToastStack } from "../components/ToastStack";
@@ -53,6 +54,8 @@ interface Props {
   /** Pipeline de firmas — para el aviso de próximas acciones de hoy */
   firmasEntries?: FirmasEntry[];
   onOpenFirmar?: (entryId: string) => void;
+  /** true si hay una versión nueva de la app desplegada (detectado en App.tsx) */
+  updateAvailable?: boolean;
   players: Player[];
   tasks: Task[];
   profiles: Profile[];
@@ -112,6 +115,7 @@ export function Dashboard({
   onViewChange,
   firmasEntries,
   onOpenFirmar,
+  updateAvailable,
   players,
   tasks,
   profiles,
@@ -493,6 +497,12 @@ export function Dashboard({
   // ── Firmar: iconos por tipo de acción (coherentes con el historial) ──
   const FIRMAS_KIND_ICON: Record<string, string> = { llamada: "📞", whatsapp: "💬", reunion: "🤝", entorno: "👪", nota: "📝" };
 
+  // ── Novedades de la app: visibles hasta descartarlas (por build) ──
+  const [showChangelog, setShowChangelog] = useState<boolean>(() => {
+    try { return BUILD_ID !== 'dev' && localStorage.getItem('ais_seen_build') !== BUILD_ID && CHANGELOG.length > 0 } catch { return false }
+  });
+  const [changelogOpen, setChangelogOpen] = useState(false);
+
   // ── Contratos de representación que expiran (≤6 meses, o vencidos hace <30 días) ──
   const [showRepContracts, setShowRepContracts] = useState(false);
   const repExpiring = players
@@ -836,6 +846,61 @@ export function Dashboard({
                   }).join(", ")}
                 </span>
               </div>
+            )}
+          </div>
+        )}
+
+        {/* Versión nueva desplegada: recargar para actualizar */}
+        {updateAvailable && (
+          <div className="mb-4 flex items-center gap-3 bg-gradient-to-r from-blue-600 to-violet-600 text-white rounded-lg px-4 py-3 shadow-sm">
+            <span className="text-base flex-shrink-0">🚀</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold leading-tight">Hay una versión nueva de la app</p>
+              <p className="text-[11px] opacity-80">Actualiza para ver las últimas funciones y correcciones</p>
+            </div>
+            <button
+              onClick={() => window.location.reload()}
+              className="flex-shrink-0 px-3.5 py-1.5 rounded-lg bg-white text-blue-700 text-xs font-bold hover:bg-blue-50 transition-colors"
+            >
+              Actualizar ahora
+            </button>
+          </div>
+        )}
+
+        {/* Novedades tras actualizar (descartable) */}
+        {showChangelog && !updateAvailable && (
+          <div className="mb-4 bg-violet-50 border border-violet-200 rounded-lg overflow-hidden">
+            <div className="flex items-center gap-2 p-3">
+              <span className="text-sm flex-shrink-0">🆕</span>
+              <button onClick={() => setChangelogOpen(v => !v)} className="flex-1 text-left">
+                <span className="text-sm font-semibold text-violet-800">Novedades de la app</span>
+                <span className="hidden sm:inline text-xs text-violet-600/70 ml-2">
+                  {new Date(CHANGELOG[0].date).toLocaleDateString("es-ES", { day: "numeric", month: "long" })} · {CHANGELOG[0].items.length} cambio{CHANGELOG[0].items.length !== 1 ? "s" : ""}
+                </span>
+              </button>
+              <button onClick={() => setChangelogOpen(v => !v)} aria-label="Ver novedades" className="p-1 text-violet-600">
+                <ChevronDown className={`w-4 h-4 transition-transform ${changelogOpen ? "rotate-180" : ""}`} />
+              </button>
+              <button
+                onClick={() => {
+                  try { localStorage.setItem("ais_seen_build", BUILD_ID) } catch { /* modo privado */ }
+                  setShowChangelog(false);
+                }}
+                aria-label="Descartar novedades"
+                className="p-1 text-violet-400 hover:text-violet-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {changelogOpen && (
+              <ul className="border-t border-violet-200 px-4 py-2.5 space-y-1.5">
+                {CHANGELOG[0].items.map((item, i) => (
+                  <li key={i} className="flex items-start gap-2 text-xs text-slate-700">
+                    <span className="text-violet-500 flex-shrink-0 mt-0.5">•</span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
         )}
