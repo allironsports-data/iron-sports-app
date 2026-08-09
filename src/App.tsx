@@ -101,6 +101,11 @@ export default function App() {
   const [firmasEntries, setFirmasEntries] = useState<FirmasEntry[]>([])
   const [boulemaPlayers, setBoulemaPlayers] = useState<BoulemaPlayer[]>([])
 
+  // Guard anti-bucle de la sincronización Firmar ⇄ Tareas.
+  // DEBE declararse aquí arriba: es un hook y no puede ir después de los
+  // returns tempranos (loading/login) — romperlo deja la app en blanco.
+  const firmasSyncGuard = useRef(false)
+
   // ── Detector de versión nueva de la app ───────────────────
   // Compara el BUILD_ID compilado con /version.json (que cambia en cada
   // deploy). Comprueba cada 5 min y al volver a la pestaña.
@@ -728,7 +733,6 @@ export default function App() {
   // La tarea vive en el tablero (asignada al encargado, fecha límite =
   // fecha de la acción) y se sincroniza en ambos sentidos.
   const FIRMAS_KIND_ICON: Record<string, string> = { llamada: '📞', whatsapp: '💬', reunion: '🤝', entorno: '👪', nota: '📝' }
-  const firmasSyncGuard = useRef(false)
 
   const firmasActionTaskDraft = (f: FirmasEntry): Task => ({
     id: 'tmp',
