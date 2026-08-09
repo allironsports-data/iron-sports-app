@@ -565,6 +565,33 @@ export default function App() {
       : { ...updated, completedAt: undefined }
     await db.updateTask(withCompleted)
     setTasks((prev) => prev.map((t) => (t.id === withCompleted.id ? withCompleted : t)))
+
+    // Firmar ⇄ Tareas: si esta tarea era la próxima acción de un jugador del
+    // pipeline y se acaba de completar, se marca hecha también en Firmar
+    // (el guard evita el bucle cuando el origen es la propia sincronización).
+    if (!firmasSyncGuard.current && withCompleted.status === 'completada' && previous?.status !== 'completada') {
+      const fe = firmasEntries.find(f => f.nextActionTaskId === withCompleted.id && (f.nextAction || f.nextActionDate))
+      if (fe && profile) {
+        const log = {
+          id: crypto.randomUUID(),
+          text: `✓ Hecho: ${fe.nextAction ?? 'próxima acción'}`,
+          date: new Date().toISOString(),
+          author: profile.name,
+          authorId: profile.id,
+          kind: (fe.nextActionKind ?? 'nota') as NonNullable<FirmasEntry['comments'][number]['kind']>,
+        }
+        const cleared: FirmasEntry = {
+          ...fe,
+          nextAction: undefined, nextActionDate: undefined, nextActionAssignee: undefined,
+          nextActionKind: undefined, nextActionTaskId: undefined,
+          comments: [...fe.comments, log],
+        }
+        try {
+          await db.updateFirmasEntry(cleared)
+          setFirmasEntries(prev => prev.map(x => x.id === cleared.id ? cleared : x))
+        } catch (err) { console.error(err) }
+      }
+    }
   }
 
   const handleDeleteTask = async (taskId: string) => {
@@ -697,6 +724,95 @@ export default function App() {
     setMatchPlayers(prev => prev.filter(x => !(x.matchId === matchId && x.playerId === playerId)))
   }
 
+  // ── Firmar ⇄ Tareas: cada próxima acción genera una tarea real ──
+  // La tarea vive en el tablero (asignada al encargado, fecha límite =
+  // fecha de la acción) y se sincroniza en ambos sentidos.
+  const FIRMAS_KIND_ICON: Record<string, string> = { llamada: '📞', whatsapp: '💬', reunion: '🤝', entorno: '👪', nota: '📝' }
+  const firmasSyncGuard = useRef(false)
+
+  const firmasActionTaskDraft = (f: FirmasEntry): Task => ({
+    id: 'tmp',
+    playerId: 'general',
+    title: `${FIRMAS_KIND_ICON[f.nextActionKind ?? ''] ?? '📌'} ${f.nextAction ?? 'Próxima acción'} · ${f.playerName}`,
+    description: `Próxima acción del pipeline Firmar — ${f.playerName} (${f.zone}). Al completarla aquí se marca hecha en Firmar, y viceversa.`,
+    assigneeId: f.nextActionAssignee ?? '',
+    status: 'pendiente',
+    priority: 'media',
+    label: 'Scouting',
+    dueDate: f.nextActionDate,
+    createdAt: new Date().toISOString(),
+    comments: [],
+  })
+
+  /** Crea/actualiza/completa la tarea vinculada según el cambio de la acción */
+  const syncFirmasActionTask = async (prev: FirmasEntry | undefined, next: FirmasEntry): Promise<FirmasEntry> => {
+    const has = !!(next.nextAction || next.nextActionDate)
+    const had = !!(prev?.nextAction || prev?.nextActionDate)
+    const changed = !prev
+      ? has
+      : prev.nextAction !== next.nextAction || prev.nextActionDate !== next.nextActionDate ||
+        prev.nextActionAssignee !== next.nextActionAssignee || prev.nextActionKind !== next.nextActionKind
+    const taskId = next.nextActionTaskId
+    const existing = taskId ? tasks.find(t => t.id === taskId) : undefined
+
+    firmasSyncGuard.current = true
+    try {
+      if (has && (changed || !existing)) {
+        const draft = firmasActionTaskDraft(next)
+        if (existing) {
+          await handleUpdateTask({
+            ...existing,
+            title: draft.title,
+            description: draft.description,
+            assigneeId: draft.assigneeId || existing.assigneeId,
+            dueDate: draft.dueDate,
+            label: existing.label ?? 'Scouting',
+            status: existing.status === 'completada' ? 'pendiente' : existing.status,
+          })
+          return next
+        }
+        const saved = await handleAddTask(draft)
+        return { ...next, nextActionTaskId: saved.id }
+      }
+      if (!has && had && existing && existing.status !== 'completada') {
+        // acción hecha o retirada desde Firmar → la tarea se completa
+        await handleUpdateTask({ ...existing, status: 'completada' })
+        return { ...next, nextActionTaskId: undefined }
+      }
+      if (!has && taskId) return { ...next, nextActionTaskId: undefined }
+      return next
+    } catch (err) {
+      console.error('No se pudo sincronizar la tarea de la próxima acción:', err)
+      return next
+    } finally {
+      firmasSyncGuard.current = false
+    }
+  }
+
+  /** Crea tareas para las acciones ya existentes que aún no tienen (backfill de la Agenda) */
+  const handleSyncFirmasActionTasks = async (): Promise<number> => {
+    const pending = firmasEntries.filter(f =>
+      f.status !== 'firmado' && (f.nextAction || f.nextActionDate) &&
+      (!f.nextActionTaskId || !tasks.some(t => t.id === f.nextActionTaskId))
+    )
+    let n = 0
+    for (const f of pending) {
+      try {
+        firmasSyncGuard.current = true
+        const saved = await handleAddTask(firmasActionTaskDraft(f))
+        firmasSyncGuard.current = false
+        const updated = { ...f, nextActionTaskId: saved.id }
+        await db.updateFirmasEntry(updated)
+        setFirmasEntries(prev => prev.map(x => x.id === f.id ? updated : x))
+        n++
+      } catch (err) {
+        firmasSyncGuard.current = false
+        console.error(err)
+      }
+    }
+    return n
+  }
+
   // ── Captación · Firmar (pipeline de firmas) ─────────────────
   const handleCreateFirmasEntry = async (e: Omit<FirmasEntry, 'id' | 'createdAt' | 'updatedAt'>) => {
     const saved = await db.createFirmasEntry(e)
@@ -704,8 +820,10 @@ export default function App() {
     return saved
   }
   const handleUpdateFirmasEntry = async (e: FirmasEntry) => {
-    await db.updateFirmasEntry(e)
-    setFirmasEntries(prev => prev.map(x => x.id === e.id ? e : x))
+    const prev = firmasEntries.find(x => x.id === e.id)
+    const final = await syncFirmasActionTask(prev, e)
+    await db.updateFirmasEntry(final)
+    setFirmasEntries(prevList => prevList.map(x => x.id === final.id ? final : x))
   }
   const handleDeleteFirmasEntry = async (id: string) => {
     await db.deleteFirmasEntry(id)
@@ -989,6 +1107,7 @@ export default function App() {
         onCreatePlayer={handleAddPlayer}
         boulemaPeticiones={boulemaPeticiones}
         firmasEntries={firmasEntries}
+        onSyncFirmasActionTasks={handleSyncFirmasActionTasks}
         onCreateFirmasEntry={handleCreateFirmasEntry}
         onUpdateFirmasEntry={handleUpdateFirmasEntry}
         onDeleteFirmasEntry={handleDeleteFirmasEntry}

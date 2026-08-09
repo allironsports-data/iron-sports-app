@@ -385,6 +385,7 @@ export interface FirmasEntry {
   nextAction?: string          // próxima acción ("Llamar", "Reunión"…)
   nextActionKind?: string      // tipo: llamada/whatsapp/reunion/entorno/nota — coherente con el historial
   knownTeam?: string           // último club conocido del vinculado (para avisar de cambios de club)
+  nextActionTaskId?: string    // tarea real del tablero generada por la próxima acción (sync bidireccional)
   nextActionDate?: string      // "YYYY-MM-DD"
   nextActionAssignee?: string  // profiles.id
   signedAt?: string            // ISO — cuándo pasó a «firmado»

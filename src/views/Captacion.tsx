@@ -1713,7 +1713,7 @@ function FirmasHoverCard({ entry, sp, reports, profiles, pos }: {
 
 function FirmasTab({
   entries, profiles, currentProfile, scoutingPlayers, scoutingReports, scoutingMatches,
-  matchPlayers, boulemaPeticiones, players, onCreatePlayer,
+  matchPlayers, boulemaPeticiones, players, onCreatePlayer, onSyncActionTasks,
   onCreate, onUpdate, onDelete, onOpenScoutingPlayer, showToast, headerHeight,
   openEntryId, onOpenEntryConsumed,
 }: {
@@ -1727,6 +1727,7 @@ function FirmasTab({
   boulemaPeticiones: BoulemaPeticion[]
   players: Player[]
   onCreatePlayer: (p: Player) => Promise<Player>
+  onSyncActionTasks?: () => Promise<number>
   onCreate: (e: Omit<FirmasEntry, 'id' | 'createdAt' | 'updatedAt'>) => Promise<FirmasEntry>
   onUpdate: (e: FirmasEntry) => Promise<void>
   onDelete: (id: string) => Promise<void>
@@ -1778,6 +1779,7 @@ function FirmasTab({
   const [showAlerts, setShowAlerts] = useState(false)
   const [showAgenda, setShowAgenda] = useState(false)
   const [showResumen, setShowResumen] = useState(false)
+  const [syncingTasks, setSyncingTasks] = useState(false)
   const [dragOverCol, setDragOverCol] = useState<FirmasStatus | null>(null)
   const [swipedId, setSwipedId] = useState<string | null>(null)
   const touchStart = React.useRef<{ x: number; y: number } | null>(null)
@@ -2298,6 +2300,27 @@ function FirmasTab({
                 {agenda.some(e => (e.nextActionDate ?? '') < todayISO()) && (
                   <span className="text-[10.5px] font-semibold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600">
                     {agenda.filter(e => (e.nextActionDate ?? '') < todayISO()).length} vencida{agenda.filter(e => (e.nextActionDate ?? '') < todayISO()).length !== 1 ? 's' : ''}
+                  </span>
+                )}
+                {onSyncActionTasks && agenda.some(e => !e.nextActionTaskId) && (
+                  <span
+                    onClick={async (ev) => {
+                      ev.stopPropagation()
+                      if (syncingTasks) return
+                      setSyncingTasks(true)
+                      try {
+                        const n = await onSyncActionTasks()
+                        showToast(n > 0 ? `${n} tarea${n !== 1 ? 's' : ''} creada${n !== 1 ? 's' : ''} en el tablero` : 'Todas las acciones ya tienen tarea', n > 0 ? 'success' : 'info')
+                      } catch {
+                        showToast('No se pudieron crear las tareas', 'error')
+                      } finally {
+                        setSyncingTasks(false)
+                      }
+                    }}
+                    className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-blue-600 text-white hover:bg-blue-700 cursor-pointer transition-colors"
+                    title="Crea una tarea en el tablero por cada acción que aún no la tenga (asignada a su encargado, con la fecha como límite)"
+                  >
+                    {syncingTasks ? 'Creando…' : `⇪ Crear tareas (${agenda.filter(e => !e.nextActionTaskId).length})`}
                   </span>
                 )}
                 <ChevronDown className={`w-4 h-4 text-blue-600 ml-auto flex-shrink-0 transition-transform ${showAgenda ? 'rotate-180' : ''}`} />
@@ -3698,6 +3721,8 @@ interface Props {
   players: Player[]
   onCreatePlayer: (p: Player) => Promise<Player>
   boulemaPeticiones: BoulemaPeticion[]
+  /** Crear tareas del tablero para las próximas acciones que aún no tienen (backfill) */
+  onSyncFirmasActionTasks?: () => Promise<number>
   firmasEntries: FirmasEntry[]
   onCreateFirmasEntry: (e: Omit<FirmasEntry, 'id' | 'createdAt' | 'updatedAt'>) => Promise<FirmasEntry>
   onUpdateFirmasEntry: (e: FirmasEntry) => Promise<void>
@@ -3806,6 +3831,7 @@ export function Captacion({
   players,
   onCreatePlayer,
   boulemaPeticiones,
+  onSyncFirmasActionTasks,
   firmasEntries,
   onCreateFirmasEntry,
   onUpdateFirmasEntry,
@@ -4745,6 +4771,7 @@ export function Captacion({
           boulemaPeticiones={boulemaPeticiones}
           players={players}
           onCreatePlayer={onCreatePlayer}
+          onSyncActionTasks={onSyncFirmasActionTasks}
           openEntryId={openFirmasEntryId ?? firmasJumpId}
           onOpenEntryConsumed={() => { onOpenFirmasEntryConsumed?.(); setFirmasJumpId(null) }}
           onCreate={onCreateFirmasEntry}

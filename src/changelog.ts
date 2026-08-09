@@ -16,6 +16,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-08-07',
+    items: [
+      'Las próximas acciones de Firmar crean una tarea real en el tablero: asignada a su encargado y con la fecha como límite',
+      'Sincronización en ambos sentidos: completa la tarea y se marca hecha en Firmar, o al revés',
+      'Botón «Crear tareas» en la Agenda de Firmar para convertir de golpe las acciones que ya tenías',
+    ],
+  },
+  {
     date: '2026-07-31',
     items: [
       'Nueva pestaña Captación → Firmar: el pipeline de captación activa (ex-Trello) con zonas, estatus, próximas acciones, avisos y agenda',
