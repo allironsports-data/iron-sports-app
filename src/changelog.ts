@@ -16,6 +16,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-08-16',
+    items: [
+      'Ficha de partido: haz clic en cualquier partido de Captación y se abre una ventana con sus jugadores, informes y scouts',
+      'Un partido puede tener varios scouts asignados, y cada uno marca su parte como vista por separado',
+      'Varios informes del mismo jugador en el mismo partido: cada scout escribe el suyo (antes solo cabía uno)',
+      'Los jugadores sugeridos al vincular ya no mezclan equipos parecidos (Real Madrid / Atlético Madrid / Atlético Baleares)',
+      'La lista de sugeridos ya no se corta en 16: salen todos, y el buscador muestra hasta 60 resultados',
+      'Tarjetas de club en Distribución: se acabó el texto montado sobre los avatares',
+    ],
+  },
+  {
     date: '2026-08-07',
     items: [
       'Las próximas acciones de Firmar crean una tarea real en el tablero: asignada a su encargado y con la fecha como límite',

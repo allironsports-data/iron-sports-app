@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, lazy } from 'react'
 import { useAuth } from './contexts/AuthContext'
-import type { Player, Task, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion, MemberStatus, Postpartido, FirmasEntry, BoulemaPlayer } from './types'
+import type { Player, Task, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchScout, BoulemaPeticion, MemberStatus, Postpartido, FirmasEntry, BoulemaPlayer } from './types'
 import * as db from './lib/db'
 import { supabase } from './lib/supabase'
 import type { Profile } from './contexts/AuthContext'
@@ -97,6 +97,7 @@ export default function App() {
   const [scoutingReports, setScoutingReports] = useState<ScoutingReport[]>([])
   const [scoutingMatches, setScoutingMatches] = useState<ScoutingMatch[]>([])
   const [matchPlayers, setMatchPlayers] = useState<ScoutingMatchPlayer[]>([])
+  const [matchScouts, setMatchScouts] = useState<ScoutingMatchScout[]>([])
   const [boulemaPeticiones, setBoulemaPeticiones] = useState<BoulemaPeticion[]>([])
   const [firmasEntries, setFirmasEntries] = useState<FirmasEntry[]>([])
   const [boulemaPlayers, setBoulemaPlayers] = useState<BoulemaPlayer[]>([])
@@ -250,12 +251,13 @@ export default function App() {
         db.fetchScoutingReports(),
         db.fetchScoutingMatches(),
         db.fetchMatchPlayers(),
+        db.fetchMatchScouts().catch(() => [] as ScoutingMatchScout[]),
         db.fetchBoulemaPeticiones().catch(() => [] as BoulemaPeticion[]),
         db.fetchMemberStatuses().catch(() => [] as MemberStatus[]),
         db.fetchPostpartidos().catch(() => [] as Postpartido[]),
         db.fetchFirmasEntries().catch(() => [] as FirmasEntry[]),
         db.fetchBoulemaPlayers().catch(() => [] as BoulemaPlayer[]),
-      ]).then(([cl, de, ng, sp, sr, sm, mp, bp, ms, pp, fe, bpl]) => {
+      ]).then(([cl, de, ng, sp, sr, sm, mp, msc, bp, ms, pp, fe, bpl]) => {
         if (cancelled) return
         setClubs(cl as Club[])
         setDistEntries(de as DistributionEntry[])
@@ -264,6 +266,7 @@ export default function App() {
         setScoutingReports(sr as ScoutingReport[])
         setScoutingMatches(sm as ScoutingMatch[])
         setMatchPlayers(mp as ScoutingMatchPlayer[])
+        setMatchScouts(msc as ScoutingMatchScout[])
         setBoulemaPeticiones(bp as BoulemaPeticion[])
         setMemberStatuses(ms as MemberStatus[])
         setPostpartidos(pp as Postpartido[])
@@ -719,6 +722,7 @@ export default function App() {
   const handleDeleteScoutingMatch = (id: string) => {
     setScoutingMatches(prev => prev.filter(x => x.id !== id))
     setMatchPlayers(prev => prev.filter(mp => mp.matchId !== id))
+    setMatchScouts(prev => prev.filter(ms => ms.matchId !== id))
   }
   const handleAddMatchPlayer = async (matchId: string, playerId: string) => {
     const mp = await db.addMatchPlayer(matchId, playerId)
@@ -727,6 +731,19 @@ export default function App() {
   const handleRemoveMatchPlayer = async (matchId: string, playerId: string) => {
     await db.removeMatchPlayer(matchId, playerId)
     setMatchPlayers(prev => prev.filter(x => !(x.matchId === matchId && x.playerId === playerId)))
+  }
+  // ── Varios scouts por partido (scouting_match_scouts) ──
+  const handleAddMatchScout = async (matchId: string, scout: string) => {
+    const row = await db.addMatchScout(matchId, scout)
+    setMatchScouts(prev => prev.some(x => x.matchId === matchId && x.scout === scout) ? prev : [...prev, row])
+  }
+  const handleRemoveMatchScout = async (matchId: string, scout: string) => {
+    await db.removeMatchScout(matchId, scout)
+    setMatchScouts(prev => prev.filter(x => !(x.matchId === matchId && x.scout === scout)))
+  }
+  const handleSetMatchScoutStatus = async (matchId: string, scout: string, status: 'pendiente' | 'visto') => {
+    await db.setMatchScoutStatus(matchId, scout, status)
+    setMatchScouts(prev => prev.map(x => x.matchId === matchId && x.scout === scout ? { ...x, status } : x))
   }
 
   // ── Firmar ⇄ Tareas: cada próxima acción genera una tarea real ──
@@ -1103,6 +1120,10 @@ export default function App() {
         matchPlayers={matchPlayers}
         onAddMatchPlayer={handleAddMatchPlayer}
         onRemoveMatchPlayer={handleRemoveMatchPlayer}
+        matchScouts={matchScouts}
+        onAddMatchScout={handleAddMatchScout}
+        onRemoveMatchScout={handleRemoveMatchScout}
+        onSetMatchScoutStatus={handleSetMatchScoutStatus}
         openPlayerId={captacionOpenPlayerId}
         onOpenPlayerConsumed={() => setCaptacionOpenPlayerId(null)}
         openFirmasEntryId={captacionOpenFirmasId}

@@ -7,7 +7,7 @@ import {
   PenLine, MapPin, MessageSquare, ExternalLink, LayoutGrid,
 } from 'lucide-react'
 import logoImg from '../assets/logo.jpeg'
-import type { Player, ScoutingPlayer, ScoutingReport, ScoutingAssessment, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion, FirmasEntry, FirmasStatus, FirmasComment } from '../types'
+import type { Player, ScoutingPlayer, ScoutingReport, ScoutingAssessment, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchScout, BoulemaPeticion, FirmasEntry, FirmasStatus, FirmasComment } from '../types'
 import type { Profile } from '../contexts/AuthContext'
 import * as db from '../lib/db'
 import { ConfirmModal } from '../components/ConfirmModal'
@@ -142,6 +142,7 @@ const TEAM_NOISE_TOKENS = new Set([
   'cf', 'cd', 'ud', 'fc', 'sd', 'ad', 'ce', 'sad', 'club',
   'juv', 'juvenil', 'cadete', 'cad', 'inf', 'infantil', 'alevin',
   'a', 'b', 'c', 'equipo', 'filial',
+  'de', 'del', 'la', 'el', 'los', 'las', 'y', 'the', 'of',
 ])
 
 function normTeamTokens(name: string): string[] {
@@ -152,17 +153,61 @@ function normTeamTokens(name: string): string[] {
     .filter(t => t.length > 0 && !TEAM_NOISE_TOKENS.has(t))
 }
 
+// Palabras que comparten decenas de clubes distintos: por sí solas NO identifican
+// a ninguno ("Real Madrid" vs "Real Sociedad", "Atlético Madrid" vs "Atlético Baleares").
+const TEAM_GENERIC_TOKENS = new Set([
+  'real', 'atletico', 'athletic', 'atletic', 'deportivo', 'sporting', 'racing', 'union',
+  'cultural', 'sociedad', 'madrid', 'san', 'santa', 'futbol', 'football', 'balompie',
+  'olimpico', 'olimpica', 'municipal', 'escuela', 'independiente', 'internacional',
+  'nacional', 'ciudad', 'recreativo', 'gimnastic', 'gimnastica', 'sportiva', 'calcio',
+])
+
+/**
+ * ¿Se refieren al mismo club?
+ * - 'exacto'  → mismo club: mismo nombre normalizado, o uno es prefijo del otro
+ *               con alguna palabra distintiva ("Getafe" ⊂ "Getafe B").
+ * - 'parcial' → coincidencia ambigua: el nombre corto solo tiene palabras genéricas
+ *               ("Atlético" ⊂ "Atlético Madrid"). Puede ser, pero no es seguro.
+ * - null      → clubes distintos.
+ */
+function teamMatchKind(a?: string, b?: string): 'exacto' | 'parcial' | null {
+  if (!a || !b) return null
+  const ta = normTeamTokens(a), tb = normTeamTokens(b)
+  if (ta.length === 0 || tb.length === 0) return null
+  if (ta.join(' ') === tb.join(' ')) return 'exacto'
+
+  const short = ta.length <= tb.length ? ta : tb
+  const long = short === ta ? tb : ta
+  const isPrefix = long.slice(0, short.length).join(' ') === short.join(' ')
+  const shortHasDistinctive = short.some(t => !TEAM_GENERIC_TOKENS.has(t))
+  if (isPrefix) return shortHasDistinctive ? 'exacto' : 'parcial'
+
+  // Sin prefijo: exigimos al menos una palabra distintiva compartida.
+  const sharedDistinctive = ta.filter(t => tb.includes(t) && !TEAM_GENERIC_TOKENS.has(t))
+  if (sharedDistinctive.length === 0) return null
+  const shared = ta.filter(t => tb.includes(t)).length
+  return shared / Math.max(ta.length, tb.length) >= 0.5 ? 'exacto' : 'parcial'
+}
+
 /** ¿Se refieren (probablemente) al mismo club? */
 function teamsAlike(a?: string, b?: string): boolean {
-  if (!a || !b) return false
-  const ta = normTeamTokens(a), tb = normTeamTokens(b)
-  if (ta.length === 0 || tb.length === 0) return false
-  const na = ta.join(' '), nb = tb.join(' ')
-  if (na === nb || na.includes(nb) || nb.includes(na)) return true
-  let hits = 0
-  for (const t of ta) if (tb.includes(t)) hits++
-  return hits / Math.max(ta.length, tb.length) >= 0.5
+  return teamMatchKind(a, b) !== null
 }
+
+/** Scout que cubre un partido, con su propio estado (pendiente / visto) */
+type MatchScoutInfo = { scout: string; status: 'pendiente' | 'visto' }
+
+// Motivo por el que un jugador aparece sugerido en un partido
+type SuggestWhy = 'equipo' | 'posible' | 'historial' | 'busqueda'
+const SUGGEST_ORDER: Record<SuggestWhy, number> = { equipo: 0, posible: 1, historial: 2, busqueda: 3 }
+const SUGGEST_LABEL: Record<SuggestWhy, string> = {
+  equipo: '',
+  posible: ' · nombre de equipo ambiguo',
+  historial: ' · visto antes con este equipo',
+  busqueda: '',
+}
+/** Tope de resultados del buscador libre (las sugerencias por equipo no tienen tope) */
+const SEARCH_LIMIT = 60
 
 // ── Grupos de posición y slots del campograma ────────────────
 type PosGroup = 'POR' | 'DEF' | 'MED' | 'EXT' | 'DEL'
@@ -511,16 +556,166 @@ function scoutColor(avatar: string) {
 // ── MatchRow ──────────────────────────────────────────────────
 
 function MatchRow({
-  match, scoutName, profiles, currentProfile, isAdmin,
+  match, scoutName, scouts, profiles, currentProfile, isAdmin,
   scoutingPlayers, linkedPlayerIds,
-  scoutingReports, allMatches, matchPlayersByMatchId,
-  onEdit, onDelete, onToggleStatus, onAssign,
-  onAddMatchPlayer, onRemoveMatchPlayer,
-  onAddReport, onOpenPlayer,
-  showToast,
+  scoutingReports,
+  onEdit, onDelete, onToggleStatus, onOpenDetail,
 }: {
   match: ScoutingMatch
   scoutName: string
+  /** Todos los scouts que cubren el partido (incluye el responsable principal) */
+  scouts: MatchScoutInfo[]
+  profiles: Profile[]
+  currentProfile: Profile
+  isAdmin: boolean
+  scoutingPlayers: ScoutingPlayer[]
+  linkedPlayerIds: string[]
+  scoutingReports: ScoutingReport[]
+  onEdit: (m: ScoutingMatch) => void
+  onDelete: (id: string) => void
+  onToggleStatus: (m: ScoutingMatch) => void
+  onOpenDetail: (matchId: string) => void
+}) {
+  const [confirm, setConfirm] = useState(false)
+
+  const day = match.date.slice(8)
+  const mon = MONTHS_ES[parseInt(match.date.slice(5, 7)) - 1]
+  const yr = match.date.slice(2, 4)
+  const isVisto = match.status === 'visto'
+  const myScout = scouts.find(s => s.scout === currentProfile.avatar)
+  const isPendingForMe = !!myScout && myScout.status !== 'visto' && !isVisto
+  const isFuture = isFutureMatch(match.date)
+
+  const linkedPlayers = scoutingPlayers.filter(p => linkedPlayerIds.includes(p.id))
+  const reportedIds = new Set(scoutingReports.filter(r => r.matchId === match.id).map(r => r.playerId))
+  const linkedWithReport = linkedPlayers.filter(p => reportedIds.has(p.id)).length
+
+  const open = () => onOpenDetail(match.id)
+
+  return (
+    <tr
+      onClick={open}
+      className={`transition-colors cursor-pointer ${
+        isPendingForMe ? 'bg-amber-50/60 hover:bg-amber-50' :
+        isFuture ? 'bg-blue-50/40 hover:bg-blue-50/70' :
+        'hover:bg-slate-50/60'
+      }`}
+    >
+      {/* Fecha */}
+      <td className={`px-3 py-2 text-xs whitespace-nowrap ${isFuture ? 'text-blue-600 font-semibold' : 'text-slate-500'}`}>
+        {day} {mon} '{yr}
+        {match.time && <span className={`block text-[11px] font-normal ${isFuture ? 'text-blue-500' : 'text-slate-400'}`}>{match.time}</span>}
+      </td>
+      {/* Local */}
+      <td className="px-3 py-2 text-sm font-medium text-slate-800 whitespace-nowrap">{match.homeTeam}</td>
+      {/* vs */}
+      <td className="px-2 py-2 text-[11px] font-bold text-slate-400 text-center">vs</td>
+      {/* Visitante */}
+      <td className="px-3 py-2 text-sm font-medium text-slate-800 whitespace-nowrap">{match.awayTeam}</td>
+      {/* Competición */}
+      <td className="px-3 py-2">
+        {match.competition && (
+          <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded whitespace-nowrap">{match.competition}</span>
+        )}
+      </td>
+      {/* Modo */}
+      <td className="px-3 py-2 text-xs whitespace-nowrap">
+        {match.viewMode === 'campo'
+          ? <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded text-[11px] font-medium">🏟️ Campo</span>
+          : <span className="inline-flex items-center gap-1 text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded text-[11px] font-medium">📹 Vídeo</span>
+        }
+      </td>
+      {/* Scouts (pueden ser varios) */}
+      <td className="px-3 py-2 text-xs">
+        {scouts.length > 0 ? (
+          <span className="flex flex-wrap items-center gap-1">
+            {scouts.map(s => {
+              const c = scoutColor(s.scout)
+              const name = personaToName(s.scout, profiles)
+              return (
+                <span
+                  key={s.scout}
+                  title={`${name || s.scout}${s.status === 'visto' ? ' · ya lo ha visto' : ' · pendiente'}`}
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-semibold ${c.bg} ${c.text} ${c.border} ${s.status === 'visto' ? '' : 'opacity-70'}`}
+                >
+                  <span className="font-mono">{s.scout}</span>
+                  {s.status === 'visto' && <span className="text-[10px]">✓</span>}
+                  {scouts.length === 1 && scoutName && scoutName !== s.scout && (
+                    <span className="font-normal opacity-70">({scoutName})</span>
+                  )}
+                </span>
+              )
+            })}
+          </span>
+        ) : (
+          <span className="text-slate-300 text-xs">— asignar</span>
+        )}
+      </td>
+      {/* Jugadores vinculados + estado de informes */}
+      <td className="px-3 py-2">
+        <span
+          className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded border whitespace-nowrap ${
+            linkedPlayers.length === 0
+              ? 'bg-slate-50 text-slate-400 border-slate-200'
+              : linkedWithReport < linkedPlayers.length
+                ? 'bg-amber-50 text-amber-700 border-amber-200'
+                : 'bg-violet-50 text-violet-700 border-violet-200'
+          }`}
+          title={linkedPlayers.length > 0
+            ? `${linkedWithReport} de ${linkedPlayers.length} jugadores con informe de este partido`
+            : 'Abrir el partido para añadir jugadores'}
+        >
+          👤 {linkedPlayers.length > 0 ? `${linkedWithReport}/${linkedPlayers.length}` : '+'}
+        </span>
+      </td>
+      {/* Notas */}
+      <td className="px-3 py-2 text-xs text-slate-500 max-w-[160px] truncate" title={match.notes ?? ''}>{match.notes ?? '—'}</td>
+      {/* Visto */}
+      <td className="px-3 py-2 text-center">
+        <button onClick={e => { e.stopPropagation(); onToggleStatus(match) }}
+          title={isVisto ? 'Marcar como pendiente' : 'Marcar como visto'}
+          aria-label={isVisto ? 'Marcar como pendiente' : 'Marcar como visto'}
+          className={`inline-flex items-center justify-center w-6 h-6 rounded-full border transition-all ${
+            isVisto ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 text-slate-300 hover:border-emerald-400 hover:text-emerald-500'
+          }`}
+        >
+          <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="2.5,8 6,11.5 13.5,4" />
+          </svg>
+        </button>
+      </td>
+      {/* Acciones */}
+      <td className="px-3 py-2">
+        <div className="flex items-center gap-1 justify-end">
+          <button onClick={e => { e.stopPropagation(); onEdit(match) }} className="p-1 text-slate-300 hover:text-blue-500 transition-colors" title="Editar" aria-label="Editar partido">
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+          {isAdmin && (confirm
+            ? <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                <button onClick={() => { onDelete(match.id); setConfirm(false) }} className="px-2 py-0.5 text-[11px] bg-red-600 text-white rounded font-medium">Sí</button>
+                <button onClick={() => setConfirm(false)} className="px-2 py-0.5 text-[11px] border border-slate-200 rounded text-slate-600">No</button>
+              </div>
+            : <button onClick={e => { e.stopPropagation(); setConfirm(true) }} className="p-1 text-slate-300 hover:text-red-500 transition-colors" title="Eliminar" aria-label="Eliminar partido"><Trash2 className="w-3.5 h-3.5" /></button>
+          )}
+        </div>
+      </td>
+    </tr>
+  )
+}
+
+// ── MatchDetailModal — ficha del partido ─────────────────────
+// Todo lo del partido en una ventana: scouts asignados (varios), jugadores
+// vistos con los informes de cada scout, y buscador/sugeridos para añadir más.
+
+function MatchDetailModal({
+  match, scouts, profiles, currentProfile, isAdmin,
+  scoutingPlayers, linkedPlayerIds, scoutingReports, allMatches, matchPlayersByMatchId,
+  onClose, onEdit, onToggleStatus,
+  onAddScout, onRemoveScout, onSetScoutStatus,
+  onAddMatchPlayer, onRemoveMatchPlayer, onAddReport, onOpenPlayer, showToast,
+}: {
+  match: ScoutingMatch
+  scouts: MatchScoutInfo[]
   profiles: Profile[]
   currentProfile: Profile
   isAdmin: boolean
@@ -529,17 +724,46 @@ function MatchRow({
   scoutingReports: ScoutingReport[]
   allMatches: ScoutingMatch[]
   matchPlayersByMatchId: Record<string, string[]>
+  onClose: () => void
   onEdit: (m: ScoutingMatch) => void
-  onDelete: (id: string) => void
   onToggleStatus: (m: ScoutingMatch) => void
-  onAssign: (m: ScoutingMatch, assignedTo: string) => void
+  onAddScout: (m: ScoutingMatch, scout: string) => void
+  onRemoveScout: (m: ScoutingMatch, scout: string) => void
+  onSetScoutStatus: (m: ScoutingMatch, scout: string, status: 'pendiente' | 'visto') => void
   onAddMatchPlayer: (matchId: string, playerId: string) => Promise<void>
   onRemoveMatchPlayer: (matchId: string, playerId: string) => Promise<void>
   onAddReport: (r: ScoutingReport) => void
   onOpenPlayer?: (id: string) => void
   showToast?: ShowToast
 }) {
-  const [confirm, setConfirm] = useState(false)
+  const [playerSearch, setPlayerSearch] = useState('')
+  const [suggYearFilter, setSuggYearFilter] = useState<string | null>(null)
+  const [suggPosFilter, setSuggPosFilter] = useState<PosGroup | null>(null)
+  const [reportFormFor, setReportFormFor] = useState<string | null>(null)
+  const [quickText, setQuickText] = useState('')
+  const [quickConclusion, setQuickConclusion] = useState<ConclusionOption>('')
+  const [savingQuick, setSavingQuick] = useState(false)
+  const [addScoutOpen, setAddScoutOpen] = useState(false)
+
+  useEscapeKey(onClose)
+
+  const day = match.date.slice(8)
+  const mon = MONTHS_ES[parseInt(match.date.slice(5, 7)) - 1]
+  const yr = match.date.slice(2, 4)
+  const isVisto = match.status === 'visto'
+
+  const linkedPlayers = scoutingPlayers.filter(p => linkedPlayerIds.includes(p.id))
+
+  const matchReportsByPlayer = useMemo(() => {
+    const map: Record<string, ScoutingReport[]> = {}
+    for (const r of scoutingReports) {
+      if (r.matchId !== match.id) continue
+      if (!map[r.playerId]) map[r.playerId] = []
+      map[r.playerId].push(r)
+    }
+    return map
+  }, [scoutingReports, match.id])
+  const linkedWithReport = linkedPlayers.filter(p => (matchReportsByPlayer[p.id] ?? []).length > 0).length
 
   async function handleAddPlayer(playerId: string) {
     try {
@@ -556,38 +780,6 @@ function MatchRow({
       showToast?.('Error al desvincular el jugador del partido', 'error')
     }
   }
-  const [assignOpen, setAssignOpen] = useState(false)
-  const [playersOpen, setPlayersOpen] = useState(false)
-  const [playerSearch, setPlayerSearch] = useState('')
-  // Filtros de afinado de sugerencias
-  const [suggYearFilter, setSuggYearFilter] = useState<string | null>(null)
-  const [suggPosFilter, setSuggPosFilter] = useState<PosGroup | null>(null)
-  // Informe rápido inline
-  const [reportFormFor, setReportFormFor] = useState<string | null>(null)
-  const [quickText, setQuickText] = useState('')
-  const [quickConclusion, setQuickConclusion] = useState<ConclusionOption>('')
-  const [savingQuick, setSavingQuick] = useState(false)
-
-  const day = match.date.slice(8)
-  const mon = MONTHS_ES[parseInt(match.date.slice(5, 7)) - 1]
-  const yr = match.date.slice(2, 4)
-  const isVisto = match.status === 'visto'
-  const isPendingForMe = match.assignedTo === currentProfile.avatar && !isVisto
-  const isFuture = isFutureMatch(match.date)
-
-  const linkedPlayers = scoutingPlayers.filter(p => linkedPlayerIds.includes(p.id))
-
-  // Informes de ESTE partido, por jugador
-  const matchReportsByPlayer = useMemo(() => {
-    const map: Record<string, ScoutingReport[]> = {}
-    for (const r of scoutingReports) {
-      if (r.matchId !== match.id) continue
-      if (!map[r.playerId]) map[r.playerId] = []
-      map[r.playerId].push(r)
-    }
-    return map
-  }, [scoutingReports, match.id])
-  const linkedWithReport = linkedPlayers.filter(p => (matchReportsByPlayer[p.id] ?? []).length > 0).length
 
   async function saveQuickReport() {
     if (!reportFormFor || !quickText.trim() || savingQuick) return
@@ -616,33 +808,35 @@ function MatchRow({
 
   // ── Sugerencias: matching normalizado + historial ──────────
   const suggestionPool = useMemo(() => {
-    if (!playersOpen) return [] as { p: ScoutingPlayer; why: 'equipo' | 'historial' }[]
-    // 1) Equipo en BD coincide (tokens normalizados, sin acentos/sufijos)
-    const byTeam = new Map<string, 'equipo' | 'historial'>()
+    const byTeam = new Map<string, SuggestWhy>()
     for (const p of scoutingPlayers) {
       if (linkedPlayerIds.includes(p.id)) continue
-      if (teamsAlike(p.team, match.homeTeam) || teamsAlike(p.team, match.awayTeam)) {
-        byTeam.set(p.id, 'equipo')
-      }
+      const kind = teamMatchKind(p.team, match.homeTeam) ?? teamMatchKind(p.team, match.awayTeam)
+      if (kind === 'exacto') byTeam.set(p.id, 'equipo')
+      else if (kind === 'parcial') byTeam.set(p.id, 'posible')
     }
-    // 2) Historial: vinculados a partidos anteriores de estos mismos equipos
     for (const m2 of allMatches) {
       if (m2.id === match.id) continue
-      const sameTeams =
+      const sameFixture =
+        (teamsAlike(m2.homeTeam, match.homeTeam) && teamsAlike(m2.awayTeam, match.awayTeam)) ||
+        (teamsAlike(m2.homeTeam, match.awayTeam) && teamsAlike(m2.awayTeam, match.homeTeam))
+      const sameTeams = sameFixture ||
         teamsAlike(m2.homeTeam, match.homeTeam) || teamsAlike(m2.homeTeam, match.awayTeam) ||
         teamsAlike(m2.awayTeam, match.homeTeam) || teamsAlike(m2.awayTeam, match.awayTeam)
       if (!sameTeams) continue
       for (const pid of (matchPlayersByMatchId[m2.id] ?? [])) {
         if (linkedPlayerIds.includes(pid) || byTeam.has(pid)) continue
+        const sp = scoutingPlayers.find(x => x.id === pid)
+        if (!sp) continue
+        if (sp.team?.trim() && !sameFixture) continue
         byTeam.set(pid, 'historial')
       }
     }
     return Array.from(byTeam.entries())
       .map(([id, why]) => ({ p: scoutingPlayers.find(sp => sp.id === id)!, why }))
       .filter(x => x.p)
-  }, [playersOpen, scoutingPlayers, linkedPlayerIds, allMatches, matchPlayersByMatchId, match.id, match.homeTeam, match.awayTeam])
+  }, [scoutingPlayers, linkedPlayerIds, allMatches, matchPlayersByMatchId, match.id, match.homeTeam, match.awayTeam])
 
-  // Opciones de afinado derivadas del pool
   const suggYears = useMemo(() =>
     Array.from(new Set(suggestionPool.map(x => x.p.birthdate?.slice(0, 4)).filter(Boolean) as string[]))
       .sort((a, b) => b.localeCompare(a)),
@@ -651,308 +845,344 @@ function MatchRow({
     POS_GROUPS.filter(g => suggestionPool.some(x => posGroupOf(x.p.position1) === g || posGroupOf(x.p.position2) === g)),
   [suggestionPool])
 
+  // Sin tope: se muestran todos los sugeridos (el contenedor hace scroll)
   const teamSuggested = suggestionPool
     .filter(x => !suggYearFilter || x.p.birthdate?.slice(0, 4) === suggYearFilter)
     .filter(x => !suggPosFilter || posGroupOf(x.p.position1) === suggPosFilter || posGroupOf(x.p.position2) === suggPosFilter)
-    .sort((a, b) => (a.why === b.why ? a.p.fullName.localeCompare(b.p.fullName) : a.why === 'equipo' ? -1 : 1))
-    .slice(0, 16)
+    .sort((a, b) => (a.why === b.why
+      ? a.p.fullName.localeCompare(b.p.fullName)
+      : SUGGEST_ORDER[a.why] - SUGGEST_ORDER[b.why]))
 
-  const searchResults = playerSearch.length >= 2
+  const searchMatches = playerSearch.length >= 2
     ? scoutingPlayers.filter(p =>
         !linkedPlayerIds.includes(p.id) &&
         p.fullName.toLowerCase().includes(playerSearch.toLowerCase())
-      ).slice(0, 8).map(p => ({ p, why: 'equipo' as const }))
+      )
+    : []
+  const searchResults = playerSearch.length >= 2
+    ? searchMatches.slice(0, SEARCH_LIMIT).map(p => ({ p, why: 'busqueda' as const }))
     : teamSuggested
 
+  const freeProfiles = profiles.filter(p => p.avatar && !scouts.some(s => s.scout === p.avatar))
+
   return (
-    <>
-      <tr className={`transition-colors ${
-        isPendingForMe ? 'bg-amber-50/60 hover:bg-amber-50' :
-        isFuture ? 'bg-blue-50/40 hover:bg-blue-50/70' :
-        'hover:bg-slate-50/60'
-      }`}>
-        {/* Fecha */}
-        <td className={`px-3 py-2 text-xs whitespace-nowrap ${isFuture ? 'text-blue-600 font-semibold' : 'text-slate-500'}`}>
-          {day} {mon} '{yr}
-          {match.time && <span className={`block text-[11px] font-normal ${isFuture ? 'text-blue-500' : 'text-slate-400'}`}>{match.time}</span>}
-        </td>
-        {/* Local */}
-        <td className="px-3 py-2 text-sm font-medium text-slate-800 whitespace-nowrap">{match.homeTeam}</td>
-        {/* vs */}
-        <td className="px-2 py-2 text-[11px] font-bold text-slate-400 text-center">vs</td>
-        {/* Visitante */}
-        <td className="px-3 py-2 text-sm font-medium text-slate-800 whitespace-nowrap">{match.awayTeam}</td>
-        {/* Competición */}
-        <td className="px-3 py-2">
-          {match.competition && (
-            <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded whitespace-nowrap">{match.competition}</span>
-          )}
-        </td>
-        {/* Modo */}
-        <td className="px-3 py-2 text-xs whitespace-nowrap">
-          {match.viewMode === 'campo'
-            ? <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded text-[11px] font-medium">🏟️ Campo</span>
-            : <span className="inline-flex items-center gap-1 text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded text-[11px] font-medium">📹 Vídeo</span>
-          }
-        </td>
-        {/* Scout */}
-        <td className="px-3 py-2 text-xs whitespace-nowrap">
-          {assignOpen ? (
-            <select autoFocus
-              className="text-xs border border-slate-200 rounded px-1 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
-              defaultValue={match.assignedTo ?? ''}
-              onBlur={() => setAssignOpen(false)}
-              onChange={e => { onAssign(match, e.target.value); setAssignOpen(false) }}
+    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/40 px-3 py-6 overflow-y-auto" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl my-auto" onClick={e => e.stopPropagation()}>
+        {/* ── Cabecera ── */}
+        <div className="px-4 sm:px-5 py-3 border-b border-slate-200 flex items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500">
+              <span className="font-semibold text-slate-600">{day} {mon} '{yr}{match.time ? ` · ${match.time}` : ''}</span>
+              {match.competition && <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">{match.competition}</span>}
+              {match.viewMode === 'campo'
+                ? <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded font-medium">🏟️ Campo</span>
+                : <span className="text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded font-medium">📹 Vídeo</span>}
+            </div>
+            <h3 className="mt-1 text-base font-bold text-slate-800 break-words">
+              {match.homeTeam} <span className="text-slate-400 font-medium">vs</span> {match.awayTeam}
+            </h3>
+          </div>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              onClick={() => onToggleStatus(match)}
+              className={`text-[11px] font-bold px-2.5 py-1.5 rounded-lg border transition-colors ${
+                isVisto
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                  : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+              }`}
+              title="Estado del partido"
             >
-              <option value="">Sin asignar</option>
-              {profiles.map(p => <option key={p.id} value={p.avatar}>{p.avatar} · {p.name}</option>)}
-            </select>
-          ) : (
-            <button onClick={() => setAssignOpen(true)} className="text-left hover:opacity-80 transition-opacity" title="Clic para reasignar">
-              {match.assignedTo ? (() => {
-                const c = scoutColor(match.assignedTo)
+              {isVisto ? '✓ Visto' : 'Pendiente'}
+            </button>
+            <button onClick={() => { onEdit(match); onClose() }} className="p-1.5 text-slate-400 hover:text-blue-500 rounded-lg" title="Editar partido" aria-label="Editar partido">
+              <Pencil className="w-4 h-4" />
+            </button>
+            <button onClick={onClose} aria-label="Cerrar" className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="px-4 sm:px-5 py-4 space-y-5 max-h-[72vh] overflow-y-auto">
+          {/* ── Scouts asignados ── */}
+          <div>
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
+              Scouts asignados {scouts.length > 1 ? `(${scouts.length})` : ''}
+            </span>
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              {scouts.map(s => {
+                const c = scoutColor(s.scout)
+                const name = personaToName(s.scout, profiles)
+                const isMe = s.scout === currentProfile.avatar
                 return (
-                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-semibold ${c.bg} ${c.text} ${c.border}`}>
-                    <span className="font-mono">{match.assignedTo}</span>
-                    {scoutName && scoutName !== match.assignedTo && <span className="font-normal opacity-70">({scoutName})</span>}
+                  <span key={s.scout} className={`inline-flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-full border text-xs font-semibold ${c.bg} ${c.text} ${c.border}`}>
+                    <span className="font-mono">{s.scout}</span>
+                    {name && name !== s.scout && <span className="font-normal opacity-70">{name}</span>}
+                    <button
+                      onClick={() => onSetScoutStatus(match, s.scout, s.status === 'visto' ? 'pendiente' : 'visto')}
+                      title={s.status === 'visto' ? 'Ya lo ha visto — marcar como pendiente' : 'Marcar como visto'}
+                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border transition-colors ${
+                        s.status === 'visto'
+                          ? 'bg-emerald-500 text-white border-emerald-500'
+                          : 'bg-white/70 text-slate-500 border-slate-200 hover:bg-white'
+                      }`}
+                    >
+                      {s.status === 'visto' ? '✓ visto' : isMe ? 'marcar visto' : 'pendiente'}
+                    </button>
+                    {(isAdmin || isMe) && (
+                      <button
+                        onClick={() => onRemoveScout(match, s.scout)}
+                        aria-label={`Quitar a ${name || s.scout} del partido`}
+                        className="text-slate-400 hover:text-red-500 p-0.5"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
                   </span>
                 )
-              })() : <span className="text-slate-300 text-xs">— asignar</span>}
-            </button>
-          )}
-        </td>
-        {/* Jugadores vinculados + estado de informes */}
-        <td className="px-3 py-2">
-          <button
-            onClick={() => { setPlayersOpen(o => !o); setPlayerSearch('') }}
-            className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded border transition-colors whitespace-nowrap ${
-              linkedPlayers.length === 0
-                ? 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
-                : linkedWithReport < linkedPlayers.length
-                  ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
-                  : 'bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100'
-            }`}
-            title={linkedPlayers.length > 0
-              ? `${linkedWithReport} de ${linkedPlayers.length} jugadores con informe de este partido`
-              : 'Ver / añadir jugadores vistos en este partido'}
-          >
-            👤 {linkedPlayers.length > 0 ? `${linkedWithReport}/${linkedPlayers.length}` : '+'}
-          </button>
-        </td>
-        {/* Notas */}
-        <td className="px-3 py-2 text-xs text-slate-500 max-w-[160px] truncate" title={match.notes ?? ''}>{match.notes ?? '—'}</td>
-        {/* Visto */}
-        <td className="px-3 py-2 text-center">
-          <button onClick={() => onToggleStatus(match)}
-            title={isVisto ? 'Marcar como pendiente' : 'Marcar como visto'}
-            aria-label={isVisto ? 'Marcar como pendiente' : 'Marcar como visto'}
-            className={`inline-flex items-center justify-center w-6 h-6 rounded-full border transition-all ${
-              isVisto ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 text-slate-300 hover:border-emerald-400 hover:text-emerald-500'
-            }`}
-          >
-            <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="2.5,8 6,11.5 13.5,4" />
-            </svg>
-          </button>
-        </td>
-        {/* Acciones */}
-        <td className="px-3 py-2">
-          <div className="flex items-center gap-1 justify-end">
-            <button onClick={() => onEdit(match)} className="p-1 text-slate-300 hover:text-blue-500 transition-colors" title="Editar" aria-label="Editar partido">
-              <Pencil className="w-3.5 h-3.5" />
-            </button>
-            {isAdmin && (confirm
-              ? <div className="flex items-center gap-1">
-                  <button onClick={() => { onDelete(match.id); setConfirm(false) }} className="px-2 py-0.5 text-[11px] bg-red-600 text-white rounded font-medium">Sí</button>
-                  <button onClick={() => setConfirm(false)} className="px-2 py-0.5 text-[11px] border border-slate-200 rounded text-slate-600">No</button>
-                </div>
-              : <button onClick={() => setConfirm(true)} className="p-1 text-slate-300 hover:text-red-500 transition-colors" title="Eliminar" aria-label="Eliminar partido"><Trash2 className="w-3.5 h-3.5" /></button>
+              })}
+              {addScoutOpen ? (
+                <select
+                  autoFocus
+                  className="text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400/30"
+                  defaultValue=""
+                  onBlur={() => setAddScoutOpen(false)}
+                  onChange={e => { if (e.target.value) onAddScout(match, e.target.value); setAddScoutOpen(false) }}
+                >
+                  <option value="">Añadir scout…</option>
+                  {freeProfiles.map(p => <option key={p.id} value={p.avatar}>{p.avatar} · {p.name}</option>)}
+                </select>
+              ) : (
+                <button
+                  onClick={() => setAddScoutOpen(true)}
+                  className="inline-flex items-center gap-1 text-[11px] font-bold border border-dashed border-slate-300 text-slate-500 hover:border-blue-400 hover:text-blue-600 px-2 py-1 rounded-full transition-colors"
+                >
+                  <Plus className="w-3 h-3" /> Añadir scout
+                </button>
+              )}
+              {scouts.length === 0 && <span className="text-xs text-slate-400 italic">Nadie asignado todavía</span>}
+            </div>
+            {scouts.length > 1 && (
+              <p className="mt-1 text-[11px] text-slate-400">
+                Cada scout marca su parte y escribe su propio informe de cada jugador.
+              </p>
             )}
           </div>
-        </td>
-      </tr>
 
-      {/* ── Fila expandida: jugadores vinculados + informes rápidos ── */}
-      {playersOpen && (
-        <tr className="bg-violet-50/40">
-          <td colSpan={11} className="px-4 py-3">
-            {/* Jugadores vinculados, con estado de informe y formulario inline */}
-            {linkedPlayers.length > 0 && (
-              <div className="space-y-1.5 mb-3">
-                <span className="text-[11px] font-semibold text-violet-600 uppercase tracking-wide">
-                  Vistos en este partido · {linkedPlayers.length} jugador{linkedPlayers.length !== 1 ? 'es' : ''} · {linkedWithReport} con informe
-                </span>
-                {linkedPlayers.map(p => {
-                  const pReports = matchReportsByPlayer[p.id] ?? []
-                  const isFormOpen = reportFormFor === p.id
-                  return (
-                    <div key={p.id} className="bg-white border border-slate-200 rounded-lg px-3 py-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          onClick={() => onOpenPlayer?.(p.id)}
-                          className="text-xs font-semibold text-slate-800 hover:text-primary transition-colors"
-                          title="Abrir ficha del jugador"
+          {/* ── Notas del partido ── */}
+          {match.notes && (
+            <div>
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Notas</span>
+              <p className="mt-1 text-xs text-slate-600 whitespace-pre-wrap break-words">{match.notes}</p>
+            </div>
+          )}
+
+          {/* ── Jugadores vistos ── */}
+          <div>
+            <span className="text-[11px] font-semibold text-violet-600 uppercase tracking-wide">
+              Vistos en este partido · {linkedPlayers.length} jugador{linkedPlayers.length !== 1 ? 'es' : ''} · {linkedWithReport} con informe
+            </span>
+            <div className="mt-1.5 space-y-1.5">
+              {linkedPlayers.length === 0 && (
+                <p className="text-xs text-slate-400 italic">Aún no hay jugadores vinculados a este partido.</p>
+              )}
+              {linkedPlayers.map(p => {
+                const pReports = matchReportsByPlayer[p.id] ?? []
+                const isFormOpen = reportFormFor === p.id
+                // Cada scout puede escribir SU informe del mismo jugador en el mismo
+                // partido: el botón solo desaparece si ya escribí yo.
+                const myReport = pReports.find(r =>
+                  (r.authorId && r.authorId === currentProfile.id) || r.persona === currentProfile.avatar)
+                return (
+                  <div key={p.id} className="bg-white border border-slate-200 rounded-lg px-3 py-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={() => onOpenPlayer?.(p.id)}
+                        className="text-xs font-semibold text-slate-800 hover:text-primary transition-colors"
+                        title="Abrir ficha del jugador"
+                      >
+                        {p.fullName}
+                      </button>
+                      <span className="text-[11px] text-slate-400">
+                        {[p.position1, birthYearFromBirthdate(p.birthdate) !== '—' ? birthYearFromBirthdate(p.birthdate) : null, p.team].filter(Boolean).join(' · ')}
+                      </span>
+                      <AssessmentChip a={p.assessment} small />
+                      <span className="flex-1" />
+                      {/* Un chip por informe: se ve quién ha escrito cada uno */}
+                      {pReports.map(r => (
+                        <span
+                          key={r.id}
+                          title={r.texto ?? ''}
+                          className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
+                            (r.authorId && r.authorId === currentProfile.id) || r.persona === currentProfile.avatar
+                              ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                              : 'text-slate-600 bg-slate-50 border-slate-200'
+                          }`}
                         >
-                          {p.fullName}
-                        </button>
-                        <span className="text-[11px] text-slate-400">
-                          {[p.position1, birthYearFromBirthdate(p.birthdate) !== '—' ? birthYearFromBirthdate(p.birthdate) : null, p.team].filter(Boolean).join(' · ')}
+                          ✓ {r.persona ?? '—'}
+                          {normConclusion(r.conclusion) && (
+                            <span className={`ml-0.5 px-1.5 rounded-full text-[10px] ${CONCLUSION_STYLE[normConclusion(r.conclusion)!] ?? 'bg-slate-100 text-slate-500'}`}>
+                              {normConclusion(r.conclusion)}
+                            </span>
+                          )}
                         </span>
-                        <AssessmentChip a={p.assessment} small />
-                        <span className="flex-1" />
-                        {pReports.length > 0 ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                            ✓ Informe{pReports.length > 1 ? `s (${pReports.length})` : ''} · {pReports[0].persona ?? '—'}
-                            {normConclusion(pReports[0].conclusion) && (
-                              <span className={`ml-0.5 px-1.5 rounded-full text-[10px] ${CONCLUSION_STYLE[normConclusion(pReports[0].conclusion)!] ?? 'bg-slate-100 text-slate-500'}`}>
-                                {normConclusion(pReports[0].conclusion)}
-                              </span>
-                            )}
-                          </span>
-                        ) : (
-                          <button
-                            onClick={() => {
-                              setReportFormFor(isFormOpen ? null : p.id)
-                              setQuickText('')
-                              setQuickConclusion('')
-                            }}
-                            className="text-[11px] font-bold border border-primary text-primary bg-white hover:bg-blue-50 px-2.5 py-1 rounded-lg transition-colors"
-                          >
-                            {isFormOpen ? 'Cancelar' : '+ Informe'}
-                          </button>
-                        )}
-                        <button onClick={() => handleRemovePlayer(p.id)} aria-label={`Desvincular a ${p.fullName}`} className="text-slate-300 hover:text-red-500 p-1">
-                          <X className="w-3 h-3" />
+                      ))}
+                      {!myReport && (
+                        <button
+                          onClick={() => {
+                            setReportFormFor(isFormOpen ? null : p.id)
+                            setQuickText('')
+                            setQuickConclusion('')
+                          }}
+                          className="text-[11px] font-bold border border-primary text-primary bg-white hover:bg-blue-50 px-2.5 py-1 rounded-lg transition-colors"
+                        >
+                          {isFormOpen ? 'Cancelar' : pReports.length > 0 ? '+ Mi informe' : '+ Informe'}
                         </button>
-                      </div>
-
-                      {/* Mini-formulario de informe rápido */}
-                      {isFormOpen && (
-                        <div className="mt-2 bg-blue-50 border border-blue-200 rounded-lg p-2.5 space-y-2">
-                          <textarea
-                            value={quickText}
-                            onChange={e => setQuickText(e.target.value)}
-                            rows={3}
-                            autoFocus
-                            placeholder={`Informe corto de ${p.fullName.split(' ')[0]} en este partido…`}
-                            className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none"
-                            onKeyDown={e => {
-                              if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); saveQuickReport() }
-                            }}
-                          />
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="text-[11px] text-slate-500 font-medium">Conclusión:</span>
-                            {CONCLUSION_OPTIONS.filter(Boolean).map(c => (
-                              <button
-                                key={c}
-                                onClick={() => setQuickConclusion(quickConclusion === c ? '' : c)}
-                                className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
-                                  quickConclusion === c
-                                    ? (CONCLUSION_STYLE[c] ?? 'bg-slate-200 text-slate-700')
-                                    : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
-                                }`}
-                              >
-                                {c}
-                              </button>
-                            ))}
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] text-slate-400">Se vincula a este partido y aparece en la ficha del jugador · ⌘+Enter</span>
-                            <button
-                              onClick={saveQuickReport}
-                              disabled={!quickText.trim() || savingQuick}
-                              className="px-3 py-1.5 text-[11px] font-bold bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-40 inline-flex items-center gap-1.5"
-                            >
-                              {savingQuick && <Spinner />}
-                              {savingQuick ? 'Guardando…' : 'Guardar informe'}
-                            </button>
-                          </div>
-                        </div>
                       )}
+                      <button onClick={() => handleRemovePlayer(p.id)} aria-label={`Desvincular a ${p.fullName}`} className="text-slate-300 hover:text-red-500 p-1">
+                        <X className="w-3 h-3" />
+                      </button>
                     </div>
-                  )
-                })}
-              </div>
-            )}
 
-            {/* Buscar / sugerencias con afinado */}
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="relative flex-shrink-0">
-                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
-                  <input
-                    value={playerSearch}
-                    onChange={e => setPlayerSearch(e.target.value)}
-                    placeholder="Buscar jugador..."
-                    className="pl-6 pr-3 py-1 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-violet-400/30 w-48"
-                  />
-                </div>
-                {/* Afinado: año y posición */}
-                {playerSearch.length < 2 && suggestionPool.length > 0 && (suggYears.length > 1 || suggPosGroups.length > 1) && (
-                  <div className="flex flex-wrap items-center gap-1">
-                    <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">Afinar:</span>
-                    {suggYears.slice(0, 6).map(y => (
-                      <button
-                        key={y}
-                        onClick={() => setSuggYearFilter(f => f === y ? null : y)}
-                        className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
-                          suggYearFilter === y ? 'bg-violet-100 border-violet-300 text-violet-700' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'
-                        }`}
-                      >
-                        {y}
-                      </button>
-                    ))}
-                    {suggPosGroups.length > 1 && <span className="text-slate-200">|</span>}
-                    {suggPosGroups.map(g => (
-                      <button
-                        key={g}
-                        onClick={() => setSuggPosFilter(f => f === g ? null : g)}
-                        className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
-                          suggPosFilter === g ? 'bg-violet-100 border-violet-300 text-violet-700' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'
-                        }`}
-                      >
-                        {g}
-                      </button>
-                    ))}
+                    {/* Mini-formulario de informe rápido */}
+                    {isFormOpen && (
+                      <div className="mt-2 bg-blue-50 border border-blue-200 rounded-lg p-2.5 space-y-2">
+                        <textarea
+                          value={quickText}
+                          onChange={e => setQuickText(e.target.value)}
+                          rows={3}
+                          autoFocus
+                          placeholder={`Informe corto de ${p.fullName.split(' ')[0]} en este partido…`}
+                          className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none"
+                          onKeyDown={e => {
+                            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); saveQuickReport() }
+                          }}
+                        />
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-[11px] text-slate-500 font-medium">Conclusión:</span>
+                          {CONCLUSION_OPTIONS.filter(Boolean).map(c => (
+                            <button
+                              key={c}
+                              onClick={() => setQuickConclusion(quickConclusion === c ? '' : c)}
+                              className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
+                                quickConclusion === c
+                                  ? (CONCLUSION_STYLE[c] ?? 'bg-slate-200 text-slate-700')
+                                  : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
+                              }`}
+                            >
+                              {c}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-slate-400">Se vincula a este partido y aparece en la ficha del jugador · ⌘+Enter</span>
+                          <button
+                            onClick={saveQuickReport}
+                            disabled={!quickText.trim() || savingQuick}
+                            className="px-3 py-1.5 text-[11px] font-bold bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-40 inline-flex items-center gap-1.5"
+                          >
+                            {savingQuick && <Spinner />}
+                            {savingQuick ? 'Guardando…' : 'Guardar informe'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                )
+              })}
+            </div>
+          </div>
 
-              <div>
-                {searchResults.length > 0 ? (
+          {/* ── Buscar / sugerencias con afinado ── */}
+          <div className="space-y-2 border-t border-slate-100 pt-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative flex-shrink-0">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+                <input
+                  value={playerSearch}
+                  onChange={e => setPlayerSearch(e.target.value)}
+                  placeholder="Buscar jugador..."
+                  className="pl-6 pr-3 py-1 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-violet-400/30 w-48"
+                />
+              </div>
+              {/* Afinado: año y posición */}
+              {playerSearch.length < 2 && suggestionPool.length > 0 && (suggYears.length > 1 || suggPosGroups.length > 1) && (
+                <div className="flex flex-wrap items-center gap-1">
+                  <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">Afinar:</span>
+                  {suggYears.slice(0, 8).map(y => (
+                    <button
+                      key={y}
+                      onClick={() => setSuggYearFilter(f => f === y ? null : y)}
+                      className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
+                        suggYearFilter === y ? 'bg-violet-100 border-violet-300 text-violet-700' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'
+                      }`}
+                    >
+                      {y}
+                    </button>
+                  ))}
+                  {suggPosGroups.length > 1 && <span className="text-slate-200">|</span>}
+                  {suggPosGroups.map(g => (
+                    <button
+                      key={g}
+                      onClick={() => setSuggPosFilter(f => f === g ? null : g)}
+                      className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
+                        suggPosFilter === g ? 'bg-violet-100 border-violet-300 text-violet-700' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'
+                      }`}
+                    >
+                      {g}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              {searchResults.length > 0 ? (
+                <div className="max-h-64 overflow-y-auto pr-1">
                   <div className="flex flex-wrap gap-1 items-center">
                     {playerSearch.length < 2 && teamSuggested.length > 0 && (
                       <span className="text-[11px] text-violet-500 font-semibold uppercase tracking-wide mr-1">
-                        Sugeridos:
+                        Sugeridos ({teamSuggested.length}):
+                      </span>
+                    )}
+                    {playerSearch.length >= 2 && (
+                      <span className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide mr-1">
+                        {searchMatches.length > SEARCH_LIMIT
+                          ? `${SEARCH_LIMIT} de ${searchMatches.length} — afina la búsqueda:`
+                          : `${searchMatches.length} resultado${searchMatches.length !== 1 ? 's' : ''}:`}
                       </span>
                     )}
                     {searchResults.map(({ p, why }) => (
                       <button
                         key={p.id}
                         onClick={() => { handleAddPlayer(p.id); setPlayerSearch('') }}
-                        className="text-xs bg-white border border-violet-200 text-violet-700 hover:bg-violet-100 px-2 py-0.5 rounded-full transition-colors flex items-center gap-1"
+                        className={`text-xs bg-white border px-2 py-0.5 rounded-full transition-colors flex items-center gap-1 ${
+                          why === 'equipo' || why === 'busqueda'
+                            ? 'border-violet-200 text-violet-700 hover:bg-violet-100'
+                            : 'border-slate-200 text-slate-500 hover:bg-slate-100'
+                        }`}
                       >
                         <Plus className="w-3 h-3" />{p.fullName}
-                        <span className="text-violet-400 text-[11px]">
+                        <span className={why === 'equipo' || why === 'busqueda' ? 'text-violet-400 text-[11px]' : 'text-slate-400 text-[11px]'}>
                           {[p.birthdate ? `'${p.birthdate.slice(2, 4)}` : null, p.team].filter(Boolean).join(' · ')}
-                          {why === 'historial' ? ' · visto antes con este equipo' : ''}
+                          {SUGGEST_LABEL[why]}
                         </span>
                       </button>
                     ))}
                   </div>
-                ) : playerSearch.length >= 2 ? (
-                  <span className="text-xs text-slate-400 italic">Sin resultados</span>
-                ) : suggestionPool.length === 0 && linkedPlayers.length === 0 ? (
-                  <span className="text-xs text-slate-400 italic">Busca un jugador para vincular</span>
-                ) : teamSuggested.length === 0 && suggestionPool.length > 0 ? (
-                  <span className="text-xs text-slate-400 italic">Ningún sugerido con esos filtros — <button className="underline" onClick={() => { setSuggYearFilter(null); setSuggPosFilter(null) }}>quitar afinado</button></span>
-                ) : null}
-              </div>
+                </div>
+              ) : playerSearch.length >= 2 ? (
+                <span className="text-xs text-slate-400 italic">Sin resultados</span>
+              ) : suggestionPool.length === 0 ? (
+                <span className="text-xs text-slate-400 italic">Busca un jugador para vincularlo al partido</span>
+              ) : teamSuggested.length === 0 ? (
+                <span className="text-xs text-slate-400 italic">Ningún sugerido con esos filtros — <button className="underline" onClick={() => { setSuggYearFilter(null); setSuggPosFilter(null) }}>quitar afinado</button></span>
+              ) : null}
             </div>
-          </td>
-        </tr>
-      )}
-    </>
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -3711,6 +3941,11 @@ interface Props {
   matchPlayers: ScoutingMatchPlayer[]
   onAddMatchPlayer: (matchId: string, playerId: string) => Promise<void>
   onRemoveMatchPlayer: (matchId: string, playerId: string) => Promise<void>
+  /** Varios scouts por partido (tabla scouting_match_scouts) */
+  matchScouts: ScoutingMatchScout[]
+  onAddMatchScout: (matchId: string, scout: string) => Promise<void>
+  onRemoveMatchScout: (matchId: string, scout: string) => Promise<void>
+  onSetMatchScoutStatus: (matchId: string, scout: string, status: 'pendiente' | 'visto') => Promise<void>
   /** Abrir la ficha de un jugador al montar (navegación desde otra sección, p. ej. Boulema) */
   openPlayerId?: string | null
   onOpenPlayerConsumed?: () => void
@@ -3824,6 +4059,10 @@ export function Captacion({
   matchPlayers,
   onAddMatchPlayer,
   onRemoveMatchPlayer,
+  matchScouts,
+  onAddMatchScout,
+  onRemoveMatchScout,
+  onSetMatchScoutStatus,
   openPlayerId,
   onOpenPlayerConsumed,
   openFirmasEntryId,
@@ -3937,6 +4176,8 @@ export function Captacion({
   // ── match state ──
   const [showAddMatch, setShowAddMatch] = useState(false)
   const [editingMatch, setEditingMatch] = useState<ScoutingMatch | null>(null)
+  /** Ficha de partido abierta en ventana */
+  const [detailMatchId, setDetailMatchId] = useState<string | null>(null)
 
   // ── match filters ──
   const [matchSearch, setMatchSearch] = useState('')
@@ -4012,11 +4253,30 @@ export function Captacion({
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
   const paginated = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
 
+  // ── scouts por partido (tabla nueva + assigned_to legacy) ──
+  const scoutsByMatch = useMemo(() => {
+    const map: Record<string, MatchScoutInfo[]> = {}
+    for (const ms of matchScouts) {
+      if (!map[ms.matchId]) map[ms.matchId] = []
+      map[ms.matchId].push({ scout: ms.scout, status: ms.status })
+    }
+    // Compatibilidad: el responsable de assigned_to cuenta como scout aunque
+    // la migración de scouting_match_scouts todavía no se haya ejecutado.
+    for (const m of scoutingMatches) {
+      if (!m.assignedTo) continue
+      if (!map[m.id]) map[m.id] = []
+      if (!map[m.id].some(s => s.scout === m.assignedTo)) {
+        map[m.id].unshift({ scout: m.assignedTo, status: m.status === 'visto' ? 'visto' : 'pendiente' })
+      }
+    }
+    return map
+  }, [matchScouts, scoutingMatches])
+
   // ── filtered matches ──
   const filteredMatches = useMemo(() => {
     const q = matchSearch.toLowerCase().trim()
     return scoutingMatches.filter(m => {
-      if (matchPersonaFilter !== 'all' && m.assignedTo !== matchPersonaFilter) return false
+      if (matchPersonaFilter !== 'all' && !(scoutsByMatch[m.id] ?? []).some(s => s.scout === matchPersonaFilter)) return false
       if (matchCompFilter !== 'all' && m.competition !== matchCompFilter) return false
       if (matchModeFilter !== 'all' && (m.viewMode ?? 'video') !== matchModeFilter) return false
       if (matchStatusFilter !== 'all' && (m.status ?? 'pendiente') !== matchStatusFilter) return false
@@ -4026,7 +4286,7 @@ export function Captacion({
       }
       return true
     })
-  }, [scoutingMatches, matchSearch, matchPersonaFilter, matchCompFilter, matchModeFilter, matchStatusFilter])
+  }, [scoutingMatches, scoutsByMatch, matchSearch, matchPersonaFilter, matchCompFilter, matchModeFilter, matchStatusFilter])
 
   // ── matchPlayers lookup map (avoids O(n*m) scan per row during render) ──
   const matchPlayersByMatchId = useMemo(() => {
@@ -4369,13 +4629,42 @@ export function Captacion({
     }
   }
 
-  async function handleAssignMatch(m: ScoutingMatch, assignedTo: string) {
+  // ── Varios scouts por partido ──
+  // assigned_to sigue guardando al responsable principal (Dashboard, avisos).
+  async function handleAddScoutToMatch(m: ScoutingMatch, scout: string) {
+    if (!scout) return
     try {
-      const updated: ScoutingMatch = { ...m, assignedTo: assignedTo || undefined, status: 'pendiente' }
-      await db.updateScoutingMatch(updated)
-      onUpdateMatch(updated)
+      await onAddMatchScout(m.id, scout)
+      if (!m.assignedTo) {
+        const updated: ScoutingMatch = { ...m, assignedTo: scout }
+        await db.updateScoutingMatch(updated)
+        onUpdateMatch(updated)
+      }
+      showToast(`${personaToName(scout, profiles) || scout} asignado a este partido`)
     } catch {
-      showToast('Error al asignar el partido', 'error')
+      showToast('No se pudo asignar el scout. ¿Está ejecutada la migración de match_scouts?', 'error')
+    }
+  }
+
+  async function handleRemoveScoutFromMatch(m: ScoutingMatch, scout: string) {
+    try {
+      await onRemoveMatchScout(m.id, scout)
+      if (m.assignedTo === scout) {
+        const rest = (scoutsByMatch[m.id] ?? []).filter(s => s.scout !== scout)
+        const updated: ScoutingMatch = { ...m, assignedTo: rest[0]?.scout }
+        await db.updateScoutingMatch(updated)
+        onUpdateMatch(updated)
+      }
+    } catch {
+      showToast('No se pudo quitar el scout del partido', 'error')
+    }
+  }
+
+  async function handleScoutStatus(m: ScoutingMatch, scout: string, status: 'pendiente' | 'visto') {
+    try {
+      await onSetMatchScoutStatus(m.id, scout, status)
+    } catch {
+      showToast('No se pudo cambiar el estado del scout', 'error')
     }
   }
 
@@ -4897,7 +5186,11 @@ export function Captacion({
         <div className="flex-1 w-full px-3 sm:px-6 py-4 space-y-3">
           {/* Notificación de partidos pendientes */}
           {(() => {
-            const myPending = scoutingMatches.filter(m => m.assignedTo === currentProfile.avatar && m.status !== 'visto')
+            const myPending = scoutingMatches.filter(m => {
+              if (m.status === 'visto') return false
+              const mine = (scoutsByMatch[m.id] ?? []).find(s => s.scout === currentProfile.avatar)
+              return !!mine && mine.status !== 'visto'
+            })
             if (myPending.length === 0) return null
             return (
               <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-sm">
@@ -5148,7 +5441,11 @@ export function Captacion({
                               ? <span className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">🏟️ Campo</span>
                               : <span className="text-xs text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">📹 Vídeo</span>
                             }
-                            {m.assignedTo && <span className="text-xs font-mono font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">{m.assignedTo}</span>}
+                            {(scoutsByMatch[m.id] ?? []).map(s2 => (
+                              <span key={s2.scout} className={`text-xs font-mono font-semibold px-1.5 py-0.5 rounded ${s2.status === 'visto' ? 'text-emerald-700 bg-emerald-50' : 'text-slate-600 bg-slate-100'}`}>
+                                {s2.scout}{s2.status === 'visto' ? ' ✓' : ''}
+                              </span>
+                            ))}
                           </div>
                           {m.notes && <div className="text-xs text-slate-400 mt-1 truncate">{m.notes}</div>}
                         </div>
@@ -5187,6 +5484,12 @@ export function Captacion({
                           ))}
                         </div>
                       )}
+                      <button
+                        onClick={() => setDetailMatchId(m.id)}
+                        className="w-full text-[11px] font-bold text-violet-700 bg-violet-50 border border-violet-200 rounded-lg py-2 hover:bg-violet-100 transition-colors"
+                      >
+                        Abrir partido · jugadores, scouts e informes
+                      </button>
                     </div>
                   )
                 })}
@@ -5220,23 +5523,17 @@ export function Captacion({
                             key={m.id}
                             match={m}
                             scoutName={scoutName}
+                            scouts={scoutsByMatch[m.id] ?? []}
                             profiles={profiles}
                             currentProfile={currentProfile}
                             isAdmin={isAdmin}
                             scoutingPlayers={scoutingPlayers}
                             linkedPlayerIds={linkedPlayerIds}
                             scoutingReports={scoutingReports}
-                            allMatches={scoutingMatches}
-                            matchPlayersByMatchId={matchPlayersByMatchId}
                             onEdit={openEditMatch}
                             onDelete={handleDeleteMatch}
                             onToggleStatus={handleToggleMatchStatus}
-                            onAssign={handleAssignMatch}
-                            onAddMatchPlayer={onAddMatchPlayer}
-                            onRemoveMatchPlayer={onRemoveMatchPlayer}
-                            onAddReport={onAddReport}
-                            onOpenPlayer={id => setPanelPlayerId(id)}
-                            showToast={showToast}
+                            onOpenDetail={setDetailMatchId}
                           />
                         )
                       })}
@@ -5927,6 +6224,37 @@ export function Captacion({
           </div>
         </>
       )}
+
+      {/* ── Ficha de partido (ventana) ── */}
+      {(() => {
+        const dm = detailMatchId ? scoutingMatches.find(m => m.id === detailMatchId) : null
+        if (!dm) return null
+        return (
+          <MatchDetailModal
+            match={dm}
+            scouts={scoutsByMatch[dm.id] ?? []}
+            profiles={profiles}
+            currentProfile={currentProfile}
+            isAdmin={isAdmin}
+            scoutingPlayers={scoutingPlayers}
+            linkedPlayerIds={matchPlayersByMatchId[dm.id] ?? []}
+            scoutingReports={scoutingReports}
+            allMatches={scoutingMatches}
+            matchPlayersByMatchId={matchPlayersByMatchId}
+            onClose={() => setDetailMatchId(null)}
+            onEdit={openEditMatch}
+            onToggleStatus={handleToggleMatchStatus}
+            onAddScout={handleAddScoutToMatch}
+            onRemoveScout={handleRemoveScoutFromMatch}
+            onSetScoutStatus={handleScoutStatus}
+            onAddMatchPlayer={onAddMatchPlayer}
+            onRemoveMatchPlayer={onRemoveMatchPlayer}
+            onAddReport={onAddReport}
+            onOpenPlayer={id => { setDetailMatchId(null); setPanelPlayerId(id) }}
+            showToast={showToast}
+          />
+        )
+      })()}
 
       {/* Toasts globales de la vista */}
       <ToastStack toasts={toasts} onDismiss={dismissToast} />

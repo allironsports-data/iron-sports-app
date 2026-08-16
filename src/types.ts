@@ -304,6 +304,15 @@ export interface ScoutingMatchPlayer {
   createdAt: string
 }
 
+/** Scout asignado a un partido. Un partido puede tener varios. */
+export interface ScoutingMatchScout {
+  id: string
+  matchId: string
+  scout: string                        // iniciales del perfil (profiles.avatar)
+  status: 'pendiente' | 'visto'        // estado de ESE scout, no del partido
+  createdAt: string
+}
+
 export interface BoulemaPeticion {
   id: string
   playerName: string

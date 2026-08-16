@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion, ClubLog, PlayerMeeting, PlayerActivity, MemberStatus, Postpartido, FirmasEntry, BoulemaPlayer } from '../types'
+import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchScout, BoulemaPeticion, ClubLog, PlayerMeeting, PlayerActivity, MemberStatus, Postpartido, FirmasEntry, BoulemaPlayer } from '../types'
 
 // ── helpers ──────────────────────────────────────────────────
 
@@ -819,6 +819,49 @@ export async function addMatchPlayer(matchId: string, playerId: string): Promise
 export async function removeMatchPlayer(matchId: string, playerId: string): Promise<void> {
   const { error } = await supabase.from('scouting_match_players')
     .delete().eq('match_id', matchId).eq('player_id', playerId)
+  if (error) throw error
+}
+
+// ── scouting_match_scouts (varios scouts por partido) ─────────
+
+function dbToMatchScout(row: Record<string, unknown>): ScoutingMatchScout {
+  return {
+    id: row.id as string,
+    matchId: row.match_id as string,
+    scout: row.scout as string,
+    status: (row.status as string) === 'visto' ? 'visto' : 'pendiente',
+    createdAt: row.created_at as string,
+  }
+}
+
+/** Devuelve [] si la tabla aún no existe (migración sin ejecutar). */
+export async function fetchMatchScouts(): Promise<ScoutingMatchScout[]> {
+  try {
+    const { data, error } = await supabase.from('scouting_match_scouts').select('*')
+    if (error) return []
+    return (data ?? []).map(dbToMatchScout)
+  } catch {
+    return []
+  }
+}
+
+export async function addMatchScout(matchId: string, scout: string): Promise<ScoutingMatchScout> {
+  const { data, error } = await supabase.from('scouting_match_scouts')
+    .upsert({ match_id: matchId, scout }, { onConflict: 'match_id,scout' })
+    .select().single()
+  if (error) throw error
+  return dbToMatchScout(data)
+}
+
+export async function removeMatchScout(matchId: string, scout: string): Promise<void> {
+  const { error } = await supabase.from('scouting_match_scouts')
+    .delete().eq('match_id', matchId).eq('scout', scout)
+  if (error) throw error
+}
+
+export async function setMatchScoutStatus(matchId: string, scout: string, status: 'pendiente' | 'visto'): Promise<void> {
+  const { error } = await supabase.from('scouting_match_scouts')
+    .update({ status }).eq('match_id', matchId).eq('scout', scout)
   if (error) throw error
 }
 
