@@ -4129,35 +4129,30 @@ function ClubCard({ club, negotiations, isSelected, onClick, onOffer, onTogglePr
       <div className={`w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0 text-[11px] font-bold ${tierCfg.bg} ${tierCfg.text}`}>
         {tier}
       </div>
-      <div className="flex-1 min-w-0 overflow-hidden">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <span className="font-medium text-slate-800 text-sm truncate" title={club.name}>{club.name}</span>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start flex-wrap gap-x-1.5 gap-y-0.5 min-w-0">
+          <span className="font-medium text-slate-800 text-sm break-words">{club.name}</span>
           {club.needs.length > 0 && (
-            <span className="text-[11px] leading-none bg-amber-50 text-amber-600 border border-amber-200 px-1.5 py-[3px] rounded-full flex-shrink-0 whitespace-nowrap">
+            <span className="text-[11px] leading-none bg-amber-50 text-amber-600 border border-amber-200 px-1.5 py-[3px] rounded-full flex-shrink-0 whitespace-nowrap mt-px">
               {club.needs.length} nec.
             </span>
           )}
-        </div>
-        <div className="flex items-center gap-1.5 mt-0.5 text-xs text-slate-500 min-w-0">
-          {club.league && <span className="text-slate-400 truncate">{club.league}</span>}
-          {club.contactPerson && <span className="truncate hidden sm:inline">{club.contactPerson}</span>}
-          {activeNegs.length > 0 && (
-            <span className="text-blue-600 flex-shrink-0 whitespace-nowrap" title={`${activeNegs.length} jugador${activeNegs.length !== 1 ? 'es' : ''} ofrecido${activeNegs.length !== 1 ? 's' : ''}`}>
-              {activeNegs.length} ofr.
-            </span>
-          )}
           {daysAgo !== null ? (
-            <span
-              className={`flex-shrink-0 whitespace-nowrap ml-auto pl-1 ${isStale ? 'text-orange-500 font-semibold' : 'text-slate-400'}`}
-              title={`Última actividad: ${fmtDays(daysAgo)}`}
-            >
+            <span className={`text-xs whitespace-nowrap flex-shrink-0 ml-auto pl-1 ${isStale ? 'text-orange-500 font-semibold' : 'text-slate-400'}`}>
               {isStale ? `⏰ ${fmtDays(daysAgo)}` : fmtDays(daysAgo)}
             </span>
           ) : contactedDaysAgo !== null ? (
-            <span className="flex-shrink-0 whitespace-nowrap ml-auto pl-1 text-green-600 max-w-[55%] truncate">
+            <span className="text-xs whitespace-nowrap flex-shrink-0 ml-auto pl-1 text-green-600">
               ✓ {contactedByName?.split(' ')[0] ?? club.contactedBy} · {fmtDays(contactedDaysAgo)}
             </span>
           ) : null}
+        </div>
+        <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 mt-0.5 text-xs text-slate-500 min-w-0">
+          {club.league && <span className="text-slate-400 break-words">{club.league}</span>}
+          {club.contactPerson && <span className="break-words">{club.contactPerson}</span>}
+          {activeNegs.length > 0 && (
+            <span className="text-blue-600 whitespace-nowrap">{activeNegs.length} ofrecido{activeNegs.length !== 1 ? 's' : ''}</span>
+          )}
         </div>
       </div>
       <div className="flex items-center gap-1 flex-shrink-0">
