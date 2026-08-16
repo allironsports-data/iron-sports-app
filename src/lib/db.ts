@@ -531,11 +531,22 @@ function dbToDistEntry(row: Record<string, unknown>): DistributionEntry {
 }
 
 export async function fetchDistributionEntries(season?: string): Promise<DistributionEntry[]> {
-  let q = supabase.from('distribution_entries').select('*').eq('active', true).order('priority')
-  if (season) q = q.eq('season', season)
-  const { data, error } = await q
-  if (error) throw error
-  return (data ?? []).map(dbToDistEntry)
+  const all: DistributionEntry[] = []
+  const pageSize = 1000
+  let from = 0
+  while (true) {
+    let q = supabase.from('distribution_entries').select('*').eq('active', true)
+      .order('priority')
+      .range(from, from + pageSize - 1)
+    if (season) q = q.eq('season', season)
+    const { data, error } = await q
+    if (error) throw error
+    const page = (data ?? []).map(dbToDistEntry)
+    all.push(...page)
+    if (page.length < pageSize) break
+    from += pageSize
+  }
+  return all
 }
 
 export async function createDistributionEntry(e: Omit<DistributionEntry, 'id' | 'createdAt'>): Promise<DistributionEntry> {
@@ -588,12 +599,24 @@ function dbToNegotiation(row: Record<string, unknown>): ClubNegotiation {
 }
 
 export async function fetchNegotiations(playerId?: string, clubId?: string): Promise<ClubNegotiation[]> {
-  let q = supabase.from('club_negotiations').select('*').order('updated_at', { ascending: false })
-  if (playerId) q = q.eq('player_id', playerId)
-  if (clubId) q = q.eq('club_id', clubId)
-  const { data, error } = await q
-  if (error) throw error
-  return (data ?? []).map(dbToNegotiation)
+  // Paginado: sin esto Supabase corta en 1000 filas y desaparecían ofrecimientos
+  const all: ClubNegotiation[] = []
+  const pageSize = 1000
+  let from = 0
+  while (true) {
+    let q = supabase.from('club_negotiations').select('*')
+      .order('updated_at', { ascending: false })
+      .range(from, from + pageSize - 1)
+    if (playerId) q = q.eq('player_id', playerId)
+    if (clubId) q = q.eq('club_id', clubId)
+    const { data, error } = await q
+    if (error) throw error
+    const page = (data ?? []).map(dbToNegotiation)
+    all.push(...page)
+    if (page.length < pageSize) break
+    from += pageSize
+  }
+  return all
 }
 
 export async function createNegotiation(n: Omit<ClubNegotiation, 'id' | 'createdAt' | 'updatedAt'>): Promise<ClubNegotiation> {
@@ -799,10 +822,24 @@ function dbToMatchPlayer(row: Record<string, unknown>): ScoutingMatchPlayer {
 }
 
 export async function fetchMatchPlayers(): Promise<ScoutingMatchPlayer[]> {
+  // Paginado: Supabase devuelve como máximo 1000 filas por petición y aquí hay
+  // varios miles. Sin esto, muchos partidos aparecían sin sus jugadores.
   try {
-    const { data, error } = await supabase.from('scouting_match_players').select('*')
-    if (error) return []
-    return (data ?? []).map(dbToMatchPlayer)
+    const all: ScoutingMatchPlayer[] = []
+    const pageSize = 1000
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase.from('scouting_match_players')
+        .select('*')
+        .order('created_at', { ascending: true })
+        .range(from, from + pageSize - 1)
+      if (error) return all
+      const page = (data ?? []).map(dbToMatchPlayer)
+      all.push(...page)
+      if (page.length < pageSize) break
+      from += pageSize
+    }
+    return all
   } catch {
     return []
   }
@@ -847,10 +884,23 @@ function dbToMatchScout(row: Record<string, unknown>): ScoutingMatchScout {
 
 /** Devuelve [] si la tabla aún no existe (migración sin ejecutar). */
 export async function fetchMatchScouts(): Promise<ScoutingMatchScout[]> {
+  // Paginado por el mismo motivo: hay una fila por scout y partido.
   try {
-    const { data, error } = await supabase.from('scouting_match_scouts').select('*')
-    if (error) return []
-    return (data ?? []).map(dbToMatchScout)
+    const all: ScoutingMatchScout[] = []
+    const pageSize = 1000
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase.from('scouting_match_scouts')
+        .select('*')
+        .order('created_at', { ascending: true })
+        .range(from, from + pageSize - 1)
+      if (error) return all
+      const page = (data ?? []).map(dbToMatchScout)
+      all.push(...page)
+      if (page.length < pageSize) break
+      from += pageSize
+    }
+    return all
   } catch {
     return []
   }
