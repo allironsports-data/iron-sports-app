@@ -830,6 +830,7 @@ function dbToMatchScout(row: Record<string, unknown>): ScoutingMatchScout {
     matchId: row.match_id as string,
     scout: row.scout as string,
     status: (row.status as string) === 'visto' ? 'visto' : 'pendiente',
+    viewMode: (row.view_mode as ScoutingMatchScout['viewMode']) ?? undefined,
     createdAt: row.created_at as string,
   }
 }
@@ -845,12 +846,19 @@ export async function fetchMatchScouts(): Promise<ScoutingMatchScout[]> {
   }
 }
 
-export async function addMatchScout(matchId: string, scout: string): Promise<ScoutingMatchScout> {
+export async function addMatchScout(matchId: string, scout: string, viewMode?: 'campo' | 'video'): Promise<ScoutingMatchScout> {
   const { data, error } = await supabase.from('scouting_match_scouts')
-    .upsert({ match_id: matchId, scout }, { onConflict: 'match_id,scout' })
+    .upsert({ match_id: matchId, scout, view_mode: viewMode ?? null }, { onConflict: 'match_id,scout' })
     .select().single()
   if (error) throw error
   return dbToMatchScout(data)
+}
+
+/** Cómo vio ESE scout el partido: en el campo o por vídeo */
+export async function setMatchScoutMode(matchId: string, scout: string, viewMode: 'campo' | 'video'): Promise<void> {
+  const { error } = await supabase.from('scouting_match_scouts')
+    .update({ view_mode: viewMode }).eq('match_id', matchId).eq('scout', scout)
+  if (error) throw error
 }
 
 export async function removeMatchScout(matchId: string, scout: string): Promise<void> {

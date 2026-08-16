@@ -310,6 +310,7 @@ export interface ScoutingMatchScout {
   matchId: string
   scout: string                        // iniciales del perfil (profiles.avatar)
   status: 'pendiente' | 'visto'        // estado de ESE scout, no del partido
+  viewMode?: 'campo' | 'video'         // cómo lo vio ESE scout (campo o vídeo)
   createdAt: string
 }
 

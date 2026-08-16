@@ -733,8 +733,8 @@ export default function App() {
     setMatchPlayers(prev => prev.filter(x => !(x.matchId === matchId && x.playerId === playerId)))
   }
   // ── Varios scouts por partido (scouting_match_scouts) ──
-  const handleAddMatchScout = async (matchId: string, scout: string) => {
-    const row = await db.addMatchScout(matchId, scout)
+  const handleAddMatchScout = async (matchId: string, scout: string, viewMode?: 'campo' | 'video') => {
+    const row = await db.addMatchScout(matchId, scout, viewMode)
     setMatchScouts(prev => prev.some(x => x.matchId === matchId && x.scout === scout) ? prev : [...prev, row])
   }
   const handleRemoveMatchScout = async (matchId: string, scout: string) => {
@@ -744,6 +744,10 @@ export default function App() {
   const handleSetMatchScoutStatus = async (matchId: string, scout: string, status: 'pendiente' | 'visto') => {
     await db.setMatchScoutStatus(matchId, scout, status)
     setMatchScouts(prev => prev.map(x => x.matchId === matchId && x.scout === scout ? { ...x, status } : x))
+  }
+  const handleSetMatchScoutMode = async (matchId: string, scout: string, viewMode: 'campo' | 'video') => {
+    await db.setMatchScoutMode(matchId, scout, viewMode)
+    setMatchScouts(prev => prev.map(x => x.matchId === matchId && x.scout === scout ? { ...x, viewMode } : x))
   }
 
   // ── Firmar ⇄ Tareas: cada próxima acción genera una tarea real ──
@@ -1124,6 +1128,7 @@ export default function App() {
         onAddMatchScout={handleAddMatchScout}
         onRemoveMatchScout={handleRemoveMatchScout}
         onSetMatchScoutStatus={handleSetMatchScoutStatus}
+        onSetMatchScoutMode={handleSetMatchScoutMode}
         openPlayerId={captacionOpenPlayerId}
         onOpenPlayerConsumed={() => setCaptacionOpenPlayerId(null)}
         openFirmasEntryId={captacionOpenFirmasId}

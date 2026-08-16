@@ -195,7 +195,7 @@ function teamsAlike(a?: string, b?: string): boolean {
 }
 
 /** Scout que cubre un partido, con su propio estado (pendiente / visto) */
-type MatchScoutInfo = { scout: string; status: 'pendiente' | 'visto' }
+type MatchScoutInfo = { scout: string; status: 'pendiente' | 'visto'; viewMode: 'campo' | 'video' }
 
 // Motivo por el que un jugador aparece sugerido en un partido
 type SuggestWhy = 'equipo' | 'posible' | 'historial' | 'busqueda'
@@ -635,10 +635,11 @@ function MatchRow({
               return (
                 <span
                   key={s.scout}
-                  title={`${name || s.scout}${s.status === 'visto' ? ' · ya lo ha visto' : ' · pendiente'}`}
+                  title={`${name || s.scout} · ${s.viewMode === 'campo' ? 'en el campo' : 'por vídeo'}${s.status === 'visto' ? ' · ya lo ha visto' : ' · pendiente'}`}
                   className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-semibold ${c.bg} ${c.text} ${c.border} ${s.status === 'visto' ? '' : 'opacity-70'}`}
                 >
                   <span className="font-mono">{s.scout}</span>
+                  <span className="text-[9px]">{s.viewMode === 'campo' ? '🏟️' : '📹'}</span>
                   {s.status === 'visto' && <span className="text-[10px]">✓</span>}
                   {scouts.length === 1 && scoutName && scoutName !== s.scout && (
                     <span className="font-normal opacity-70">({scoutName})</span>
@@ -711,7 +712,7 @@ function MatchDetailModal({
   match, scouts, profiles, currentProfile, isAdmin,
   scoutingPlayers, linkedPlayerIds, scoutingReports, allMatches, matchPlayersByMatchId,
   onClose, onEdit, onToggleStatus,
-  onAddScout, onRemoveScout, onSetScoutStatus,
+  onAddScout, onRemoveScout, onSetScoutStatus, onSetScoutMode,
   onAddMatchPlayer, onRemoveMatchPlayer, onAddReport, onOpenPlayer, showToast,
 }: {
   match: ScoutingMatch
@@ -730,6 +731,7 @@ function MatchDetailModal({
   onAddScout: (m: ScoutingMatch, scout: string) => void
   onRemoveScout: (m: ScoutingMatch, scout: string) => void
   onSetScoutStatus: (m: ScoutingMatch, scout: string, status: 'pendiente' | 'visto') => void
+  onSetScoutMode: (m: ScoutingMatch, scout: string, viewMode: 'campo' | 'video') => void
   onAddMatchPlayer: (matchId: string, playerId: string) => Promise<void>
   onRemoveMatchPlayer: (matchId: string, playerId: string) => Promise<void>
   onAddReport: (r: ScoutingReport) => void
@@ -918,6 +920,13 @@ function MatchDetailModal({
                   <span key={s.scout} className={`inline-flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-full border text-xs font-semibold ${c.bg} ${c.text} ${c.border}`}>
                     <span className="font-mono">{s.scout}</span>
                     {name && name !== s.scout && <span className="font-normal opacity-70">{name}</span>}
+                    <button
+                      onClick={() => onSetScoutMode(match, s.scout, s.viewMode === 'campo' ? 'video' : 'campo')}
+                      title={s.viewMode === 'campo' ? 'Lo vio en el campo — cambiar a vídeo' : 'Lo vio por vídeo — cambiar a campo'}
+                      className="text-[11px] px-1.5 py-0.5 rounded-full border bg-white/70 border-slate-200 hover:bg-white transition-colors"
+                    >
+                      {s.viewMode === 'campo' ? '🏟️' : '📹'}
+                    </button>
                     <button
                       onClick={() => onSetScoutStatus(match, s.scout, s.status === 'visto' ? 'pendiente' : 'visto')}
                       title={s.status === 'visto' ? 'Ya lo ha visto — marcar como pendiente' : 'Marcar como visto'}
@@ -3943,9 +3952,10 @@ interface Props {
   onRemoveMatchPlayer: (matchId: string, playerId: string) => Promise<void>
   /** Varios scouts por partido (tabla scouting_match_scouts) */
   matchScouts: ScoutingMatchScout[]
-  onAddMatchScout: (matchId: string, scout: string) => Promise<void>
+  onAddMatchScout: (matchId: string, scout: string, viewMode?: 'campo' | 'video') => Promise<void>
   onRemoveMatchScout: (matchId: string, scout: string) => Promise<void>
   onSetMatchScoutStatus: (matchId: string, scout: string, status: 'pendiente' | 'visto') => Promise<void>
+  onSetMatchScoutMode: (matchId: string, scout: string, viewMode: 'campo' | 'video') => Promise<void>
   /** Abrir la ficha de un jugador al montar (navegación desde otra sección, p. ej. Boulema) */
   openPlayerId?: string | null
   onOpenPlayerConsumed?: () => void
@@ -4063,6 +4073,7 @@ export function Captacion({
   onAddMatchScout,
   onRemoveMatchScout,
   onSetMatchScoutStatus,
+  onSetMatchScoutMode,
   openPlayerId,
   onOpenPlayerConsumed,
   openFirmasEntryId,
@@ -4256,9 +4267,10 @@ export function Captacion({
   // ── scouts por partido (tabla nueva + assigned_to legacy) ──
   const scoutsByMatch = useMemo(() => {
     const map: Record<string, MatchScoutInfo[]> = {}
+    const modoDe = (id: string) => scoutingMatches.find(m => m.id === id)?.viewMode ?? 'video'
     for (const ms of matchScouts) {
       if (!map[ms.matchId]) map[ms.matchId] = []
-      map[ms.matchId].push({ scout: ms.scout, status: ms.status })
+      map[ms.matchId].push({ scout: ms.scout, status: ms.status, viewMode: ms.viewMode ?? modoDe(ms.matchId) })
     }
     // Compatibilidad: el responsable de assigned_to cuenta como scout aunque
     // la migración de scouting_match_scouts todavía no se haya ejecutado.
@@ -4266,7 +4278,7 @@ export function Captacion({
       if (!m.assignedTo) continue
       if (!map[m.id]) map[m.id] = []
       if (!map[m.id].some(s => s.scout === m.assignedTo)) {
-        map[m.id].unshift({ scout: m.assignedTo, status: m.status === 'visto' ? 'visto' : 'pendiente' })
+        map[m.id].unshift({ scout: m.assignedTo, status: m.status === 'visto' ? 'visto' : 'pendiente', viewMode: m.viewMode ?? 'video' })
       }
     }
     return map
@@ -4634,7 +4646,7 @@ export function Captacion({
   async function handleAddScoutToMatch(m: ScoutingMatch, scout: string) {
     if (!scout) return
     try {
-      await onAddMatchScout(m.id, scout)
+      await onAddMatchScout(m.id, scout, m.viewMode ?? 'video')
       if (!m.assignedTo) {
         const updated: ScoutingMatch = { ...m, assignedTo: scout }
         await db.updateScoutingMatch(updated)
@@ -4665,6 +4677,14 @@ export function Captacion({
       await onSetMatchScoutStatus(m.id, scout, status)
     } catch {
       showToast('No se pudo cambiar el estado del scout', 'error')
+    }
+  }
+
+  async function handleScoutMode(m: ScoutingMatch, scout: string, viewMode: 'campo' | 'video') {
+    try {
+      await onSetMatchScoutMode(m.id, scout, viewMode)
+    } catch {
+      showToast('No se pudo cambiar el modo del scout', 'error')
     }
   }
 
@@ -6247,6 +6267,7 @@ export function Captacion({
             onAddScout={handleAddScoutToMatch}
             onRemoveScout={handleRemoveScoutFromMatch}
             onSetScoutStatus={handleScoutStatus}
+            onSetScoutMode={handleScoutMode}
             onAddMatchPlayer={onAddMatchPlayer}
             onRemoveMatchPlayer={onRemoveMatchPlayer}
             onAddReport={onAddReport}
