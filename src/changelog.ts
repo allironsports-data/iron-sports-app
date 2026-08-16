@@ -24,6 +24,8 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Los jugadores sugeridos al vincular ya no mezclan equipos parecidos (Real Madrid / Atlético Madrid / Atlético Baleares)',
       'La lista de sugeridos ya no se corta en 16: salen todos, y el buscador muestra hasta 60 resultados',
       'Tarjetas de club en Distribución: se acabó el texto montado sobre los avatares',
+      'Los partidos duplicados (una copia por scout) se han fusionado en uno solo: 2001 → 1862 partidos',
+      'Captación se sincroniza en vivo: si otro scout vincula un jugador o escribe un informe, lo ves sin recargar',
     ],
   },
   {

@@ -809,11 +809,21 @@ export async function fetchMatchPlayers(): Promise<ScoutingMatchPlayer[]> {
 }
 
 export async function addMatchPlayer(matchId: string, playerId: string): Promise<ScoutingMatchPlayer> {
+  // INSERT normal, no upsert: ahora un partido es compartido por varios scouts,
+  // así que el jugador puede estar ya vinculado por otro. El upsert entraba por
+  // la vía del UPDATE y RLS lo bloqueaba (la tabla solo tiene policy de select,
+  // insert y delete) → "error al vincular jugador".
   const { data, error } = await supabase.from('scouting_match_players')
-    .upsert({ match_id: matchId, player_id: playerId }, { onConflict: 'match_id,player_id' })
-    .select().single()
-  if (error) throw error
-  return dbToMatchPlayer(data)
+    .insert({ match_id: matchId, player_id: playerId })
+    .select().maybeSingle()
+  if (!error && data) return dbToMatchPlayer(data)
+  if (error && error.code !== '23505') throw error   // 23505 = ya estaba vinculado
+
+  const { data: existing, error: readError } = await supabase.from('scouting_match_players')
+    .select('*').eq('match_id', matchId).eq('player_id', playerId).maybeSingle()
+  if (readError) throw readError
+  if (!existing) throw error ?? new Error('No se pudo vincular el jugador al partido')
+  return dbToMatchPlayer(existing)
 }
 
 export async function removeMatchPlayer(matchId: string, playerId: string): Promise<void> {

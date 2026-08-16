@@ -770,8 +770,13 @@ function MatchDetailModal({
   async function handleAddPlayer(playerId: string) {
     try {
       await onAddMatchPlayer(match.id, playerId)
-    } catch {
-      showToast?.('Error al vincular el jugador al partido', 'error')
+    } catch (e) {
+      const err = e as { code?: string; message?: string }
+      showToast?.(
+        err?.code === '23503'
+          ? 'Ese partido ya no existe (se fusionó con otro). Recarga la página.'
+          : `Error al vincular el jugador: ${err?.message ?? 'desconocido'}`,
+        'error')
     }
   }
 

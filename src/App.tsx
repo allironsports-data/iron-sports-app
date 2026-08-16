@@ -484,6 +484,16 @@ export default function App() {
         debouncedRefetch('postpartidos', () => db.fetchPostpartidos().then((d) => setPostpartidos(d)).catch(() => {})))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'captacion_firmas' }, () =>
         debouncedRefetch('captacion_firmas', () => db.fetchFirmasEntries().then((d) => setFirmasEntries(d)).catch(() => {})))
+      // Captación · partidos: ahora un partido lo comparten varios scouts, así que
+      // los jugadores vinculados y los informes cambian mientras tienes la ficha abierta.
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'scouting_matches' }, () =>
+        debouncedRefetch('scouting_matches', () => db.fetchScoutingMatches().then((d) => setScoutingMatches(d as ScoutingMatch[])).catch(() => {})))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'scouting_match_players' }, () =>
+        debouncedRefetch('scouting_match_players', () => db.fetchMatchPlayers().then((d) => setMatchPlayers(d as ScoutingMatchPlayer[])).catch(() => {})))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'scouting_match_scouts' }, () =>
+        debouncedRefetch('scouting_match_scouts', () => db.fetchMatchScouts().then((d) => setMatchScouts(d as ScoutingMatchScout[])).catch(() => {})))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'scouting_reports' }, () =>
+        debouncedRefetch('scouting_reports', () => db.fetchScoutingReports().then((d) => setScoutingReports(d as ScoutingReport[])).catch(() => {})))
       .subscribe()
     return () => {
       Object.values(timers).forEach(clearTimeout)
