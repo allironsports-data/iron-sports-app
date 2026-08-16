@@ -927,10 +927,14 @@ function MatchDetailModal({
                     {name && name !== s.scout && <span className="font-normal opacity-70">{name}</span>}
                     <button
                       onClick={() => onSetScoutMode(match, s.scout, s.viewMode === 'campo' ? 'video' : 'campo')}
-                      title={s.viewMode === 'campo' ? 'Lo vio en el campo — cambiar a vídeo' : 'Lo vio por vídeo — cambiar a campo'}
-                      className="text-[11px] px-1.5 py-0.5 rounded-full border bg-white/70 border-slate-200 hover:bg-white transition-colors"
+                      title={s.viewMode === 'campo' ? 'Lo vio en el campo — clic para cambiar a vídeo' : 'Lo vio por vídeo — clic para cambiar a campo'}
+                      className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border transition-colors whitespace-nowrap ${
+                        s.viewMode === 'campo'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                          : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                      }`}
                     >
-                      {s.viewMode === 'campo' ? '🏟️' : '📹'}
+                      {s.viewMode === 'campo' ? '🏟️ Campo' : '📹 Vídeo'}
                     </button>
                     <button
                       onClick={() => onSetScoutStatus(match, s.scout, s.status === 'visto' ? 'pendiente' : 'visto')}
