@@ -27,6 +27,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Cuentas «solo Captación»: en Admin puedes restringir a cualquier miembro para que solo vea Jugadores, Partidos e Informes — ideal para colaboradores que meten informes',
       'Admin → Estadísticas → pestaña Scouts: análisis del trabajo de cada scout — volumen, muletillas, originalidad, conclusiones, congruencia con los demás, acierto y detección temprana — con glosario de cada métrica',
       'Y estadísticas del equipo completo: ritmo de 12 meses, embudo de la BBDD a la firma, consenso, debates pendientes (Llamar vs Descartar), destacados que se enfrían, reparto del esfuerzo y cobertura por posición',
+      'Firmar: acción predefinida «📵 Conseguir teléfono» — al programar la próxima acción, un toque en 📵 la deja lista; la tarjeta del jugador muestra el 📵 y cada columna cuenta cuántos están sin número',
     ],
   },
   {

@@ -368,7 +368,7 @@ export interface ScoutingMatch {
 export type FirmasStatus = 'llamar' | 'caliente' | 'templado' | 'frio' | 'decidir' | 'firmado'
 
 /** Tipo de apunte en el historial: nota libre, contacto tipado o cambio de estatus (automático) */
-export type FirmasCommentKind = 'nota' | 'llamada' | 'whatsapp' | 'reunion' | 'entorno' | 'estatus'
+export type FirmasCommentKind = 'nota' | 'llamada' | 'whatsapp' | 'reunion' | 'entorno' | 'estatus' | 'telefono'
 
 export interface FirmasComment {
   id: string

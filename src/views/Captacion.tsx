@@ -1880,6 +1880,23 @@ const FIRMAS_KIND_META: Record<string, { icon: string; label: string }> = {
   entorno:  { icon: '👪', label: 'Entorno' },
 }
 
+// Tipos de PRÓXIMA ACCIÓN: los del historial + "Conseguir teléfono" (📵).
+// Pedido por Pablo: muchos jugadores en "Llamar" están realmente en fase de
+// conseguir el número; el 📵 en la tarjeta lo distingue de un vistazo.
+const FIRMAS_ACTION_KIND_META: Record<string, { icon: string; label: string }> = {
+  ...FIRMAS_KIND_META,
+  telefono: { icon: '📵', label: 'Conseguir teléfono' },
+}
+
+// ¿Está pendiente de conseguir teléfono? Detecta tanto el tipo explícito
+// como el texto de acciones ya existentes ("Conseguir teléfono", "buscar
+// número", "tlf", "móvil"…), así funciona retroactivamente sin tocar datos.
+const necesitaTelefono = (e: FirmasEntry): boolean =>
+  e.status !== 'firmado' && (
+    e.nextActionKind === 'telefono' ||
+    /tel[eé]fono|n[uú]mero|\btlf\b|m[oó]vil/i.test(e.nextAction ?? '')
+  )
+
 // Orden canónico de zonas (las del Trello); las nuevas van después, alfabéticas
 const FIRMAS_ZONE_ORDER = [
   'Valencia',
@@ -2070,13 +2087,16 @@ function FirmasHoverCard({ entry, sp, reports, profiles, pos }: {
         )}
         {entry.nextActionDate && (
           <span className={`rounded px-1.5 py-0.5 ${entry.nextActionDate < todayISO() ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
-            {FIRMAS_KIND_META[entry.nextActionKind ?? '']?.icon ?? '📌'} {entry.nextAction ?? 'Acción'} · {fmtDate(entry.nextActionDate)}
+            {FIRMAS_ACTION_KIND_META[entry.nextActionKind ?? '']?.icon ?? '📌'} {entry.nextAction ?? 'Acción'} · {fmtDate(entry.nextActionDate)}
           </span>
+        )}
+        {necesitaTelefono(entry) && (
+          <span className="rounded px-1.5 py-0.5 bg-violet-50 text-violet-700">📵 sin teléfono</span>
         )}
       </div>
       {lastComment && (
         <div className="mt-2 bg-slate-50 rounded-lg px-2 py-1.5 text-[11px] text-slate-600">
-          {FIRMAS_KIND_META[lastComment.kind ?? 'nota']?.icon} {lastComment.text.length > 90 ? lastComment.text.slice(0, 90) + '…' : lastComment.text}
+          {FIRMAS_ACTION_KIND_META[lastComment.kind ?? 'nota']?.icon} {lastComment.text.length > 90 ? lastComment.text.slice(0, 90) + '…' : lastComment.text}
           <span className="text-slate-400"> · {lastComment.author?.split(' ')[0]} · {relativeDate(lastComment.date) || fmtDate(lastComment.date)}</span>
         </div>
       )}
@@ -2461,12 +2481,15 @@ function FirmasTab({
               ? [sp.team, sp.birthdate ? sp.birthdate.slice(0, 4) : null].filter(Boolean).join(' · ') || e.zone
               : e.zone}
           </span>
+          {necesitaTelefono(e) && !(e.nextActionDate && e.nextActionKind === 'telefono') && (
+            <span className="flex-shrink-0" title="Pendiente de conseguir teléfono">📵</span>
+          )}
           {e.nextActionDate && e.status !== 'firmado' && (
             <span
               className={`flex-shrink-0 font-medium ${actionOverdue ? 'text-red-500' : actionToday ? 'text-blue-600' : 'text-slate-400'}`}
               title={`${e.nextAction ?? 'Próxima acción'} · ${fmtDate(e.nextActionDate)}`}
             >
-              {FIRMAS_KIND_META[e.nextActionKind ?? '']?.icon ?? '📌'} {actionOverdue ? 'vencida' : actionToday ? 'hoy' : new Date(e.nextActionDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+              {FIRMAS_ACTION_KIND_META[e.nextActionKind ?? '']?.icon ?? '📌'} {actionOverdue ? 'vencida' : actionToday ? 'hoy' : new Date(e.nextActionDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
             </span>
           )}
           {e.comments.filter(c => c.kind !== 'estatus').length > 0 && (
@@ -2535,9 +2558,12 @@ function FirmasTab({
             {sp
               ? [sp.team, sp.birthdate ? sp.birthdate.slice(0, 4) : null].filter(Boolean).join(' · ') || e.zone
               : e.zone}
+            {necesitaTelefono(e) && !(e.nextActionDate && e.nextActionKind === 'telefono') && (
+              <span className="ml-1.5" title="Pendiente de conseguir teléfono">📵</span>
+            )}
             {e.nextActionDate && e.status !== 'firmado' && (
               <span className={`ml-1.5 font-medium ${actionOverdue ? 'text-red-500' : actionToday ? 'text-blue-600' : 'text-slate-400'}`}>
-                {FIRMAS_KIND_META[e.nextActionKind ?? '']?.icon ?? '📌'} {actionOverdue ? 'vencida' : actionToday ? 'hoy' : new Date(e.nextActionDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                {FIRMAS_ACTION_KIND_META[e.nextActionKind ?? '']?.icon ?? '📌'} {actionOverdue ? 'vencida' : actionToday ? 'hoy' : new Date(e.nextActionDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
               </span>
             )}
           </span>
@@ -2587,6 +2613,11 @@ function FirmasTab({
               <span className={`w-2 h-2 rounded-full ${FIRMAS_CONFIG[s].dot}`} />
               <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">{FIRMAS_CONFIG[s].label}</span>
               <span className="text-[11px] text-slate-400 font-medium">{groups[s].length}</span>
+              {groups[s].filter(necesitaTelefono).length > 0 && (
+                <span className="ml-auto text-[11px] text-violet-600 font-medium" title="Pendientes de conseguir teléfono">
+                  📵 {groups[s].filter(necesitaTelefono).length}
+                </span>
+              )}
             </div>
             <div className="px-2 pb-2 space-y-1.5 max-h-[65vh] overflow-y-auto">
               {groups[s].length === 0 ? (
@@ -2717,7 +2748,7 @@ function FirmasTab({
                         <span className={`flex-shrink-0 font-semibold tabular-nums ${overdue ? 'text-red-600' : isToday ? 'text-blue-700' : 'text-slate-500'}`}>
                           {overdue ? '⚠ ' : ''}{isToday ? 'hoy' : new Date(e.nextActionDate!).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
                         </span>
-                        <span className="flex-shrink-0">{FIRMAS_KIND_META[e.nextActionKind ?? '']?.icon ?? '📌'}</span>
+                        <span className="flex-shrink-0">{FIRMAS_ACTION_KIND_META[e.nextActionKind ?? '']?.icon ?? '📌'}</span>
                         <span className="font-semibold truncate">{e.playerName}</span>
                         <span className="text-slate-500 truncate">{e.nextAction ?? ''}</span>
                         {assignee && (
@@ -3593,10 +3624,15 @@ function FirmasDetailPanel({
                   {editingAction ? (
                     <div className="mt-1 border border-blue-200 rounded-lg p-2 bg-blue-50/40 space-y-1.5">
                       <div className="flex items-center gap-1 flex-wrap">
-                        {Object.entries(FIRMAS_KIND_META).map(([k, meta]) => (
+                        {Object.entries(FIRMAS_ACTION_KIND_META).map(([k, meta]) => (
                           <button
                             key={k}
-                            onClick={() => setActionKind(k)}
+                            onClick={() => {
+                              setActionKind(k)
+                              // Acción predefinida: elegir 📵 rellena el texto solo
+                              if (k === 'telefono' && (!actionLabel.trim() || actionLabel === 'Conseguir teléfono')) setActionLabel('Conseguir teléfono')
+                              else if (k !== 'telefono' && actionLabel === 'Conseguir teléfono') setActionLabel('')
+                            }}
                             className={`px-1.5 py-0.5 rounded-md text-[11px] transition-colors ${
                               actionKind === k ? 'bg-primary/10 text-primary font-semibold ring-1 ring-primary/30' : 'text-slate-400 hover:bg-white'
                             }`}
@@ -3629,7 +3665,7 @@ function FirmasDetailPanel({
                     </div>
                   ) : entry.nextAction || entry.nextActionDate ? (
                     <div className={`mt-1 flex items-center gap-2 border rounded-lg px-2.5 py-1.5 ${actionOverdue ? 'border-red-200 bg-red-50/60' : 'border-blue-200 bg-blue-50/50'}`}>
-                      <span className="text-xs font-semibold text-slate-800 truncate">{FIRMAS_KIND_META[entry.nextActionKind ?? '']?.icon ?? '📌'} {entry.nextAction ?? 'Acción'}</span>
+                      <span className="text-xs font-semibold text-slate-800 truncate">{FIRMAS_ACTION_KIND_META[entry.nextActionKind ?? '']?.icon ?? '📌'} {entry.nextAction ?? 'Acción'}</span>
                       <span className={`text-[11px] flex-shrink-0 ${actionOverdue ? 'text-red-600 font-semibold' : 'text-slate-500'}`}>
                         {entry.nextActionDate ? fmtDate(entry.nextActionDate) : 'sin fecha'}
                         {actionOverdue ? ' · vencida' : entry.nextActionDate === todayISO() ? ' · hoy' : ''}
@@ -3848,7 +3884,7 @@ function FirmasDetailPanel({
                   ) : (
                     <div key={c.id} className="group border border-slate-100 rounded-lg px-2.5 py-2 bg-slate-50/60">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-xs">{FIRMAS_KIND_META[c.kind ?? 'nota']?.icon ?? '📝'}</span>
+                        <span className="text-xs">{FIRMAS_ACTION_KIND_META[c.kind ?? 'nota']?.icon ?? '📝'}</span>
                         <span className="text-[11px] font-semibold text-slate-600">{c.author || '—'}</span>
                         {c.outcome && (
                           <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${c.outcome === 'contesto' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
