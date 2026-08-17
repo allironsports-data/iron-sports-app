@@ -1,29 +1,32 @@
 import { useState } from "react";
-import type { Player } from "../types";
+import type { Player, Postpartido, Task } from "../types";
 import { calcAge } from "../types";
 import type { Profile } from "../contexts/AuthContext";
 import logoImg from '../assets/logo.jpeg';
 import { EmptyState } from "../components/EmptyState";
 import {
-  ArrowLeft, LogOut, Users, FileText, AlertTriangle, Shield,
+  ArrowLeft, LogOut, Users, FileText, AlertTriangle, Shield, ClipboardList,
 } from "lucide-react";
 
 interface Props {
   players: Player[];
   profiles: Profile[];
+  postpartidos: Postpartido[];
+  tasks: Task[];
   onBack: () => void;
   onLogout: () => void;
   onAdmin?: () => void;
 }
 
-type TabId = "plantilla" | "contratos";
+type TabId = "plantilla" | "contratos" | "postpartidos";
 
-export function OverviewPanel({ players, profiles, onBack, onLogout, onAdmin }: Props) {
+export function OverviewPanel({ players, profiles, postpartidos, tasks, onBack, onLogout, onAdmin }: Props) {
   const [tab, setTab] = useState<TabId>("plantilla");
 
   const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
     { id: "plantilla", label: "Plantilla", icon: <Users className="w-4 h-4" /> },
     { id: "contratos", label: "Contratos", icon: <FileText className="w-4 h-4" /> },
+    { id: "postpartidos", label: "Postpartidos", icon: <ClipboardList className="w-4 h-4" /> },
   ];
 
   return (
@@ -66,6 +69,7 @@ export function OverviewPanel({ players, profiles, onBack, onLogout, onAdmin }: 
       <main className="mx-auto max-w-5xl px-4 py-6">
         {tab === "plantilla" && <PlantillaTab players={players} profiles={profiles} />}
         {tab === "contratos" && <ContratosTab players={players} />}
+        {tab === "postpartidos" && <PostpartidosTab postpartidos={postpartidos} tasks={tasks} players={players} profiles={profiles} />}
       </main>
     </div>
   );
@@ -390,6 +394,124 @@ function ContratosTab({ players }: { players: Player[] }) {
               })}
             </tbody>
           </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ========== POSTPARTIDOS TAB ========== */
+function PostpartidosTab({ postpartidos, tasks, players, profiles }: {
+  postpartidos: Postpartido[];
+  tasks: Task[];
+  players: Player[];
+  profiles: Profile[];
+}) {
+  // Estado de cada postpartido = estado de su tarea en el tablero
+  const rows = postpartidos.map((pp) => {
+    const task = pp.taskId ? tasks.find((t) => t.id === pp.taskId) : undefined;
+    return { pp, done: !!task && task.status === "completada" };
+  });
+  const total = rows.length;
+  const done = rows.filter((r) => r.done).length;
+  const pending = total - done;
+
+  // ── Por responsable: quién hace qué ──
+  const byAssignee = new Map<string, { total: number; done: number }>();
+  rows.forEach(({ pp, done }) => {
+    const key = pp.assigneeId || "—";
+    const cur = byAssignee.get(key) ?? { total: 0, done: 0 };
+    cur.total += 1;
+    if (done) cur.done += 1;
+    byAssignee.set(key, cur);
+  });
+  const assignees = [...byAssignee.entries()]
+    .map(([id, stats]) => ({ id, profile: profiles.find((pr) => pr.id === id), ...stats }))
+    .sort((a, b) => b.total - a.total);
+  const maxAssignee = Math.max(...assignees.map((a) => a.total), 1);
+
+  // ── Por jugador: quién acumula más postpartidos ──
+  const byPlayer = new Map<string, { total: number; done: number }>();
+  rows.forEach(({ pp, done }) => {
+    const name = pp.playerId
+      ? (players.find((p) => p.id === pp.playerId)?.name ?? "Jugador eliminado")
+      : (pp.playerName?.trim() || "Sin jugador");
+    const cur = byPlayer.get(name) ?? { total: 0, done: 0 };
+    cur.total += 1;
+    if (done) cur.done += 1;
+    byPlayer.set(name, cur);
+  });
+  const topPlayers = [...byPlayer.entries()].sort((a, b) => b[1].total - a[1].total);
+  const maxPlayer = Math.max(...topPlayers.map(([, v]) => v.total), 1);
+
+  if (total === 0) {
+    return (
+      <EmptyState
+        icon={<ClipboardList className="w-8 h-8" />}
+        title="Sin postpartidos"
+        subtitle="Cuando crees informes postpartido en Mantenimiento, aquí verás quién hace qué y qué jugadores acumulan más."
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Key numbers */}
+      <div className="grid grid-cols-3 gap-3">
+        <StatBox label="Total postpartidos" value={total.toString()} color="blue" />
+        <StatBox label="Completados" value={done.toString()} color="green" />
+        <StatBox label="Pendientes" value={pending.toString()} color="amber" />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Por responsable */}
+        <div className="bg-white border border-slate-200 rounded-lg p-4">
+          <h3 className="text-sm font-semibold text-slate-800 mb-1">Quién hace qué</h3>
+          <p className="text-[11px] text-slate-400 mb-3">Postpartidos por responsable · completados / total</p>
+          <div className="space-y-2.5 max-h-72 overflow-y-auto">
+            {assignees.map((a) => {
+              const pct = Math.round((a.total / maxAssignee) * 100);
+              const donePct = a.total > 0 ? Math.round((a.done / a.total) * 100) : 0;
+              return (
+                <div key={a.id}>
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="w-5 h-5 rounded-full bg-slate-200 text-[9px] font-bold flex items-center justify-center text-slate-600 flex-shrink-0">
+                        {a.profile?.avatar ?? "?"}
+                      </span>
+                      <span className="text-xs text-slate-700 truncate">{a.profile?.name ?? "Sin responsable"}</span>
+                    </div>
+                    <span className="text-xs font-semibold text-slate-500 whitespace-nowrap flex-shrink-0">
+                      {a.done}/{a.total}
+                      <span className="text-slate-300 font-normal"> · {donePct}%</span>
+                    </span>
+                  </div>
+                  <div className="h-2 bg-slate-100 rounded-full overflow-hidden" style={{ width: `${pct}%`, minWidth: '2rem' }}>
+                    <div className="h-full bg-emerald-400" style={{ width: `${donePct}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-[10px] text-slate-300 mt-2">Largo de la barra = volumen · relleno verde = parte completada</p>
+        </div>
+
+        {/* Por jugador */}
+        <div className="bg-white border border-slate-200 rounded-lg p-4">
+          <h3 className="text-sm font-semibold text-slate-800 mb-1">Jugadores con más postpartidos</h3>
+          <p className="text-[11px] text-slate-400 mb-3">Informes postpartido acumulados por jugador</p>
+          <div className="space-y-1.5 max-h-72 overflow-y-auto">
+            {topPlayers.map(([name, v], i) => (
+              <div key={name} className="flex items-center gap-2 py-1">
+                <span className={`w-5 text-[11px] font-bold flex-shrink-0 text-right ${i < 3 ? "text-blue-600" : "text-slate-300"}`}>{i + 1}</span>
+                <span className="text-xs text-slate-700 truncate min-w-0 flex-1">{name}</span>
+                <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden flex-shrink-0 hidden sm:block">
+                  <div className="h-full bg-blue-400" style={{ width: `${Math.round((v.total / maxPlayer) * 100)}%` }} />
+                </div>
+                <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded flex-shrink-0">{v.total}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>

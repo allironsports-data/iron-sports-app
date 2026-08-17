@@ -983,6 +983,8 @@ export default function App() {
       <OverviewPanel
         players={players}
         profiles={profiles}
+        postpartidos={postpartidos}
+        tasks={tasks}
         onBack={() => setShowOverview(false)}
         onLogout={signOut}
         onAdmin={profile.is_admin ? () => { setShowOverview(false); setShowAdmin(true); } : undefined}

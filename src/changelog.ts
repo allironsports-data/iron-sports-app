@@ -16,6 +16,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-08-17',
+    items: [
+      'Overview → Postpartidos: estadísticas de quién hace qué y qué jugadores acumulan más informes postpartido',
+      'Añadir negociación en Distribución: el club se elige escribiendo en un buscador, se acabó el scroll infinito',
+      'Botón «Ocultar futuros» en Captación → Partidos para quedarte solo con lo ya jugado',
+      'La pestaña Informes muestra los últimos 150 de cada persona (antes 60)',
+      'Pretemporada incluye ahora la Best Cup y cualquier partido de julio o agosto',
+    ],
+  },
+  {
     date: '2026-08-16',
     items: [
       'Ficha de partido: haz clic en cualquier partido de Captación y se abre una ventana con sus jugadores, informes y scouts',

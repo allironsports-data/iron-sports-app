@@ -4211,6 +4211,8 @@ export function Captacion({
   const [matchCompFilter, setMatchCompFilter] = useState('all')
   const [matchModeFilter, setMatchModeFilter] = useState<'all' | 'video' | 'campo'>('all')
   const [matchStatusFilter, setMatchStatusFilter] = useState<'all' | 'visto' | 'pendiente'>('all')
+  /** Ocultar momentáneamente los partidos con fecha posterior a hoy (no se persiste) */
+  const [hideFutureMatches, setHideFutureMatches] = useState(false)
   const [reportPersonaFilter, setReportPersonaFilter] = useState('all')
 
   // ── pretemporada filters ──
@@ -4301,13 +4303,14 @@ export function Captacion({
       if (matchCompFilter !== 'all' && m.competition !== matchCompFilter) return false
       if (matchModeFilter !== 'all' && (m.viewMode ?? 'video') !== matchModeFilter) return false
       if (matchStatusFilter !== 'all' && (m.status ?? 'pendiente') !== matchStatusFilter) return false
+      if (hideFutureMatches && isFutureMatch(m.date)) return false
       if (q) {
         const hay = `${m.homeTeam} ${m.awayTeam} ${m.competition ?? ''} ${m.notes ?? ''}`.toLowerCase()
         if (!hay.includes(q)) return false
       }
       return true
     })
-  }, [scoutingMatches, scoutsByMatch, matchSearch, matchPersonaFilter, matchCompFilter, matchModeFilter, matchStatusFilter])
+  }, [scoutingMatches, scoutsByMatch, matchSearch, matchPersonaFilter, matchCompFilter, matchModeFilter, matchStatusFilter, hideFutureMatches])
 
   // ── matchPlayers lookup map (avoids O(n*m) scan per row during render) ──
   const matchPlayersByMatchId = useMemo(() => {
@@ -4321,7 +4324,16 @@ export function Captacion({
 
   // ── pretemporada: jugadores vistos en partidos de Pretemporada, nacidos >= PRETEMPORADA_MIN_BIRTH_YEAR ──
   const pretemporadaData = useMemo(() => {
-    const preMatches = scoutingMatches.filter(m => m.competition === 'Pretemporada')
+    // Cuenta como pretemporada: la competición "Pretemporada", los torneos
+    // veraniegos tipo "Best Cup" y, en general, cualquier partido jugado en
+    // julio o agosto (la ventana 1-jul → 1-sep de cada año).
+    const esPretemporada = (m: ScoutingMatch) => {
+      const comp = (m.competition ?? '').trim().toLowerCase()
+      if (comp === 'pretemporada' || comp === 'best cup') return true
+      const mes = parseInt(m.date.slice(5, 7), 10)
+      return mes === 7 || mes === 8
+    }
+    const preMatches = scoutingMatches.filter(esPretemporada)
     const preMatchIds = new Set(preMatches.map(m => m.id))
     const matchById = new Map(preMatches.map(m => [m.id, m]))
 
@@ -4415,7 +4427,7 @@ export function Captacion({
     return [...scoutingReports]
       .sort((a, b) => (b.fecha ?? b.createdAt).localeCompare(a.fecha ?? a.createdAt))
       .filter(r => reportPersonaFilter === 'all' || r.persona === reportPersonaFilter)
-      .slice(0, 60)
+      .slice(0, 150)
   }, [scoutingReports, reportPersonaFilter])
 
   // ── handlers ──
@@ -5396,6 +5408,19 @@ export function Captacion({
                 <option value="pendiente">Pendientes</option>
               </select>
 
+              {/* Ocultar futuros */}
+              <button
+                onClick={() => setHideFutureMatches(v => !v)}
+                title={hideFutureMatches ? 'Mostrando solo partidos hasta hoy — clic para ver también los futuros' : 'Ocultar los partidos posteriores a hoy'}
+                className={`text-xs border rounded-lg px-2.5 py-1.5 font-medium transition-colors whitespace-nowrap ${
+                  hideFutureMatches
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                {hideFutureMatches ? '👁 Futuros ocultos' : 'Ocultar futuros'}
+              </button>
+
               {/* Resultados */}
               <span className="text-xs text-slate-400 ml-auto">
                 {filteredMatches.length === scoutingMatches.length
@@ -5413,6 +5438,7 @@ export function Captacion({
             if (matchCompFilter !== 'all') chips.push({ key: 'comp', label: `Competición: ${matchCompFilter}`, onRemove: () => setMatchCompFilter('all') })
             if (matchModeFilter !== 'all') chips.push({ key: 'mode', label: matchModeFilter === 'video' ? 'Modo: Vídeo' : 'Modo: Campo', onRemove: () => setMatchModeFilter('all') })
             if (matchStatusFilter !== 'all') chips.push({ key: 'status', label: matchStatusFilter === 'visto' ? 'Estado: Vistos' : 'Estado: Pendientes', onRemove: () => setMatchStatusFilter('all') })
+            if (hideFutureMatches) chips.push({ key: 'nofuture', label: 'Futuros ocultos', onRemove: () => setHideFutureMatches(false) })
             if (chips.length === 0) return null
             return (
               <ActiveFilterChips

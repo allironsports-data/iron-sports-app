@@ -4734,10 +4734,7 @@ function AddNegotiationModal({ players, clubs, entries, fixedPlayerId, fixedClub
         {!fixedClubId && (
           <div>
             <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Club *</label>
-            <select value={clubId} onChange={e => setClubId(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
-              <option value="">Seleccionar club…</option>
-              {clubs.map(c => <option key={c.id} value={c.id}>{c.name}{c.league ? ` (${c.league})` : ''}</option>)}
-            </select>
+            <ClubSearchSelect clubs={clubs} value={clubId} onChange={setClubId} />
           </div>
         )}
         <div>
@@ -4767,6 +4764,93 @@ function AddNegotiationModal({ players, clubs, entries, fixedPlayerId, fixedClub
         </button>
       </div>
     </ModalShell>
+  )
+}
+
+// ── CLUB SEARCH SELECT ────────────────────────────────────────
+// Buscador con autocompletado para elegir club: escribir en vez de
+// recorrer una lista de 1.400 clubes.
+function ClubSearchSelect({ clubs, value, onChange }: {
+  clubs: Club[]
+  value: string
+  onChange: (clubId: string) => void
+}) {
+  const [query, setQuery] = useState('')
+  const [open, setOpen] = useState(false)
+
+  const norm = (s: string) =>
+    s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+
+  const selected = clubs.find(c => c.id === value)
+
+  const results = useMemo(() => {
+    const q = norm(query.trim())
+    if (!q) return []
+    const starts: Club[] = []
+    const contains: Club[] = []
+    for (const c of clubs) {
+      const hay = norm(`${c.name} ${c.league ?? ''} ${c.country ?? ''}`)
+      if (!hay.includes(q)) continue
+      if (norm(c.name).startsWith(q)) starts.push(c)
+      else contains.push(c)
+      if (starts.length + contains.length >= 60) break
+    }
+    return [...starts, ...contains].slice(0, 30)
+  }, [clubs, query])
+
+  if (selected) {
+    return (
+      <div className="flex items-center justify-between gap-2 border border-slate-200 rounded-lg px-3 py-2 bg-slate-50">
+        <div className="min-w-0">
+          <div className="text-sm font-medium text-slate-800 truncate">{selected.name}</div>
+          {(selected.league || selected.country) && (
+            <div className="text-[11px] text-slate-400 truncate">
+              {[selected.league, selected.country].filter(Boolean).join(' · ')}
+            </div>
+          )}
+        </div>
+        <button
+          onClick={() => { onChange(''); setQuery(''); setOpen(false) }}
+          aria-label="Cambiar club"
+          className="text-xs text-blue-600 hover:text-blue-700 font-medium flex-shrink-0"
+        >
+          Cambiar
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="relative">
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+      <input
+        value={query}
+        autoFocus={false}
+        onChange={e => { setQuery(e.target.value); setOpen(true) }}
+        onFocus={() => setOpen(true)}
+        placeholder="Escribe para buscar club…"
+        className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+      />
+      {open && query.trim().length > 0 && (
+        <div className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+          {results.map(c => (
+            <button
+              key={c.id}
+              onClick={() => { onChange(c.id); setOpen(false) }}
+              className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors border-b border-slate-50 last:border-0"
+            >
+              <div className="text-sm text-slate-800">{c.name}</div>
+              {(c.league || c.country) && (
+                <div className="text-[11px] text-slate-400">{[c.league, c.country].filter(Boolean).join(' · ')}</div>
+              )}
+            </button>
+          ))}
+          {results.length === 0 && (
+            <div className="px-3 py-2 text-xs text-slate-400 italic">Sin resultados para «{query}»</div>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 
