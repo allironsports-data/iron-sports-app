@@ -560,6 +560,7 @@ function MatchRow({
   scoutingPlayers, linkedPlayerIds,
   scoutingReports,
   onEdit, onDelete, onToggleStatus, onOpenDetail,
+  mergeMode, mergeSelected, onToggleMerge,
 }: {
   match: ScoutingMatch
   scoutName: string
@@ -575,6 +576,10 @@ function MatchRow({
   onDelete: (id: string) => void
   onToggleStatus: (m: ScoutingMatch) => void
   onOpenDetail: (matchId: string) => void
+  /** Modo fusión: la fila se selecciona en vez de abrirse */
+  mergeMode?: boolean
+  mergeSelected?: boolean
+  onToggleMerge?: (matchId: string) => void
 }) {
   const [confirm, setConfirm] = useState(false)
 
@@ -590,12 +595,13 @@ function MatchRow({
   const reportedIds = new Set(scoutingReports.filter(r => r.matchId === match.id).map(r => r.playerId))
   const linkedWithReport = linkedPlayers.filter(p => reportedIds.has(p.id)).length
 
-  const open = () => onOpenDetail(match.id)
+  const open = () => mergeMode ? onToggleMerge?.(match.id) : onOpenDetail(match.id)
 
   return (
     <tr
       onClick={open}
       className={`transition-colors cursor-pointer ${
+        mergeSelected ? 'bg-violet-50 ring-1 ring-inset ring-violet-300' :
         isPendingForMe ? 'bg-amber-50/60 hover:bg-amber-50' :
         isFuture ? 'bg-blue-50/40 hover:bg-blue-50/70' :
         'hover:bg-slate-50/60'
@@ -603,6 +609,16 @@ function MatchRow({
     >
       {/* Fecha */}
       <td className={`px-3 py-2 text-xs whitespace-nowrap ${isFuture ? 'text-blue-600 font-semibold' : 'text-slate-500'}`}>
+        {mergeMode && (
+          <input
+            type="checkbox"
+            checked={!!mergeSelected}
+            onChange={() => onToggleMerge?.(match.id)}
+            onClick={e => e.stopPropagation()}
+            className="w-4 h-4 rounded mr-2 align-middle accent-violet-600"
+            aria-label={`Seleccionar ${match.homeTeam} vs ${match.awayTeam} para fusionar`}
+          />
+        )}
         {day} {mon} '{yr}
         {match.time && <span className={`block text-[11px] font-normal ${isFuture ? 'text-blue-500' : 'text-slate-400'}`}>{match.time}</span>}
       </td>
@@ -1198,6 +1214,119 @@ function MatchDetailModal({
               ) : null}
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── MergeMatchesModal ─────────────────────────────────────────
+// Fusión manual: eliges qué copia sobrevive y con qué fecha; el resto
+// aporta sus scouts, jugadores e informes y se elimina.
+function MergeMatchesModal({ matches, scoutsByMatch, matchPlayersByMatchId, scoutingReports, merging, onClose, onConfirm }: {
+  matches: ScoutingMatch[]
+  scoutsByMatch: Record<string, MatchScoutInfo[]>
+  matchPlayersByMatchId: Record<string, string[]>
+  scoutingReports: ScoutingReport[]
+  merging: boolean
+  onClose: () => void
+  onConfirm: (survivorId: string, newDate: string) => void
+}) {
+  const info = (m: ScoutingMatch) => ({
+    jug: (matchPlayersByMatchId[m.id] ?? []).length,
+    inf: scoutingReports.filter(r => r.matchId === m.id).length,
+    scouts: (scoutsByMatch[m.id] ?? []).map(x => x.scout),
+  })
+  // Superviviente por defecto: la copia con más contenido
+  const defaultSurvivor = [...matches].sort((a, b) => {
+    const ia = info(a), ib = info(b)
+    return (ib.jug + ib.inf) - (ia.jug + ia.inf) || a.createdAt.localeCompare(b.createdAt)
+  })[0]
+  const [survivorId, setSurvivorId] = useState(defaultSurvivor.id)
+  const [newDate, setNewDate] = useState(defaultSurvivor.date)
+
+  useEscapeKey(onClose, !merging)
+
+  const survivor = matches.find(m => m.id === survivorId)!
+  const others = matches.filter(m => m.id !== survivorId)
+  const totalScouts = new Set(matches.flatMap(m => info(m).scouts)).size
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={merging ? undefined : onClose}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-5 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-sm font-bold text-slate-800">Fusionar {matches.length} partidos en uno</h3>
+          <button onClick={onClose} disabled={merging} aria-label="Cerrar" className="p-1 text-slate-400 hover:text-slate-600 rounded-lg">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <p className="text-xs text-slate-400 mb-3">
+          Elige qué copia se queda. Las demás le pasan sus scouts, jugadores vinculados e informes (cada informe conserva su autor) y se eliminan. No se pierde nada.
+        </p>
+
+        <div className="space-y-1.5">
+          {matches.map(m => {
+            const i = info(m)
+            const sel = m.id === survivorId
+            return (
+              <label
+                key={m.id}
+                className={`flex items-start gap-2.5 border rounded-lg px-3 py-2 cursor-pointer transition-colors ${
+                  sel ? 'border-violet-400 bg-violet-50 ring-1 ring-violet-200' : 'border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="survivor"
+                  checked={sel}
+                  onChange={() => { setSurvivorId(m.id); setNewDate(m.date) }}
+                  className="mt-1 accent-violet-600"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-slate-800">
+                    {m.homeTeam} <span className="text-slate-400 font-normal">vs</span> {m.awayTeam}
+                  </div>
+                  <div className="text-[11px] text-slate-500 flex flex-wrap gap-x-2 mt-0.5">
+                    <span className="font-medium">{m.date}{m.time ? ` · ${m.time}` : ''}</span>
+                    {m.competition && <span>{m.competition}</span>}
+                    <span>{i.scouts.length > 0 ? i.scouts.join(' + ') : 'sin scout'}</span>
+                    <span className="text-violet-600">{i.jug} jug · {i.inf} inf</span>
+                  </div>
+                </div>
+                {sel && <span className="text-[10px] font-bold text-violet-700 bg-violet-100 rounded-full px-2 py-0.5 flex-shrink-0 mt-0.5">SE QUEDA</span>}
+              </label>
+            )
+          })}
+        </div>
+
+        <div className="mt-3">
+          <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide block mb-1">Fecha del partido fusionado</label>
+          <input
+            type="date"
+            value={newDate}
+            onChange={e => setNewDate(e.target.value)}
+            className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300"
+          />
+        </div>
+
+        <div className="mt-3 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-[11px] text-slate-500">
+          Resultado: <strong>{survivor.homeTeam} vs {survivor.awayTeam}</strong> el <strong>{newDate}</strong> con {totalScouts} scout{totalScouts !== 1 ? 's' : ''},{' '}
+          {matches.reduce((n, m) => n + info(m).jug, 0)} vínculos de jugador y {matches.reduce((n, m) => n + info(m).inf, 0)} informes.
+          Se eliminarán {others.length} copia{others.length !== 1 ? 's' : ''}.
+        </div>
+
+        <div className="mt-4 flex items-center justify-end gap-2">
+          <button onClick={onClose} disabled={merging} className="px-3 py-2 text-xs font-medium border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50">
+            Cancelar
+          </button>
+          <button
+            onClick={() => onConfirm(survivorId, newDate)}
+            disabled={merging || !newDate}
+            className="px-4 py-2 text-xs font-bold bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-50 inline-flex items-center gap-1.5"
+          >
+            {merging && <Spinner />}
+            {merging ? 'Fusionando…' : 'Fusionar'}
+          </button>
         </div>
       </div>
     </div>
@@ -4213,6 +4342,16 @@ export function Captacion({
   const [matchStatusFilter, setMatchStatusFilter] = useState<'all' | 'visto' | 'pendiente'>('all')
   /** Ocultar momentáneamente los partidos con fecha posterior a hoy (no se persiste) */
   const [hideFutureMatches, setHideFutureMatches] = useState(false)
+  /** Fusión manual de partidos: modo selección + seleccionados + modal */
+  const [mergeMode, setMergeMode] = useState(false)
+  const [mergeSelected, setMergeSelected] = useState<Set<string>>(new Set())
+  const [showMergeModal, setShowMergeModal] = useState(false)
+  const [merging, setMerging] = useState(false)
+  const toggleMergeSelected = (id: string) => setMergeSelected(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
   const [reportPersonaFilter, setReportPersonaFilter] = useState('all')
 
   // ── pretemporada filters ──
@@ -4706,6 +4845,43 @@ export function Captacion({
       await onSetMatchScoutMode(m.id, scout, viewMode)
     } catch {
       showToast('No se pudo cambiar el modo del scout', 'error')
+    }
+  }
+
+  /** Fusión manual: superviviente elegido por el usuario; el resto aporta
+   *  scouts, jugadores e informes y desaparece. */
+  async function handleMergeMatches(survivorId: string, newDate: string) {
+    const survivor = scoutingMatches.find(m => m.id === survivorId)
+    if (!survivor || merging) return
+    const victims = scoutingMatches.filter(m => mergeSelected.has(m.id) && m.id !== survivorId)
+    if (victims.length === 0) return
+    setMerging(true)
+    try {
+      // 1) scouts de las copias → superviviente (conservando visto y campo/vídeo)
+      for (const v of victims) {
+        for (const sc of (scoutsByMatch[v.id] ?? [])) {
+          const ya = (scoutsByMatch[survivorId] ?? []).find(x => x.scout === sc.scout)
+          if (!ya) {
+            await onAddMatchScout(survivorId, sc.scout, sc.viewMode)
+            if (sc.status === 'visto') await onSetMatchScoutStatus(survivorId, sc.scout, 'visto')
+          } else {
+            if (sc.status === 'visto' && ya.status !== 'visto') await onSetMatchScoutStatus(survivorId, sc.scout, 'visto')
+            if (sc.viewMode === 'campo' && ya.viewMode !== 'campo') await onSetMatchScoutMode(survivorId, sc.scout, 'campo')
+          }
+        }
+      }
+      // 2) informes, jugadores y postpartidos + borrar copias (en BBDD)
+      const updated = await db.mergeScoutingMatches(survivor, victims, newDate || undefined)
+      onUpdateMatch(updated)
+      victims.forEach(v => onDeleteMatch(v.id))
+      setMergeSelected(new Set())
+      setMergeMode(false)
+      setShowMergeModal(false)
+      showToast(`${victims.length + 1} partidos fusionados en uno`)
+    } catch {
+      showToast('No se pudo completar la fusión. Recarga y comprueba el estado del partido.', 'error')
+    } finally {
+      setMerging(false)
     }
   }
 
@@ -5421,6 +5597,19 @@ export function Captacion({
                 {hideFutureMatches ? '👁 Futuros ocultos' : 'Ocultar futuros'}
               </button>
 
+              {/* Fusionar partidos */}
+              <button
+                onClick={() => { setMergeMode(v => !v); setMergeSelected(new Set()) }}
+                title={mergeMode ? 'Salir del modo fusión' : 'Seleccionar partidos duplicados y fusionarlos en uno'}
+                className={`text-xs border rounded-lg px-2.5 py-1.5 font-medium transition-colors whitespace-nowrap ${
+                  mergeMode
+                    ? 'bg-violet-600 text-white border-violet-600'
+                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                {mergeMode ? '✕ Cancelar fusión' : '⇄ Fusionar'}
+              </button>
+
               {/* Resultados */}
               <span className="text-xs text-slate-400 ml-auto">
                 {filteredMatches.length === scoutingMatches.length
@@ -5483,6 +5672,15 @@ export function Captacion({
                     }`}>
                       {/* Header row */}
                       <div className="flex items-start justify-between gap-2">
+                        {mergeMode && (
+                          <input
+                            type="checkbox"
+                            checked={mergeSelected.has(m.id)}
+                            onChange={() => toggleMergeSelected(m.id)}
+                            className="w-5 h-5 rounded mt-0.5 flex-shrink-0 accent-violet-600"
+                            aria-label={`Seleccionar ${m.homeTeam} vs ${m.awayTeam} para fusionar`}
+                          />
+                        )}
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-semibold text-slate-800 leading-tight">
                             {m.homeTeam} <span className="text-slate-400 font-normal text-xs">vs</span> {m.awayTeam}
@@ -5589,6 +5787,9 @@ export function Captacion({
                             onDelete={handleDeleteMatch}
                             onToggleStatus={handleToggleMatchStatus}
                             onOpenDetail={setDetailMatchId}
+                            mergeMode={mergeMode}
+                            mergeSelected={mergeSelected.has(m.id)}
+                            onToggleMerge={toggleMergeSelected}
                           />
                         )
                       })}
@@ -6278,6 +6479,37 @@ export function Captacion({
             )}
           </div>
         </>
+      )}
+
+      {/* ── Barra de fusión ── */}
+      {mergeMode && (
+        <div className="fixed bottom-16 sm:bottom-6 left-1/2 -translate-x-1/2 z-40 bg-violet-600 text-white rounded-full shadow-xl px-4 py-2.5 flex items-center gap-3">
+          <span className="text-xs font-semibold whitespace-nowrap">
+            {mergeSelected.size === 0
+              ? 'Toca los partidos que quieras fusionar'
+              : `${mergeSelected.size} partido${mergeSelected.size !== 1 ? 's' : ''} seleccionado${mergeSelected.size !== 1 ? 's' : ''}`}
+          </span>
+          <button
+            onClick={() => setShowMergeModal(true)}
+            disabled={mergeSelected.size < 2}
+            className="text-xs font-bold bg-white text-violet-700 rounded-full px-3 py-1.5 disabled:opacity-40 whitespace-nowrap"
+          >
+            Fusionar →
+          </button>
+        </div>
+      )}
+
+      {/* ── Modal de fusión ── */}
+      {showMergeModal && mergeSelected.size >= 2 && (
+        <MergeMatchesModal
+          matches={scoutingMatches.filter(m => mergeSelected.has(m.id))}
+          scoutsByMatch={scoutsByMatch}
+          matchPlayersByMatchId={matchPlayersByMatchId}
+          scoutingReports={scoutingReports}
+          merging={merging}
+          onClose={() => setShowMergeModal(false)}
+          onConfirm={handleMergeMatches}
+        />
       )}
 
       {/* ── Ficha de partido (ventana) ── */}

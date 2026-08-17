@@ -23,6 +23,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Botón «Ocultar futuros» en Captación → Partidos para quedarte solo con lo ya jugado',
       'La pestaña Informes muestra los últimos 150 de cada persona (antes 60)',
       'Pretemporada incluye ahora la Best Cup y cualquier partido de julio o agosto',
+      'Fusión manual de partidos: botón «⇄ Fusionar» en Partidos — selecciona los duplicados, elige cuál se queda y su fecha, y el resto le pasa scouts, jugadores e informes',
     ],
   },
   {

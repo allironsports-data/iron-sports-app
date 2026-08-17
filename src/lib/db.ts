@@ -933,6 +933,70 @@ export async function setMatchScoutStatus(matchId: string, scout: string, status
   if (error) throw error
 }
 
+// ── Fusión manual de partidos ─────────────────────────────────
+// Mueve al superviviente los informes, jugadores vinculados y postpartidos
+// de las copias, rellena huecos (hora/competición/notas) y borra las copias.
+// Los scouts se traspasan aparte (addMatchScout) porque viven en el estado
+// de la app. Devuelve el superviviente actualizado.
+export async function mergeScoutingMatches(
+  survivor: ScoutingMatch,
+  victims: ScoutingMatch[],
+  newDate?: string,
+): Promise<ScoutingMatch> {
+  const victimIds = victims.map(v => v.id)
+  if (victimIds.length === 0) return survivor
+
+  // 1) informes → superviviente (conservan autor)
+  {
+    const { error } = await supabase.from('scouting_reports')
+      .update({ match_id: survivor.id }).in('match_id', victimIds)
+    if (error) throw error
+  }
+
+  // 2) postpartidos (la tabla puede no existir aún)
+  try {
+    await supabase.from('postpartidos')
+      .update({ match_id: survivor.id }).in('match_id', victimIds)
+  } catch { /* sin tabla postpartidos: nada que mover */ }
+
+  // 3) jugadores vinculados, sin duplicar
+  {
+    const { data: existing, error: e1 } = await supabase.from('scouting_match_players')
+      .select('player_id').eq('match_id', survivor.id)
+    if (e1) throw e1
+    const have = new Set((existing ?? []).map(r => r.player_id as string))
+    const { data: moving, error: e2 } = await supabase.from('scouting_match_players')
+      .select('player_id').in('match_id', victimIds)
+    if (e2) throw e2
+    const toAdd = Array.from(new Set((moving ?? []).map(r => r.player_id as string)))
+      .filter(pid => !have.has(pid))
+    if (toAdd.length > 0) {
+      const { error: e3 } = await supabase.from('scouting_match_players')
+        .insert(toAdd.map(pid => ({ match_id: survivor.id, player_id: pid })))
+      if (e3 && e3.code !== '23505') throw e3
+    }
+  }
+
+  // 4) el superviviente hereda lo que le falte + fecha elegida
+  const donor = (field: (m: ScoutingMatch) => string | undefined) =>
+    victims.map(field).find(v => v && v.trim()) || undefined
+  const updated: ScoutingMatch = {
+    ...survivor,
+    date: newDate || survivor.date,
+    time: survivor.time ?? donor(m => m.time),
+    competition: survivor.competition ?? donor(m => m.competition),
+    notes: survivor.notes ?? donor(m => m.notes),
+  }
+  await updateScoutingMatch(updated)
+
+  // 5) fuera las copias (cascade limpia sus vínculos y scouts)
+  {
+    const { error } = await supabase.from('scouting_matches').delete().in('id', victimIds)
+    if (error) throw error
+  }
+  return updated
+}
+
 // ── Scouting Matches ────────────────────────────────────────
 
 function dbToScoutingMatch(row: Record<string, unknown>): ScoutingMatch {
