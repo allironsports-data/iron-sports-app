@@ -2636,7 +2636,7 @@ function FirmasTab({
     <div className="flex-1 w-full px-3 sm:px-6 py-4 space-y-3">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <h2 className="text-sm font-semibold text-slate-800">Firmar</h2>
+          <h2 className="text-sm font-semibold text-slate-800">Pipeline/Firmar</h2>
           <p className="text-xs text-slate-400">Captación activa: jugadores en proceso de conseguir la firma, por zona y estatus</p>
         </div>
         <div className="flex-shrink-0 flex items-center gap-1.5">
@@ -4245,6 +4245,48 @@ const SLOT_LABELS: Record<PitchSlotId, string> = {
 // Orden de lectura de la lista (arriba atrás, abajo arriba), como el Excel
 const SLOT_ORDER: PitchSlotId[] = ['POR', 'CTD', 'CT', 'CTI', 'LD', 'LI', 'PIV', 'MC', 'MP', 'ED', 'EI', 'DEL']
 
+// ── Ligas ────────────────────────────────────────────────────
+// Composición real de la temporada 2026-27 (LaLiga EA Sports, Hypermotion
+// y los dos grupos de Primera Federación), con los nombres tal y como
+// están escritos en la BBDD de Captación. Al cambiar de temporada solo
+// hay que retocar estas tres listas.
+type Liga = '1ª' | '2ª' | '1ª RFEF'
+const LIGA_LISTS: { liga: Liga; teams: string[] }[] = [
+  { liga: '1ª', teams: [
+    'Barcelona', 'Real Madrid', 'Villarreal', 'Atlético Madrid', 'Atletico Madrid', 'Atlético', 'Atletico',
+    'Real Betis', 'Betis', 'Celta', 'Celta de Vigo', 'Real Sociedad', 'Getafe', 'Athletic', 'Athletic Club',
+    'Athletic Bilbao', 'Valencia', 'Sevilla', 'Rayo Vallecano', 'Rayo', 'Osasuna', 'Espanyol', 'Alaves',
+    'Alavés', 'Levante', 'Elche', 'Racing Santander', 'Racing de Santander', 'Deportivo',
+    'Deportivo La Coruña', 'Málaga', 'Malaga',
+  ] },
+  { liga: '2ª', teams: [
+    'Oviedo', 'Real Oviedo', 'Mallorca', 'Girona', 'Almería', 'Almeria', 'Las Palmas', 'Castellón',
+    'Castellon', 'Burgos', 'Eibar', 'Córdoba', 'Cordoba', 'Sporting', 'Sporting Gijon', 'Sporting de Gijón',
+    'Ceuta', 'Albacete', 'Andorra', 'Granada', 'Real Sociedad B', 'Leganes', 'Leganés', 'Valladolid',
+    'Cádiz', 'Cadiz', 'Tenerife', 'Eldense', 'Celta B', 'Celta Fortuna', 'Sabadell',
+  ] },
+  { liga: '1ª RFEF', teams: [
+    'Merida', 'Mérida', 'Arenas', 'Arenas Club', 'Bilbao Athletic', 'Athletic B', 'Barakaldo', 'Coria',
+    'Extremadura', 'Lugo', 'Mirandes', 'Mirandés', 'Cacereño', 'Cacereno', 'Cultural Leonesa', 'Pontevedra',
+    'Racing Ferrol', 'Deportivo B', 'Deportivo Fabril', 'Fabril', 'Real Avilés', 'Real Aviles', 'Real Union',
+    'Real Unión', 'Ponferradina', 'UD Logroñes', 'UD Logroñés', 'Logroñes', 'Logroñés', 'Ourense',
+    'Unionistas', 'Zamora', 'Alcorcon', 'Alcorcón', 'Aguilas', 'Águilas', 'Algeciras', 'Antequera',
+    'Atlético Madrid B', 'Atletico Madrid B', 'Atlético Madrileño', 'Teruel', 'Europa', 'Rayo Majadahonda',
+    'Cartagena', 'Nastic', 'Nàstic', 'Gimnastic', 'Hercules', 'Hércules', 'Juventud Torremolinos',
+    'Real Jaen', 'Real Jaén', 'Jaen', 'Real Madrid Castilla', 'Castilla', 'Murcia', 'Real Murcia',
+    'Zaragoza', 'Huesca', 'Ibiza', 'UD Ibiza', 'Sant Andreu', 'Villarreal B',
+  ] },
+]
+const TEAM_LIGA: Record<string, Liga> = (() => {
+  const m: Record<string, Liga> = {}
+  LIGA_LISTS.forEach(({ liga, teams }) => teams.forEach(t => { if (!m[normSearch(t)]) m[normSearch(t)] = liga }))
+  return m
+})()
+const LIGAS: Liga[] = ['1ª', '2ª', '1ª RFEF']
+function ligaOf(team?: string): Liga | null {
+  return TEAM_LIGA[normSearch(team ?? '')] ?? null
+}
+
 /** Fin de contrato en texto libre → fecha y año. Acepta 30/06/2027,
  *  2027-06-30, 30-06-2027, 06/2027, 30/06/27 y un «2027» suelto. */
 function parseContract(s?: string): { date: Date | null; year: string | null } {
@@ -4264,49 +4306,73 @@ function parseContract(s?: string): { date: Date | null; year: string | null } {
   return { date: null, year: null }
 }
 
-function ContratosTab({ players, isAdmin, onOpenPlayer, onSetContract }: {
+function ContratosTab({ players, isAdmin, onOpenPlayer, onSetContract, onToggleMarketMap }: {
   players: ScoutingPlayer[]
   isAdmin: boolean
   onOpenPlayer: (id: string) => void
   onSetContract: (p: ScoutingPlayer, value: string) => Promise<void>
+  onToggleMarketMap: (p: ScoutingPlayer, value: boolean) => Promise<void>
 }) {
   const [view, setView] = useState<'campo' | 'lista'>('lista')
+  const [source, setSource] = useState<'mapa' | 'todos'>('mapa')
   const [yearSel, setYearSel] = useState<string | null>(null)
   const [q, setQ] = useState('')
   const [assessFilter, setAssessFilter] = useState<'all' | ScoutingAssessment>('all')
+  const [ligaFilter, setLigaFilter] = useState<Set<string>>(new Set(LIGAS as string[]))
   const [expandedSlots, setExpandedSlots] = useState<Set<string>>(new Set())
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
   const [saving, setSaving] = useState(false)
 
-  const parsed = useMemo(
-    () => players.map(p => { const c = parseContract(p.clubContract); return { p, date: c.date, year: c.year } }),
+  const all = useMemo(
+    () => players.map(p => { const c = parseContract(p.clubContract); return { p, date: c.date, year: c.year, liga: ligaOf(p.team) } }),
     [players]
   )
+  const enMapa = useMemo(() => all.filter(e => e.p.marketMap), [all])
 
-  // Años presentes + cuántos sin fecha
-  const { years, counts, sinFecha } = useMemo(() => {
+  // Fuente: mi campograma de mercado (los que me has pasado) o toda la
+  // BBDD filtrada por liga (1ª, 2ª, 1ª RFEF) para poder añadir jugadores.
+  const parsed = useMemo(() => source === 'mapa'
+    ? enMapa
+    : all.filter(e => ligaFilter.has(e.liga ?? 'otros')),
+    [source, enMapa, all, ligaFilter])
+
+  // Solo las tres ventanas que importan (2026, 2027, 2028 — avanza solo
+  // cada año). El resto de años cae en «Otros», que solo aparece si hay
+  // alguien ahí para que nadie quede escondido.
+  const windowYears = useMemo(() => {
+    const y0 = new Date().getFullYear()
+    return [String(y0), String(y0 + 1), String(y0 + 2)]
+  }, [])
+  const inWindow = useCallback((y: string | null) => !!y && windowYears.includes(y), [windowYears])
+
+  const { counts, sinFecha, otros } = useMemo(() => {
     const c: Record<string, number> = {}
+    windowYears.forEach(y => { c[y] = 0 })
     let sin = 0
-    parsed.forEach(({ year }) => { if (year) c[year] = (c[year] ?? 0) + 1; else sin++ })
-    return { years: Object.keys(c).sort(), counts: c, sinFecha: sin }
-  }, [parsed])
+    let otr = 0
+    parsed.forEach(({ year: y }) => {
+      if (!y) sin++
+      else if (windowYears.includes(y)) c[y]++
+      else otr++
+    })
+    return { counts: c, sinFecha: sin, otros: otr }
+  }, [parsed, windowYears])
 
-  // Año por defecto: el más próximo que aún no ha pasado; si no, el último
-  const defaultYear = useMemo(() => {
-    if (!years.length) return 'sin'
-    const thisYear = String(new Date().getFullYear())
-    return years.find(y => y >= thisYear) ?? years[years.length - 1]
-  }, [years])
+  // Año por defecto: la ventana con más jugadores (hoy, 2027)
+  const defaultYear = useMemo(
+    () => windowYears.reduce((best, y) => counts[y] > counts[best] ? y : best, windowYears[0]),
+    [windowYears, counts]
+  )
   const year = yearSel ?? defaultYear
 
   const nq = normSearch(q)
   const shown = useMemo(() => parsed.filter(({ p, year: y }) => {
-    if (year === 'sin' ? !!y : y !== year) return false
+    if (year === 'sin' ? !!y : year === 'otros' ? (!y || inWindow(y)) : y !== year) return false
     if (assessFilter !== 'all' && p.assessment !== assessFilter) return false
     if (nq && !normSearch(`${p.fullName} ${p.team ?? ''} ${p.agency ?? ''}`).includes(nq)) return false
     return true
-  }), [parsed, year, assessFilter, nq])
+  }), [parsed, year, assessFilter, nq, inWindow])
 
   // Reparto por posición del campograma
   const { bySlot, sinPos } = useMemo(() => {
@@ -4325,6 +4391,12 @@ function ContratosTab({ players, isAdmin, onOpenPlayer, onSetContract }: {
 
   const fmtShort = (d: Date | null) => d ? d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '—'
 
+  const toggleLiga = (l: string) => setLigaFilter(prev => {
+    const n = new Set(prev)
+    if (n.has(l)) n.delete(l); else n.add(l)
+    return n.size ? n : prev            // nunca dejar los cuatro apagados
+  })
+
   async function saveContract(p: ScoutingPlayer) {
     setSaving(true)
     try {
@@ -4336,7 +4408,7 @@ function ContratosTab({ players, isAdmin, onOpenPlayer, onSetContract }: {
   }
 
   // Fila de jugador de la lista
-  const playerRow = (e: { p: ScoutingPlayer; date: Date | null }) => {
+  const playerRow = (e: { p: ScoutingPlayer; date: Date | null; liga: Liga | null }) => {
     const { p } = e
     if (editingId === p.id) {
       return (
@@ -4363,18 +4435,31 @@ function ContratosTab({ players, isAdmin, onOpenPlayer, onSetContract }: {
             {p.birthdate && <span className="text-slate-400 font-medium"> '{p.birthdate.slice(2, 4)}</span>}
           </span>
           <span className="block text-[10.5px] text-slate-400 truncate">
-            {p.team || '—'}{p.agency ? ` · ${p.agency}` : ''}
+            {e.liga && <span className="text-slate-500 font-semibold">{e.liga}</span>}
+            {e.liga ? ' · ' : ''}{p.team || '—'}{p.agency ? ` · ${p.agency}` : ''}
           </span>
         </button>
         <span className="text-[10.5px] text-slate-400 flex-shrink-0 tabular-nums">{fmtShort(e.date)}</span>
         {isAdmin && (
-          <button
-            onClick={() => { setEditingId(p.id); setEditValue(p.clubContract ?? '') }}
-            className="p-0.5 rounded text-slate-300 hover:text-slate-600 hover:bg-white opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex-shrink-0"
-            aria-label="Editar fin de contrato"
-          >
-            <Pencil className="w-3 h-3" />
-          </button>
+          <>
+            <button
+              onClick={() => { setEditingId(p.id); setEditValue(p.clubContract ?? '') }}
+              className="p-0.5 rounded text-slate-300 hover:text-slate-600 hover:bg-white opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex-shrink-0"
+              aria-label="Editar fin de contrato"
+            >
+              <Pencil className="w-3 h-3" />
+            </button>
+            <button
+              onClick={() => void onToggleMarketMap(p, !p.marketMap)}
+              className={`px-0.5 text-[12px] leading-none flex-shrink-0 transition-opacity ${
+                p.marketMap ? 'text-amber-500 hover:text-amber-600' : 'text-slate-300 hover:text-amber-500 opacity-0 group-hover:opacity-100 focus:opacity-100'
+              }`}
+              title={p.marketMap ? 'Quitar del campograma de mercado' : 'Añadir al campograma de mercado'}
+              aria-label={p.marketMap ? 'Quitar del campograma' : 'Añadir al campograma'}
+            >
+              {p.marketMap ? '★' : '☆'}
+            </button>
+          </>
         )}
       </div>
     )
@@ -4399,19 +4484,49 @@ function ContratosTab({ players, isAdmin, onOpenPlayer, onSetContract }: {
         <div>
           <h2 className="text-sm font-semibold text-slate-800">Fin de contrato</h2>
           <p className="text-xs text-slate-400">
-            Quién acaba contrato cada año, por posición: elige el año y tienes el campograma de mercado
+            {source === 'mapa'
+              ? 'Tu campograma de mercado: solo los jugadores marcados con ★, por año de fin de contrato'
+              : 'Toda la BBDD de 1ª, 2ª y 1ª RFEF — marca con ☆ los que quieras en tu campograma'}
           </p>
         </div>
-        <div className="text-[11px] text-slate-500 flex items-center gap-3">
-          <span><strong className="text-slate-700">{players.length - sinFecha}</strong> con fecha</span>
-          <span><strong className="text-slate-700">{sinFecha}</strong> sin fecha</span>
+        <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
+          <button
+            onClick={() => { setSource('mapa'); setYearSel(null); setExpandedSlots(new Set()) }}
+            className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${source === 'mapa' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >★ Mi campograma <span className="text-slate-400 font-semibold">{enMapa.length}</span></button>
+          <button
+            onClick={() => { setSource('todos'); setYearSel(null); setExpandedSlots(new Set()) }}
+            className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${source === 'todos' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >Toda la BBDD</button>
         </div>
       </div>
 
+      {/* Ligas (solo al mirar toda la BBDD) */}
+      {source === 'todos' && (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Liga</span>
+          {[...LIGAS as string[], 'otros'].map(l => (
+            <button
+              key={l}
+              onClick={() => toggleLiga(l)}
+              className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border transition-colors ${
+                ligaFilter.has(l)
+                  ? 'bg-primary/10 text-primary border-primary/30'
+                  : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'
+              }`}
+            >
+              {l === 'otros' ? 'Resto' : l}
+              <span className="ml-1 text-[10px] opacity-70">{all.filter(e => (e.liga ?? 'otros') === l).length}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Años */}
       <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-0.5">
-        {years.map(y => chip(y, y, counts[y]))}
+        {windowYears.map(y => chip(y, y, counts[y]))}
         {chip('sin', 'Sin fecha', sinFecha)}
+        {otros > 0 && chip('otros', 'Otros años', otros)}
       </div>
 
       {/* Controles */}
@@ -4445,7 +4560,11 @@ function ContratosTab({ players, isAdmin, onOpenPlayer, onSetContract }: {
       {shown.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-xl px-4 py-8 text-center">
           <p className="text-xs text-slate-400 italic">
-            {year === 'sin' ? 'Todos los jugadores del filtro tienen fin de contrato.' : `Ningún jugador acaba contrato en ${year} con ese filtro.`}
+            {source === 'mapa' && enMapa.length === 0
+              ? 'Tu campograma está vacío: entra en «Toda la BBDD» y marca jugadores con ☆.'
+              : year === 'sin' ? 'Todos los jugadores del filtro tienen fin de contrato.'
+              : year === 'otros' ? 'Nadie con fin de contrato fuera de estos tres años.'
+              : `Ningún jugador acaba contrato en ${year} con ese filtro.`}
           </p>
         </div>
       ) : view === 'lista' ? (
@@ -5011,6 +5130,18 @@ export function Captacion({
     }
   }
 
+  // Añadir / quitar del campograma de mercado (pestaña Fin de contrato)
+  async function handleToggleMarketMap(player: ScoutingPlayer, value: boolean) {
+    try {
+      const updated: ScoutingPlayer = { ...player, marketMap: value }
+      await db.updateScoutingPlayer(updated)
+      onUpdatePlayer(updated)
+      showToast(value ? `${player.fullName} añadido al campograma` : `${player.fullName} quitado del campograma`)
+    } catch {
+      showToast('Error al actualizar el campograma', 'error')
+    }
+  }
+
   async function handleQuickAssessment(player: ScoutingPlayer, assessment: ScoutingAssessment | undefined) {
     try {
       const updated = {
@@ -5327,10 +5458,10 @@ export function Captacion({
         {/* Captación sub-tabs */}
         <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center gap-1 py-1.5 border-t border-slate-100 bg-slate-50/60 overflow-x-auto scrollbar-none">
           {([
-            { id: 'jugadores' as CaptacionTab, label: 'Jugadores', labelMobile: 'Jugadores', icon: <Users className="w-3.5 h-3.5" /> },
-            { id: 'firmar' as CaptacionTab, label: 'Firmar', labelMobile: 'Firmar', icon: <PenLine className="w-3.5 h-3.5" /> },
+            { id: 'firmar' as CaptacionTab, label: 'Pipeline/Firmar', labelMobile: 'Pipeline', icon: <PenLine className="w-3.5 h-3.5" /> },
             { id: 'conclusiones' as CaptacionTab, label: 'Conclusiones', labelMobile: 'Concl.', icon: <Target className="w-3.5 h-3.5" /> },
             { id: 'contratos' as CaptacionTab, label: 'Fin de contrato', labelMobile: 'Contratos', icon: <Calendar className="w-3.5 h-3.5" /> },
+            { id: 'jugadores' as CaptacionTab, label: 'Jugadores', labelMobile: 'Jugadores', icon: <Users className="w-3.5 h-3.5" /> },
             { id: 'informes' as CaptacionTab, label: 'Informes recientes', labelMobile: 'Informes', icon: <FileText className="w-3.5 h-3.5" /> },
             { id: 'partidos' as CaptacionTab, label: 'Partidos', labelMobile: 'Partidos', icon: <ClipboardList className="w-3.5 h-3.5" /> },
             { id: 'pretemporada' as CaptacionTab, label: 'Pretemporada', labelMobile: 'Pretemp.', icon: <Sun className="w-3.5 h-3.5" /> },
@@ -5681,6 +5812,7 @@ export function Captacion({
               isAdmin={isAdmin}
               onOpenPlayer={id => setPanelPlayerId(id)}
               onSetContract={handleQuickContract}
+              onToggleMarketMap={handleToggleMarketMap}
             />
           </div>
         </div>

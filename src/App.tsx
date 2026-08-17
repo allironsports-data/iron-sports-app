@@ -32,6 +32,15 @@ export interface AppNotification {
   ts: number
 }
 
+// Etiquetas de estatus del pipeline (para los avisos a los encargados)
+const FIRMAS_STATUS_LABEL: Record<string, string> = {
+  llamar: 'Llamar', caliente: 'Caliente', templado: 'Templado',
+  frio: 'Frío', decidir: 'Decidir', firmado: 'Firmado',
+}
+
+const fmtShortDate = (iso: string) =>
+  new Date(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
+
 function Spinner() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -408,20 +417,60 @@ export default function App() {
         })
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'captacion_firmas' }, (payload: { new: Record<string, unknown> }) => {
-        // Aviso a los encargados taggeados cuando otro añade un apunte o cambia el estatus
+        // Aviso a los encargados taggeados de CUALQUIER cambio en la tarjeta:
+        // apuntes nuevos, estatus, próxima acción, zona, notas o encargados.
+        // El "antes" lo saca del estado local (Supabase no manda payload.old),
+        // así que el aviso dice exactamente qué ha cambiado.
         const row = payload.new as Record<string, unknown>
+        const id = row.id as string
         const managers = (row.managers as string[]) ?? []
-        if (!managers.includes(profile.id)) return
+        const playerName = (row.player_name as string) ?? 'jugador'
         const comments = (row.comments as { text?: string; date?: string; author?: string; authorId?: string; kind?: string }[]) ?? []
         const last = comments[comments.length - 1]
-        if (!last?.date) return
-        if (last.authorId === profile.id) return                       // mis propios cambios no me avisan
-        if (Date.now() - new Date(last.date).getTime() > 60000) return // solo actividad recién añadida
-        const who = (last.author ?? 'Alguien').split(' ')[0]
-        const playerName = (row.player_name as string) ?? 'jugador'
-        const preview = (last.text ?? '').length > 45 ? (last.text ?? '').slice(0, 45) + '…' : (last.text ?? '')
-        const what = last.kind === 'estatus' ? `cambió el estatus (${preview})` : `añadió: "${preview}"`
-        addNotification(`Firmar · ${playerName}: ${who} ${what}`, 'task_new')
+        const recent = !!last?.date && Date.now() - new Date(last.date).getTime() < 60000
+        const mineJustNow = recent && last?.authorId === profile.id
+        const who = recent ? (last?.author ?? '').split(' ')[0] : ''
+
+        setFirmasEntries((prevFe) => {
+          const before = prevFe.find((e) => e.id === id)
+          const wasManager = !!before?.managers.includes(profile.id)
+          const isManager = managers.includes(profile.id)
+
+          // Me acaban de asignar la tarjeta → aviso aunque antes no fuera mío
+          if (isManager && !wasManager && before) {
+            addNotification(`Pipeline · ${playerName}: te han puesto como encargado`, 'task_new')
+            return prevFe
+          }
+          if (!isManager || mineJustNow) return prevFe   // no es mía, o el cambio es mío
+
+          const changes: string[] = []
+          if (before) {
+            if ((row.status as string) !== before.status) {
+              changes.push(`estatus → ${FIRMAS_STATUS_LABEL[row.status as string] ?? row.status}`)
+            }
+            const naBefore = `${before.nextAction ?? ''}|${before.nextActionDate ?? ''}`
+            const naAfter = `${(row.next_action as string) ?? ''}|${(row.next_action_date as string) ?? ''}`
+            if (naBefore !== naAfter) {
+              changes.push((row.next_action as string)
+                ? `próxima acción: ${row.next_action}${row.next_action_date ? ` (${fmtShortDate(row.next_action_date as string)})` : ''}`
+                : 'acción completada')
+            }
+            if (((row.zone as string) ?? '') !== (before.zone ?? '')) changes.push(`zona → ${row.zone}`)
+            if (((row.notes as string) ?? '') !== (before.notes ?? '')) changes.push('notas actualizadas')
+            if (comments.length > before.comments.length && recent && last) {
+              const preview = (last.text ?? '').length > 45 ? (last.text ?? '').slice(0, 45) + '…' : (last.text ?? '')
+              changes.push(last.kind === 'estatus' ? `«${preview}»` : `apunte: "${preview}"`)
+            }
+          } else if (recent && last) {
+            const preview = (last.text ?? '').length > 45 ? (last.text ?? '').slice(0, 45) + '…' : (last.text ?? '')
+            changes.push(`apunte: "${preview}"`)
+          }
+
+          if (changes.length) {
+            addNotification(`Pipeline · ${playerName}: ${who ? `${who} — ` : ''}${changes.join(' · ')}`, 'task_new')
+          }
+          return prevFe
+        })
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'club_negotiations' }, (payload: { new: Record<string, unknown> }) => {
         const row = payload.new as Record<string, unknown>

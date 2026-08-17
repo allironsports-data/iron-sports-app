@@ -277,6 +277,7 @@ export interface ScoutingPlayer {
   nationalTeam?: string
   agency?: string
   clubContract?: string     // "30/06/2027"
+  marketMap?: boolean       // en el campograma de mercado (pestaña Fin de contrato)
   contacto?: string
   categoria?: string
   segundaCategoria?: string
