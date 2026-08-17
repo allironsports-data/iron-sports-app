@@ -34,6 +34,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Avisos de tarjeta: si eres encargado de un jugador del pipeline, te llega notificación de cualquier cambio — estatus, próxima acción, apuntes, zona, notas — y también cuando te ponen como encargado',
       'En Fin de contrato cada jugador lleva su estatus del pipeline con color: Llamar, Caliente, Templado, Frío, Decidir o Firmado (y un punto hueco si aún no está en el pipeline)',
       'Ficha de partido: si un scout escribió su informe desde la ficha del jugador (sin enganchar el partido), ahora aparece igualmente en gris con un ⇄ para vincularlo al partido de un clic — se acabaron los informes que faltaban',
+      'Estadísticas del equipo: las listas de debates pendientes y de destacados que se enfrían ya no se cortan — se despliegan enteras y se descargan a Excel; el embudo muestra además qué porcentaje pasa de cada etapa a la siguiente',
       'Admin → Estadísticas → Modelo de Llamar: aprende del texto de vuestros informes qué se dice de un jugador que acaba en «Llamar» y le pone probabilidad a cada informe — con la lista de «Seguir» que suenan a Llamar, los «Llamar» que el texto no sostiene, las palabras que más pesan y un probador donde pegar un informe nuevo',
     ],
   },

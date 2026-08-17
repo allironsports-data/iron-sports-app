@@ -74,8 +74,25 @@ interface Props {
   profiles: Profile[]
 }
 
+// Descarga una lista como CSV (se abre en Excel). Con BOM para que los
+// acentos no salgan rotos.
+function descargarCsv(nombre: string, cabecera: string[], filas: (string | number)[][]) {
+  const esc = (v: string | number) => {
+    const s = String(v ?? '')
+    return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+  }
+  const csv = [cabecera, ...filas].map(f => f.map(esc).join(';')).join('\r\n')
+  const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' }))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${nombre}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: _sm, firmasEntries, profiles }: Props) {
   const [selected, setSelected] = useState<string | null>(null)
+  const [verTodo, setVerTodo] = useState({ debates: false, frios: false })
 
   const metrics = useMemo<ScoutMetrics[]>(() => {
     const playersById = new Map(scoutingPlayers.map(p => [p.id, p]))
@@ -359,9 +376,15 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
       jugadoresConInforme: jugadoresConInforme.size,
       partidosConInforme, partidosTotal: _sm.length,
       friosCount: frios.length,
-      friosTop: frios.slice(0, 6).map(p => ({ nombre: p.fullName, ultimo: (ultimoInformeDe.get(p.id) ?? '').slice(0, 10) || 'nunca' })),
+      friosTop: frios.map(p => ({
+        nombre: p.fullName,
+        ultimo: (ultimoInformeDe.get(p.id) ?? '').slice(0, 10) || 'nunca',
+        equipo: p.team ?? '',
+        pos: p.position1 ?? '',
+        anyo: p.birthdate ? p.birthdate.slice(0, 4) : '',
+      })),
       destacadosTotal: destacados.length,
-      multi, unanime, dividido, debates: debates.slice(0, 8), dobleOpinion,
+      multi, unanime, dividido, debates, dobleOpinion,
       embudo, reparto, cargaMax, posiciones,
     }
   }, [scoutingPlayers, scoutingReports, firmasEntries, _sm])
@@ -438,16 +461,24 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
           <div className="border border-slate-100 rounded-lg p-3">
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Embudo: de la BBDD a la firma</p>
             <div className="mt-2 space-y-1.5">
-              {team.embudo.map((e, i) => (
-                <div key={e.label} className="flex items-center gap-2 text-[11px]">
-                  <span className="w-32 text-slate-600 flex-shrink-0">{e.label}</span>
-                  <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
-                    <div className={`h-full ${['bg-slate-400','bg-blue-400','bg-amber-400','bg-violet-400','bg-emerald-500'][i]}`}
-                         style={{ width: `${Math.max(Math.round((e.n / maxEmbudo) * 100), e.n ? 2 : 0)}%` }} />
+              {team.embudo.map((e, i) => {
+                const prev = i > 0 ? team.embudo[i - 1].n : 0
+                const paso = i > 0 && prev > 0 ? Math.round((e.n / prev) * 100) : null
+                return (
+                  <div key={e.label} className="flex items-center gap-2 text-[11px]">
+                    <span className="w-32 text-slate-600 flex-shrink-0">{e.label}</span>
+                    <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
+                      <div className={`h-full ${['bg-slate-400','bg-blue-400','bg-amber-400','bg-violet-400','bg-emerald-500'][i]}`}
+                           style={{ width: `${Math.max(Math.round((e.n / maxEmbudo) * 100), e.n ? 2 : 0)}%` }} />
+                    </div>
+                    {/* qué porcentaje sobrevive de la etapa anterior: ahí se ve el atasco */}
+                    <span className="w-10 text-right text-[10px] text-slate-400 tabular-nums" title={paso !== null ? `${e.n} de ${prev} (${paso}%)` : ''}>
+                      {paso !== null ? `${paso}%` : ''}
+                    </span>
+                    <span className="w-12 text-right font-semibold text-slate-700">{e.n}</span>
                   </div>
-                  <span className="w-12 text-right font-semibold text-slate-700">{e.n}</span>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
 
@@ -475,31 +506,80 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
         {/* Debates + fríos */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="border border-amber-200 bg-amber-50/40 rounded-lg p-3">
-            <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wide">⚖️ Debates pendientes</p>
-            <p className="text-[10px] text-slate-400 mb-1.5">Un scout dice «Llamar» y otro «Descartar» — merecen una charla</p>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wide">⚖️ Debates pendientes</p>
+                <p className="text-[10px] text-slate-400 mb-1.5">Un scout dice «Llamar» y otro «Descartar» — merecen una charla</p>
+              </div>
+              {team.debates.length > 0 && (
+                <button
+                  onClick={() => descargarCsv('debates_pendientes', ['Jugador', 'Conclusiones'], team.debates.map(d => [d.nombre, d.detalle]))}
+                  className="flex-shrink-0 text-[10px] font-semibold text-amber-700 hover:text-amber-900 underline decoration-dotted"
+                >
+                  ↓ Excel
+                </button>
+              )}
+            </div>
             {team.debates.length > 0 ? (
-              <ul className="space-y-1 text-[11px] text-slate-700">
-                {team.debates.map(d => (
-                  <li key={d.nombre}><strong>{d.nombre}</strong> <span className="text-slate-400">— {d.detalle}</span></li>
-                ))}
-              </ul>
+              <>
+                <ul className={`space-y-1 text-[11px] text-slate-700 ${verTodo.debates ? 'max-h-72 overflow-y-auto pr-1' : ''}`}>
+                  {(verTodo.debates ? team.debates : team.debates.slice(0, 8)).map(d => (
+                    <li key={d.nombre}><strong>{d.nombre}</strong> <span className="text-slate-400">— {d.detalle}</span></li>
+                  ))}
+                </ul>
+                {team.debates.length > 8 && (
+                  <button
+                    onClick={() => setVerTodo(v => ({ ...v, debates: !v.debates }))}
+                    className="mt-1.5 text-[10.5px] font-semibold text-amber-700 hover:text-amber-900"
+                  >
+                    {verTodo.debates ? '← Ver solo los primeros' : `Ver los ${team.debates.length} →`}
+                  </button>
+                )}
+              </>
             ) : (
               <p className="text-[11px] text-slate-400 italic">Ninguno — sin choques frontales ahora mismo.</p>
             )}
           </div>
 
           <div className="border border-sky-200 bg-sky-50/40 rounded-lg p-3">
-            <p className="text-[10px] font-bold text-sky-600 uppercase tracking-wide">🧊 Destacados que se enfrían</p>
-            <p className="text-[10px] text-slate-400 mb-1.5">Llamar/Basque sin ningún informe en los últimos 60 días ({team.friosCount} de {team.destacadosTotal})</p>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold text-sky-600 uppercase tracking-wide">🧊 Destacados que se enfrían</p>
+                <p className="text-[10px] text-slate-400 mb-1.5">Llamar/Basque sin ningún informe en los últimos 60 días ({team.friosCount} de {team.destacadosTotal})</p>
+              </div>
+              {team.friosTop.length > 0 && (
+                <button
+                  onClick={() => descargarCsv('destacados_que_se_enfrian',
+                    ['Jugador', 'Equipo', 'Posición', 'Año', 'Último informe'],
+                    team.friosTop.map(f => [f.nombre, f.equipo, f.pos, f.anyo, f.ultimo]))}
+                  className="flex-shrink-0 text-[10px] font-semibold text-sky-700 hover:text-sky-900 underline decoration-dotted"
+                >
+                  ↓ Excel
+                </button>
+              )}
+            </div>
             {team.friosTop.length > 0 ? (
-              <ul className="space-y-1 text-[11px] text-slate-700">
-                {team.friosTop.map(f => (
-                  <li key={f.nombre}><strong>{f.nombre}</strong> <span className="text-slate-400">— último informe: {f.ultimo}</span></li>
-                ))}
-                {team.friosCount > team.friosTop.length && (
-                  <li className="text-slate-400 italic">…y {team.friosCount - team.friosTop.length} más</li>
+              <>
+                <ul className={`space-y-1 text-[11px] text-slate-700 ${verTodo.frios ? 'max-h-72 overflow-y-auto pr-1' : ''}`}>
+                  {(verTodo.frios ? team.friosTop : team.friosTop.slice(0, 6)).map(f => (
+                    <li key={f.nombre}>
+                      <strong>{f.nombre}</strong>
+                      <span className="text-slate-400">
+                        {[f.equipo, f.pos, f.anyo].filter(Boolean).length > 0 && ` (${[f.equipo, f.pos, f.anyo].filter(Boolean).join(' · ')})`}
+                        {' '}— último informe: {f.ultimo}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                {team.friosTop.length > 6 && (
+                  <button
+                    onClick={() => setVerTodo(v => ({ ...v, frios: !v.frios }))}
+                    className="mt-1.5 text-[10.5px] font-semibold text-sky-700 hover:text-sky-900"
+                  >
+                    {verTodo.frios ? '← Ver solo los primeros' : `Ver los ${team.friosTop.length} →`}
+                  </button>
                 )}
-              </ul>
+              </>
             ) : (
               <p className="text-[11px] text-slate-400 italic">Todos los destacados tienen informe reciente. 👏</p>
             )}
