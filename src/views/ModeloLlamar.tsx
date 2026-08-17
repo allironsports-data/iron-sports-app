@@ -60,6 +60,19 @@ interface Sample { idx: number[]; y: number }
 
 interface Trained { w: Float64Array; bias: number }
 
+// Sigmoide a prueba de desbordamientos (un informe largo activa cientos de
+// términos; sin acotar, z se dispara y salen NaN)
+function sigmoid(z: number): number {
+  if (!isFinite(z)) return z > 0 ? 1 : 0
+  const c = z > 30 ? 30 : z < -30 ? -30 : z
+  return 1 / (1 + Math.exp(-c))
+}
+
+// Peso de cada término dentro del informe: 1/√(nº de términos). Así un
+// informe de 400 palabras y otro de 40 pesan igual y el entrenamiento no
+// se desestabiliza con los textos largos.
+const scaleOf = (n: number) => (n > 0 ? 1 / Math.sqrt(n) : 0)
+
 function train(samples: Sample[], nFeat: number, opts: { epochs: number; lr: number; l2: number; seed: number }): Trained {
   const w = new Float64Array(nFeat)
   let bias = 0
@@ -73,24 +86,60 @@ function train(samples: Sample[], nFeat: number, opts: { epochs: number; lr: num
     }
     for (const oi of order) {
       const s = samples[oi]
+      if (!s.idx.length) continue
+      const sc = scaleOf(s.idx.length)
       let z = bias
-      for (const f of s.idx) z += w[f]
-      const p = 1 / (1 + Math.exp(-z))
+      for (const f of s.idx) z += w[f] * sc
+      const p = sigmoid(z)
       const g = p - s.y
       const lr = opts.lr / (1 + t * 1e-4)
       t++
       bias -= lr * g
-      for (const f of s.idx) w[f] -= lr * (g + opts.l2 * w[f])
+      for (const f of s.idx) w[f] -= lr * (g * sc + opts.l2 * w[f])
     }
   }
+  // Red de seguridad: si algo se fuera de madre, el término se anula en vez
+  // de contaminar todas las cuentas con NaN
+  for (let i = 0; i < w.length; i++) if (!isFinite(w[i])) w[i] = 0
+  if (!isFinite(bias)) bias = 0
   return { w, bias }
 }
 
-function predict(m: Trained, idx: number[]): number {
+function rawZ(m: Trained, idx: number[]): number {
+  if (!idx.length) return m.bias
+  const sc = scaleOf(idx.length)
   let z = m.bias
-  for (const f of idx) z += m.w[f]
-  return 1 / (1 + Math.exp(-z))
+  for (const f of idx) z += m.w[f] * sc
+  return z
 }
+
+// Calibración de Platt: el modelo ordena bien pero sus porcentajes se
+// quedan cortos o se pasan. Esto ajusta una recta (a·z + b) sobre las
+// puntuaciones de validación para que un 70% signa de verdad un 70%.
+interface Platt { a: number; b: number }
+
+function fitPlatt(pairs: { z: number; y: number }[]): Platt {
+  let a = 1
+  let b = 0
+  const n = pairs.length
+  if (!n) return { a, b }
+  for (let it = 0; it < 400; it++) {
+    let ga = 0
+    let gb = 0
+    for (const { z, y } of pairs) {
+      const p = sigmoid(a * z + b)
+      const d = p - y
+      ga += d * z
+      gb += d
+    }
+    a -= (0.5 * ga) / n
+    b -= (0.5 * gb) / n
+    if (!isFinite(a) || !isFinite(b)) return { a: 1, b: 0 }
+  }
+  return { a, b }
+}
+
+const applyPlatt = (pl: Platt, z: number) => sigmoid(pl.a * z + pl.b)
 
 function auc(pairs: { p: number; y: number }[]): number {
   const pos = pairs.filter(x => x.y === 1).length
@@ -117,6 +166,7 @@ interface ModelOk {
   ok: true
   vocab: string[]
   model: Trained
+  platt: Platt
   nTrain: number
   baseRate: number
   aucCv: number
@@ -160,19 +210,24 @@ function buildModel(reports: ScoutingReport[]): ModelOk | ModelResult {
     return { idx, y: normConclusion(usable[i].conclusion) === 'Llamar' ? 1 : 0 }
   })
 
-  const HP = { epochs: 12, lr: 0.25, l2: 2e-4, seed: 20260817 }
+  // lr moderado: con el vector normalizado el paso ya es estable, y 20
+  // pasadas dan de sobra para textos de scouting
+  const HP = { epochs: 20, lr: 0.6, l2: 1e-5, seed: 20260817 }
 
   // 3) Validación cruzada de 5 bloques: cada informe se puntúa con un
   //    modelo que NO lo ha visto al entrenar
   const K = 5
   const fold = samples.map((_, i) => i % K)
-  const cvPairs: { p: number; y: number }[] = []
+  const cvRaw: { z: number; y: number }[] = []
   for (let k = 0; k < K; k++) {
     const tr = samples.filter((_, i) => fold[i] !== k)
     const te = samples.map((s, i) => ({ s, i })).filter(x => fold[x.i] === k)
     const m = train(tr, vocab.length, { ...HP, seed: HP.seed + k })
-    te.forEach(({ s }) => cvPairs.push({ p: predict(m, s.idx), y: s.y }))
+    te.forEach(({ s }) => cvRaw.push({ z: rawZ(m, s.idx), y: s.y }))
   }
+  // La recta de calibración se aprende SOLO con puntuaciones de validación
+  const platt = fitPlatt(cvRaw)
+  const cvPairs = cvRaw.map(x => ({ p: applyPlatt(platt, x.z), y: x.y }))
   const aucCv = auc(cvPairs)
 
   // Calibración: ¿cuando dice 70% acierta el 70%?
@@ -209,11 +264,11 @@ function buildModel(reports: ScoutingReport[]): ModelOk | ModelResult {
     .map(r => {
       const idx: number[] = []
       new Set(tokenize(r.texto ?? '')).forEach(tk => { const j = vIndex[tk]; if (j !== undefined) idx.push(j) })
-      return { r, p: predict(model, idx) }
+      return { r, p: applyPlatt(platt, rawZ(model, idx)) }
     })
 
   return {
-    ok: true, vocab, model, nTrain: usable.length, baseRate: llamar / usable.length,
+    ok: true, vocab, model, platt, nTrain: usable.length, baseRate: llamar / usable.length,
     aucCv, calib, top, bottom, scored, precisionTop,
   }
 }
@@ -252,7 +307,7 @@ export function ModeloLlamar({ scoutingPlayers, scoutingReports, profiles }: {
       if (j !== undefined) { idx.push(j); hits.push({ term: tk, w: result.model.w[j] }) }
     })
     hits.sort((a, b) => Math.abs(b.w) - Math.abs(a.w))
-    return { p: predict(result.model, idx), hits: hits.slice(0, 8) }
+    return { p: applyPlatt(result.platt, rawZ(result.model, idx)), hits: hits.slice(0, 8) }
   }, [probe, result])
 
   if (!result) {
@@ -273,7 +328,7 @@ export function ModeloLlamar({ scoutingPlayers, scoutingReports, profiles }: {
     )
   }
 
-  const pct = (x: number) => `${Math.round(x * 100)}%`
+  const pct = (x: number) => (isFinite(x) ? `${Math.round(x * 100)}%` : '—')
   const nombre = (r: ScoutingReport) => playerById[r.playerId]?.fullName ?? 'Jugador'
   const scout = (r: ScoutingReport) => {
     const p = profiles.find(pr => pr.avatar === r.persona)
