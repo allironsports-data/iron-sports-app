@@ -16,6 +16,8 @@ interface AuthState {
   user: User | null
   profile: Profile | null
   loading: boolean
+  /** true si el usuario está autenticado pero NO existe su fila en profiles */
+  profileMissing: boolean
   signIn: (email: string, password: string) => Promise<string | null>
   signOut: () => Promise<void>
 }
@@ -26,9 +28,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
+  const [profileMissing, setProfileMissing] = useState(false)
 
   const fetchProfile = async (userId: string) => {
-    const { data } = await supabase.from('profiles').select('*').eq('id', userId).single()
+    // maybeSingle: si la fila no existe no es un error de red, es un perfil
+    // sin crear — lo señalamos para que la app lo explique en vez de
+    // devolver al login en bucle.
+    const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle()
+    setProfileMissing(!error && !data)
     if (data) {
       setProfile({
         id: data.id,
@@ -79,10 +86,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut()
     setUser(null)
     setProfile(null)
+    setProfileMissing(false)
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, profile, loading, profileMissing, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   )

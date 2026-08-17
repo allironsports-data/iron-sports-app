@@ -41,7 +41,7 @@ function Spinner() {
 }
 
 export default function App() {
-  const { user, profile, loading, signIn, signOut } = useAuth()
+  const { profileMissing, user, profile, loading, signIn, signOut } = useAuth()
 
   const [players, setPlayers] = useState<Player[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
@@ -510,7 +510,28 @@ export default function App() {
   }, [])
 
   if (loading) return <Spinner />
-  if (!user || !profile) return <LoginScreen onLogin={signIn} />
+  if (!user) return <LoginScreen onLogin={signIn} />
+  if (!profile) {
+    // Autenticado pero sin fila en profiles (o aún cargando): sin esto, la
+    // cuenta "entra y vuelve a salirse" sin ninguna pista.
+    return profileMissing ? (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+        <div className="max-w-sm text-center bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+          <p className="text-sm font-semibold text-slate-800">Tu cuenta no tiene perfil todavía</p>
+          <p className="text-xs text-slate-500 mt-2">
+            El acceso es correcto, pero falta crear tu perfil en la base de datos.
+            Avisa al administrador para que lo cree y vuelve a entrar.
+          </p>
+          <button
+            onClick={signOut}
+            className="mt-4 px-4 py-2 text-xs font-bold bg-slate-800 text-white rounded-lg hover:bg-slate-700"
+          >
+            Volver al login
+          </button>
+        </div>
+      </div>
+    ) : <Spinner />
+  }
   if (dataLoading) return <Spinner />
   if (dataError) {
     return (
