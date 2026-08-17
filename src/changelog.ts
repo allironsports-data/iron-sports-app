@@ -29,6 +29,10 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Y estadísticas del equipo completo: ritmo de 12 meses, embudo de la BBDD a la firma, consenso, debates pendientes (Llamar vs Descartar), destacados que se enfrían, reparto del esfuerzo y cobertura por posición',
       'Firmar: acción predefinida «📵 Conseguir teléfono» — al programar la próxima acción, un toque en 📵 la deja lista; la tarjeta del jugador muestra el 📵 y cada columna cuenta cuántos están sin número',
       'Nueva pestaña Captación → Fin de contrato: eliges el año (2026, 2027, 2028…) y ves quién acaba contrato, colocado por posición en lista o campograma, con su equipo y su agencia — y puedes corregir la fecha ahí mismo con el lápiz',
+      'Ese campograma de mercado es tuyo: solo salen los jugadores marcados con ★, y en «Toda la BBDD» filtras por 1ª, 2ª y 1ª RFEF para ir añadiendo',
+      'La pestaña Firmar pasa a llamarse Pipeline/Firmar y las pestañas de Captación se reordenan: Pipeline, Conclusiones, Fin de contrato, Jugadores, Informes…',
+      'Avisos de tarjeta: si eres encargado de un jugador del pipeline, te llega notificación de cualquier cambio — estatus, próxima acción, apuntes, zona, notas — y también cuando te ponen como encargado',
+      'En Fin de contrato cada jugador lleva su estatus del pipeline con color: Llamar, Caliente, Templado, Frío, Decidir o Firmado (y un punto hueco si aún no está en el pipeline)',
     ],
   },
   {

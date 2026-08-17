@@ -4306,8 +4306,9 @@ function parseContract(s?: string): { date: Date | null; year: string | null } {
   return { date: null, year: null }
 }
 
-function ContratosTab({ players, isAdmin, onOpenPlayer, onSetContract, onToggleMarketMap }: {
+function ContratosTab({ players, firmasEntries, isAdmin, onOpenPlayer, onSetContract, onToggleMarketMap }: {
   players: ScoutingPlayer[]
+  firmasEntries: FirmasEntry[]
   isAdmin: boolean
   onOpenPlayer: (id: string) => void
   onSetContract: (p: ScoutingPlayer, value: string) => Promise<void>
@@ -4329,6 +4330,13 @@ function ContratosTab({ players, isAdmin, onOpenPlayer, onSetContract, onToggleM
     [players]
   )
   const enMapa = useMemo(() => all.filter(e => e.p.marketMap), [all])
+
+  // Estatus en el pipeline (Firmar) de cada jugador, por si está en él
+  const firmasByPlayer = useMemo(() => {
+    const m: Record<string, FirmasEntry> = {}
+    firmasEntries.forEach(e => { if (e.scoutingPlayerId && !m[e.scoutingPlayerId]) m[e.scoutingPlayerId] = e })
+    return m
+  }, [firmasEntries])
 
   // Fuente: mi campograma de mercado (los que me has pasado) o toda la
   // BBDD filtrada por liga (1ª, 2ª, 1ª RFEF) para poder añadir jugadores.
@@ -4367,12 +4375,15 @@ function ContratosTab({ players, isAdmin, onOpenPlayer, onSetContract, onToggleM
   const year = yearSel ?? defaultYear
 
   const nq = normSearch(q)
+  // Al buscar en toda la BBDD el año se ignora: si buscas a alguien por
+  // nombre es para encontrarlo, no para pelearte con el filtro
+  const ignoreYear = source === 'todos' && !!nq
   const shown = useMemo(() => parsed.filter(({ p, year: y }) => {
-    if (year === 'sin' ? !!y : year === 'otros' ? (!y || inWindow(y)) : y !== year) return false
+    if (!ignoreYear && (year === 'sin' ? !!y : year === 'otros' ? (!y || inWindow(y)) : y !== year)) return false
     if (assessFilter !== 'all' && p.assessment !== assessFilter) return false
     if (nq && !normSearch(`${p.fullName} ${p.team ?? ''} ${p.agency ?? ''}`).includes(nq)) return false
     return true
-  }), [parsed, year, assessFilter, nq, inWindow])
+  }), [parsed, year, assessFilter, nq, inWindow, ignoreYear])
 
   // Reparto por posición del campograma
   const { bySlot, sinPos } = useMemo(() => {
@@ -4439,20 +4450,40 @@ function ContratosTab({ players, isAdmin, onOpenPlayer, onSetContract, onToggleM
             {e.liga ? ' · ' : ''}{p.team || '—'}{p.agency ? ` · ${p.agency}` : ''}
           </span>
         </button>
+        {(() => {
+          // Estatus en el pipeline: color + etiqueta (o punto hueco si no está)
+          const fe = firmasByPlayer[p.id]
+          if (!fe) return (
+            <span className="w-1.5 h-1.5 rounded-full border border-slate-200 flex-shrink-0" title="No está en el pipeline" />
+          )
+          const cfg = FIRMAS_CONFIG[fe.status]
+          return (
+            <span
+              className={`flex-shrink-0 inline-flex items-center gap-1 rounded-full border px-1.5 py-px text-[9.5px] font-bold ${cfg.bg} ${cfg.text} ${cfg.border}`}
+              title={`Pipeline: ${cfg.label}`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+              <span className="hidden sm:inline">{cfg.label}</span>
+            </span>
+          )
+        })()}
         <span className="text-[10.5px] text-slate-400 flex-shrink-0 tabular-nums">{fmtShort(e.date)}</span>
         {isAdmin && (
           <>
             <button
               onClick={() => { setEditingId(p.id); setEditValue(p.clubContract ?? '') }}
-              className="p-0.5 rounded text-slate-300 hover:text-slate-600 hover:bg-white opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex-shrink-0"
+              className="p-0.5 rounded text-slate-300 hover:text-slate-600 hover:bg-white transition-colors flex-shrink-0"
+              title="Editar fin de contrato"
               aria-label="Editar fin de contrato"
             >
               <Pencil className="w-3 h-3" />
             </button>
+            {/* Estrella siempre visible: es la forma de meter y sacar
+                jugadores del campograma (también en móvil, sin hover) */}
             <button
               onClick={() => void onToggleMarketMap(p, !p.marketMap)}
-              className={`px-0.5 text-[12px] leading-none flex-shrink-0 transition-opacity ${
-                p.marketMap ? 'text-amber-500 hover:text-amber-600' : 'text-slate-300 hover:text-amber-500 opacity-0 group-hover:opacity-100 focus:opacity-100'
+              className={`px-0.5 text-[13px] leading-none flex-shrink-0 transition-colors ${
+                p.marketMap ? 'text-amber-500 hover:text-amber-600' : 'text-slate-300 hover:text-amber-500'
               }`}
               title={p.marketMap ? 'Quitar del campograma de mercado' : 'Añadir al campograma de mercado'}
               aria-label={p.marketMap ? 'Quitar del campograma' : 'Añadir al campograma'}
@@ -4554,7 +4585,13 @@ function ContratosTab({ players, isAdmin, onOpenPlayer, onSetContract, onToggleM
             className="w-full text-xs border border-slate-200 rounded-lg pl-8 pr-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20"
           />
         </div>
-        <span className="text-[11px] text-slate-400">{shown.length} jugador{shown.length !== 1 ? 'es' : ''}</span>
+        <span className="text-[11px] text-slate-400">
+          {shown.length} jugador{shown.length !== 1 ? 'es' : ''}
+          {ignoreYear && <span className="text-slate-300"> · buscando en todos los años</span>}
+        </span>
+        {source === 'todos' && isAdmin && (
+          <span className="text-[11px] text-amber-600 font-medium">☆ = añadir al campograma</span>
+        )}
       </div>
 
       {shown.length === 0 ? (
@@ -4614,17 +4651,21 @@ function ContratosTab({ players, isAdmin, onOpenPlayer, onSetContract, onToggleM
                     {pls.length > 0 && <span className="bg-amber-500 text-[9px] text-amber-950 rounded-full px-1.5 font-extrabold">{pls.length}</span>}
                   </div>
                   <div className="flex flex-col items-center gap-0.5">
-                    {visible.map(({ p, date }) => (
-                      <button
-                        key={p.id}
-                        onClick={() => onOpenPlayer(p.id)}
-                        title={`${p.fullName}${p.team ? ' · ' + p.team : ''}${p.agency ? ' · ' + p.agency : ''} · fin ${p.clubContract ?? '—'}`}
-                        className="bg-amber-50 border border-amber-200 text-amber-900 text-[9.5px] font-bold rounded-md px-1.5 py-px whitespace-nowrap shadow hover:bg-amber-100 transition-colors max-w-[130px] truncate"
-                      >
-                        {p.fullName.split(' ').slice(0, 2).join(' ')}
-                        {date && <span className="font-medium text-amber-600"> {fmtShort(date).slice(0, 5)}</span>}
-                      </button>
-                    ))}
+                    {visible.map(({ p, date }) => {
+                      const fe = firmasByPlayer[p.id]
+                      return (
+                        <button
+                          key={p.id}
+                          onClick={() => onOpenPlayer(p.id)}
+                          title={`${p.fullName}${p.team ? ' · ' + p.team : ''}${p.agency ? ' · ' + p.agency : ''} · fin ${p.clubContract ?? '—'}${fe ? ` · pipeline: ${FIRMAS_CONFIG[fe.status].label}` : ''}`}
+                          className="bg-amber-50 border border-amber-200 text-amber-900 text-[9.5px] font-bold rounded-md px-1.5 py-px whitespace-nowrap shadow hover:bg-amber-100 transition-colors max-w-[130px] truncate inline-flex items-center gap-1"
+                        >
+                          {fe && <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${FIRMAS_CONFIG[fe.status].dot}`} />}
+                          {p.fullName.split(' ').slice(0, 2).join(' ')}
+                          {date && <span className="font-medium text-amber-600">{fmtShort(date).slice(0, 5)}</span>}
+                        </button>
+                      )
+                    })}
                     {extra > 0 && (
                       <button
                         onClick={() => setExpandedSlots(prev => { const n = new Set(prev); n.add(s.id); return n })}
@@ -5809,6 +5850,7 @@ export function Captacion({
           <div className="max-w-6xl mx-auto">
             <ContratosTab
               players={scoutingPlayers}
+              firmasEntries={firmasEntries}
               isAdmin={isAdmin}
               onOpenPlayer={id => setPanelPlayerId(id)}
               onSetContract={handleQuickContract}
