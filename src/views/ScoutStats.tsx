@@ -417,12 +417,78 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
             <p className="text-[10px] text-slate-300 mt-1.5">Expresiones de 3 palabras que aparecen en 3 o más informes suyos.</p>
           </div>
 
-          <p className="text-[10px] text-slate-300">
-            Nota: «acierto» es una aproximación — compara sus conclusiones con dónde está el jugador HOY, y el estado actual
-            puede deberse en parte a sus propios informes. Las métricas se ocultan («—») cuando hay pocos datos para no engañar.
-          </p>
         </div>
       )}
+
+      {/* ── Glosario ── */}
+      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+        <h3 className="text-sm font-semibold text-slate-700 mb-3">📖 Glosario de métricas</h3>
+        <dl className="space-y-3 text-xs text-slate-600">
+          <div>
+            <dt className="font-bold text-slate-800">Concluye</dt>
+            <dd className="mt-0.5">
+              Porcentaje de sus informes que llevan una conclusión (Llamar, Seguir o Descartar), no solo texto.
+              Un informe sin conclusión describe; con conclusión, decide. <span className="text-slate-400">Cuanto más alto mejor:
+              por debajo del 50% se marca en ámbar.</span>
+            </dd>
+          </div>
+          <div>
+            <dt className="font-bold text-slate-800">Exigencia</dt>
+            <dd className="mt-0.5">
+              De sus informes con conclusión, el porcentaje que son «Descartar». Mide si el scout filtra o le vale todo.
+              <span className="text-slate-400"> No es «cuanto más mejor»: un 0% avisa de que nunca descarta (no filtra), y
+              un valor altísimo puede indicar que va a ver a los jugadores equivocados. Lo sano es un término medio, y
+              sobre todo que sea parecido entre scouts que ven el mismo nivel de fútbol.</span>
+            </dd>
+          </div>
+          <div>
+            <dt className="font-bold text-slate-800">Originalidad</dt>
+            <dd className="mt-0.5">
+              Porcentaje de expresiones de 4 palabras que no se repiten entre sus propios informes. Detecta los informes
+              «de plantilla»: si escribe casi lo mismo de cada jugador, el número baja.
+              <span className="text-slate-400"> Por debajo del 55% se marca en ámbar: sus informes se parecen demasiado
+              entre sí. Complementa a las «frases habituales», que enseñan exactamente qué muletillas repite.</span>
+            </dd>
+          </div>
+          <div>
+            <dt className="font-bold text-slate-800">Congruencia</dt>
+            <dd className="mt-0.5">
+              Sobre los jugadores que también evaluaron otros scouts, el porcentaje de veces que su conclusión coincide
+              con la mayoría del resto. <span className="text-slate-400">Ni un extremo ni el otro es bueno: muy baja
+              significa que va por libre (o que ve cosas que los demás no ven — merece revisión caso a caso); un 100%
+              constante significa que no aporta criterio propio. Solo se calcula con 5 o más jugadores en común.</span>
+            </dd>
+          </div>
+          <div>
+            <dt className="font-bold text-slate-800">Acierto</dt>
+            <dd className="mt-0.5">
+              De los jugadores que él concluyó «Llamar», el porcentaje que HOY sigue destacado: en estado Llamar o Basque,
+              o dentro del pipeline de Firmar. En su ficha se añaden los «descartes confirmados»: de sus «Descartar»,
+              cuántos están hoy Descartados. <span className="text-slate-400">Es una aproximación, no una nota: el estado
+              actual del jugador puede deberse en parte a sus propios informes, y a un fichaje aún le queda demostrar.
+              Con más histórico se puede afinar comparando contra firmas y minutos reales.</span>
+            </dd>
+          </div>
+          <div>
+            <dt className="font-bold text-slate-800">Seguimiento</dt>
+            <dd className="mt-0.5">
+              Porcentaje de sus jugadores a los que ha hecho 2 o más informes. Distingue al scout que revisita y confirma
+              del que solo deja primeras impresiones.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-bold text-slate-800">Detección temprana</dt>
+            <dd className="mt-0.5">
+              Entre los jugadores hoy destacados que fueron vistos por varios scouts, el porcentaje de veces que el primer
+              informe fue el suyo. Mide quién llega antes a los buenos.
+            </dd>
+          </div>
+        </dl>
+        <p className="text-[10px] text-slate-400 mt-3">
+          Regla general de toda la página: cuando una métrica tiene pocos datos (menos de 5 casos comparables, menos de
+          10 conclusiones, textos escasos…) se muestra «—» en vez de un porcentaje que engañaría.
+        </p>
+      </div>
     </div>
   )
 }
