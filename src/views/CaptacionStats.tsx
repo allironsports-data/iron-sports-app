@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
-import { ClipboardList, Users, PenLine, UserSearch } from 'lucide-react'
+import { ClipboardList, Users, PenLine, UserSearch, Brain } from 'lucide-react'
 import { ScoutStats } from './ScoutStats'
+import { ModeloLlamar } from './ModeloLlamar'
 import type { ScoutingPlayer, ScoutingReport, ScoutingMatch, FirmasEntry, FirmasStatus } from '../types'
 import type { Profile } from '../contexts/AuthContext'
 
@@ -49,7 +50,7 @@ interface Props {
 }
 
 export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatches, firmasEntries, profiles }: Props) {
-  const [statsTab, setStatsTab] = useState<'general' | 'scouts'>('general')
+  const [statsTab, setStatsTab] = useState<'general' | 'scouts' | 'modelo'>('general')
   // ── statistics ──
   const stats = useMemo(() => {
     // Reports per persona
@@ -206,6 +207,7 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
         {([
           { id: 'general' as const, label: 'Visión general', icon: <ClipboardList className="w-3.5 h-3.5" /> },
           { id: 'scouts' as const, label: 'Scouts', icon: <UserSearch className="w-3.5 h-3.5" /> },
+          { id: 'modelo' as const, label: 'Modelo de Llamar', icon: <Brain className="w-3.5 h-3.5" /> },
         ]).map(t => (
           <button
             key={t.id}
@@ -218,6 +220,14 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
           </button>
         ))}
       </div>
+
+      {statsTab === 'modelo' && (
+        <ModeloLlamar
+          scoutingPlayers={scoutingPlayers}
+          scoutingReports={scoutingReports}
+          profiles={profiles}
+        />
+      )}
 
       {statsTab === 'scouts' && (
         <ScoutStats
