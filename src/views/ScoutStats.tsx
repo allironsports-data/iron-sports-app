@@ -242,6 +242,130 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
     return out.sort((a, b) => b.total - a.total)
   }, [scoutingPlayers, scoutingReports, firmasEntries, profiles])
 
+  // ── Estadísticas del EQUIPO ──
+  const team = useMemo(() => {
+    const reports = scoutingReports.filter(r => r.persona && (r.texto ?? '').trim().length > 0)
+    const playersById = new Map(scoutingPlayers.map(p => [p.id, p]))
+    const enFirmar = new Set(firmasEntries.map(f => f.scoutingPlayerId).filter(Boolean) as string[])
+    const firmados = firmasEntries.filter(f => f.status === 'firmado').length
+
+    const hoy = new Date()
+    const iso = (d: Date) => d.toISOString()
+    const hace30 = iso(new Date(hoy.getTime() - 30 * 86400000))
+    const hace60 = iso(new Date(hoy.getTime() - 60 * 86400000))
+    const fecha = (r: ScoutingReport) => r.fecha ?? r.createdAt
+
+    // Ritmo: 12 meses + comparación 30d vs 30 anteriores
+    const meses: { key: string; label: string; count: number }[] = []
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1)
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      meses.push({ key, label: MONTHS_ES[d.getMonth()], count: 0 })
+    }
+    const mesIdx = new Map(meses.map((m, i) => [m.key, i]))
+    let ult30 = 0, prev30 = 0
+    const hace60b = iso(new Date(hoy.getTime() - 60 * 86400000))
+    for (const r of reports) {
+      const f = fecha(r)
+      const i = mesIdx.get(f.slice(0, 7))
+      if (i !== undefined) meses[i].count++
+      if (f >= hace30) ult30++
+      else if (f >= hace60b) prev30++
+    }
+
+    // Cobertura
+    const jugadoresConInforme = new Set(reports.map(r => r.playerId))
+    const partidosConInforme = new Set(reports.map(r => r.matchId).filter(Boolean)).size
+    const ultimoInformeDe = new Map<string, string>()
+    for (const r of reports) {
+      const f = fecha(r)
+      if ((ultimoInformeDe.get(r.playerId) ?? '') < f) ultimoInformeDe.set(r.playerId, f)
+    }
+    const destacados = scoutingPlayers.filter(p => p.assessment === 'Llamar' || p.assessment === 'Basque')
+    const frios = destacados
+      .filter(p => (ultimoInformeDe.get(p.id) ?? '') < hace60)
+      .sort((a, b) => (ultimoInformeDe.get(a.id) ?? '').localeCompare(ultimoInformeDe.get(b.id) ?? ''))
+
+    // Conclusiones por scout y jugador → consenso, debates, doble opinión
+    const conclusionDe = new Map<string, Map<string, string>>()
+    for (const r of reports) {
+      const c = normConclusion(r.conclusion)
+      if (!c) continue
+      let m = conclusionDe.get(r.playerId)
+      if (!m) { m = new Map(); conclusionDe.set(r.playerId, m) }
+      m.set(r.persona!, c)   // aproximación: se queda la última procesada
+    }
+    let unanime = 0, dividido = 0, multi = 0
+    const debates: { nombre: string; detalle: string }[] = []
+    for (const [pid, m] of conclusionDe) {
+      if (m.size < 2) continue
+      multi++
+      const cs = new Set(m.values())
+      if (cs.size === 1) unanime++
+      else {
+        dividido++
+        if (cs.has('Llamar') && cs.has('Descartar')) {
+          const p = playersById.get(pid)
+          if (p) debates.push({
+            nombre: p.fullName,
+            detalle: [...m.entries()].map(([sc, c]) => `${sc}: ${c}`).join(' · '),
+          })
+        }
+      }
+    }
+    const dobleOpinion = destacados.length
+      ? Math.round((destacados.filter(p => (conclusionDe.get(p.id)?.size ?? 0) >= 2 ||
+          new Set(reports.filter(r => r.playerId === p.id).map(r => r.persona)).size >= 2).length / destacados.length) * 100)
+      : null
+
+    // Embudo
+    const conLlamarDeAlguien = [...conclusionDe.values()].filter(m => [...m.values()].includes('Llamar')).length
+    const embudo = [
+      { label: 'Jugadores en BBDD', n: scoutingPlayers.length },
+      { label: 'Con informe', n: jugadoresConInforme.size },
+      { label: 'Con algún «Llamar»', n: conLlamarDeAlguien },
+      { label: 'En pipeline Firmar', n: enFirmar.size },
+      { label: 'Firmados', n: firmados },
+    ]
+
+    // Reparto del esfuerzo
+    const porScout = new Map<string, number>()
+    for (const r of reports) porScout.set(r.persona!, (porScout.get(r.persona!) ?? 0) + 1)
+    const reparto = [...porScout.entries()].sort((a, b) => b[1] - a[1])
+    const cargaMax = reports.length ? Math.round((reparto[0][1] / reports.length) * 100) : 0
+
+    // Posiciones cubiertas (grupo grueso)
+    const grupoDe = (pos?: string) => {
+      const s = (pos ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+      if (!s) return 'Sin posición'
+      if (s.includes('portero') || s === 'por' || s === 'gk') return 'Portero'
+      if (s.includes('lateral') || s.includes('central') || s.includes('defensa') || s.includes('carrilero')) return 'Defensa'
+      if (s.includes('pivote') || s.includes('medio') || s.includes('interior') || s.includes('volante') || s.includes('punta') && s.includes('media')) return 'Medio'
+      if (s.includes('mediapunta') || s.includes('enganche')) return 'Medio'
+      if (s.includes('extremo') || s.includes('banda')) return 'Extremo'
+      if (s.includes('delantero') || s.includes('ariete') || s === 'punta') return 'Delantero'
+      return 'Otros'
+    }
+    const porPosicion = new Map<string, number>()
+    for (const r of reports) {
+      const g = grupoDe(playersById.get(r.playerId)?.position1)
+      porPosicion.set(g, (porPosicion.get(g) ?? 0) + 1)
+    }
+    const posiciones = ['Portero', 'Defensa', 'Medio', 'Extremo', 'Delantero']
+      .map(g => ({ g, n: porPosicion.get(g) ?? 0 }))
+
+    return {
+      total: reports.length, ult30, prev30, meses,
+      jugadoresConInforme: jugadoresConInforme.size,
+      partidosConInforme, partidosTotal: _sm.length,
+      friosCount: frios.length,
+      friosTop: frios.slice(0, 6).map(p => ({ nombre: p.fullName, ultimo: (ultimoInformeDe.get(p.id) ?? '').slice(0, 10) || 'nunca' })),
+      destacadosTotal: destacados.length,
+      multi, unanime, dividido, debates: debates.slice(0, 8), dobleOpinion,
+      embudo, reparto, cargaMax, posiciones,
+    }
+  }, [scoutingPlayers, scoutingReports, firmasEntries, _sm])
+
   const sel = metrics.find(m => m.persona === selected) ?? metrics[0]
   const maxSpark = sel ? Math.max(...sel.mesesSpark.map(m => m.count), 1) : 1
 
@@ -254,8 +378,172 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
       ? <span className="text-slate-300">— <span className="text-[9px]">(pocos datos)</span></span>
       : <span className={warnBelow !== undefined && v < warnBelow ? 'text-amber-600 font-semibold' : 'font-semibold'}>{v}%</span>
 
+  const maxMes = Math.max(...team.meses.map(m => m.count), 1)
+  const maxEmbudo = Math.max(...team.embudo.map(e => e.n), 1)
+  const maxPos = Math.max(...team.posiciones.map(p => p.n), 1)
+  const tendencia = team.prev30 > 0 ? Math.round(((team.ult30 - team.prev30) / team.prev30) * 100) : null
+
   return (
     <div className="space-y-4">
+      {/* ── EL EQUIPO ── */}
+      <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-4">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-700">El equipo</h3>
+          <p className="text-[11px] text-slate-400 mt-0.5">Cómo trabajamos entre todos: ritmo, cobertura, consenso y embudo.</p>
+        </div>
+
+        {/* Cifras + tendencia */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="bg-slate-50 rounded-lg p-3 text-center">
+            <div className="text-2xl font-bold text-slate-800">{team.total}</div>
+            <div className="text-[11px] text-slate-500">Informes totales</div>
+          </div>
+          <div className="bg-slate-50 rounded-lg p-3 text-center">
+            <div className="text-2xl font-bold text-slate-800">
+              {team.ult30}
+              {tendencia !== null && (
+                <span className={`text-xs font-bold ml-1 ${tendencia >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                  {tendencia >= 0 ? '↑' : '↓'}{Math.abs(tendencia)}%
+                </span>
+              )}
+            </div>
+            <div className="text-[11px] text-slate-500">Últimos 30 días vs los 30 anteriores</div>
+          </div>
+          <div className="bg-slate-50 rounded-lg p-3 text-center">
+            <div className="text-2xl font-bold text-slate-800">{team.jugadoresConInforme}</div>
+            <div className="text-[11px] text-slate-500">Jugadores con informe</div>
+          </div>
+          <div className="bg-slate-50 rounded-lg p-3 text-center">
+            <div className="text-2xl font-bold text-slate-800">{team.partidosConInforme}<span className="text-sm text-slate-400">/{team.partidosTotal}</span></div>
+            <div className="text-[11px] text-slate-500">Partidos con algún informe</div>
+          </div>
+        </div>
+
+        {/* Ritmo 12 meses */}
+        <div className="border border-slate-100 rounded-lg p-3">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Ritmo del equipo · 12 meses</p>
+          <div className="flex items-end gap-1 mt-2 h-20">
+            {team.meses.map((m, i) => (
+              <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
+                <span className="text-[8px] text-slate-400">{m.count || ''}</span>
+                <div className="w-full bg-blue-400 rounded-t" style={{ height: `${Math.max((m.count / maxMes) * 56, m.count ? 2 : 0)}px` }} />
+                <span className="text-[8px] text-slate-400">{m.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Embudo */}
+          <div className="border border-slate-100 rounded-lg p-3">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Embudo: de la BBDD a la firma</p>
+            <div className="mt-2 space-y-1.5">
+              {team.embudo.map((e, i) => (
+                <div key={e.label} className="flex items-center gap-2 text-[11px]">
+                  <span className="w-32 text-slate-600 flex-shrink-0">{e.label}</span>
+                  <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
+                    <div className={`h-full ${['bg-slate-400','bg-blue-400','bg-amber-400','bg-violet-400','bg-emerald-500'][i]}`}
+                         style={{ width: `${Math.max(Math.round((e.n / maxEmbudo) * 100), e.n ? 2 : 0)}%` }} />
+                  </div>
+                  <span className="w-12 text-right font-semibold text-slate-700">{e.n}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Consenso */}
+          <div className="border border-slate-100 rounded-lg p-3">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Consenso del equipo</p>
+            {team.multi > 0 ? (
+              <div className="mt-2 text-xs text-slate-600 space-y-1">
+                <p><strong>{team.multi}</strong> jugadores con conclusión de 2+ scouts:</p>
+                <p className="text-emerald-700">{team.unanime} unánimes ({Math.round((team.unanime / team.multi) * 100)}%)</p>
+                <p className="text-amber-700">{team.dividido} divididos</p>
+                <p className="mt-1.5">
+                  Doble opinión en destacados: {team.dobleOpinion !== null
+                    ? <strong>{team.dobleOpinion}%</strong>
+                    : '—'}{' '}
+                  <span className="text-slate-400">de los {team.destacadosTotal} Llamar/Basque tienen 2+ scouts detrás</span>
+                </p>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400 italic mt-2">Aún no hay jugadores con conclusiones de varios scouts.</p>
+            )}
+          </div>
+        </div>
+
+        {/* Debates + fríos */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="border border-amber-200 bg-amber-50/40 rounded-lg p-3">
+            <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wide">⚖️ Debates pendientes</p>
+            <p className="text-[10px] text-slate-400 mb-1.5">Un scout dice «Llamar» y otro «Descartar» — merecen una charla</p>
+            {team.debates.length > 0 ? (
+              <ul className="space-y-1 text-[11px] text-slate-700">
+                {team.debates.map(d => (
+                  <li key={d.nombre}><strong>{d.nombre}</strong> <span className="text-slate-400">— {d.detalle}</span></li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-[11px] text-slate-400 italic">Ninguno — sin choques frontales ahora mismo.</p>
+            )}
+          </div>
+
+          <div className="border border-sky-200 bg-sky-50/40 rounded-lg p-3">
+            <p className="text-[10px] font-bold text-sky-600 uppercase tracking-wide">🧊 Destacados que se enfrían</p>
+            <p className="text-[10px] text-slate-400 mb-1.5">Llamar/Basque sin ningún informe en los últimos 60 días ({team.friosCount} de {team.destacadosTotal})</p>
+            {team.friosTop.length > 0 ? (
+              <ul className="space-y-1 text-[11px] text-slate-700">
+                {team.friosTop.map(f => (
+                  <li key={f.nombre}><strong>{f.nombre}</strong> <span className="text-slate-400">— último informe: {f.ultimo}</span></li>
+                ))}
+                {team.friosCount > team.friosTop.length && (
+                  <li className="text-slate-400 italic">…y {team.friosCount - team.friosTop.length} más</li>
+                )}
+              </ul>
+            ) : (
+              <p className="text-[11px] text-slate-400 italic">Todos los destacados tienen informe reciente. 👏</p>
+            )}
+          </div>
+        </div>
+
+        {/* Reparto + posiciones */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="border border-slate-100 rounded-lg p-3">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Reparto del esfuerzo</p>
+            <div className="flex h-3 rounded-full overflow-hidden mt-2">
+              {team.reparto.map(([sc, n], i) => (
+                <div key={sc}
+                     title={`${sc}: ${n} informes (${Math.round((n / team.total) * 100)}%)`}
+                     className={['bg-blue-500','bg-emerald-500','bg-amber-400','bg-violet-500','bg-rose-400','bg-sky-400','bg-lime-500','bg-orange-400'][i % 8]}
+                     style={{ width: `${(n / team.total) * 100}%` }} />
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5 text-[10px] text-slate-500">
+              {team.reparto.map(([sc, n]) => <span key={sc}><strong>{sc}</strong> {Math.round((n / team.total) * 100)}%</span>)}
+            </div>
+            {team.cargaMax >= 50 && (
+              <p className="text-[10px] text-amber-600 mt-1.5">⚠ Un solo scout firma el {team.cargaMax}% de los informes.</p>
+            )}
+          </div>
+
+          <div className="border border-slate-100 rounded-lg p-3">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Informes por posición</p>
+            <div className="mt-2 space-y-1.5">
+              {team.posiciones.map(pz => (
+                <div key={pz.g} className="flex items-center gap-2 text-[11px]">
+                  <span className="w-20 text-slate-600 flex-shrink-0">{pz.g}</span>
+                  <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
+                    <div className="h-full bg-blue-400" style={{ width: `${Math.round((pz.n / maxPos) * 100)}%` }} />
+                  </div>
+                  <span className="w-10 text-right text-slate-500">{pz.n}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] text-slate-300 mt-1.5">Una barra muy corta = zona del campo que apenas estamos viendo.</p>
+          </div>
+        </div>
+      </div>
+
       {/* ── Tabla comparativa ── */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-100">
