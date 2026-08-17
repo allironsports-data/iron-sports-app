@@ -33,6 +33,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'La pestaña Firmar pasa a llamarse Pipeline/Firmar y las pestañas de Captación se reordenan: Pipeline, Conclusiones, Fin de contrato, Jugadores, Informes…',
       'Avisos de tarjeta: si eres encargado de un jugador del pipeline, te llega notificación de cualquier cambio — estatus, próxima acción, apuntes, zona, notas — y también cuando te ponen como encargado',
       'En Fin de contrato cada jugador lleva su estatus del pipeline con color: Llamar, Caliente, Templado, Frío, Decidir o Firmado (y un punto hueco si aún no está en el pipeline)',
+      'Ficha de partido: si un scout escribió su informe desde la ficha del jugador (sin enganchar el partido), ahora aparece igualmente en gris con un ⇄ para vincularlo al partido de un clic — se acabaron los informes que faltaban',
     ],
   },
   {

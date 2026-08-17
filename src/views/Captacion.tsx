@@ -729,7 +729,7 @@ function MatchDetailModal({
   scoutingPlayers, linkedPlayerIds, scoutingReports, allMatches, matchPlayersByMatchId,
   onClose, onEdit, onToggleStatus,
   onAddScout, onRemoveScout, onSetScoutStatus, onSetScoutMode,
-  onAddMatchPlayer, onRemoveMatchPlayer, onAddReport, onOpenPlayer, showToast,
+  onAddMatchPlayer, onRemoveMatchPlayer, onAddReport, onLinkReportToMatch, onOpenPlayer, showToast,
 }: {
   match: ScoutingMatch
   scouts: MatchScoutInfo[]
@@ -751,6 +751,7 @@ function MatchDetailModal({
   onAddMatchPlayer: (matchId: string, playerId: string) => Promise<void>
   onRemoveMatchPlayer: (matchId: string, playerId: string) => Promise<void>
   onAddReport: (r: ScoutingReport) => void
+  onLinkReportToMatch: (r: ScoutingReport, matchId: string) => Promise<void>
   onOpenPlayer?: (id: string) => void
   showToast?: ShowToast
 }) {
@@ -781,6 +782,25 @@ function MatchDetailModal({
     }
     return map
   }, [scoutingReports, match.id])
+
+  // Informes escritos por esas mismas fechas pero SIN vincular a este partido
+  // (el scout los escribió desde la ficha del jugador). Se enseñan igual, en
+  // gris, con un botón para engancharlos al partido de un clic.
+  const looseReportsByPlayer = useMemo(() => {
+    const map: Record<string, ScoutingReport[]> = {}
+    const matchTime = new Date(match.date).getTime()
+    if (isNaN(matchTime)) return map
+    for (const r of scoutingReports) {
+      if (r.matchId === match.id) continue
+      const d = r.fecha ?? r.createdAt
+      if (!d) continue
+      const t = new Date(d).getTime()
+      if (isNaN(t) || Math.abs(t - matchTime) > 4 * 86400000) continue   // ±4 días
+      if (!map[r.playerId]) map[r.playerId] = []
+      map[r.playerId].push(r)
+    }
+    return map
+  }, [scoutingReports, match.id, match.date])
   const linkedWithReport = linkedPlayers.filter(p => (matchReportsByPlayer[p.id] ?? []).length > 0).length
 
   async function handleAddPlayer(playerId: string) {
@@ -1061,6 +1081,35 @@ function MatchDetailModal({
                           )}
                         </span>
                       ))}
+                      {/* Informes de esas fechas que no están enganchados a
+                          este partido: se ven en gris y se vinculan de un clic */}
+                      {(looseReportsByPlayer[p.id] ?? []).map(r => {
+                        const otherMatch = r.matchId ? allMatches.find(m => m.id === r.matchId) : undefined
+                        return (
+                          <span
+                            key={r.id}
+                            title={otherMatch
+                              ? `Informe de ${r.persona ?? '—'} en ${otherMatch.homeTeam} vs ${otherMatch.awayTeam} (${fmtDate(otherMatch.date)}) — pulsa ⇄ para traerlo a este partido`
+                              : `Informe de ${r.persona ?? '—'} sin partido asignado — pulsa ⇄ para vincularlo a este`}
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border border-dashed border-slate-300 text-slate-400 bg-white"
+                          >
+                            {r.persona ?? '—'}
+                            {normConclusion(r.conclusion) && (
+                              <span className="ml-0.5 px-1.5 rounded-full text-[10px] bg-slate-100 text-slate-500">
+                                {normConclusion(r.conclusion)}
+                              </span>
+                            )}
+                            <span className="text-[9px] text-slate-400">{otherMatch ? 'otro partido' : 'sin partido'}</span>
+                            <button
+                              onClick={() => void onLinkReportToMatch(r, match.id)}
+                              className="ml-0.5 text-slate-400 hover:text-primary font-bold"
+                              aria-label="Vincular este informe al partido"
+                            >
+                              ⇄
+                            </button>
+                          </span>
+                        )
+                      })}
                       {!myReport && (
                         <button
                           onClick={() => {
@@ -5158,6 +5207,19 @@ export function Captacion({
     }
   }
 
+  // Engancha a este partido un informe que se escribió sin partido (o que
+  // quedó colgado de otro): así la ficha del partido enseña TODOS los informes
+  async function handleLinkReportToMatch(r: ScoutingReport, matchId: string) {
+    try {
+      const updated: ScoutingReport = { ...r, matchId }
+      await db.updateScoutingReport(updated)
+      onUpdateReport(updated)
+      showToast('Informe vinculado al partido')
+    } catch {
+      showToast('Error al vincular el informe', 'error')
+    }
+  }
+
   // Fin de contrato editable desde la pestaña Contratos (texto libre:
   // 30/06/2027, 2027-06-30 o incluso «2027»; vacío = quitar la fecha)
   async function handleQuickContract(player: ScoutingPlayer, value: string) {
@@ -7093,6 +7155,7 @@ export function Captacion({
             onAddMatchPlayer={onAddMatchPlayer}
             onRemoveMatchPlayer={onRemoveMatchPlayer}
             onAddReport={onAddReport}
+            onLinkReportToMatch={handleLinkReportToMatch}
             onOpenPlayer={id => { setDetailMatchId(null); setPanelPlayerId(id) }}
             showToast={showToast}
           />
