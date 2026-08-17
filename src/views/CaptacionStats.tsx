@@ -1,5 +1,6 @@
-import { useMemo } from 'react'
-import { ClipboardList, Users, PenLine } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { ClipboardList, Users, PenLine, UserSearch } from 'lucide-react'
+import { ScoutStats } from './ScoutStats'
 import type { ScoutingPlayer, ScoutingReport, ScoutingMatch, FirmasEntry, FirmasStatus } from '../types'
 import type { Profile } from '../contexts/AuthContext'
 
@@ -48,6 +49,7 @@ interface Props {
 }
 
 export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatches, firmasEntries, profiles }: Props) {
+  const [statsTab, setStatsTab] = useState<'general' | 'scouts'>('general')
   // ── statistics ──
   const stats = useMemo(() => {
     // Reports per persona
@@ -199,6 +201,35 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
 
   return (
     <div className="space-y-4">
+      {/* Pestañas: visión general / análisis por scout */}
+      <div className="flex items-center gap-1">
+        {([
+          { id: 'general' as const, label: 'Visión general', icon: <ClipboardList className="w-3.5 h-3.5" /> },
+          { id: 'scouts' as const, label: 'Scouts', icon: <UserSearch className="w-3.5 h-3.5" /> },
+        ]).map(t => (
+          <button
+            key={t.id}
+            onClick={() => setStatsTab(t.id)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              statsTab === t.id ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-100'
+            }`}
+          >
+            {t.icon}{t.label}
+          </button>
+        ))}
+      </div>
+
+      {statsTab === 'scouts' && (
+        <ScoutStats
+          scoutingPlayers={scoutingPlayers}
+          scoutingReports={scoutingReports}
+          scoutingMatches={scoutingMatches}
+          firmasEntries={firmasEntries}
+          profiles={profiles}
+        />
+      )}
+
+      {statsTab === 'general' && (<>
         <div className="space-y-4">
           {/* Summary row */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -592,6 +623,7 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
           ))}
         </div>
       </div>
+      </>)}
     </div>
   )
 }
