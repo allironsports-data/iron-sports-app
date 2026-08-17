@@ -28,6 +28,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Admin → Estadísticas → pestaña Scouts: análisis del trabajo de cada scout — volumen, muletillas, originalidad, conclusiones, congruencia con los demás, acierto y detección temprana — con glosario de cada métrica',
       'Y estadísticas del equipo completo: ritmo de 12 meses, embudo de la BBDD a la firma, consenso, debates pendientes (Llamar vs Descartar), destacados que se enfrían, reparto del esfuerzo y cobertura por posición',
       'Firmar: acción predefinida «📵 Conseguir teléfono» — al programar la próxima acción, un toque en 📵 la deja lista; la tarjeta del jugador muestra el 📵 y cada columna cuenta cuántos están sin número',
+      'Nueva pestaña Captación → Fin de contrato: eliges el año (2026, 2027, 2028…) y ves quién acaba contrato, colocado por posición en lista o campograma, con su equipo y su agencia — y puedes corregir la fecha ahí mismo con el lápiz',
     ],
   },
   {
