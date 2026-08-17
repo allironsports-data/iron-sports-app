@@ -9,6 +9,7 @@ export interface Profile {
   avatar: string
   is_admin: boolean
   hidden_from_status?: boolean   // oculto en el panel de estado del equipo (lo gestiona un admin)
+  captacion_only?: boolean       // cuenta restringida: solo ve Captación (Jugadores, Partidos, Informes)
 }
 
 interface AuthState {
@@ -35,6 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         avatar: data.avatar ?? '',
         is_admin: data.is_admin ?? false,
         hidden_from_status: data.hidden_from_status ?? false,
+        captacion_only: data.captacion_only ?? false,
       })
     }
   }

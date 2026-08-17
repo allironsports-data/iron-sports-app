@@ -1112,18 +1112,20 @@ export default function App() {
     )
   }
 
-  if (mainSection === 'captacion') {
-    return withExtras(
+  if (mainSection === 'captacion' || profile.captacion_only) {
+    // Cuenta "solo Captación": no importa la sección guardada, siempre aterriza
+    // aquí y sin extras que naveguen fuera (bottom nav, búsqueda global).
+    const captacionNode = (
       <Captacion
         scoutingPlayers={scoutingPlayers}
         scoutingReports={scoutingReports}
         scoutingMatches={scoutingMatches}
         profiles={profiles}
         currentProfile={profile}
-        onBack={() => setMainSection('tareas')}
-        onGoToSection={(s) => setMainSection(s)}
+        onBack={() => { if (!profile.captacion_only) setMainSection('tareas') }}
+        onGoToSection={(s) => { if (!profile.captacion_only) setMainSection(s) }}
         onLogout={signOut}
-        onAdmin={profile.is_admin ? () => { setMainSection('tareas'); setShowAdmin(true) } : undefined}
+        onAdmin={profile.is_admin && !profile.captacion_only ? () => { setMainSection('tareas'); setShowAdmin(true) } : undefined}
         onAddPlayer={handleAddScoutingPlayer}
         onUpdatePlayer={handleUpdateScoutingPlayer}
         onDeletePlayer={handleDeleteScoutingPlayer}
@@ -1153,8 +1155,12 @@ export default function App() {
         onCreateFirmasEntry={handleCreateFirmasEntry}
         onUpdateFirmasEntry={handleUpdateFirmasEntry}
         onDeleteFirmasEntry={handleDeleteFirmasEntry}
+        restricted={!!profile.captacion_only}
       />
     )
+    return profile.captacion_only
+      ? <>{captacionNode}<SavingIndicator /></>
+      : withExtras(captacionNode)
   }
 
   if (mainSection === 'distribucion' || selectedClub) {

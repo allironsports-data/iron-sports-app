@@ -4100,6 +4100,8 @@ interface Props {
   /** Abrir una entrada del pipeline Firmar (navegación desde el Dashboard) */
   openFirmasEntryId?: string | null
   onOpenFirmasEntryConsumed?: () => void
+  /** Cuenta "solo Captación": oculta el resto de secciones y deja solo Jugadores, Partidos e Informes */
+  restricted?: boolean
   /** Para los avisos del pipeline Firmar y el alta en Mantenimiento al firmar */
   players: Player[]
   onCreatePlayer: (p: Player) => Promise<Player>
@@ -4216,6 +4218,7 @@ export function Captacion({
   onOpenPlayerConsumed,
   openFirmasEntryId,
   onOpenFirmasEntryConsumed,
+  restricted,
   players,
   onCreatePlayer,
   boulemaPeticiones,
@@ -4232,6 +4235,11 @@ export function Captacion({
 
   // ── section tab ── (must be before header-height effect)
   const [captTab, setCaptTab] = useState<CaptacionTab>('jugadores')
+  const RESTRICTED_TABS: CaptacionTab[] = ['jugadores', 'partidos', 'informes']
+  useEffect(() => {
+    if (restricted && !RESTRICTED_TABS.includes(captTab)) setCaptTab('jugadores')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restricted, captTab])
 
   // Navegación externa: abrir la ficha de un jugador concreto (p. ej. desde Boulema)
   useEffect(() => {
@@ -4930,7 +4938,8 @@ export function Captacion({
           </button>
         </div>
 
-        {/* Level 1: main sections */}
+        {/* Level 1: main sections (oculto para cuentas solo-Captación) */}
+        {!restricted && (
         <div className="max-w-6xl mx-auto px-3 sm:px-6 hidden sm:flex items-center border-t border-slate-100 overflow-x-auto scrollbar-none">
           <button
             onClick={() => onGoToSection('tareas')}
@@ -4957,6 +4966,7 @@ export function Captacion({
             Boulema
           </button>
         </div>
+        )}
 
         {/* Captación sub-tabs */}
         <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center gap-1 py-1.5 border-t border-slate-100 bg-slate-50/60 overflow-x-auto scrollbar-none">
@@ -4967,7 +4977,7 @@ export function Captacion({
             { id: 'informes' as CaptacionTab, label: 'Informes recientes', labelMobile: 'Informes', icon: <FileText className="w-3.5 h-3.5" /> },
             { id: 'partidos' as CaptacionTab, label: 'Partidos', labelMobile: 'Partidos', icon: <ClipboardList className="w-3.5 h-3.5" /> },
             { id: 'pretemporada' as CaptacionTab, label: 'Pretemporada', labelMobile: 'Pretemp.', icon: <Sun className="w-3.5 h-3.5" /> },
-          ]).map(t => (
+          ]).filter(t => !restricted || RESTRICTED_TABS.includes(t.id)).map(t => (
             <button
               key={t.id}
               onClick={() => setCaptTab(t.id)}

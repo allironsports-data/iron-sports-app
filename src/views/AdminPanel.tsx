@@ -160,6 +160,12 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
     await onRefresh()
   }
 
+  /** Cuenta restringida: solo ve Captación (Jugadores, Partidos e Informes) */
+  const handleToggleCaptacionOnly = async (p: Profile) => {
+    await updateProfile(p.id, { captacion_only: !p.captacion_only })
+    await onRefresh()
+  }
+
   const handleSaveEdit = async (id: string) => {
     await updateProfile(id, { name: editName, avatar: editAvatar })
     await onRefresh()
@@ -302,6 +308,15 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
                         p.is_admin ? 'border-blue-200 text-blue-600 hover:bg-blue-50' : 'border-slate-200 text-slate-500 hover:text-slate-700'
                       }`}>
                       {p.is_admin ? 'Quitar admin' : 'Hacer admin'}
+                    </button>
+                    <button onClick={() => handleToggleCaptacionOnly(p)}
+                      title={p.captacion_only
+                        ? 'Ahora solo ve Captación (Jugadores, Partidos e Informes) — clic para darle acceso completo'
+                        : 'Restringir esta cuenta a Captación: solo Jugadores, Partidos e Informes'}
+                      className={`text-[11px] px-2 py-1 rounded border transition-colors ${
+                        p.captacion_only ? 'border-violet-200 text-violet-600 bg-violet-50 hover:bg-violet-100' : 'border-slate-200 text-slate-500 hover:text-slate-700'
+                      }`}>
+                      {p.captacion_only ? '👁 Solo Captación' : 'Solo Captación'}
                     </button>
                   </div>
                 </div>

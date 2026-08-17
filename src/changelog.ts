@@ -24,6 +24,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'La pestaña Informes muestra los últimos 150 de cada persona (antes 60)',
       'Pretemporada incluye ahora la Best Cup y cualquier partido de julio o agosto',
       'Fusión manual de partidos: botón «⇄ Fusionar» en Partidos — selecciona los duplicados, elige cuál se queda y su fecha, y el resto le pasa scouts, jugadores e informes',
+      'Cuentas «solo Captación»: en Admin puedes restringir a cualquier miembro para que solo vea Jugadores, Partidos e Informes — ideal para colaboradores que meten informes',
     ],
   },
   {
