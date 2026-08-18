@@ -51,7 +51,6 @@ declare
   ganadora     record;
   perdedora    record;
   v_comments   jsonb;
-  v_managers   jsonb;
   v_status     text;
   v_antes      int;
   v_detalle    text;
@@ -73,8 +72,18 @@ begin
     limit 1;
 
     v_comments := coalesce(ganadora.comments, '[]'::jsonb);
-    v_managers := to_jsonb(coalesce(ganadora.managers, array[]::text[]));
     v_status   := ganadora.status;
+
+    -- Encargados: unión de TODAS las tarjetas de ese jugador. Se hace en SQL
+    -- puro y antes de borrar nada, para no depender del tipo de la columna
+    -- (en esta base es uuid[], pero así vale igual si fuera texto).
+    update public.captacion_firmas t
+       set managers = coalesce((
+             select array_agg(distinct m)
+             from public.captacion_firmas o, unnest(coalesce(o.managers, '{}')) m
+             where o.scouting_player_id = g.scouting_player_id
+           ), t.managers)
+     where t.id = ganadora.id;
     v_antes    := jsonb_array_length(v_comments);
     v_detalle  := '';
 
@@ -89,15 +98,6 @@ begin
         where not exists (
           select 1 from jsonb_array_elements(v_comments) y
           where y->>'id' = c->>'id'
-        )
-      ), '[]'::jsonb);
-
-      -- Encargados: unión de ambas
-      v_managers := v_managers || coalesce((
-        select jsonb_agg(m)
-        from jsonb_array_elements(to_jsonb(coalesce(perdedora.managers, array[]::text[]))) m
-        where not exists (
-          select 1 from jsonb_array_elements(v_managers) y where y = m
         )
       ), '[]'::jsonb);
 
@@ -132,10 +132,10 @@ begin
       delete from public.captacion_firmas where id = perdedora.id;
     end loop;
 
-    -- Guardar apuntes fusionados, encargados unidos y estatus final
+    -- Guardar apuntes fusionados y estatus final (los encargados ya se
+    -- unieron arriba, antes de borrar las tarjetas sobrantes)
     update public.captacion_firmas set
       comments = v_comments,
-      managers = (select array_agg(value::text) from jsonb_array_elements_text(v_managers)),
       status   = v_status
     where id = ganadora.id;
   end loop;
