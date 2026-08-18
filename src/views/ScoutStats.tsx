@@ -14,6 +14,15 @@ function normConclusion(c?: string): string | undefined {
   return c === 'Firmar' ? 'Llamar' : c || undefined
 }
 
+// «Visto» significa «lo he visto y no concluyo»: cuenta como informe marcado,
+// pero NO como veredicto. Si contase, un Visto frente a un Llamar saldría como
+// desacuerdo entre scouts, y meter muchos Vistos bajaría la exigencia sin que
+// nadie haya descartado a nadie.
+const esVeredicto = (c?: string): boolean => {
+  const n = normConclusion(c)
+  return n === 'Seguir' || n === 'Llamar' || n === 'Descartar'
+}
+
 // Palabras vacías: un n-grama compuesto SOLO por estas no cuenta como "frase"
 const STOP = new Set([
   'el', 'la', 'los', 'las', 'un', 'una', 'unos', 'unas', 'de', 'del', 'al', 'a', 'en', 'y', 'o', 'u',
@@ -110,6 +119,7 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
     // Conclusión (la última) de cada scout sobre cada jugador — para congruencia y acierto
     const conclusionDe = new Map<string, Map<string, string>>()   // playerId → persona → conclusión
     for (const r of reports) {
+      if (!esVeredicto(r.conclusion)) continue
       const c = normConclusion(r.conclusion)
       if (!c) continue
       let m = conclusionDe.get(r.playerId)
@@ -207,8 +217,11 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
         const c = normConclusion(r.conclusion)!
         conclusiones[c] = (conclusiones[c] ?? 0) + 1
       }
-      const exigencia = conConcl.length >= 10
-        ? Math.round(((conclusiones['Descartar'] ?? 0) / conConcl.length) * 100)
+      // Exigencia = % de Descartar, pero solo sobre los que sí son veredicto:
+      // los «Visto» no son ni un sí ni un no.
+      const veredictos = list.filter(r => esVeredicto(r.conclusion))
+      const exigencia = veredictos.length >= 10
+        ? Math.round(((conclusiones['Descartar'] ?? 0) / veredictos.length) * 100)
         : null
 
       // ── congruencia con otros scouts ──
@@ -303,9 +316,11 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
       .filter(p => (ultimoInformeDe.get(p.id) ?? '') < hace60)
       .sort((a, b) => (ultimoInformeDe.get(a.id) ?? '').localeCompare(ultimoInformeDe.get(b.id) ?? ''))
 
-    // Conclusiones por scout y jugador → consenso, debates, doble opinión
+    // Conclusiones por scout y jugador → consenso, debates, doble opinión.
+    // Solo veredictos: un «Visto» no discrepa de nadie.
     const conclusionDe = new Map<string, Map<string, string>>()
     for (const r of reports) {
+      if (!esVeredicto(r.conclusion)) continue
       const c = normConclusion(r.conclusion)
       if (!c) continue
       let m = conclusionDe.get(r.playerId)
@@ -641,7 +656,7 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
                 <th className="text-right px-3 py-2 font-medium">Jugadores</th>
                 <th className="text-right px-3 py-2 font-medium" title="Palabras de media por informe">Palabras</th>
                 <th className="text-right px-3 py-2 font-medium" title="% de informes que llevan conclusión">Concluye</th>
-                <th className="text-right px-3 py-2 font-medium" title="% Descartar sobre informes con conclusión — un scout que nunca descarta no está filtrando">Exigencia</th>
+                <th className="text-right px-3 py-2 font-medium" title="% Descartar sobre informes con veredicto (Seguir/Llamar/Descartar; los «Visto» no cuentan) — un scout que nunca descarta no está filtrando">Exigencia</th>
                 <th className="text-right px-3 py-2 font-medium" title="% de 4-gramas únicos en sus textos: bajo = se repite mucho">Originalidad</th>
                 <th className="text-right px-3 py-2 font-medium" title="% de acuerdo con la conclusión mayoritaria de los demás scouts sobre el mismo jugador">Congruencia</th>
                 <th className="text-right px-3 py-2 font-medium" title="% de sus «Llamar» que hoy siguen destacados (Llamar/Basque o en Firmar)">Acierto</th>
@@ -717,10 +732,10 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
             <div className="border border-slate-100 rounded-lg p-3">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide flex items-center gap-1"><Target className="w-3 h-3" /> Conclusiones ({sel.pctConclusion}% de sus informes)</p>
               <div className="mt-2 space-y-1.5">
-                {(['Llamar', 'Seguir', 'Descartar'] as const).map(c => {
+                {(['Llamar', 'Seguir', 'Descartar', 'Visto'] as const).map(c => {
                   const n = sel.conclusiones[c] ?? 0
                   const total = Object.values(sel.conclusiones).reduce((a, b) => a + b, 0) || 1
-                  const color = c === 'Llamar' ? 'bg-amber-400' : c === 'Seguir' ? 'bg-blue-400' : 'bg-red-400'
+                  const color = c === 'Llamar' ? 'bg-amber-400' : c === 'Seguir' ? 'bg-blue-400' : c === 'Visto' ? 'bg-slate-300' : 'bg-red-400'
                   return (
                     <div key={c} className="flex items-center gap-2 text-[11px]">
                       <span className="w-16 text-slate-600">{c}</span>
@@ -803,7 +818,8 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
           <div>
             <dt className="font-bold text-slate-800">Exigencia</dt>
             <dd className="mt-0.5">
-              De sus informes con conclusión, el porcentaje que son «Descartar». Mide si el scout filtra o le vale todo.
+              De sus informes con veredicto —Seguir, Llamar o Descartar; los «Visto» no cuentan—, el porcentaje que son
+              «Descartar». Mide si el scout filtra o le vale todo.
               <span className="text-slate-400"> No es «cuanto más mejor»: un 0% avisa de que nunca descarta (no filtra), y
               un valor altísimo puede indicar que va a ver a los jugadores equivocados. Lo sano es un término medio, y
               sobre todo que sea parecido entre scouts que ven el mismo nivel de fútbol.</span>

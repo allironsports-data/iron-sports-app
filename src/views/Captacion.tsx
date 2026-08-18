@@ -57,7 +57,10 @@ const POSITIONS_SCOUTING = [
   'Extremo derecho', 'Extremo izquierdo', 'Extremo', 'Delantero',
 ]
 
-const CONCLUSION_OPTIONS = ['', 'Seguir', 'Llamar', 'Descartar'] as const
+// «Visto» no es un veredicto: es «lo he visto y no concluyo» (poco rato, mal
+// sitio, partido malo). Sirve para distinguir al scout que decide no mojarse
+// del que se olvidó de marcar nada, y se excluye de exigencia y de debates.
+const CONCLUSION_OPTIONS = ['', 'Seguir', 'Llamar', 'Descartar', 'Visto'] as const
 type ConclusionOption = typeof CONCLUSION_OPTIONS[number]
 
 // «Firmar» se unificó con «Llamar» (ver migration_merge_firmar_llamar.sql).
@@ -70,6 +73,7 @@ const CONCLUSION_STYLE: Record<string, string> = {
   Seguir:    'bg-blue-100 text-blue-700 border border-blue-200',
   Llamar:    'bg-amber-100 text-amber-700 border border-amber-200',
   Descartar: 'bg-red-100 text-red-600 border border-red-200',
+  Visto:     'bg-slate-100 text-slate-600 border border-slate-300',
   // legado — por si hay registros antiguos sin migrar
   Firmar:    'bg-amber-100 text-amber-700 border border-amber-200',
   Decidir:   'bg-orange-100 text-orange-700 border border-orange-200',
@@ -1703,15 +1707,21 @@ function MatchDetailModal({
                             <button
                               key={c}
                               onClick={() => setQuickConclusion(quickConclusion === c ? '' : c)}
+                              title={c === 'Visto'
+                                ? 'Lo he visto y no concluyo (poco rato, mal partido, no da para decidir). No cuenta como veredicto en las estadísticas.'
+                                : undefined}
                               className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
                                 quickConclusion === c
                                   ? (CONCLUSION_STYLE[c] ?? 'bg-slate-200 text-slate-700')
                                   : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
-                              }`}
+                              } ${c === 'Visto' ? 'ml-1' : ''}`}
                             >
                               {c}
                             </button>
                           ))}
+                          {!quickConclusion && (
+                            <span className="text-[10px] text-slate-400">o déjalo sin marcar</span>
+                          )}
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="text-[10px] text-slate-400">Se vincula a este partido y aparece en la ficha del jugador · ⌘+Enter</span>

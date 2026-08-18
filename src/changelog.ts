@@ -21,6 +21,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-08-18',
     items: [
+      'Nueva conclusión «Visto» al escribir un informe: para cuando lo has visto y no da para concluir. No cuenta como veredicto — ni baja la exigencia del scout ni sale como desacuerdo con otro compañero',
       'Si dejas la app abierta y vuelves a ella (o se duerme el ordenador), se refresca sola: se acabó el «lo metí desde el móvil y en el ordenador no aparece hasta recargar»',
       'Ficha de partido: el ⇄ solo sale ya en informes sueltos. Los que pertenecen a otro partido se ven en gris con el nombre de ese partido, pero no se le pueden robar',
       'Y si un informe se enganchó al partido equivocado, se suelta desde el propio informe con «quitar del partido» — el informe no se borra, vuelve a la ficha del jugador',
