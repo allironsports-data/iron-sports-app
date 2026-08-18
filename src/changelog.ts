@@ -21,6 +21,9 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-08-18',
     items: [
+      'Si dejas la app abierta y vuelves a ella (o se duerme el ordenador), se refresca sola: se acabó el «lo metí desde el móvil y en el ordenador no aparece hasta recargar»',
+      'Ficha de partido: el ⇄ solo sale ya en informes sueltos. Los que pertenecen a otro partido se ven en gris con el nombre de ese partido, pero no se le pueden robar',
+      'Y si un informe se enganchó al partido equivocado, se suelta desde el propio informe con «quitar del partido» — el informe no se borra, vuelve a la ficha del jugador',
       'Al escribir un informe desde la ficha del jugador, la app te propone el partido: un toque y queda vinculado (y si lo dejas suelto, te avisa de que no saldrá en la ficha del partido)',
       'Las tareas que vencen hoy dejan de aparecer como «vencidas» todo el día: era un lío de husos horarios',
       'Distribución y Captación van notablemente más rápidas al escribir en los buscadores y al abrir listas largas',

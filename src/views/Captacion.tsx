@@ -1225,7 +1225,8 @@ function MatchDetailModal({
   onAddMatchPlayer: (matchId: string, playerId: string) => Promise<void>
   onRemoveMatchPlayer: (matchId: string, playerId: string) => Promise<void>
   onAddReport: (r: ScoutingReport) => void
-  onLinkReportToMatch: (r: ScoutingReport, matchId: string) => Promise<void>
+  /** matchId = null → suelta el informe del partido (sin borrarlo) */
+  onLinkReportToMatch: (r: ScoutingReport, matchId: string | null) => Promise<void>
   /** Crea un jugador que no estaba en la BBDD y lo vincula al partido */
   onCreateAndLinkPlayer: (nombre: string, equipo: string, matchId: string) => Promise<void>
   /** Corrige en la BBDD el equipo de un jugador */
@@ -1630,15 +1631,17 @@ function MatchDetailModal({
                           )}
                         </button>
                       ))}
-                      {/* Informes de esas fechas que no están enganchados a
-                          este partido: se ven en gris y se vinculan de un clic */}
+                      {/* Informes de esas fechas que no están enganchados a este
+                          partido. Los que YA son de otro partido se enseñan solo
+                          como contexto, sin botón: el ⇄ se los robaba al partido
+                          al que pertenecían y no había forma de deshacerlo. */}
                       {(looseReportsByPlayer[p.id] ?? []).map(r => {
                         const otherMatch = r.matchId ? allMatches.find(m => m.id === r.matchId) : undefined
                         return (
                           <span
                             key={r.id}
                             title={otherMatch
-                              ? `Informe de ${r.persona ?? '—'} en ${otherMatch.homeTeam} vs ${otherMatch.awayTeam} (${fmtDate(otherMatch.date)}) — pulsa ⇄ para traerlo a este partido`
+                              ? `Informe de ${r.persona ?? '—'} en ${otherMatch.homeTeam} vs ${otherMatch.awayTeam} (${fmtDate(otherMatch.date)}). Pertenece a ese partido; aquí sale solo como referencia.`
                               : `Informe de ${r.persona ?? '—'} sin partido asignado — pulsa ⇄ para vincularlo a este`}
                             className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border border-dashed border-slate-300 text-slate-400 bg-white"
                           >
@@ -1648,14 +1651,18 @@ function MatchDetailModal({
                                 {normConclusion(r.conclusion)}
                               </span>
                             )}
-                            <span className="text-[9px] text-slate-400">{otherMatch ? 'otro partido' : 'sin partido'}</span>
-                            <button
-                              onClick={() => void onLinkReportToMatch(r, match.id)}
-                              className="ml-0.5 text-slate-400 hover:text-primary font-bold"
-                              aria-label="Vincular este informe al partido"
-                            >
-                              ⇄
-                            </button>
+                            <span className="text-[9px] text-slate-400">
+                              {otherMatch ? `${otherMatch.homeTeam} – ${otherMatch.awayTeam}` : 'sin partido'}
+                            </span>
+                            {!otherMatch && (
+                              <button
+                                onClick={() => void onLinkReportToMatch(r, match.id)}
+                                className="ml-0.5 text-slate-400 hover:text-primary font-bold"
+                                aria-label="Vincular este informe al partido"
+                              >
+                                ⇄
+                              </button>
+                            )}
                           </span>
                         )
                       })}
@@ -1726,7 +1733,20 @@ function MatchDetailModal({
                           <span className="text-[11px] font-bold text-slate-600">{personaToName(r.persona, profiles) || r.persona}</span>
                           <span className="text-[10.5px] text-slate-400">{fmtDate(r.fecha ?? r.createdAt)}</span>
                           {r.titulo && <span className="text-[10.5px] text-slate-500 italic truncate">{r.titulo}</span>}
-                          <button onClick={() => setInformeAbierto(null)} className="ml-auto text-slate-400 hover:text-slate-600" aria-label="Cerrar informe">
+                          {/* Deshacer: si un informe se enganchó aquí por error,
+                              se suelta sin tener que tocar la base de datos */}
+                          <button
+                            onClick={() => {
+                              if (confirm(`¿Quitar este informe de ${match.homeTeam} – ${match.awayTeam}?\n\nEl informe NO se borra: sigue en la ficha de ${p.fullName}, solo deja de estar asignado a este partido.`)) {
+                                void onLinkReportToMatch(r, null)
+                              }
+                            }}
+                            className="ml-auto text-[10px] font-semibold text-slate-400 hover:text-red-500"
+                            title="Quitar este informe del partido (no se borra)"
+                          >
+                            quitar del partido
+                          </button>
+                          <button onClick={() => setInformeAbierto(null)} className="text-slate-400 hover:text-slate-600" aria-label="Cerrar informe">
                             <X className="w-3 h-3" />
                           </button>
                         </div>
@@ -5881,14 +5901,14 @@ export function Captacion({
 
   // Engancha a este partido un informe que se escribió sin partido (o que
   // quedó colgado de otro): así la ficha del partido enseña TODOS los informes
-  async function handleLinkReportToMatch(r: ScoutingReport, matchId: string) {
+  async function handleLinkReportToMatch(r: ScoutingReport, matchId: string | null) {
     try {
-      const updated: ScoutingReport = { ...r, matchId }
+      const updated: ScoutingReport = { ...r, matchId: matchId ?? undefined }
       await db.updateScoutingReport(updated)
       onUpdateReport(updated)
-      showToast('Informe vinculado al partido')
+      showToast(matchId ? 'Informe vinculado al partido' : 'Informe quitado del partido')
     } catch {
-      showToast('Error al vincular el informe', 'error')
+      showToast(matchId ? 'Error al vincular el informe' : 'Error al quitar el informe', 'error')
     }
   }
 

@@ -41,6 +41,15 @@ const FIRMAS_STATUS_LABEL: Record<string, string> = {
 const fmtShortDate = (iso: string) =>
   new Date(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
 
+// Tablas que se sincronizan solas entre usuarios: las escucha el realtime y
+// se vuelven a pedir enteras al volver a la pestaña (ver «resync» más abajo).
+const SYNC_TABLES = [
+  'club_negotiations', 'distribution_entries', 'clubs', 'players', 'tasks',
+  'member_status', 'postpartidos', 'captacion_firmas',
+  'scouting_matches', 'scouting_match_players', 'scouting_match_scouts',
+  'scouting_reports', 'scouting_players',
+] as const
+
 function Spinner() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -504,52 +513,76 @@ export default function App() {
     return () => { supabase.removeChannel(channel) }
   }, [user, profile, addNotification])
 
+  // Vuelve a pedir UNA tabla. Lo usan dos cosas: el realtime (cuando llega el
+  // aviso de un cambio) y el resync al volver a la pestaña (cuando el aviso
+  // nunca llegó porque el navegador estaba desconectado).
+  const refetchTable = useCallback((table: string): void => {
+    const ignora = () => {}
+    switch (table) {
+      case 'club_negotiations':     db.fetchNegotiations().then((d) => setNegotiations(d as ClubNegotiation[])).catch(ignora); break
+      case 'distribution_entries':  db.fetchDistributionEntries().then((d) => setDistEntries(d as DistributionEntry[])).catch(ignora); break
+      case 'clubs':                 db.fetchClubs().then((d) => setClubs(d as Club[])).catch(ignora); break
+      case 'players':               db.fetchPlayers().then((d) => setPlayers(d)).catch(ignora); break
+      case 'tasks':                 db.fetchTasks().then((d) => setTasks(d)).catch(ignora); break
+      case 'member_status':         db.fetchMemberStatuses().then((d) => setMemberStatuses(d)).catch(ignora); break
+      case 'postpartidos':          db.fetchPostpartidos().then((d) => setPostpartidos(d)).catch(ignora); break
+      case 'captacion_firmas':      db.fetchFirmasEntries().then((d) => setFirmasEntries(d)).catch(ignora); break
+      // Captación · partidos: un partido lo comparten varios scouts, así que los
+      // jugadores vinculados y los informes cambian mientras tienes la ficha abierta.
+      case 'scouting_matches':      db.fetchScoutingMatches().then((d) => setScoutingMatches(d as ScoutingMatch[])).catch(ignora); break
+      case 'scouting_match_players':db.fetchMatchPlayers().then((d) => setMatchPlayers(d as ScoutingMatchPlayer[])).catch(ignora); break
+      case 'scouting_match_scouts': db.fetchMatchScouts().then((d) => setMatchScouts(d as ScoutingMatchScout[])).catch(ignora); break
+      case 'scouting_reports':      db.fetchScoutingReports().then((d) => setScoutingReports(d as ScoutingReport[])).catch(ignora); break
+      // Los propios jugadores de Captación también los tocan varios a la vez:
+      // valoración, fin de contrato, campograma de mercado…
+      case 'scouting_players':      db.fetchScoutingPlayers().then((d) => setScoutingPlayers(d as ScoutingPlayer[])).catch(ignora); break
+    }
+  }, [])
+
   // Supabase realtime: sincronización de datos entre usuarios.
   // Cualquier cambio (insert/update/delete) en las tablas clave hace un refetch
   // con debounce, así todos ven los cambios sin recargar la página.
   useEffect(() => {
     if (!user) return
     const timers: Record<string, ReturnType<typeof setTimeout>> = {}
-    const debouncedRefetch = (table: string, fn: () => void) => {
-      clearTimeout(timers[table])
-      timers[table] = setTimeout(fn, 800)
+    let channel = supabase.channel('data-sync')
+    for (const t of SYNC_TABLES) {
+      channel = channel.on('postgres_changes', { event: '*', schema: 'public', table: t }, () => {
+        clearTimeout(timers[t])
+        timers[t] = setTimeout(() => refetchTable(t), 800)
+      })
     }
-    const channel = supabase.channel('data-sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'club_negotiations' }, () =>
-        debouncedRefetch('club_negotiations', () => db.fetchNegotiations().then((d) => setNegotiations(d as ClubNegotiation[])).catch(() => {})))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'distribution_entries' }, () =>
-        debouncedRefetch('distribution_entries', () => db.fetchDistributionEntries().then((d) => setDistEntries(d as DistributionEntry[])).catch(() => {})))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'clubs' }, () =>
-        debouncedRefetch('clubs', () => db.fetchClubs().then((d) => setClubs(d as Club[])).catch(() => {})))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'players' }, () =>
-        debouncedRefetch('players', () => db.fetchPlayers().then((d) => setPlayers(d)).catch(() => {})))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () =>
-        debouncedRefetch('tasks', () => db.fetchTasks().then((d) => setTasks(d)).catch(() => {})))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'member_status' }, () =>
-        debouncedRefetch('member_status', () => db.fetchMemberStatuses().then((d) => setMemberStatuses(d)).catch(() => {})))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'postpartidos' }, () =>
-        debouncedRefetch('postpartidos', () => db.fetchPostpartidos().then((d) => setPostpartidos(d)).catch(() => {})))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'captacion_firmas' }, () =>
-        debouncedRefetch('captacion_firmas', () => db.fetchFirmasEntries().then((d) => setFirmasEntries(d)).catch(() => {})))
-      // Captación · partidos: ahora un partido lo comparten varios scouts, así que
-      // los jugadores vinculados y los informes cambian mientras tienes la ficha abierta.
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'scouting_matches' }, () =>
-        debouncedRefetch('scouting_matches', () => db.fetchScoutingMatches().then((d) => setScoutingMatches(d as ScoutingMatch[])).catch(() => {})))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'scouting_match_players' }, () =>
-        debouncedRefetch('scouting_match_players', () => db.fetchMatchPlayers().then((d) => setMatchPlayers(d as ScoutingMatchPlayer[])).catch(() => {})))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'scouting_match_scouts' }, () =>
-        debouncedRefetch('scouting_match_scouts', () => db.fetchMatchScouts().then((d) => setMatchScouts(d as ScoutingMatchScout[])).catch(() => {})))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'scouting_reports' }, () =>
-        debouncedRefetch('scouting_reports', () => db.fetchScoutingReports().then((d) => setScoutingReports(d as ScoutingReport[])).catch(() => {})))
-      // Los propios jugadores de Captación también los tocan varios a la vez:
-      // assessment, fin de contrato, campograma de mercado… sin esto había que
-      // recargar para ver lo que había cambiado otro scout.
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'scouting_players' }, () =>
-        debouncedRefetch('scouting_players', () => db.fetchScoutingPlayers().then((d) => setScoutingPlayers(d as ScoutingPlayer[])).catch(() => {})))
-      .subscribe()
+    channel.subscribe()
     return () => {
       Object.values(timers).forEach(clearTimeout)
       supabase.removeChannel(channel)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id])
+
+  // ── Al volver a la pestaña, volver a pedir los datos ────────────────
+  // El realtime solo entrega lo que pasa MIENTRAS el navegador está conectado.
+  // Si el portátil se duerme, la pestaña se queda de fondo horas o se cae el
+  // wifi, el websocket se corta y esos cambios NO se recuperan al reconectar:
+  // había que recargar la página a mano (18-ago: informes metidos desde el
+  // móvil que en el ordenador no salían hasta pulsar recargar).
+  // Al volver a la pestaña, o al recuperar conexión, se piden otra vez.
+  useEffect(() => {
+    if (!user) return
+    let ultimo = Date.now()
+    const resync = () => {
+      if (document.visibilityState !== 'visible') return
+      if (Date.now() - ultimo < 15000) return    // alternar pestañas no dispara nada
+      ultimo = Date.now()
+      SYNC_TABLES.forEach((t) => refetchTable(t))
+    }
+    document.addEventListener('visibilitychange', resync)
+    window.addEventListener('focus', resync)
+    window.addEventListener('online', resync)
+    return () => {
+      document.removeEventListener('visibilitychange', resync)
+      window.removeEventListener('focus', resync)
+      window.removeEventListener('online', resync)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id])
