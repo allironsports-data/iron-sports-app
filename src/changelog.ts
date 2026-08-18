@@ -28,6 +28,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'En el móvil ya puedes editar y borrar apuntes del pipeline (los botones solo salían al pasar el ratón)',
       '«Ocultar futuros» en Partidos ya no esconde los de hoy: oculta de mañana en adelante',
       'La ficha del partido se abre ahora a pantalla partida, con más información y sin ventana flotante',
+      'Pegar alineación: copias el once de Sofascore, Flashscore o BeSoccer, lo pegas en la ficha del partido y la app te dice quién ya está en la BBDD (para vincularlo de golpe) y quién es nuevo (para crearlo con un clic)',
     ],
     adminItems: [
       'Revisión a fondo del código: tres consultas se cortaban en 1.000 filas sin avisar (jugadores, tareas y Boulema) — ya están paginadas',
