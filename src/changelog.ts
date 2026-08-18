@@ -29,6 +29,8 @@ export const CHANGELOG: ChangelogEntry[] = [
       '«Ocultar futuros» en Partidos ya no esconde los de hoy: oculta de mañana en adelante',
       'La ficha del partido se abre ahora a pantalla partida, con más información y sin ventana flotante',
       'Pegar alineación: copias el once de Sofascore, Flashscore o BeSoccer, lo pegas en la ficha del partido y la app te dice quién ya está en la BBDD (para vincularlo de golpe) y quién es nuevo (para crearlo con un clic)',
+      'Y si alguno figura con otro equipo, te lo marca y lo corriges desde ahí mismo: la alineación del día manda sobre lo que hubiera en la ficha',
+      'Botón «📋 Actualizar plantilla» en Captación → Jugadores: pegas la plantilla de un club y pone a todos esos jugadores en ese equipo de una vez — la forma rápida de ponerse al día con los fichajes sin ir partido a partido',
     ],
     adminItems: [
       'Revisión a fondo del código: tres consultas se cortaban en 1.000 filas sin avisar (jugadores, tareas y Boulema) — ya están paginadas',

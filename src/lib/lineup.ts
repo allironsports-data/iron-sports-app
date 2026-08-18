@@ -6,6 +6,10 @@ import type { ScoutingPlayer } from '../types'
 // Captación. No hace falta que el formato sea ninguno en concreto: se
 // limpian dorsales, minutos, notas, iconos y códigos de posición.
 
+const norm = (s?: string) => (s ?? '')
+  .normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .toLowerCase().replace(/[^a-z0-9ñ ]/g, ' ').replace(/\s+/g, ' ').trim()
+
 const CABECERAS = /^(alineaci|once|suplent|entrenador|banquillo|titular|formaci|estad|arbitr|árbitr|sustitu|cambio|gol|amarilla|roja|tarjeta|posesi|tiro|falta|corner|córner|fuera de juego|paradas|local|visitante|equipo|minuto|resumen|previa|clasificaci|jornada|lesion|no convocad|reserva|técnico|tecnico|coach)/i
 
 // Después de «Entrenador» viene su nombre, que no es un jugador
@@ -35,8 +39,17 @@ function limpiarLinea(raw: string): string | null {
   return s
 }
 
-/** Nombres de jugador encontrados en un texto pegado, sin repetidos */
-export function parsearAlineacion(texto: string): string[] {
+/**
+ * Nombres de jugador encontrados en un texto pegado, sin repetidos.
+ * `noJugadores` sirve para descartar los nombres de los equipos, que las
+ * webs meten entre los jugadores y acababan colándose como fichas nuevas.
+ */
+export function parsearAlineacion(texto: string, noJugadores: string[] = [], equiposDelPartido: string[] = []): string[] {
+  const veto = new Set(noJugadores.map(t => norm(t)).filter(Boolean))
+  // De los dos equipos del partido se vetan también sus palabras sueltas
+  // («Deportivo» de «Deportivo de La Coruña»); del resto de clubes conocidos
+  // solo el nombre completo, para no cargarse apellidos como «Villar».
+  equiposDelPartido.forEach(t => norm(t).split(' ').forEach(w => { if (w.length > 3) veto.add(w) }))
   const vistos = new Set<string>()
   const out: string[] = []
   let saltarSiguiente = false
@@ -47,15 +60,12 @@ export function parsearAlineacion(texto: string): string[] {
     if (saltarSiguiente) { saltarSiguiente = false; continue }   // el entrenador
     const k = n.toLowerCase()
     if (vistos.has(k)) continue
+    if (veto.has(norm(n))) continue          // es el nombre de un equipo
     vistos.add(k)
     out.push(n)
   }
   return out
 }
-
-const norm = (s?: string) => (s ?? '')
-  .normalize('NFD').replace(/[̀-ͯ]/g, '')
-  .toLowerCase().replace(/[^a-z0-9ñ ]/g, ' ').replace(/\s+/g, ' ').trim()
 
 export type Certeza = 'exacto' | 'probable' | 'ambiguo' | 'nuevo'
 

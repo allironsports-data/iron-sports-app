@@ -768,12 +768,14 @@ function useIsDesktop(minWidth = 1024): boolean {
 // app te dice quién de esos jugadores ya está en la BBDD, quién ya está
 // vinculado al partido y quién es nuevo — y los vincula de una tacada.
 
-function PegarAlineacion({ match, scoutingPlayers, linkedPlayerIds, onLink, onCreateAndLink }: {
+function PegarAlineacion({ match, scoutingPlayers, linkedPlayerIds, onLink, onCreateAndLink, onFixTeam }: {
   match: ScoutingMatch
   scoutingPlayers: ScoutingPlayer[]
   linkedPlayerIds: string[]
   onLink: (playerId: string) => Promise<void>
   onCreateAndLink: (nombre: string, equipo: string) => Promise<void>
+  /** Corrige el equipo del jugador con el del partido */
+  onFixTeam: (p: ScoutingPlayer, equipo: string) => Promise<void>
 }) {
   const [abierto, setAbierto] = useState(false)
   const [texto, setTexto] = useState('')
@@ -785,7 +787,10 @@ function PegarAlineacion({ match, scoutingPlayers, linkedPlayerIds, onLink, onCr
   const equipo = lado === 'local' ? match.homeTeam : match.awayTeam
 
   function analizar() {
-    const nombres = parsearAlineacion(texto)
+    // No son jugadores: los dos equipos del partido ni ningún nombre de
+    // club que ya exista en la BBDD (a veces se pega la columna de equipos)
+    const equiposConocidos = Array.from(new Set(scoutingPlayers.map(p => p.team).filter(Boolean) as string[]))
+    const nombres = parsearAlineacion(texto, [match.homeTeam, match.awayTeam, ...equiposConocidos], [match.homeTeam, match.awayTeam])
     const mismoEquipo = (a?: string, b?: string) => !!teamMatchKind(a, b)
     setResultado(nombres.map(n => emparejar(n, scoutingPlayers, equipo, mismoEquipo)))
     setHechos(new Set())
@@ -833,6 +838,16 @@ function PegarAlineacion({ match, scoutingPlayers, linkedPlayerIds, onLink, onCr
   const vinculados = (resultado ?? []).filter(e => (e.player && yaVinculado(e.player)) || hechos.has(e.nombre))
   const ambiguos = (resultado ?? []).filter(e => e.certeza === 'ambiguo')
   const nuevos = (resultado ?? []).filter(e => e.certeza === 'nuevo' && !hechos.has(e.nombre))
+  // Jugadores que SÍ están en la BBDD pero con otro equipo: la alineación es
+  // una fuente fiable para corregirlo (juegan ahí hoy)
+  const conEquipoDistinto = (resultado ?? []).filter(e => e.player && !teamMatchKind(e.player.team, equipo))
+
+  async function corregirEquipos(lista: Emparejamiento[]) {
+    setTrabajando(true)
+    try {
+      for (const e of lista) if (e.player) await onFixTeam(e.player, equipo)
+    } finally { setTrabajando(false) }
+  }
 
   return (
     <div className="border-t border-slate-100 pt-3 space-y-2">
@@ -895,14 +910,30 @@ function PegarAlineacion({ match, scoutingPlayers, linkedPlayerIds, onLink, onCr
             </button>
           </div>
           <div className="space-y-0.5">
-            {enBbdd.map(e => (
-              <div key={e.nombre} className="flex items-center gap-1.5 text-[11px]">
-                <button onClick={() => void vincularTodos([e])} className="text-violet-600 font-bold" title="Vincular a este partido">+</button>
-                <span className="font-semibold text-slate-700">{e.player!.fullName}</span>
-                <span className="text-slate-400 truncate">{e.player!.team}</span>
-                {e.certeza === 'probable' && <span className="text-[10px] text-amber-600" title={`Pegaste «${e.nombre}»`}>≈ comprueba</span>}
-              </div>
-            ))}
+            {enBbdd.map(e => {
+              const equipoDistinto = !teamMatchKind(e.player!.team, equipo)
+              return (
+                <div key={e.nombre} className="flex items-center gap-1.5 text-[11px]">
+                  <button onClick={() => void vincularTodos([e])} className="text-violet-600 font-bold" title="Vincular a este partido">+</button>
+                  <span className="font-semibold text-slate-700">{e.player!.fullName}</span>
+                  {/* Lo que pegaste, si no coincide letra por letra: así ves de un
+                      vistazo si el emparejamiento es el bueno */}
+                  {e.certeza === 'probable' && <span className="text-slate-400">«{e.nombre}»</span>}
+                  {equipoDistinto ? (
+                    <button
+                      onClick={() => void onFixTeam(e.player!, equipo)}
+                      className="inline-flex items-center gap-1 text-[10.5px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 hover:bg-amber-100"
+                      title={`En la BBDD figura en ${e.player!.team || 'sin equipo'} — pásalo a ${equipo}`}
+                    >
+                      <span className="line-through text-amber-500">{e.player!.team || 'sin equipo'}</span>
+                      → {equipo}
+                    </button>
+                  ) : (
+                    <span className="text-slate-400 truncate">{e.player!.team}</span>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
@@ -957,9 +988,206 @@ function PegarAlineacion({ match, scoutingPlayers, linkedPlayerIds, onLink, onCr
         </div>
       )}
 
+      {conEquipoDistinto.length > 0 && (
+        <div className="flex items-center gap-2 bg-amber-50/70 border border-amber-200 rounded-lg px-2 py-1.5">
+          <span className="text-[11px] text-amber-800">
+            {conEquipoDistinto.length} figura{conEquipoDistinto.length !== 1 ? 'n' : ''} en la BBDD con otro equipo
+          </span>
+          <button
+            onClick={() => void corregirEquipos(conEquipoDistinto)}
+            disabled={trabajando}
+            className="ml-auto text-[11px] font-bold text-white bg-amber-600 hover:bg-amber-700 px-2 py-0.5 rounded-md disabled:opacity-40"
+          >
+            {trabajando ? 'Corrigiendo…' : `Pasarlos a ${equipo}`}
+          </button>
+        </div>
+      )}
+
       {vinculados.length > 0 && (
         <p className="text-[11px] text-slate-400">✓ {vinculados.length} ya vinculado{vinculados.length !== 1 ? 's' : ''} a este partido</p>
       )}
+    </div>
+  )
+}
+
+
+// ── ActualizarPlantilla ──────────────────────────────────────────────
+// Pegas la plantilla de un club (de Sofascore, BeSoccer, Transfermarkt…)
+// y la app pone a todos esos jugadores en ese equipo de una tacada. Es la
+// forma rápida de poner al día los fichajes sin ir partido a partido.
+
+function ActualizarPlantilla({ scoutingPlayers, onClose, onFixTeam, onCreate, showToast }: {
+  scoutingPlayers: ScoutingPlayer[]
+  onClose: () => void
+  onFixTeam: (p: ScoutingPlayer, equipo: string) => Promise<void>
+  onCreate: (nombre: string, equipo: string) => Promise<void>
+  showToast: ShowToast
+}) {
+  const [equipo, setEquipo] = useState('')
+  const [texto, setTexto] = useState('')
+  const [resultado, setResultado] = useState<Emparejamiento[] | null>(null)
+  const [trabajando, setTrabajando] = useState(false)
+  const [hechos, setHechos] = useState<Set<string>>(new Set())
+
+  useEscapeKey(onClose)
+
+  const equiposConocidos = useMemo(
+    () => Array.from(new Set(scoutingPlayers.map(p => p.team).filter(Boolean) as string[])).sort(),
+    [scoutingPlayers])
+
+  function analizar() {
+    const nombres = parsearAlineacion(texto, [equipo, ...equiposConocidos], [equipo])
+    const mismoEquipo = (a?: string, b?: string) => !!teamMatchKind(a, b)
+    setResultado(nombres.map(n => emparejar(n, scoutingPlayers, equipo, mismoEquipo)))
+    setHechos(new Set())
+  }
+
+  const cambian = (resultado ?? []).filter(e => e.player && !teamMatchKind(e.player.team, equipo) && !hechos.has(e.nombre))
+  const yaEstan = (resultado ?? []).filter(e => e.player && teamMatchKind(e.player.team, equipo))
+  const nuevos  = (resultado ?? []).filter(e => e.certeza === 'nuevo' && !hechos.has(e.nombre))
+  const dudosos = (resultado ?? []).filter(e => e.certeza === 'ambiguo')
+
+  async function aplicar(lista: Emparejamiento[], crear: boolean) {
+    setTrabajando(true)
+    let n = 0
+    try {
+      for (const e of lista) {
+        if (crear) await onCreate(e.nombre, equipo)
+        else if (e.player) await onFixTeam(e.player, equipo)
+        setHechos(h => new Set(h).add(e.nombre))
+        n++
+      }
+      showToast(`${n} jugador${n !== 1 ? 'es' : ''} ${crear ? 'creados en' : 'pasados a'} ${equipo}`)
+    } catch {
+      showToast('Se ha quedado a medias — vuelve a darle', 'error')
+    } finally { setTrabajando(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/40 px-3 py-6 overflow-y-auto" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl my-auto" onClick={e => e.stopPropagation()}>
+        <div className="px-4 py-3 border-b border-slate-200 flex items-center gap-2">
+          <div className="min-w-0">
+            <h3 className="text-sm font-bold text-slate-800">Actualizar plantilla de un club</h3>
+            <p className="text-[11px] text-slate-400">
+              Pega la plantilla y la app pone a todos esos jugadores en ese equipo. Para ponerse al día con los fichajes de golpe.
+            </p>
+          </div>
+          <button onClick={onClose} aria-label="Cerrar" className="ml-auto p-1.5 text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+        </div>
+
+        <div className="px-4 py-3 space-y-3 max-h-[70vh] overflow-y-auto">
+          <div>
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Club</label>
+            <input
+              value={equipo}
+              onChange={e => setEquipo(e.target.value)}
+              list="equipos-conocidos"
+              placeholder="Sporting Gijón"
+              className="mt-1 w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20"
+            />
+            <datalist id="equipos-conocidos">
+              {equiposConocidos.map(t => <option key={t} value={t} />)}
+            </datalist>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Plantilla pegada</label>
+            <textarea
+              value={texto}
+              onChange={e => setTexto(e.target.value)}
+              rows={6}
+              placeholder="Pega aquí los nombres — da igual que vengan con dorsal, posición o valor de mercado."
+              className="mt-1 w-full text-xs border border-slate-200 rounded-lg px-2.5 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={analizar}
+              disabled={!equipo.trim() || texto.trim().length < 5}
+              className="px-3 py-1.5 rounded-lg bg-primary text-white text-[11px] font-semibold hover:bg-primary/90 disabled:opacity-40"
+            >
+              Analizar
+            </button>
+            {resultado && <span className="text-[11px] text-slate-400">{resultado.length} nombres detectados</span>}
+          </div>
+
+          {cambian.length > 0 && (
+            <div className="bg-amber-50/70 border border-amber-200 rounded-lg p-2.5">
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="text-[11px] font-bold text-amber-800">Cambian de equipo · {cambian.length}</span>
+                <button
+                  onClick={() => void aplicar(cambian, false)}
+                  disabled={trabajando}
+                  className="ml-auto text-[11px] font-bold text-white bg-amber-600 hover:bg-amber-700 px-2 py-0.5 rounded-md disabled:opacity-40"
+                >
+                  {trabajando ? 'Aplicando…' : `Pasarlos a ${equipo}`}
+                </button>
+              </div>
+              <div className="space-y-0.5">
+                {cambian.map(e => (
+                  <div key={e.nombre} className="flex items-center gap-1.5 text-[11px]">
+                    <button onClick={() => void aplicar([e], false)} className="text-amber-700 font-bold" title="Cambiar solo este">→</button>
+                    <span className="font-semibold text-slate-700">{e.player!.fullName}</span>
+                    {e.certeza === 'probable' && <span className="text-slate-400">«{e.nombre}»</span>}
+                    <span className="text-slate-400 line-through">{e.player!.team || 'sin equipo'}</span>
+                    <span className="text-amber-700 font-medium">{equipo}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {nuevos.length > 0 && (
+            <div className="bg-emerald-50/70 border border-emerald-200 rounded-lg p-2.5">
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="text-[11px] font-bold text-emerald-800">No están en la BBDD · {nuevos.length}</span>
+                <button
+                  onClick={() => void aplicar(nuevos, true)}
+                  disabled={trabajando}
+                  className="ml-auto text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-2 py-0.5 rounded-md disabled:opacity-40"
+                >
+                  {trabajando ? 'Creando…' : `Crear los ${nuevos.length}`}
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {nuevos.map(e => (
+                  <button key={e.nombre} onClick={() => void aplicar([e], true)}
+                    className="text-[11px] bg-white border border-emerald-200 text-emerald-800 rounded-full px-2 py-0.5 hover:bg-emerald-100">
+                    + {e.nombre}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {dudosos.length > 0 && (
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5">
+              <span className="text-[11px] font-bold text-slate-600">Varios con ese nombre · {dudosos.length}</span>
+              <div className="mt-1 space-y-1">
+                {dudosos.map(e => (
+                  <div key={e.nombre} className="text-[11px]">
+                    <span className="font-semibold text-slate-700">{e.nombre}</span>
+                    <span className="text-slate-400"> → </span>
+                    {e.candidatos?.map(c => (
+                      <button key={c.id}
+                        onClick={() => void onFixTeam(c, equipo).then(() => setHechos(h => new Set(h).add(e.nombre)))}
+                        className="mr-1 underline decoration-dotted text-slate-600 hover:text-slate-900">
+                        {c.fullName} ({c.team || 'sin equipo'})
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {yaEstan.length > 0 && (
+            <p className="text-[11px] text-slate-400">✓ {yaEstan.length} ya figuraban en {equipo}</p>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
@@ -974,7 +1202,7 @@ function MatchDetailModal({
   onClose, onEdit, onToggleStatus,
   onAddScout, onRemoveScout, onSetScoutStatus, onSetScoutMode,
   onAddMatchPlayer, onRemoveMatchPlayer, onAddReport, onLinkReportToMatch, onCreateAndLinkPlayer,
-  onOpenPlayer, onOpenMatch, showToast,
+  onFixPlayerTeam, onOpenPlayer, onOpenMatch, showToast,
   variant = 'modal',
 }: {
   match: ScoutingMatch
@@ -1000,6 +1228,8 @@ function MatchDetailModal({
   onLinkReportToMatch: (r: ScoutingReport, matchId: string) => Promise<void>
   /** Crea un jugador que no estaba en la BBDD y lo vincula al partido */
   onCreateAndLinkPlayer: (nombre: string, equipo: string, matchId: string) => Promise<void>
+  /** Corrige en la BBDD el equipo de un jugador */
+  onFixPlayerTeam: (p: ScoutingPlayer, equipo: string) => Promise<void>
   onOpenPlayer?: (id: string) => void
   /** Saltar a la ficha de otro partido sin salir de la pantalla */
   onOpenMatch?: (id: string) => void
@@ -1519,6 +1749,7 @@ function MatchDetailModal({
             linkedPlayerIds={linkedPlayerIds}
             onLink={async (playerId) => { await handleAddPlayer(playerId) }}
             onCreateAndLink={async (nombre, equipo) => { await onCreateAndLinkPlayer(nombre, equipo, match.id) }}
+            onFixTeam={onFixPlayerTeam}
           />
 
           {/* ── Otros partidos de estos equipos ── */}
@@ -5635,6 +5866,19 @@ export function Captacion({
     }
   }
 
+  // Corregir el equipo de un jugador (desde una alineación pegada, que es
+  // información del día del partido y suele estar más al día que la ficha)
+  async function handleFixPlayerTeam(p: ScoutingPlayer, equipo: string) {
+    try {
+      const updated: ScoutingPlayer = { ...p, team: equipo }
+      await db.updateScoutingPlayer(updated)
+      onUpdatePlayer(updated)
+      showToast(`${p.fullName}: ${p.team || 'sin equipo'} → ${equipo}`)
+    } catch {
+      showToast('No se pudo corregir el equipo', 'error')
+    }
+  }
+
   // Engancha a este partido un informe que se escribió sin partido (o que
   // quedó colgado de otro): así la ficha del partido enseña TODOS los informes
   async function handleLinkReportToMatch(r: ScoutingReport, matchId: string) {
@@ -5717,6 +5961,7 @@ export function Captacion({
         onAddReport={onAddReport}
         onLinkReportToMatch={handleLinkReportToMatch}
         onCreateAndLinkPlayer={handleCreateAndLinkPlayer}
+        onFixPlayerTeam={handleFixPlayerTeam}
         onOpenPlayer={id => { if (variant === 'modal') setDetailMatchId(null); setPanelPlayerId(id) }}
         onOpenMatch={id => setDetailMatchId(id)}
         showToast={showToast}
@@ -5733,6 +5978,7 @@ export function Captacion({
   })
   const [form, setForm] = useState(emptyForm())
   const [savingPlayer, setSavingPlayer] = useState(false)
+  const [showPlantilla, setShowPlantilla] = useState(false)
   const [playerNameError, setPlayerNameError] = useState('')
 
   function openAddPlayer() {
@@ -6133,6 +6379,15 @@ export function Captacion({
                   ✎ Edición
                 </button>
               </div>
+
+              {/* Poner al día los equipos de golpe pegando una plantilla */}
+              <button
+                onClick={() => setShowPlantilla(true)}
+                title="Pega la plantilla de un club y actualiza el equipo de todos esos jugadores de una vez"
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold border border-slate-200 text-slate-600 rounded-lg hover:border-primary hover:text-primary transition-colors"
+              >
+                📋 <span className="hidden sm:inline">Actualizar plantilla</span>
+              </button>
 
               {/* Add player — available to all users */}
               <button
@@ -7633,6 +7888,20 @@ export function Captacion({
           merging={merging}
           onClose={() => setShowMergeModal(false)}
           onConfirm={handleMergeMatches}
+        />
+      )}
+
+      {/* ── Actualizar plantilla de un club (equipos al día de golpe) ── */}
+      {showPlantilla && (
+        <ActualizarPlantilla
+          scoutingPlayers={scoutingPlayers}
+          onClose={() => setShowPlantilla(false)}
+          onFixTeam={handleFixPlayerTeam}
+          onCreate={async (nombre, equipo) => {
+            const saved = await db.createScoutingPlayer({ fullName: nombre.trim(), team: equipo || undefined })
+            onAddPlayer(saved)
+          }}
+          showToast={showToast}
         />
       )}
 
