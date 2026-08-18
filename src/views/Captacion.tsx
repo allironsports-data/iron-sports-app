@@ -125,6 +125,12 @@ function isFutureMatch(dateStr: string): boolean {
   return dateStr >= todayISO()
 }
 
+// Estrictamente posterior a hoy. «Ocultar futuros» usa esta: los partidos
+// de HOY se siguen viendo (son los que toca ver esta tarde).
+function isAfterToday(dateStr: string): boolean {
+  return dateStr > todayISO()
+}
+
 function relativeDate(iso?: string): string {
   if (!iso) return ''
   const diff = Date.now() - new Date(iso).getTime()
@@ -720,6 +726,41 @@ function MatchRow({
   )
 }
 
+// Carcasa de la ficha de partido: la MISMA ficha se pinta como columna fija
+// a la derecha en escritorio y como ventana flotante en móvil. Va a nivel de
+// módulo a propósito: si se define dentro del componente, React la remonta en
+// cada render y se pierde lo que estuvieras escribiendo.
+function FichaCarcasa({ esPanel, onClose, children }: {
+  esPanel: boolean
+  onClose: () => void
+  children: React.ReactNode
+}) {
+  if (esPanel) {
+    return <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">{children}</div>
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/40 px-3 py-6 overflow-y-auto" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl my-auto" onClick={e => e.stopPropagation()}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+// ¿Hay sitio para la pantalla partida? (a partir de lg = 1024px)
+function useIsDesktop(minWidth = 1024): boolean {
+  const [is, setIs] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia(`(min-width:${minWidth}px)`).matches)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const mq = window.matchMedia(`(min-width:${minWidth}px)`)
+    const onChange = () => setIs(mq.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [minWidth])
+  return is
+}
+
 // ── MatchDetailModal — ficha del partido ─────────────────────
 // Todo lo del partido en una ventana: scouts asignados (varios), jugadores
 // vistos con los informes de cada scout, y buscador/sugeridos para añadir más.
@@ -729,7 +770,8 @@ function MatchDetailModal({
   scoutingPlayers, linkedPlayerIds, scoutingReports, allMatches, matchPlayersByMatchId,
   onClose, onEdit, onToggleStatus,
   onAddScout, onRemoveScout, onSetScoutStatus, onSetScoutMode,
-  onAddMatchPlayer, onRemoveMatchPlayer, onAddReport, onLinkReportToMatch, onOpenPlayer, showToast,
+  onAddMatchPlayer, onRemoveMatchPlayer, onAddReport, onLinkReportToMatch, onOpenPlayer, onOpenMatch, showToast,
+  variant = 'modal',
 }: {
   match: ScoutingMatch
   scouts: MatchScoutInfo[]
@@ -753,7 +795,11 @@ function MatchDetailModal({
   onAddReport: (r: ScoutingReport) => void
   onLinkReportToMatch: (r: ScoutingReport, matchId: string) => Promise<void>
   onOpenPlayer?: (id: string) => void
+  /** Saltar a la ficha de otro partido sin salir de la pantalla */
+  onOpenMatch?: (id: string) => void
   showToast?: ShowToast
+  /** 'modal' = ventana flotante (móvil) · 'panel' = columna fija a la derecha */
+  variant?: 'modal' | 'panel'
 }) {
   const [playerSearch, setPlayerSearch] = useState('')
   const [suggYearFilter, setSuggYearFilter] = useState<string | null>(null)
@@ -763,6 +809,7 @@ function MatchDetailModal({
   const [quickConclusion, setQuickConclusion] = useState<ConclusionOption>('')
   const [savingQuick, setSavingQuick] = useState(false)
   const [addScoutOpen, setAddScoutOpen] = useState(false)
+  const [informeAbierto, setInformeAbierto] = useState<string | null>(null)
 
   useEscapeKey(onClose)
 
@@ -802,6 +849,43 @@ function MatchDetailModal({
     return map
   }, [scoutingReports, match.id, match.date])
   const linkedWithReport = linkedPlayers.filter(p => (matchReportsByPlayer[p.id] ?? []).length > 0).length
+
+  // Resumen del partido: cuántos informes y qué se concluyó
+  const totalInformes = Object.values(matchReportsByPlayer).reduce((n, rs) => n + rs.length, 0)
+  const conclusionCounts = useMemo(() => {
+    const m: Record<string, number> = {}
+    Object.values(matchReportsByPlayer).forEach(rs => rs.forEach(r => {
+      const c = normConclusion(r.conclusion)
+      if (c) m[c] = (m[c] ?? 0) + 1
+    }))
+    return m
+  }, [matchReportsByPlayer])
+
+  // Los jugadores se agrupan por equipo: local, visitante y «otros», que es
+  // como se mira un partido de verdad
+  const playersBySide = useMemo(() => {
+    const local: ScoutingPlayer[] = []
+    const visitante: ScoutingPlayer[] = []
+    const otros: ScoutingPlayer[] = []
+    linkedPlayers.forEach(p => {
+      if (teamMatchKind(match.homeTeam, p.team)) local.push(p)
+      else if (teamMatchKind(match.awayTeam, p.team)) visitante.push(p)
+      else otros.push(p)
+    })
+    return [
+      { titulo: match.homeTeam, jugadores: local },
+      { titulo: match.awayTeam, jugadores: visitante },
+      { titulo: 'Otros equipos', jugadores: otros },
+    ].filter(g => g.jugadores.length > 0)
+  }, [linkedPlayers, match.homeTeam, match.awayTeam])
+
+  // Otros partidos de estos mismos equipos, para saltar de uno a otro
+  const partidosRelacionados = useMemo(() => allMatches
+    .filter(m => m.id !== match.id &&
+      (teamMatchKind(m.homeTeam, match.homeTeam) || teamMatchKind(m.awayTeam, match.homeTeam) ||
+       teamMatchKind(m.homeTeam, match.awayTeam) || teamMatchKind(m.awayTeam, match.awayTeam)))
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 4), [allMatches, match.id, match.homeTeam, match.awayTeam])
 
   async function handleAddPlayer(playerId: string) {
     try {
@@ -908,9 +992,11 @@ function MatchDetailModal({
 
   const freeProfiles = profiles.filter(p => p.avatar && !scouts.some(s => s.scout === p.avatar))
 
+  const esPanel = variant === 'panel'
+
   return (
-    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/40 px-3 py-6 overflow-y-auto" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl my-auto" onClick={e => e.stopPropagation()}>
+    <FichaCarcasa esPanel={esPanel} onClose={onClose}>
+      <>
         {/* ── Cabecera ── */}
         <div className="px-4 sm:px-5 py-3 border-b border-slate-200 flex items-start gap-3">
           <div className="min-w-0 flex-1">
@@ -946,7 +1032,7 @@ function MatchDetailModal({
           </div>
         </div>
 
-        <div className="px-4 sm:px-5 py-4 space-y-5 max-h-[72vh] overflow-y-auto">
+        <div className={`px-4 sm:px-5 py-4 space-y-5 overflow-y-auto ${esPanel ? 'max-h-[calc(100vh-13rem)]' : 'max-h-[72vh]'}`}>
           {/* ── Scouts asignados ── */}
           <div>
             <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
@@ -1023,6 +1109,23 @@ function MatchDetailModal({
             )}
           </div>
 
+          {/* ── Resumen de un vistazo ── */}
+          {linkedPlayers.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {[
+                { n: linkedPlayers.length, l: 'jugadores vistos', cls: 'text-slate-800' },
+                { n: totalInformes, l: totalInformes === 1 ? 'informe' : 'informes', cls: 'text-slate-800' },
+                { n: conclusionCounts['Llamar'] ?? 0, l: 'Llamar', cls: 'text-amber-600' },
+                { n: conclusionCounts['Descartar'] ?? 0, l: 'Descartar', cls: 'text-slate-500' },
+              ].map(x => (
+                <div key={x.l} className="bg-slate-50 rounded-lg px-2.5 py-1.5">
+                  <div className={`text-base font-bold leading-none ${x.cls}`}>{x.n}</div>
+                  <div className="text-[10.5px] text-slate-500 mt-0.5">{x.l}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* ── Notas del partido ── */}
           {match.notes && (
             <div>
@@ -1040,7 +1143,7 @@ function MatchDetailModal({
               {linkedPlayers.length === 0 && (
                 <p className="text-xs text-slate-400 italic">Aún no hay jugadores vinculados a este partido.</p>
               )}
-              {linkedPlayers.map(p => {
+              {playersBySide.flatMap(grupo => grupo.jugadores.map((p, i) => {
                 const pReports = matchReportsByPlayer[p.id] ?? []
                 const isFormOpen = reportFormFor === p.id
                 // Cada scout puede escribir SU informe del mismo jugador en el mismo
@@ -1048,7 +1151,16 @@ function MatchDetailModal({
                 const myReport = pReports.find(r =>
                   (r.authorId && r.authorId === currentProfile.id) || r.persona === currentProfile.avatar)
                 return (
-                  <div key={p.id} className="bg-white border border-slate-200 rounded-lg px-3 py-2">
+                  <div key={p.id}>
+                  {/* Cabecera del equipo: se ve de un vistazo de qué lado juega cada uno */}
+                  {i === 0 && (
+                    <div className="flex items-center gap-1.5 mt-2 mb-1 first:mt-0">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{grupo.titulo}</span>
+                      <span className="text-[10px] text-slate-400">{grupo.jugadores.length}</span>
+                      <span className="flex-1 h-px bg-slate-100" />
+                    </div>
+                  )}
+                  <div className="bg-white border border-slate-200 rounded-lg px-3 py-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <button
                         onClick={() => onOpenPlayer?.(p.id)}
@@ -1064,14 +1176,15 @@ function MatchDetailModal({
                       <span className="flex-1" />
                       {/* Un chip por informe: se ve quién ha escrito cada uno */}
                       {pReports.map(r => (
-                        <span
+                        <button
                           key={r.id}
-                          title={r.texto ?? ''}
-                          className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
+                          onClick={() => setInformeAbierto(id => id === r.id ? null : r.id)}
+                          title="Ver el informe completo"
+                          className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border transition-colors ${
                             (r.authorId && r.authorId === currentProfile.id) || r.persona === currentProfile.avatar
-                              ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
-                              : 'text-slate-600 bg-slate-50 border-slate-200'
-                          }`}
+                              ? 'text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100'
+                              : 'text-slate-600 bg-slate-50 border-slate-200 hover:bg-slate-100'
+                          } ${informeAbierto === r.id ? 'ring-1 ring-slate-300' : ''}`}
                         >
                           ✓ {r.persona ?? '—'}
                           {normConclusion(r.conclusion) && (
@@ -1079,7 +1192,7 @@ function MatchDetailModal({
                               {normConclusion(r.conclusion)}
                             </span>
                           )}
-                        </span>
+                        </button>
                       ))}
                       {/* Informes de esas fechas que no están enganchados a
                           este partido: se ven en gris y se vinculan de un clic */}
@@ -1170,11 +1283,51 @@ function MatchDetailModal({
                         </div>
                       </div>
                     )}
+                    {/* Informe desplegado: antes había que adivinarlo por el tooltip */}
+                    {pReports.filter(r => r.id === informeAbierto).map(r => (
+                      <div key={r.id} className="mt-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[11px] font-bold text-slate-600">{personaToName(r.persona, profiles) || r.persona}</span>
+                          <span className="text-[10.5px] text-slate-400">{fmtDate(r.fecha ?? r.createdAt)}</span>
+                          {r.titulo && <span className="text-[10.5px] text-slate-500 italic truncate">{r.titulo}</span>}
+                          <button onClick={() => setInformeAbierto(null)} className="ml-auto text-slate-400 hover:text-slate-600" aria-label="Cerrar informe">
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                        <p className="text-[11.5px] text-slate-700 whitespace-pre-wrap break-words leading-relaxed">
+                          {r.texto || <span className="italic text-slate-400">Sin texto</span>}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
                   </div>
                 )
-              })}
+              }))}
             </div>
           </div>
+
+          {/* ── Otros partidos de estos equipos ── */}
+          {partidosRelacionados.length > 0 && (
+            <div className="border-t border-slate-100 pt-3">
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Otros partidos de estos equipos</span>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {partidosRelacionados.map(m => (
+                  <button
+                    key={m.id}
+                    onClick={() => onOpenMatch?.(m.id)}
+                    className="text-[11px] border border-slate-200 rounded-lg px-2 py-1 text-slate-600 hover:border-violet-300 hover:text-violet-700 transition-colors"
+                    title={`${(matchPlayersByMatchId[m.id] ?? []).length} jugadores vinculados`}
+                  >
+                    {m.homeTeam} vs {m.awayTeam}
+                    <span className="text-slate-400"> · {fmtDate(m.date)}</span>
+                    {(matchPlayersByMatchId[m.id] ?? []).length > 0 && (
+                      <span className="ml-1 text-violet-500 font-semibold">{(matchPlayersByMatchId[m.id] ?? []).length}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* ── Buscar / sugerencias con afinado ── */}
           <div className="space-y-2 border-t border-slate-100 pt-3">
@@ -1264,8 +1417,8 @@ function MatchDetailModal({
             </div>
           </div>
         </div>
-      </div>
-    </div>
+      </>
+    </FichaCarcasa>
   )
 }
 
@@ -4896,6 +5049,7 @@ export function Captacion({
   const [editingMatch, setEditingMatch] = useState<ScoutingMatch | null>(null)
   /** Ficha de partido abierta en ventana */
   const [detailMatchId, setDetailMatchId] = useState<string | null>(null)
+  const isDesktop = useIsDesktop()   // en escritorio la ficha va a la derecha, no flotando
 
   // ── match filters ──
   const [matchSearch, setMatchSearch] = useState('')
@@ -5011,7 +5165,7 @@ export function Captacion({
       if (matchCompFilter !== 'all' && m.competition !== matchCompFilter) return false
       if (matchModeFilter !== 'all' && (m.viewMode ?? 'video') !== matchModeFilter) return false
       if (matchStatusFilter !== 'all' && (m.status ?? 'pendiente') !== matchStatusFilter) return false
-      if (hideFutureMatches && isFutureMatch(m.date)) return false
+      if (hideFutureMatches && isAfterToday(m.date)) return false
       if (q) {
         const hay = `${m.homeTeam} ${m.awayTeam} ${m.competition ?? ''} ${m.notes ?? ''}`.toLowerCase()
         if (!hay.includes(q)) return false
@@ -5305,6 +5459,42 @@ export function Captacion({
     } catch {
       showToast('Error al actualizar el assessment', 'error')
     }
+  }
+
+  // La ficha de partido se pinta igual en los dos sitios: como columna a la
+  // derecha de la lista (escritorio) o como ventana (móvil).
+  function renderFichaPartido(variant: 'modal' | 'panel') {
+    const dm = detailMatchId ? scoutingMatches.find(m => m.id === detailMatchId) : null
+    if (!dm) return null
+    return (
+      <MatchDetailModal
+        match={dm}
+        scouts={scoutsByMatch[dm.id] ?? []}
+        profiles={profiles}
+        currentProfile={currentProfile}
+        isAdmin={isAdmin}
+        scoutingPlayers={scoutingPlayers}
+        linkedPlayerIds={matchPlayersByMatchId[dm.id] ?? []}
+        scoutingReports={scoutingReports}
+        allMatches={scoutingMatches}
+        matchPlayersByMatchId={matchPlayersByMatchId}
+        onClose={() => setDetailMatchId(null)}
+        onEdit={openEditMatch}
+        onToggleStatus={handleToggleMatchStatus}
+        onAddScout={handleAddScoutToMatch}
+        onRemoveScout={handleRemoveScoutFromMatch}
+        onSetScoutStatus={handleScoutStatus}
+        onSetScoutMode={handleScoutMode}
+        onAddMatchPlayer={onAddMatchPlayer}
+        onRemoveMatchPlayer={onRemoveMatchPlayer}
+        onAddReport={onAddReport}
+        onLinkReportToMatch={handleLinkReportToMatch}
+        onOpenPlayer={id => { if (variant === 'modal') setDetailMatchId(null); setPanelPlayerId(id) }}
+        onOpenMatch={id => setDetailMatchId(id)}
+        showToast={showToast}
+        variant={variant}
+      />
+    )
   }
 
   // ── player form ──
@@ -6064,7 +6254,10 @@ export function Captacion({
       {/* ── ESTADÍSTICAS TAB ──────────────────────────────── */}
       {/* ── PARTIDOS TAB ──────────────────────────────────── */}
       {captTab === 'partidos' && (
-        <div className="flex-1 w-full px-3 sm:px-6 py-4 space-y-3">
+        <div className="flex-1 w-full px-3 sm:px-6 py-4">
+          {/* Pantalla partida: lista a la izquierda, ficha del partido a la derecha */}
+          <div className={detailMatchId && isDesktop ? 'lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(400px,36%)] lg:gap-4 lg:items-start' : ''}>
+            <div className="space-y-3 min-w-0">
           {/* Notificación de partidos pendientes */}
           {(() => {
             const myPending = scoutingMatches.filter(m => {
@@ -6251,14 +6444,14 @@ export function Captacion({
               {/* Ocultar futuros */}
               <button
                 onClick={() => setHideFutureMatches(v => !v)}
-                title={hideFutureMatches ? 'Mostrando solo partidos hasta hoy — clic para ver también los futuros' : 'Ocultar los partidos posteriores a hoy'}
+                title={hideFutureMatches ? 'Mostrando hasta hoy incluido — clic para ver también los de mañana en adelante' : 'Ocultar los partidos de mañana en adelante (los de hoy se siguen viendo)'}
                 className={`text-xs border rounded-lg px-2.5 py-1.5 font-medium transition-colors whitespace-nowrap ${
                   hideFutureMatches
                     ? 'bg-blue-600 text-white border-blue-600'
                     : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                 }`}
               >
-                {hideFutureMatches ? '👁 Futuros ocultos' : 'Ocultar futuros'}
+                {hideFutureMatches ? '👁 Hasta hoy' : 'Ocultar futuros'}
               </button>
 
               {/* Fusionar partidos */}
@@ -6291,7 +6484,7 @@ export function Captacion({
             if (matchCompFilter !== 'all') chips.push({ key: 'comp', label: `Competición: ${matchCompFilter}`, onRemove: () => setMatchCompFilter('all') })
             if (matchModeFilter !== 'all') chips.push({ key: 'mode', label: matchModeFilter === 'video' ? 'Modo: Vídeo' : 'Modo: Campo', onRemove: () => setMatchModeFilter('all') })
             if (matchStatusFilter !== 'all') chips.push({ key: 'status', label: matchStatusFilter === 'visto' ? 'Estado: Vistos' : 'Estado: Pendientes', onRemove: () => setMatchStatusFilter('all') })
-            if (hideFutureMatches) chips.push({ key: 'nofuture', label: 'Futuros ocultos', onRemove: () => setHideFutureMatches(false) })
+            if (hideFutureMatches) chips.push({ key: 'nofuture', label: 'Hasta hoy incluido', onRemove: () => setHideFutureMatches(false) })
             if (chips.length === 0) return null
             return (
               <ActiveFilterChips
@@ -6471,6 +6664,15 @@ export function Captacion({
             </>
             )
           )}
+            </div>
+
+            {/* Ficha del partido, fija al lado de la lista */}
+            {detailMatchId && isDesktop && (
+              <aside className="hidden lg:block lg:sticky lg:top-4 min-w-0">
+                {renderFichaPartido('panel')}
+              </aside>
+            )}
+          </div>
         </div>
       )}
 
@@ -7206,38 +7408,9 @@ export function Captacion({
         />
       )}
 
-      {/* ── Ficha de partido (ventana) ── */}
-      {(() => {
-        const dm = detailMatchId ? scoutingMatches.find(m => m.id === detailMatchId) : null
-        if (!dm) return null
-        return (
-          <MatchDetailModal
-            match={dm}
-            scouts={scoutsByMatch[dm.id] ?? []}
-            profiles={profiles}
-            currentProfile={currentProfile}
-            isAdmin={isAdmin}
-            scoutingPlayers={scoutingPlayers}
-            linkedPlayerIds={matchPlayersByMatchId[dm.id] ?? []}
-            scoutingReports={scoutingReports}
-            allMatches={scoutingMatches}
-            matchPlayersByMatchId={matchPlayersByMatchId}
-            onClose={() => setDetailMatchId(null)}
-            onEdit={openEditMatch}
-            onToggleStatus={handleToggleMatchStatus}
-            onAddScout={handleAddScoutToMatch}
-            onRemoveScout={handleRemoveScoutFromMatch}
-            onSetScoutStatus={handleScoutStatus}
-            onSetScoutMode={handleScoutMode}
-            onAddMatchPlayer={onAddMatchPlayer}
-            onRemoveMatchPlayer={onRemoveMatchPlayer}
-            onAddReport={onAddReport}
-            onLinkReportToMatch={handleLinkReportToMatch}
-            onOpenPlayer={id => { setDetailMatchId(null); setPanelPlayerId(id) }}
-            showToast={showToast}
-          />
-        )
-      })()}
+      {/* ── Ficha de partido: ventana flotante solo en móvil (en escritorio
+             va al lado de la lista, dentro de la pestaña Partidos) ── */}
+      {!isDesktop && renderFichaPartido('modal')}
 
       {/* Toasts globales de la vista */}
       <ToastStack toasts={toasts} onDismiss={dismissToast} />

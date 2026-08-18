@@ -504,6 +504,11 @@ export function Dashboard({
   const FIRMAS_KIND_ICON: Record<string, string> = { llamada: "📞", whatsapp: "💬", reunion: "🤝", entorno: "👪", nota: "📝" };
 
   // ── Novedades de la app: visibles hasta descartarlas (por build) ──
+  // Los cambios técnicos (adminItems) solo se le enseñan a los admin: al
+  // resto del equipo no le dicen nada y ensucian la pantalla de inicio.
+  const changelogItems = currentProfile.is_admin
+    ? [...CHANGELOG[0].items, ...(CHANGELOG[0].adminItems ?? [])]
+    : CHANGELOG[0].items;
   const [showChangelog, setShowChangelog] = useState<boolean>(() => {
     try { return BUILD_ID !== 'dev' && localStorage.getItem('ais_seen_build') !== BUILD_ID && CHANGELOG.length > 0 } catch { return false }
   });
@@ -874,14 +879,14 @@ export function Dashboard({
         )}
 
         {/* Novedades tras actualizar (descartable) */}
-        {showChangelog && !updateAvailable && (
+        {showChangelog && !updateAvailable && changelogItems.length > 0 && (
           <div className="mb-4 bg-violet-50 border border-violet-200 rounded-lg overflow-hidden">
             <div className="flex items-center gap-2 p-3">
               <span className="text-sm flex-shrink-0">🆕</span>
               <button onClick={() => setChangelogOpen(v => !v)} className="flex-1 text-left">
                 <span className="text-sm font-semibold text-violet-800">Novedades de la app</span>
                 <span className="hidden sm:inline text-xs text-violet-600/70 ml-2">
-                  {new Date(CHANGELOG[0].date).toLocaleDateString("es-ES", { day: "numeric", month: "long" })} · {CHANGELOG[0].items.length} cambio{CHANGELOG[0].items.length !== 1 ? "s" : ""}
+                  {new Date(CHANGELOG[0].date).toLocaleDateString("es-ES", { day: "numeric", month: "long" })} · {changelogItems.length} cambio{changelogItems.length !== 1 ? "s" : ""}
                 </span>
               </button>
               <button onClick={() => setChangelogOpen(v => !v)} aria-label="Ver novedades" className="p-1 text-violet-600">
@@ -900,7 +905,7 @@ export function Dashboard({
             </div>
             {changelogOpen && (
               <ul className="border-t border-violet-200 px-4 py-2.5 space-y-1.5">
-                {CHANGELOG[0].items.map((item, i) => (
+                {changelogItems.map((item, i) => (
                   <li key={i} className="flex items-start gap-2 text-xs text-slate-700">
                     <span className="text-violet-500 flex-shrink-0 mt-0.5">•</span>
                     <span>{item}</span>
