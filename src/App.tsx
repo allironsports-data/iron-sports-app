@@ -570,9 +570,12 @@ export default function App() {
   useEffect(() => {
     if (!user) return
     let ultimo = Date.now()
+    // Volver a pedirlo TODO no es gratis (son ~12.000 informes), así que solo
+    // se hace si de verdad has estado fuera un rato. Alternar pestañas un
+    // momento no dispara nada.
     const resync = () => {
       if (document.visibilityState !== 'visible') return
-      if (Date.now() - ultimo < 15000) return    // alternar pestañas no dispara nada
+      if (Date.now() - ultimo < 60000) return
       ultimo = Date.now()
       SYNC_TABLES.forEach((t) => refetchTable(t))
     }

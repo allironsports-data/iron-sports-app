@@ -21,6 +21,8 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-08-18',
     items: [
+      'Captación → Partidos va mucho más rápido: la lista va ahora de 60 en 60 (como Jugadores) y el buscador ya no se atasca. La app estaba pintando los 1.900 partidos de golpe, dos veces, y recontando jugadores e informes de cada uno en cada tecla',
+      'La agenda semanal y el aviso de partidos pendientes también se calculan una sola vez en lugar de en cada repintado',
       'Nueva conclusión «Visto» al escribir un informe: para cuando lo has visto y no da para concluir. No cuenta como veredicto — ni baja la exigencia del scout ni sale como desacuerdo con otro compañero',
       'Si dejas la app abierta y vuelves a ella (o se duerme el ordenador), se refresca sola: se acabó el «lo metí desde el móvil y en el ordenador no aparece hasta recargar»',
       'Ficha de partido: el ⇄ solo sale ya en informes sueltos. Los que pertenecen a otro partido se ven en gris con el nombre de ese partido, pero no se le pueden robar',

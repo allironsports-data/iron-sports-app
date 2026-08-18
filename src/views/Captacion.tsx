@@ -568,8 +568,7 @@ function scoutColor(avatar: string) {
 
 function MatchRow({
   match, scoutName, scouts, profiles, currentProfile, isAdmin,
-  scoutingPlayers, linkedPlayerIds,
-  scoutingReports,
+  conteo,
   onEdit, onDelete, onToggleStatus, onOpenDetail,
   mergeMode, mergeSelected, onToggleMerge,
 }: {
@@ -580,9 +579,8 @@ function MatchRow({
   profiles: Profile[]
   currentProfile: Profile
   isAdmin: boolean
-  scoutingPlayers: ScoutingPlayer[]
-  linkedPlayerIds: string[]
-  scoutingReports: ScoutingReport[]
+  /** Jugadores vinculados y cuántos tienen informe — ya contados en el padre */
+  conteo: { total: number; conInforme: number }
   onEdit: (m: ScoutingMatch) => void
   onDelete: (id: string) => void
   onToggleStatus: (m: ScoutingMatch) => void
@@ -602,9 +600,8 @@ function MatchRow({
   const isPendingForMe = !!myScout && myScout.status !== 'visto' && !isVisto
   const isFuture = isFutureMatch(match.date)
 
-  const linkedPlayers = scoutingPlayers.filter(p => linkedPlayerIds.includes(p.id))
-  const reportedIds = new Set(scoutingReports.filter(r => r.matchId === match.id).map(r => r.playerId))
-  const linkedWithReport = linkedPlayers.filter(p => reportedIds.has(p.id)).length
+  const nVinculados = conteo.total
+  const linkedWithReport = conteo.conInforme
 
   const open = () => mergeMode ? onToggleMerge?.(match.id) : onOpenDetail(match.id)
 
@@ -683,17 +680,17 @@ function MatchRow({
       <td className="px-3 py-2">
         <span
           className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded border whitespace-nowrap ${
-            linkedPlayers.length === 0
+            nVinculados === 0
               ? 'bg-slate-50 text-slate-400 border-slate-200'
-              : linkedWithReport < linkedPlayers.length
+              : linkedWithReport < nVinculados
                 ? 'bg-amber-50 text-amber-700 border-amber-200'
                 : 'bg-violet-50 text-violet-700 border-violet-200'
           }`}
-          title={linkedPlayers.length > 0
-            ? `${linkedWithReport} de ${linkedPlayers.length} jugadores con informe de este partido`
+          title={nVinculados > 0
+            ? `${linkedWithReport} de ${nVinculados} jugadores con informe de este partido`
             : 'Abrir el partido para añadir jugadores'}
         >
-          👤 {linkedPlayers.length > 0 ? `${linkedWithReport}/${linkedPlayers.length}` : '+'}
+          👤 {nVinculados > 0 ? `${linkedWithReport}/${nVinculados}` : '+'}
         </span>
       </td>
       {/* Notas */}
@@ -751,6 +748,11 @@ function FichaCarcasa({ esPanel, onClose, children }: {
     </div>
   )
 }
+
+// Objeto estable para los partidos sin jugadores vinculados: si se creara uno
+// nuevo en cada render, MatchRow se repintaría siempre aunque no cambie nada.
+const SIN_CONTEO = { total: 0, conInforme: 0 }
+const SIN_PARTIDOS: ScoutingMatch[] = []
 
 // ¿Hay sitio para la pantalla partida? (a partir de lg = 1024px)
 function useIsDesktop(minWidth = 1024): boolean {
@@ -5526,9 +5528,14 @@ export function Captacion({
   /** Ficha de partido abierta en ventana */
   const [detailMatchId, setDetailMatchId] = useState<string | null>(null)
   const isDesktop = useIsDesktop()   // en escritorio la ficha va a la derecha, no flotando
+  // La tabla de partidos aparece a partir de sm (640px). Antes las dos vistas
+  // —tarjetas de móvil y tabla— se pintaban SIEMPRE y una se escondía con CSS:
+  // en el ordenador se construían 1.900 tarjetas invisibles en cada render.
+  const isTablaAncha = useIsDesktop(640)
 
   // ── match filters ──
   const [matchSearch, setMatchSearch] = useState('')
+  const matchSearchDeb = useDebounce(matchSearch, 250)
   // Vista de partidos: lista o agenda semanal
   const [matchesView, setMatchesView] = useState<'lista' | 'semana'>(
     () => (sessionStorage.getItem('capt_matches_view') as 'lista' | 'semana') ?? 'lista'
@@ -5566,7 +5573,15 @@ export function Captacion({
   const PAGE_SIZE = 50
   const [page, setPage] = useState(0)
 
-  const panelPlayer = panelPlayerId ? scoutingPlayers.find(p => p.id === panelPlayerId) ?? null : null
+  // Índice id → jugador. Sin esto, cada sitio que necesita «quién es este id»
+  // recorría los 3.700 jugadores enteros, y algunos lo hacían dentro de un map.
+  const playersById = useMemo(() => {
+    const m = new Map<string, ScoutingPlayer>()
+    for (const p of scoutingPlayers) m.set(p.id, p)
+    return m
+  }, [scoutingPlayers])
+
+  const panelPlayer = panelPlayerId ? playersById.get(panelPlayerId) ?? null : null
   const panelReports = useMemo(() => {
     if (!panelPlayerId) return []
     return scoutingReports
@@ -5635,7 +5650,7 @@ export function Captacion({
 
   // ── filtered matches ──
   const filteredMatches = useMemo(() => {
-    const q = matchSearch.toLowerCase().trim()
+    const q = matchSearchDeb.toLowerCase().trim()
     return scoutingMatches.filter(m => {
       if (matchPersonaFilter !== 'all' && !(scoutsByMatch[m.id] ?? []).some(s => s.scout === matchPersonaFilter)) return false
       if (matchCompFilter !== 'all' && m.competition !== matchCompFilter) return false
@@ -5648,7 +5663,49 @@ export function Captacion({
       }
       return true
     })
-  }, [scoutingMatches, scoutsByMatch, matchSearch, matchPersonaFilter, matchCompFilter, matchModeFilter, matchStatusFilter, hideFutureMatches])
+  }, [scoutingMatches, scoutsByMatch, matchSearchDeb, matchPersonaFilter, matchCompFilter, matchModeFilter, matchStatusFilter, hideFutureMatches])
+
+  // Agenda semanal: antes, por cada uno de los 7 días se recorrían y ordenaban
+  // los 1.900 partidos. Ahora se agrupan por fecha una sola vez.
+  const matchesPorFecha = useMemo(() => {
+    const map: Record<string, ScoutingMatch[]> = {}
+    for (const m of filteredMatches) {
+      if (!map[m.date]) map[m.date] = []
+      map[m.date].push(m)
+    }
+    for (const lista of Object.values(map)) {
+      lista.sort((a, b) => (a.time ?? '99').localeCompare(b.time ?? '99'))
+    }
+    return map
+  }, [filteredMatches])
+
+  // El desplegable de competiciones se recalculaba con cada tecla del buscador
+  const competicionesDisponibles = useMemo(
+    () => Array.from(new Set(scoutingMatches.map(m => m.competition).filter(Boolean))).sort(),
+    [scoutingMatches],
+  )
+
+  // Mis partidos pendientes (el aviso 🔔): antes se recorrían los 1.900 en cada
+  // render, y además se construía un texto con TODOS ellos concatenados.
+  const misPendientes = useMemo(
+    () => scoutingMatches.filter(m => {
+      if (m.status === 'visto') return false
+      const mine = (scoutsByMatch[m.id] ?? []).find(s => s.scout === currentProfile.avatar)
+      return !!mine && mine.status !== 'visto'
+    }),
+    [scoutingMatches, scoutsByMatch, currentProfile.avatar],
+  )
+
+  // Partidos por páginas: con 1.900 en pantalla el navegador se atragantaba
+  // solo de pintarlos. Igual que la pestaña Jugadores, que ya iba de 50 en 50.
+  const MATCH_PAGE_SIZE = 60
+  const [matchPage, setMatchPage] = useState(0)
+  useEffect(() => { setMatchPage(0) }, [matchSearchDeb, matchPersonaFilter, matchCompFilter, matchModeFilter, matchStatusFilter, hideFutureMatches])
+  const matchTotalPages = Math.max(1, Math.ceil(filteredMatches.length / MATCH_PAGE_SIZE))
+  const matchesPagina = useMemo(
+    () => filteredMatches.slice(matchPage * MATCH_PAGE_SIZE, (matchPage + 1) * MATCH_PAGE_SIZE),
+    [filteredMatches, matchPage],
+  )
 
   // ── matchPlayers lookup map (avoids O(n*m) scan per row during render) ──
   const matchPlayersByMatchId = useMemo(() => {
@@ -5659,6 +5716,34 @@ export function Captacion({
     }
     return map
   }, [matchPlayers])
+
+  // ── «👤 3/5» de cada fila de Partidos ────────────────────────────────
+  // Antes cada fila recorría los 3.700 jugadores Y los 12.000 informes para
+  // sacar dos números. Con 1.900 partidos en pantalla eran ~30 millones de
+  // vueltas por render, y se repetían con cada tecla del buscador: era la
+  // causa principal de que la pestaña Partidos fuese lenta. Ahora se calcula
+  // una sola vez para todos los partidos, con índices.
+  const conteoPorPartido = useMemo(() => {
+    const idsValidos = new Set(scoutingPlayers.map(p => p.id))
+    const conInforme: Record<string, Set<string>> = {}
+    for (const r of scoutingReports) {
+      if (!r.matchId) continue
+      if (!conInforme[r.matchId]) conInforme[r.matchId] = new Set()
+      conInforme[r.matchId].add(r.playerId)
+    }
+    const map: Record<string, { total: number; conInforme: number }> = {}
+    for (const [matchId, ids] of Object.entries(matchPlayersByMatchId)) {
+      const set = conInforme[matchId]
+      let total = 0, con = 0
+      for (const id of ids) {
+        if (!idsValidos.has(id)) continue
+        total++
+        if (set?.has(id)) con++
+      }
+      map[matchId] = { total, conInforme: con }
+    }
+    return map
+  }, [matchPlayersByMatchId, scoutingPlayers, scoutingReports])
 
   // ── pretemporada: jugadores vistos en partidos de Pretemporada, nacidos >= PRETEMPORADA_MIN_BIRTH_YEAR ──
   const pretemporadaData = useMemo(() => {
@@ -5761,12 +5846,22 @@ export function Captacion({
     return Array.from(set).sort()
   }, [scoutingReports])
 
+  // Ordenar los 12.000 informes es lo caro, y no depende del scout elegido:
+  // se ordena una vez y el filtro solo recorre la lista ya ordenada.
+  const reportsOrdenados = useMemo(
+    () => [...scoutingReports].sort((a, b) => (b.fecha ?? b.createdAt).localeCompare(a.fecha ?? a.createdAt)),
+    [scoutingReports],
+  )
   const recentReports = useMemo(() => {
-    return [...scoutingReports]
-      .sort((a, b) => (b.fecha ?? b.createdAt).localeCompare(a.fecha ?? a.createdAt))
-      .filter(r => reportPersonaFilter === 'all' || r.persona === reportPersonaFilter)
-      .slice(0, 150)
-  }, [scoutingReports, reportPersonaFilter])
+    if (reportPersonaFilter === 'all') return reportsOrdenados.slice(0, 150)
+    const out: ScoutingReport[] = []
+    for (const r of reportsOrdenados) {
+      if (r.persona !== reportPersonaFilter) continue
+      out.push(r)
+      if (out.length === 150) break
+    }
+    return out
+  }, [reportsOrdenados, reportPersonaFilter])
 
   // Partidos candidatos para el informe que se está escribiendo desde la
   // ficha del jugador: primero aquellos a los que ya está vinculado, luego
@@ -6717,7 +6812,7 @@ export function Captacion({
             </div>
             <div className="space-y-2">
               {recentReports.map(r => {
-                const player = scoutingPlayers.find(p => p.id === r.playerId)
+                const player = playersById.get(r.playerId)
                 const rel = relativeDate(r.fecha)
                 return (
                   <div
@@ -6772,23 +6867,18 @@ export function Captacion({
           <div className={detailMatchId && isDesktop ? 'lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(400px,36%)] lg:gap-4 lg:items-start' : ''}>
             <div className="space-y-3 min-w-0">
           {/* Notificación de partidos pendientes */}
-          {(() => {
-            const myPending = scoutingMatches.filter(m => {
-              if (m.status === 'visto') return false
-              const mine = (scoutsByMatch[m.id] ?? []).find(s => s.scout === currentProfile.avatar)
-              return !!mine && mine.status !== 'visto'
-            })
-            if (myPending.length === 0) return null
-            return (
-              <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-sm">
-                <span className="text-amber-500 text-base">🔔</span>
-                <div className="flex-1">
-                  <span className="font-semibold text-amber-800">Tienes {myPending.length} partido{myPending.length > 1 ? 's' : ''} pendiente{myPending.length > 1 ? 's' : ''} de ver</span>
-                  <span className="text-amber-600 ml-2 text-xs">{myPending.map(m => `${m.homeTeam} vs ${m.awayTeam}`).join(' · ')}</span>
-                </div>
+          {misPendientes.length > 0 && (
+            <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-sm">
+              <span className="text-amber-500 text-base">🔔</span>
+              <div className="flex-1 min-w-0">
+                <span className="font-semibold text-amber-800">Tienes {misPendientes.length} partido{misPendientes.length > 1 ? 's' : ''} pendiente{misPendientes.length > 1 ? 's' : ''} de ver</span>
+                <span className="text-amber-600 ml-2 text-xs">
+                  {misPendientes.slice(0, 6).map(m => `${m.homeTeam} vs ${m.awayTeam}`).join(' · ')}
+                  {misPendientes.length > 6 && ` · y ${misPendientes.length - 6} más`}
+                </span>
               </div>
-            )
-          })()}
+            </div>
+          )}
 
           <div className="flex items-center justify-between">
             <div>
@@ -6844,7 +6934,7 @@ export function Captacion({
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-7 gap-1.5">
                   {days.map((d, i) => {
-                    const dayMatches = filteredMatches.filter(m => m.date === d).sort((a, b) => (a.time ?? '99').localeCompare(b.time ?? '99'))
+                    const dayMatches = matchesPorFecha[d] ?? SIN_PARTIDOS
                     const isToday = d === todayISO()
                     return (
                       <div key={d} className={`rounded-lg border p-1.5 min-h-[64px] ${isToday ? 'border-blue-300 bg-blue-50/40' : 'border-slate-200 bg-slate-50/50'}`}>
@@ -6927,7 +7017,7 @@ export function Captacion({
                 className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 text-slate-700"
               >
                 <option value="all">Todas las competiciones</option>
-                {Array.from(new Set(scoutingMatches.map(m => m.competition).filter(Boolean))).sort().map(c => (
+                {competicionesDisponibles.map(c => (
                   <option key={c} value={c!}>{c}</option>
                 ))}
               </select>
@@ -7024,13 +7114,14 @@ export function Captacion({
           ) : (
             matchesView === 'semana' ? null : (
             <>
-              {/* ── Mobile card list (hidden on sm+) ── */}
-              <div className="sm:hidden space-y-2">
-                {filteredMatches.length === 0 ? (
+              {/* ── Tarjetas (solo en móvil: en escritorio ni se construyen) ── */}
+              {!isTablaAncha && (
+              <div className="space-y-2">
+                {matchesPagina.length === 0 ? (
                   <div className="text-center py-10 text-slate-400 text-sm">No hay partidos que coincidan con los filtros</div>
-                ) : filteredMatches.map(m => {
+                ) : matchesPagina.map(m => {
                   const linkedPlayerIds = matchPlayersByMatchId[m.id] ?? []
-                  const linkedPlayers = scoutingPlayers.filter(p => linkedPlayerIds.includes(p.id))
+                  const linkedPlayers = linkedPlayerIds.map(id => playersById.get(id)).filter(Boolean) as ScoutingPlayer[]
                   const isVisto = m.status === 'visto'
                   const isFuture = isFutureMatch(m.date)
                   const day = m.date.slice(8); const mon = MONTHS_ES[parseInt(m.date.slice(5, 7)) - 1]; const yr = m.date.slice(2, 4)
@@ -7117,9 +7208,11 @@ export function Captacion({
                   )
                 })}
               </div>
+              )}
 
-              {/* ── Desktop table (hidden on mobile) ── */}
-              <div className="hidden sm:block bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+              {/* ── Tabla (solo en escritorio) ── */}
+              {isTablaAncha && (
+              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -7138,9 +7231,8 @@ export function Captacion({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {filteredMatches.map(m => {
+                      {matchesPagina.map(m => {
                         const scoutName = personaToName(m.assignedTo, profiles)
-                        const linkedPlayerIds = matchPlayersByMatchId[m.id] ?? []
                         return (
                           <MatchRow
                             key={m.id}
@@ -7150,9 +7242,7 @@ export function Captacion({
                             profiles={profiles}
                             currentProfile={currentProfile}
                             isAdmin={isAdmin}
-                            scoutingPlayers={scoutingPlayers}
-                            linkedPlayerIds={linkedPlayerIds}
-                            scoutingReports={scoutingReports}
+                            conteo={conteoPorPartido[m.id] ?? SIN_CONTEO}
                             onEdit={openEditMatch}
                             onDelete={handleDeleteMatch}
                             onToggleStatus={handleToggleMatchStatus}
@@ -7174,6 +7264,33 @@ export function Captacion({
                   </table>
                 </div>
               </div>
+              )}
+
+              {/* Paginador de partidos */}
+              {filteredMatches.length > MATCH_PAGE_SIZE && (
+                <div className="flex items-center justify-between gap-3 mt-3 text-xs text-slate-500">
+                  <span>
+                    Mostrando {matchPage * MATCH_PAGE_SIZE + 1}–{Math.min((matchPage + 1) * MATCH_PAGE_SIZE, filteredMatches.length)} de {filteredMatches.length} partidos
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setMatchPage(p => Math.max(0, p - 1))}
+                      disabled={matchPage === 0}
+                      className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white font-semibold disabled:opacity-40 hover:border-slate-400"
+                    >
+                      ← Anterior
+                    </button>
+                    <span className="font-semibold text-slate-600">{matchPage + 1} / {matchTotalPages}</span>
+                    <button
+                      onClick={() => setMatchPage(p => Math.min(matchTotalPages - 1, p + 1))}
+                      disabled={matchPage >= matchTotalPages - 1}
+                      className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white font-semibold disabled:opacity-40 hover:border-slate-400"
+                    >
+                      Siguiente →
+                    </button>
+                  </div>
+                </div>
+              )}
             </>
             )
           )}
