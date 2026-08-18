@@ -36,6 +36,9 @@ const CONDITIONS = ['Libre', 'Traspaso', 'Cesión', 'Cesión/Traspaso', 'Traspas
 const NEG_STATUSES = SHARED_NEG_STATUSES
 const STATUS_CONFIG = NEG_STATUS_CONFIG
 
+// Array vacío estable: evita crear uno nuevo en cada render (rompería memo)
+const SIN_NEGOCIACIONES: ClubNegotiation[] = []
+
 const PRIORITY_CONFIG = {
   A: { label: 'A', bg: 'bg-red-100',    text: 'text-red-700',    border: 'border-red-200',    ring: 'ring-red-400' },
   B: { label: 'B', bg: 'bg-amber-100',  text: 'text-amber-700',  border: 'border-amber-200',  ring: 'ring-amber-400' },
@@ -477,6 +480,46 @@ export function Distribution({
     return Array.from(years).sort((a, b) => Number(b) - Number(a))
   }, [seasonEntries, players])
 
+  // ── Índices ─────────────────────────────────────────────────
+  // Antes cada fila de la tabla y cada tarjeta de club recorría el array
+  // entero de negociaciones (miles) varias veces: con 1.400 clubes eran
+  // millones de comparaciones en cada render. Se calculan una sola vez.
+  const playersById = useMemo(() => {
+    const m = new Map<string, Player>()
+    players.forEach(p => m.set(p.id, p))
+    return m
+  }, [players])
+
+  const negsByPlayer = useMemo(() => {
+    const m = new Map<string, ClubNegotiation[]>()
+    negotiations.forEach(n => {
+      const list = m.get(n.playerId)
+      if (list) list.push(n); else m.set(n.playerId, [n])
+    })
+    return m
+  }, [negotiations])
+
+  const negsByClub = useMemo(() => {
+    const m = new Map<string, ClubNegotiation[]>()
+    negotiations.forEach(n => {
+      const list = m.get(n.clubId)
+      if (list) list.push(n); else m.set(n.clubId, [n])
+    })
+    return m
+  }, [negotiations])
+
+  const clubsById = useMemo(() => {
+    const m = new Map<string, Club>()
+    clubs.forEach(c => m.set(c.id, c))
+    return m
+  }, [clubs])
+
+  const entriesByPlayer = useMemo(() => {
+    const m = new Map<string, DistributionEntry>()
+    entries.forEach(e => { if (!m.has(e.playerId)) m.set(e.playerId, e) })
+    return m
+  }, [entries])
+
   const filteredClubs = useMemo(() => {
     let result = clubs
     if (leagueFilter.length > 0) result = result.filter(c => leagueFilter.includes(`${c.league ?? 'Sin liga'}|${c.country ?? ''}`))
@@ -493,7 +536,7 @@ export function Distribution({
     if (staleOnly) {
       const ACTIVE: ClubNegotiation['status'][] = ['pendiente', 'ofrecido', 'interesado', 'negociando']
       result = result.filter(c => {
-        const active = negotiations.filter(n => n.clubId === c.id && ACTIVE.includes(n.status))
+        const active = (negsByClub.get(c.id) ?? SIN_NEGOCIACIONES).filter(n => ACTIVE.includes(n.status))
         if (active.length === 0) return false
         const last = active.reduce<string | undefined>((m, n) => (!m || n.updatedAt > m ? n.updatedAt : m), undefined)
         const days = last ? Math.floor((Date.now() - new Date(last).getTime()) / 86_400_000) : 0
@@ -503,7 +546,7 @@ export function Distribution({
     if (!search) return result
     const q = search.toLowerCase()
     return result.filter(c => c.name.toLowerCase().includes(q) || c.league?.toLowerCase().includes(q))
-  }, [clubs, negotiations, search, leagueFilter, countryFilter, tierFilter, confederationFilter, priorityOnly, hasNeedsOnly, hasContactOnly, clubManagerFilter, staleOnly, contactedFilter])
+  }, [clubs, negotiations, negsByClub, search, leagueFilter, countryFilter, tierFilter, confederationFilter, priorityOnly, hasNeedsOnly, hasContactOnly, clubManagerFilter, staleOnly, contactedFilter])
 
   const sortedLeagues = useMemo(() => {
     // Clave liga+país: "Serie A" de Italia y la de Brasil son entradas distintas
@@ -1069,12 +1112,13 @@ export function Distribution({
                       </thead>
                       <tbody>
                         {(['A', 'B', 'C', 'D'] as const).flatMap(pr => byPriority[pr]).map(entry => {
-                          const player = players.find(p => p.id === entry.playerId)
+                          const player = playersById.get(entry.playerId)
                           if (!player) return null
                           const cfg = PRIORITY_CONFIG[entry.priority]
-                          const negCount = negotiations.filter(n => n.playerId === entry.playerId).length
-                          const activeNegs = negotiations.filter(n => n.playerId === entry.playerId && !['descartado'].includes(n.status))
-                          const hasClosed = negotiations.some(n => n.playerId === entry.playerId && n.status === 'cerrado')
+                          const negsDelJugador = negsByPlayer.get(entry.playerId) ?? []
+                          const negCount = negsDelJugador.length
+                          const activeNegs = negsDelJugador.filter(n => n.status !== 'descartado')
+                          const hasClosed = negsDelJugador.some(n => n.status === 'cerrado')
                           const topNeg = activeNegs.find(n => n.status === 'negociando')
                             ?? activeNegs.find(n => n.status === 'interesado')
                             ?? activeNegs.find(n => n.status === 'ofrecido')
@@ -1683,7 +1727,7 @@ export function Distribution({
                     <ClubCard
                       key={club.id}
                       club={club}
-                      negotiations={negotiations}
+                      negotiations={negsByClub.get(club.id) ?? SIN_NEGOCIACIONES}
                       isSelected={selectedClubId === club.id || activeClubId === club.id}
                       onClick={() => {
                         if (onSelectClub) { onSelectClub(club.id) }
@@ -1729,7 +1773,7 @@ export function Distribution({
                             <ClubCard
                               key={club.id}
                               club={club}
-                              negotiations={negotiations}
+                              negotiations={negsByClub.get(club.id) ?? SIN_NEGOCIACIONES}
                               isSelected={selectedClubId === club.id || activeClubId === club.id}
                               onClick={() => {
                                 if (onSelectClub) { onSelectClub(club.id) }
@@ -1780,7 +1824,7 @@ export function Distribution({
                             <ClubCard
                               key={club.id}
                               club={club}
-                              negotiations={negotiations}
+                              negotiations={negsByClub.get(club.id) ?? SIN_NEGOCIACIONES}
                               isSelected={selectedClubId === club.id || activeClubId === club.id}
                               onClick={() => {
                                 if (onSelectClub) { onSelectClub(club.id) }
@@ -2253,13 +2297,15 @@ export function Distribution({
             )).sort()
 
             // Build enriched deals, applying filters
+            // Los .find() por negociación recorrían players/clubs/entries
+            // enteros en cada tecla del buscador: con índices es O(1) por fila
             const deals = negotiations
-              .map(neg => {
-                const player = players.find(p => p.id === neg.playerId)
-                const club = clubs.find(c => c.id === neg.clubId)
-                const entry = entries.find(e => e.playerId === neg.playerId)
-                return { neg, player, club, entry }
-              })
+              .map(neg => ({
+                neg,
+                player: playersById.get(neg.playerId),
+                club: clubsById.get(neg.clubId),
+                entry: entriesByPlayer.get(neg.playerId),
+              }))
               .filter(({ player, club, neg }) => {
                 if (!player || !club) return false
                 if (!distPlayerIds.has(player.id)) return false
@@ -3239,7 +3285,7 @@ export function Distribution({
               if (!need) return null
               const tier = getClubTier(club.league, club.country)
               const tierCfg = TIER_CONFIG[tier]
-              const offeredToClub = negotiations.filter(n => n.clubId === club.id)
+              const offeredToClub = negsByClub.get(club.id) ?? SIN_NEGOCIACIONES
               // Negs linked to this specific need (by needPosition when set, fallback to position matching for old data)
               const offeredForNeed = offeredToClub.filter(neg => {
                 if (neg.needPosition) return neg.needPosition === need.position
@@ -3399,7 +3445,7 @@ export function Distribution({
             })()}
 
             {selectedClub && (() => {
-              const clubNegsPanel = negotiations.filter(n => n.clubId === selectedClub.id)
+              const clubNegsPanel = negsByClub.get(selectedClub.id) ?? SIN_NEGOCIACIONES
               // when opened from a solicitud, filter by needPosition or fall back to position matching for old data
               const displayedNegs = selectedNeedPosition
                 ? clubNegsPanel.filter(neg => {
@@ -4489,7 +4535,7 @@ function NeedFormInline({ initial, onSave, onCancel }: {
     if (!position) return
     setSaving(true)
     try {
-      await onSave({ position, ageMax: ageMax ? parseInt(ageMax) : undefined, transferBudget: transferBudget || undefined, salaryBudget: salaryBudget || undefined, notes: notes || undefined })
+      await onSave({ position, ageMax: Number.isFinite(parseInt(ageMax)) ? parseInt(ageMax) : undefined, transferBudget: transferBudget || undefined, salaryBudget: salaryBudget || undefined, notes: notes || undefined })
     } finally { setSaving(false) }
   }
 

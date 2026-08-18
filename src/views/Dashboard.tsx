@@ -445,7 +445,13 @@ export function Dashboard({
   const boardCompleted = visibleTasks.filter(t => t.status === 'completada' && matchesPerson(t));
 
   // ── Tasks stats + week nav ──────────────────────────────────
-  const todayStr = new Date().toISOString().slice(0, 10);
+  // Fecha LOCAL, no UTC: con toISOString(), entre las 00:00 y las 2:00 de la
+  // madrugada española "hoy" seguía siendo ayer y las tareas del día no se
+  // marcaban como vencidas.
+  const todayStr = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  })();
   // Week window (driven by weekOffset for the Equipo view)
   const weekMonday = (() => {
     const d = new Date();

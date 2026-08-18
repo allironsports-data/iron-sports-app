@@ -3942,7 +3942,8 @@ function FirmasDetailPanel({
                         )}
                         <span className="text-[10.5px] text-slate-400">{relativeDate(c.date) || fmtDate(c.date)}</span>
                         {(isAdmin || c.authorId === currentProfile.id) && (
-                          <span className="ml-auto flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          // en móvil no hay hover: por debajo de sm los botones se ven siempre
+                          <span className="ml-auto flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                             <button
                               onClick={() => { setEditingCommentId(c.id); setEditingCommentText(c.text) }}
                               aria-label="Editar apunte"
@@ -4819,6 +4820,14 @@ export function Captacion({
   useEffect(() => { sessionStorage.setItem('capt_concl_threshold', String(conclThreshold)) }, [conclThreshold])
 
   // nº de informes «Llamar» por jugador (Firmar legado cuenta como Llamar)
+  // Nº de informes por jugador, calculado una vez: antes cada fila de la
+  // tabla recorría los >10.000 informes (50 filas × 10.000 por tecleo)
+  const reportCountByPlayer = useMemo(() => {
+    const m: Record<string, number> = {}
+    scoutingReports.forEach(r => { m[r.playerId] = (m[r.playerId] ?? 0) + 1 })
+    return m
+  }, [scoutingReports])
+
   const llamarCountByPlayer = useMemo(() => {
     const m: Record<string, number> = {}
     scoutingReports.forEach(r => {
@@ -5128,6 +5137,44 @@ export function Captacion({
       .filter(r => reportPersonaFilter === 'all' || r.persona === reportPersonaFilter)
       .slice(0, 150)
   }, [scoutingReports, reportPersonaFilter])
+
+  // Partidos candidatos para el informe que se está escribiendo desde la
+  // ficha del jugador: primero aquellos a los que ya está vinculado, luego
+  // los de su equipo, siempre los más cercanos en el tiempo. Así el scout
+  // no tiene que buscar el partido a mano (y dejan de nacer informes
+  // huérfanos que luego no salen en la ficha del partido).
+  const reportMatchSuggestions = useMemo(() => {
+    const empty = { list: [] as { m: ScoutingMatch; linked: boolean; days: number }[], auto: null as ScoutingMatch | null }
+    if (!panelPlayer) return empty
+    const hoy = new Date(todayISO()).getTime()
+    const cand = scoutingMatches
+      .map(m => {
+        const t = new Date(m.date).getTime()
+        if (isNaN(t) || t > hoy + 86400000) return null            // partidos aún por jugar, fuera
+        const days = Math.round((hoy - t) / 86400000)
+        if (days > 120) return null                                 // demasiado antiguo para sugerirlo
+        const linked = (matchPlayersByMatchId[m.id] ?? []).includes(panelPlayer.id)
+        const kind = teamMatchKind(m.homeTeam, panelPlayer.team) ?? teamMatchKind(m.awayTeam, panelPlayer.team)
+        if (!linked && kind !== 'exacto') return null
+        return { m, linked, days, score: (linked ? 1000 : 0) - days }
+      })
+      .filter((x): x is { m: ScoutingMatch; linked: boolean; days: number; score: number } => x !== null)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3)
+    // Si ya estaba vinculado a un partido reciente, se da por hecho que el
+    // informe es de ese partido (se puede quitar de un clic)
+    const auto = cand.find(c => c.linked && c.days <= 14)?.m ?? null
+    return { list: cand.map(({ m, linked, days }) => ({ m, linked, days })), auto }
+  }, [panelPlayer, scoutingMatches, matchPlayersByMatchId])
+
+  // Al abrir el formulario, el partido probable viene ya puesto
+  useEffect(() => {
+    if (showAddReportForm && !reportMatchId && reportMatchSuggestions.auto) {
+      setReportMatchId(reportMatchSuggestions.auto.id)
+    }
+    // solo al abrirlo: si el scout lo quita a mano, no se lo volvemos a poner
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showAddReportForm, panelPlayerId])
 
   // ── handlers ──
 
@@ -5733,7 +5780,7 @@ export function Captacion({
                         </td>
                       </tr>
                     ) : paginated.map(p => {
-                      const reportCount = scoutingReports.filter(r => r.playerId === p.id).length
+                      const reportCount = reportCountByPlayer[p.id] ?? 0
                       return (
                         <tr
                           key={p.id}
@@ -6932,6 +6979,36 @@ export function Captacion({
                                     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); handleAddReport() }
                                   }}
                                 />
+                                {/* ¿De qué partido es este informe? Un toque y queda vinculado */}
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Partido</span>
+                                  {reportMatchSuggestions.list.map(({ m, linked, days }) => {
+                                    const sel = reportMatchId === m.id
+                                    return (
+                                      <button
+                                        key={m.id}
+                                        onClick={() => setReportMatchId(sel ? '' : m.id)}
+                                        title={`${m.homeTeam} vs ${m.awayTeam} · ${fmtDate(m.date)}${linked ? ' · ya vinculado a este jugador' : ''}`}
+                                        className={`text-[11px] font-medium rounded-full px-2 py-0.5 border transition-colors ${
+                                          sel
+                                            ? 'bg-violet-600 text-white border-violet-600'
+                                            : 'bg-white text-slate-600 border-slate-200 hover:border-violet-300'
+                                        }`}
+                                      >
+                                        {linked && '✓ '}{m.homeTeam} vs {m.awayTeam}
+                                        <span className={sel ? 'text-white/70' : 'text-slate-400'}> · {days === 0 ? 'hoy' : `hace ${days}d`}</span>
+                                      </button>
+                                    )
+                                  })}
+                                  {reportMatchSuggestions.list.length === 0 && (
+                                    <span className="text-[11px] text-slate-400">Sin partidos recientes de su equipo — búscalo abajo</span>
+                                  )}
+                                </div>
+                                {!reportMatchId && (
+                                  <p className="text-[10.5px] text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1">
+                                    Sin partido: el informe se guarda igual, pero no aparecerá en la ficha del partido.
+                                  </p>
+                                )}
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                   <select
                                     value={reportConclusion}

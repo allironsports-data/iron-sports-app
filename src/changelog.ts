@@ -16,6 +16,19 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-08-18',
+    items: [
+      'Al escribir un informe desde la ficha del jugador, la app te propone el partido: un toque y queda vinculado (y si lo dejas suelto, te avisa de que no saldrá en la ficha del partido)',
+      'Revisión a fondo de la app: tres consultas que se cortaban en 1.000 filas sin avisar (jugadores, tareas y Boulema) ya están paginadas — nada vuelve a desaparecer en silencio',
+      'Las tareas que vencen hoy dejan de aparecer como «vencidas» todo el día: era un lío de husos horarios',
+      'Si algo se rompe al pintar una pantalla, ya no te quedas ante una página en blanco: sale un aviso con botón de recargar',
+      'Distribución y Captación van notablemente más rápidas: las listas grandes ya no recalculan medio millón de comparaciones con cada tecla',
+      'Los jugadores de Captación se sincronizan en vivo: si otro scout cambia una valoración o un contrato, lo ves sin recargar',
+      'En el móvil ya puedes editar y borrar apuntes del pipeline (los botones solo salían al pasar el ratón)',
+      'Contactos avisa de que sus cambios se guardan solo en ese dispositivo, mientras lo pasamos a la base de datos',
+    ],
+  },
+  {
     date: '2026-08-17',
     items: [
       'Overview → Postpartidos: estadísticas de quién hace qué y qué jugadores acumulan más informes postpartido',

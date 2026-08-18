@@ -113,7 +113,10 @@ export function TaskDetailPanel({
     name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
 
   const assignee = profiles.find(p => p.id === (canEdit ? assigneeId : task.assigneeId));
-  const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "completada";
+  // OJO: new Date('2026-08-18') es medianoche UTC = 2:00 de la madrugada en
+  // España, así que una tarea que vence HOY salía "Vencida" todo el día.
+  // Comparando a mediodía local (como ya hace el Dashboard) se arregla.
+  const isOverdue = task.dueDate && new Date(task.dueDate + "T12:00:00") < new Date() && task.status !== "completada";
 
   const priorityBorderColor =
     task.priority === "alta"  ? "#E24B4A" :

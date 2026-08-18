@@ -307,8 +307,7 @@ export default function App() {
         const row = payload.new as Record<string, unknown>
         const playerId = row.player_id as string
         const title = row.title as string
-        // Refresh tasks
-        db.fetchTasks().then((t) => setTasks(t))
+        // (el canal data-sync ya recarga las tareas: no duplicamos la lectura)
         // Check if player is managed by current user
         setPlayers((prev) => {
           const p = prev.find((pl) => pl.id === playerId)
@@ -323,8 +322,7 @@ export default function App() {
         const playerId = row.player_id as string
         const title = row.title as string
         const status = row.status as string
-        // Refresh tasks
-        db.fetchTasks().then((t) => setTasks(t))
+        // (el canal data-sync ya recarga las tareas: no duplicamos la lectura)
         if (status === 'completada') {
           setPlayers((prev) => {
             const p = prev.find((pl) => pl.id === playerId)
@@ -543,6 +541,11 @@ export default function App() {
         debouncedRefetch('scouting_match_scouts', () => db.fetchMatchScouts().then((d) => setMatchScouts(d as ScoutingMatchScout[])).catch(() => {})))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'scouting_reports' }, () =>
         debouncedRefetch('scouting_reports', () => db.fetchScoutingReports().then((d) => setScoutingReports(d as ScoutingReport[])).catch(() => {})))
+      // Los propios jugadores de Captación también los tocan varios a la vez:
+      // assessment, fin de contrato, campograma de mercado… sin esto había que
+      // recargar para ver lo que había cambiado otro scout.
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'scouting_players' }, () =>
+        debouncedRefetch('scouting_players', () => db.fetchScoutingPlayers().then((d) => setScoutingPlayers(d as ScoutingPlayer[])).catch(() => {})))
       .subscribe()
     return () => {
       Object.values(timers).forEach(clearTimeout)

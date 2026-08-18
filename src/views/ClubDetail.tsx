@@ -906,7 +906,7 @@ function NeedForm({ initial, onSave, onCancel }: {
     try {
       await onSave({
         position: position.trim(),
-        ageMax: ageMax ? parseInt(ageMax) : undefined,
+        ageMax: Number.isFinite(parseInt(ageMax)) ? parseInt(ageMax) : undefined,
         transferBudget: transferBudget || undefined,
         salaryBudget: salaryBudget || undefined,
         notes: notes || undefined,

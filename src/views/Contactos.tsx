@@ -371,6 +371,14 @@ export function Contactos({ onBack }: { onBack: () => void }) {
           </button>
           <span className="text-sm font-semibold text-slate-800">Contactos</span>
           <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 text-[11px] font-semibold uppercase tracking-wide">Admin</span>
+          {/* Aviso honesto: esta sección todavía no vive en la base de datos,
+              así que lo que edites aquí no lo ve nadie más ni te sigue al móvil */}
+          <span
+            className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 text-[10.5px] font-semibold"
+            title="Los contactos que añadas o edites se guardan solo en este navegador: no se comparten con el equipo ni aparecen en tu móvil, y se pierden si borras los datos del navegador."
+          >
+            ⚠ Solo en este dispositivo
+          </span>
 
           <div className="flex-1" />
 

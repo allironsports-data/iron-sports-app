@@ -92,12 +92,30 @@ export async function uploadContractPdf(playerId: string, file: File): Promise<s
   return uploadAndSign(`contracts/${playerId}_${Date.now()}.${ext}`, file)
 }
 
+// Un fallo a media carga dejaba la lista corta sin que nadie se enterase:
+// ahora al menos queda en consola con cuántas filas se habían leído.
+function logFetchError(tabla: string, error: unknown, leidas: number) {
+  console.error(`[db] Fallo leyendo ${tabla} (se habían leído ${leidas} filas):`, error)
+}
+
 // ── PLAYERS ──────────────────────────────────────────────────
 
+// ⚠ Supabase corta en 1000 filas SIN avisar: todo fetch de una tabla que
+// pueda crecer va paginado (igual que fetchClubs o fetchScoutingPlayers)
 export async function fetchPlayers(): Promise<Player[]> {
-  const { data, error } = await supabase.from('players').select('*').order('name')
-  if (error) throw error
-  return (data ?? []).map(dbToPlayer)
+  const all: Player[] = []
+  const pageSize = 1000
+  let from = 0
+  while (true) {
+    const { data, error } = await supabase.from('players').select('*').order('name')
+      .range(from, from + pageSize - 1)
+    if (error) throw error
+    const page = (data ?? []).map(dbToPlayer)
+    all.push(...page)
+    if (page.length < pageSize) break
+    from += pageSize
+  }
+  return all
 }
 
 export async function createPlayer(p: Player): Promise<Player> {
@@ -161,11 +179,23 @@ function dbToTask(row: Record<string, unknown>): Task {
 }
 
 export async function fetchTasks(playerId?: string): Promise<Task[]> {
-  let q = supabase.from('tasks').select('*').order('created_at', { ascending: false })
-  if (playerId) q = q.eq('player_id', playerId)
-  const { data, error } = await q
-  if (error) throw error
-  return (data ?? []).map(dbToTask)
+  const all: Task[] = []
+  const pageSize = 1000
+  let from = 0
+  while (true) {
+    // Sin paginar, al pasar de 1000 tareas desaparecían las más antiguas
+    // (van ordenadas por fecha de creación descendente)
+    let q = supabase.from('tasks').select('*').order('created_at', { ascending: false })
+      .range(from, from + pageSize - 1)
+    if (playerId) q = q.eq('player_id', playerId)
+    const { data, error } = await q
+    if (error) throw error
+    const page = (data ?? []).map(dbToTask)
+    all.push(...page)
+    if (page.length < pageSize) break
+    from += pageSize
+  }
+  return all
 }
 
 export async function createTask(t: Task): Promise<Task> {
@@ -836,7 +866,7 @@ export async function fetchMatchPlayers(): Promise<ScoutingMatchPlayer[]> {
         .select('*')
         .order('created_at', { ascending: true })
         .range(from, from + pageSize - 1)
-      if (error) return all
+      if (error) { logFetchError('scouting/partidos', error, all.length); return all }
       const page = (data ?? []).map(dbToMatchPlayer)
       all.push(...page)
       if (page.length < pageSize) break
@@ -897,7 +927,7 @@ export async function fetchMatchScouts(): Promise<ScoutingMatchScout[]> {
         .select('*')
         .order('created_at', { ascending: true })
         .range(from, from + pageSize - 1)
-      if (error) return all
+      if (error) { logFetchError('scouting/partidos', error, all.length); return all }
       const page = (data ?? []).map(dbToMatchScout)
       all.push(...page)
       if (page.length < pageSize) break
@@ -1029,7 +1059,7 @@ export async function fetchScoutingMatches(): Promise<ScoutingMatch[]> {
         .select('*')
         .order('date', { ascending: false })
         .range(from, from + PAGE - 1)
-      if (error) return all.length ? all : [] // table may not exist yet
+      if (error) { logFetchError('tabla opcional (¿migración pendiente?)', error, all.length); return all }
       const rows = (data ?? []).map(dbToScoutingMatch)
       all.push(...rows)
       if (rows.length < PAGE) break   // last page
@@ -1114,7 +1144,7 @@ export async function fetchFirmasEntries(): Promise<FirmasEntry[]> {
       const { data, error } = await supabase
         .from('captacion_firmas').select('*').order('sort_pos')
         .range(from, from + pageSize - 1)
-      if (error) return all.length ? all : []
+      if (error) { logFetchError('tabla opcional (¿migración pendiente?)', error, all.length); return all }
       const page = (data ?? []).map(dbToFirmasEntry)
       all.push(...page)
       if (page.length < pageSize) break
@@ -1274,12 +1304,23 @@ function dbToBoulemaPlayer(row: Record<string, unknown>): BoulemaPlayer {
 
 export async function fetchBoulemaPlayers(): Promise<BoulemaPlayer[]> {
   // la tabla puede no existir aún (migración pendiente)
+  const all: BoulemaPlayer[] = []
+  const pageSize = 1000
+  let from = 0
   try {
-    const { data, error } = await supabase.from('boulema_players').select('*').order('full_name')
-    if (error) return []
-    return (data ?? []).map(dbToBoulemaPlayer)
-  } catch {
-    return []
+    while (true) {
+      const { data, error } = await supabase.from('boulema_players').select('*').order('full_name')
+        .range(from, from + pageSize - 1)
+      if (error) { logFetchError('boulema_players', error, all.length); return all }
+      const page = (data ?? []).map(dbToBoulemaPlayer)
+      all.push(...page)
+      if (page.length < pageSize) break
+      from += pageSize
+    }
+    return all
+  } catch (e) {
+    logFetchError('boulema_players', e, all.length)
+    return all
   }
 }
 
