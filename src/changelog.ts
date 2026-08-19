@@ -21,6 +21,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-08-18',
     items: [
+      'Filtro por zona geográfica en los campogramas: en Conclusiones y en Fin de contrato eliges zona (C. Valenciana, Cat/Ara/Bal, Madrid, Mur/Alm/CLM, Andalucía, Norte, CyL/Nav/Rioja, Canarias, Extremadura o Extranjero) y el campograma se queda solo con esos jugadores',
       'Captación → Partidos va mucho más rápido: la lista va ahora de 60 en 60 (como Jugadores) y el buscador ya no se atasca. La app estaba pintando los 1.900 partidos de golpe, dos veces, y recontando jugadores e informes de cada uno en cada tecla',
       'La agenda semanal y el aviso de partidos pendientes también se calculan una sola vez en lugar de en cada repintado',
       'Nueva conclusión «Visto» al escribir un informe: para cuando lo has visto y no da para concluir. No cuenta como veredicto — ni baja la exigencia del scout ni sale como desacuerdo con otro compañero',

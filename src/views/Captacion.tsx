@@ -19,6 +19,7 @@ import { useToast } from '../hooks/useToast'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import { useDebounce } from '../hooks/useDebounce'
 import { isValidName } from '../lib/validate'
+import { ZONAS, SIN_ZONA, zonaDe } from '../lib/zonas'
 
 type ShowToast = (message: string, variant?: 'success' | 'error' | 'info', action?: { label: string; fn: () => void }) => void
 
@@ -2036,6 +2037,7 @@ function ConclusionesTab({ players, reports, threshold, onThresholdChange, isAdm
   const [genFilter, setGenFilter] = useState<string>('all')
   const [expandedSlots, setExpandedSlots] = useState<Set<string>>(new Set())
   const [showStale, setShowStale] = useState(false)
+  const [zonaFilter, setZonaFilter] = useState<string>('all')
 
   // Informes por jugador (desc por fecha)
   const reportsByPlayer = useMemo(() => {
@@ -2089,9 +2091,23 @@ function ConclusionesTab({ players, reports, threshold, onThresholdChange, isAdm
 
   // ── b) Mapa ─────────────────────────────────────────────────
   const mapPlayers = useMemo(
-    () => players.filter(p => p.assessment === mapAssessment),
-    [players, mapAssessment]
+    () => players.filter(p =>
+      p.assessment === mapAssessment &&
+      (zonaFilter === 'all' || (zonaDe(p.team) ?? SIN_ZONA) === zonaFilter)
+    ),
+    [players, mapAssessment, zonaFilter]
   )
+
+  // Cuántos hay en cada zona con la valoración elegida (para el desplegable)
+  const conteoZonas = useMemo(() => {
+    const m: Record<string, number> = {}
+    for (const p of players) {
+      if (p.assessment !== mapAssessment) continue
+      const z = zonaDe(p.team) ?? SIN_ZONA
+      m[z] = (m[z] ?? 0) + 1
+    }
+    return m
+  }, [players, mapAssessment])
   const genRows = useMemo(() => {
     const gens = new Set<string>()
     mapPlayers.forEach(p => gens.add(p.birthdate ? p.birthdate.slice(0, 4) : '—'))
@@ -2324,7 +2340,33 @@ function ConclusionesTab({ players, reports, threshold, onThresholdChange, isAdm
         <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-center gap-2">
           <h3 className="text-sm font-bold text-slate-800">🗺️ Jugadores en {mapAssessment}</h3>
           <span className="text-xs bg-slate-100 text-slate-600 rounded-full px-2 py-0.5 font-semibold">{mapPlayers.length}</span>
+          {zonaFilter !== 'all' && (
+            <button
+              onClick={() => { setZonaFilter('all'); setSelectedCell(null) }}
+              className="text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5 hover:bg-blue-100"
+              title="Quitar el filtro de zona"
+            >
+              📍 {zonaFilter} ✕
+            </button>
+          )}
           <div className="ml-auto flex flex-wrap items-center gap-1.5">
+            {/* Filtro geográfico: los clubes están agrupados por zona en src/lib/zonas.ts */}
+            <select
+              value={zonaFilter}
+              onChange={e => { setZonaFilter(e.target.value); setSelectedCell(null) }}
+              className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              title="Filtrar por zona geográfica del club"
+            >
+              <option value="all">📍 Todas las zonas</option>
+              {ZONAS.map(z => (
+                <option key={z} value={z} disabled={!conteoZonas[z]}>
+                  {z} ({conteoZonas[z] ?? 0})
+                </option>
+              ))}
+              {!!conteoZonas[SIN_ZONA] && (
+                <option value={SIN_ZONA}>{SIN_ZONA} ({conteoZonas[SIN_ZONA]})</option>
+              )}
+            </select>
             <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
               <button className={segBtn(mapView === 'matriz')} onClick={() => setMapView('matriz')}>Matriz</button>
               <button className={segBtn(mapView === 'campo')} onClick={() => setMapView('campo')}>⚽ Campograma</button>
@@ -2344,7 +2386,9 @@ function ConclusionesTab({ players, reports, threshold, onThresholdChange, isAdm
         </div>
 
         {mapPlayers.length === 0 ? (
-          <p className="text-xs text-slate-400 italic px-4 py-5">No hay jugadores en {mapAssessment}.</p>
+          <p className="text-xs text-slate-400 italic px-4 py-5">
+            No hay jugadores en {mapAssessment}{zonaFilter !== 'all' ? ` en ${zonaFilter}` : ''}.
+          </p>
         ) : mapView === 'matriz' ? (
           <>
             <div className="p-4 overflow-x-auto">
@@ -5000,6 +5044,7 @@ function ContratosTab({ players, firmasEntries, isAdmin, onOpenPlayer, onSetCont
   const [yearSel, setYearSel] = useState<string | null>(null)
   const [q, setQ] = useState('')
   const [assessFilter, setAssessFilter] = useState<'all' | ScoutingAssessment>('all')
+  const [zonaFilter, setZonaFilter] = useState<string>('all')
   const [ligaFilter, setLigaFilter] = useState<Set<string>>(new Set(LIGAS as string[]))
   const [expandedSlots, setExpandedSlots] = useState<Set<string>>(new Set())
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -5062,9 +5107,20 @@ function ContratosTab({ players, firmasEntries, isAdmin, onOpenPlayer, onSetCont
   const shown = useMemo(() => parsed.filter(({ p, year: y }) => {
     if (!ignoreYear && (year === 'sin' ? !!y : year === 'otros' ? (!y || inWindow(y)) : y !== year)) return false
     if (assessFilter !== 'all' && p.assessment !== assessFilter) return false
+    if (zonaFilter !== 'all' && (zonaDe(p.team) ?? SIN_ZONA) !== zonaFilter) return false
     if (nq && !normSearch(`${p.fullName} ${p.team ?? ''} ${p.agency ?? ''}`).includes(nq)) return false
     return true
-  }), [parsed, year, assessFilter, nq, inWindow, ignoreYear])
+  }), [parsed, year, assessFilter, zonaFilter, nq, inWindow, ignoreYear])
+
+  // Zonas presentes en lo que se está mirando (para el desplegable)
+  const conteoZonas = useMemo(() => {
+    const m: Record<string, number> = {}
+    for (const { p } of parsed) {
+      const z = zonaDe(p.team) ?? SIN_ZONA
+      m[z] = (m[z] ?? 0) + 1
+    }
+    return m
+  }, [parsed])
 
   // Reparto por posición del campograma
   const { bySlot, sinPos } = useMemo(() => {
@@ -5256,6 +5312,13 @@ function ContratosTab({ players, firmasEntries, isAdmin, onOpenPlayer, onSetCont
         <select value={assessFilter} onChange={e => setAssessFilter(e.target.value as 'all' | ScoutingAssessment)} className={SELECT_CLS}>
           <option value="all">Todos los estados</option>
           {(['Llamar', 'Basque', 'Seguir', 'Decidir', 'Visto', 'Descartado'] as ScoutingAssessment[]).map(a => <option key={a} value={a}>{a}</option>)}
+        </select>
+        <select value={zonaFilter} onChange={e => setZonaFilter(e.target.value)} className={SELECT_CLS} title="Filtrar por zona geográfica del club">
+          <option value="all">📍 Todas las zonas</option>
+          {ZONAS.map(z => (
+            <option key={z} value={z} disabled={!conteoZonas[z]}>{z} ({conteoZonas[z] ?? 0})</option>
+          ))}
+          {!!conteoZonas[SIN_ZONA] && <option value={SIN_ZONA}>{SIN_ZONA} ({conteoZonas[SIN_ZONA]})</option>}
         </select>
         <div className="relative flex-1 min-w-[140px] max-w-xs">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
