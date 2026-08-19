@@ -19,7 +19,7 @@ import { useToast } from '../hooks/useToast'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import { useDebounce } from '../hooks/useDebounce'
 import { isValidName } from '../lib/validate'
-import { ZONAS, SIN_ZONA, zonaDe, clubBase, type Zona } from '../lib/zonas'
+import { ZONAS, ZONA_CORTA, SIN_ZONA, zonaDe, clubBase, type Zona } from '../lib/zonas'
 
 type ShowToast = (message: string, variant?: 'success' | 'error' | 'info', action?: { label: string; fn: () => void }) => void
 
@@ -5667,6 +5667,23 @@ export function Captacion({
     return m
   }, [scoutingReports])
 
+  // Para la vista ampliada: último informe y estatus en el pipeline
+  const ultimoInformeByPlayer = useMemo(() => {
+    const m: Record<string, string> = {}
+    for (const r of scoutingReports) {
+      const d = r.fecha ?? r.createdAt
+      if (!d) continue
+      if (!m[r.playerId] || d > m[r.playerId]) m[r.playerId] = d
+    }
+    return m
+  }, [scoutingReports])
+
+  const firmasByPlayer = useMemo(() => {
+    const m: Record<string, FirmasEntry> = {}
+    firmasEntries.forEach(e => { if (e.scoutingPlayerId && !m[e.scoutingPlayerId]) m[e.scoutingPlayerId] = e })
+    return m
+  }, [firmasEntries])
+
   const llamarCountByPlayer = useMemo(() => {
     const m: Record<string, number> = {}
     scoutingReports.forEach(r => {
@@ -5706,8 +5723,8 @@ export function Captacion({
   const [posFilter, setPosFilter] = useState<string>('all')
   const [quickAssessId, setQuickAssessId] = useState<string | null>(null)
   // Vista de Jugadores: lista (con panel) o tabla de edición rápida
-  const [jugadoresView, setJugadoresView] = useState<'lista' | 'edicion'>(
-    () => (sessionStorage.getItem('capt_jugadores_view') as 'lista' | 'edicion') ?? 'lista'
+  const [jugadoresView, setJugadoresView] = useState<'lista' | 'ampliada' | 'edicion'>(
+    () => (sessionStorage.getItem('capt_jugadores_view') as 'lista' | 'ampliada' | 'edicion') ?? 'lista'
   )
   useEffect(() => { sessionStorage.setItem('capt_jugadores_view', jugadoresView) }, [jugadoresView])
 
@@ -6704,6 +6721,15 @@ export function Captacion({
                   Lista
                 </button>
                 <button
+                  onClick={() => setJugadoresView('ampliada')}
+                  title="Lista ampliada: agencia, fin de contrato, zona, pipeline y último informe"
+                  className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-colors ${
+                    jugadoresView === 'ampliada' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  ⊞ Ampliada
+                </button>
+                <button
                   onClick={() => setJugadoresView('edicion')}
                   title="Tabla de edición rápida: edita celdas sin abrir cada jugador"
                   className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-colors ${
@@ -6713,6 +6739,15 @@ export function Captacion({
                   ✎ Edición
                 </button>
               </div>
+
+              {/* Zonas de los clubes */}
+              <button
+                onClick={() => setZonasAbierto(true)}
+                title="Zonas de los clubes: asignar o corregir la zona geográfica"
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold border border-slate-200 text-slate-600 rounded-lg hover:border-primary hover:text-primary transition-colors"
+              >
+                📍 <span className="hidden sm:inline">Zonas</span>
+              </button>
 
               {/* Poner al día los equipos de golpe pegando una plantilla */}
               <button
@@ -6735,7 +6770,7 @@ export function Captacion({
           </div>
 
           {/* Table */}
-          <div className="flex-1 max-w-6xl mx-auto w-full px-3 sm:px-6 py-4">
+          <div className={`flex-1 mx-auto w-full px-3 sm:px-6 py-4 ${jugadoresView === 'ampliada' ? 'max-w-[1500px]' : 'max-w-6xl'}`}>
             {/* Chips de filtros activos */}
             {(() => {
               const chips: FilterChip[] = []
@@ -6770,15 +6805,24 @@ export function Captacion({
                       <th className="text-left px-2 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden sm:table-cell">Año nasc.</th>
                       <th className="text-left px-2 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden md:table-cell">Equipo</th>
                       <th className="text-left px-2 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden lg:table-cell">Categoría</th>
+                      {jugadoresView === 'ampliada' && <>
+                        <th className="text-left px-2 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">Agencia</th>
+                        <th className="text-left px-2 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">Fin contrato</th>
+                        <th className="text-left px-2 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">Zona</th>
+                        <th className="text-left px-2 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">Pipeline</th>
+                      </>}
                       <th className="text-left px-2 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">Assessment</th>
                       <th className="text-left px-2 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden sm:table-cell">Informes</th>
+                      {jugadoresView === 'ampliada' && (
+                        <th className="text-left px-2 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">Último</th>
+                      )}
                       <th className="text-right px-3 py-2.5" />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {paginated.length === 0 ? (
                       <tr>
-                        <td colSpan={8}>
+                        <td colSpan={jugadoresView === 'ampliada' ? 13 : 8}>
                           <EmptyState
                             icon={<Users className="w-10 h-10" />}
                             title="No se encontraron jugadores"
@@ -6811,6 +6855,32 @@ export function Captacion({
                           <td className="px-2 py-2.5 text-xs text-slate-500 hidden lg:table-cell">
                             {p.categoria ?? '—'}
                           </td>
+                          {jugadoresView === 'ampliada' && <>
+                            <td className="px-2 py-2.5 text-xs text-slate-600 max-w-[140px] truncate" title={p.agency ?? ''}>
+                              {p.agency || <span className="text-slate-300">—</span>}
+                            </td>
+                            <td className="px-2 py-2.5 text-xs text-slate-600 whitespace-nowrap">
+                              {p.clubContract || <span className="text-slate-300">—</span>}
+                            </td>
+                            <td className="px-2 py-2.5 text-[11px] text-slate-500 max-w-[130px] truncate" title={zonaDe(p.team, clubZonas) ?? 'Sin zona'}>
+                              {zonaDe(p.team, clubZonas)
+                                ? ZONA_CORTA[zonaDe(p.team, clubZonas)!]
+                                : <span className="text-amber-500">sin zona</span>}
+                            </td>
+                            <td className="px-2 py-2.5">
+                              {(() => {
+                                const fe = firmasByPlayer[p.id]
+                                if (!fe) return <span className="text-slate-300 text-xs">—</span>
+                                const cfg = FIRMAS_CONFIG[fe.status]
+                                return (
+                                  <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-px text-[10px] font-bold ${cfg.bg} ${cfg.text} ${cfg.border}`}>
+                                    <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+                                    {cfg.label}
+                                  </span>
+                                )
+                              })()}
+                            </td>
+                          </>}
                           <td className="px-2 py-2.5" onClick={e => e.stopPropagation()}>
                             <div className="relative inline-block">
                               <button
@@ -6859,6 +6929,11 @@ export function Captacion({
                               <span className="text-slate-300 text-xs">—</span>
                             )}
                           </td>
+                          {jugadoresView === 'ampliada' && (
+                            <td className="px-2 py-2.5 text-[11px] text-slate-500 whitespace-nowrap">
+                              {ultimoInformeByPlayer[p.id] ? fmtDate(ultimoInformeByPlayer[p.id]) : <span className="text-slate-300">—</span>}
+                            </td>
+                          )}
                           <td className="px-3 py-2.5 text-right">
                             <ChevronRight className="w-3.5 h-3.5 text-slate-300 inline" />
                           </td>

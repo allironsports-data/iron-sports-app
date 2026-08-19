@@ -21,6 +21,8 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-08-18',
     items: [
+      'Captación → Jugadores: tercera vista «⊞ Ampliada» con agencia, fin de contrato, zona, estatus en el pipeline y fecha del último informe, además de lo de siempre',
+      'Y un botón «📍 Zonas» en esa misma barra para asignar o corregir la zona de cualquier club',
       'Filtro por zona geográfica en los campogramas: en Conclusiones y en Fin de contrato eliges zona (C. Valenciana, Cat/Ara/Bal, Madrid, Mur/Alm/CLM, Andalucía, Norte, CyL/Nav/Rioja, Canarias, Extremadura o Extranjero) y el campograma se queda solo con esos jugadores',
       'Captación → Partidos va mucho más rápido: la lista va ahora de 60 en 60 (como Jugadores) y el buscador ya no se atasca. La app estaba pintando los 1.900 partidos de golpe, dos veces, y recontando jugadores e informes de cada uno en cada tecla',
       'La agenda semanal y el aviso de partidos pendientes también se calculan una sola vez en lugar de en cada repintado',
