@@ -1844,7 +1844,7 @@ function MatchDetailModal({
   scoutingPlayers, linkedPlayerIds, scoutingReports, allMatches, matchPlayersByMatchId,
   onClose, onEdit, onToggleStatus,
   onAddScout, onRemoveScout, onSetScoutStatus, onSetScoutMode,
-  onAddMatchPlayer, onRemoveMatchPlayer, onAddReport, onLinkReportToMatch, onCreateAndLinkPlayer,
+  onAddMatchPlayer, onRemoveMatchPlayer, onAddReport, onLinkReportToMatch, onCreateAndLinkPlayer, onOpenEquipo,
   onFixPlayerTeam, onOpenPlayer, onOpenMatch, showToast,
   variant = 'modal',
 }: {
@@ -1870,6 +1870,8 @@ function MatchDetailModal({
   onAddReport: (r: ScoutingReport) => void
   /** matchId = null → suelta el informe del partido (sin borrarlo) */
   onLinkReportToMatch: (r: ScoutingReport, matchId: string | null) => Promise<void>
+  /** Abrir la ficha de un equipo desde el nombre del partido */
+  onOpenEquipo: (nombre: string) => void
   /** Crea un jugador que no estaba en la BBDD y lo vincula al partido */
   onCreateAndLinkPlayer: (nombre: string, equipo: string, matchId: string) => Promise<void>
   /** Corrige en la BBDD el equipo de un jugador */
@@ -2088,7 +2090,18 @@ function MatchDetailModal({
                 : <span className="text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded font-medium">📹 Vídeo</span>}
             </div>
             <h3 className="mt-1 text-base font-bold text-slate-800 break-words">
-              {match.homeTeam} <span className="text-slate-400 font-medium">vs</span> {match.awayTeam}
+              {/* Los nombres llevan a la ficha del equipo: cobertura, plantilla y sus partidos */}
+              <button
+                onClick={() => onOpenEquipo(match.homeTeam)}
+                title={`Ver la ficha de ${match.homeTeam}`}
+                className="hover:text-primary hover:underline decoration-dotted underline-offset-2"
+              >{match.homeTeam}</button>
+              <span className="text-slate-400 font-medium"> vs </span>
+              <button
+                onClick={() => onOpenEquipo(match.awayTeam)}
+                title={`Ver la ficha de ${match.awayTeam}`}
+                className="hover:text-primary hover:underline decoration-dotted underline-offset-2"
+              >{match.awayTeam}</button>
             </h3>
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
@@ -6850,6 +6863,7 @@ export function Captacion({
         onRemoveMatchPlayer={onRemoveMatchPlayer}
         onAddReport={onAddReport}
         onLinkReportToMatch={handleLinkReportToMatch}
+        onOpenEquipo={(nombre) => { setDetailMatchId(null); setCaptTab('equipos'); abrirJugador(null); setPanelEquipo(nombre.trim()) }}
         onCreateAndLinkPlayer={handleCreateAndLinkPlayer}
         onFixPlayerTeam={handleFixPlayerTeam}
         onOpenPlayer={id => { if (variant === 'modal') setDetailMatchId(null); abrirJugador(id) }}
@@ -8135,9 +8149,11 @@ export function Captacion({
           )}
             </div>
 
-            {/* Ficha del partido, fija al lado de la lista */}
+            {/* Ficha del partido, pegada al lado de la lista pero con scroll
+                propio: antes, si la ficha era más alta que la pantalla, no
+                había forma de llegar al final. */}
             {detailMatchId && isDesktop && (
-              <aside className="hidden lg:block lg:sticky lg:top-4 min-w-0">
+              <aside className="hidden lg:block lg:sticky lg:top-4 min-w-0 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:pr-1">
                 {renderFichaPartido('panel')}
               </aside>
             )}
