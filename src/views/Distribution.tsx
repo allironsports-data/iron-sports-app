@@ -18,6 +18,7 @@ import { useEscapeKey } from '../hooks/useEscapeKey'
 import { isValidName, isValidDate } from '../lib/validate'
 import { POSITIONS, POSITION_CODES, positionLabel, positionEs, needMatchesPlayer, normalizePosition } from '../lib/positions'
 import { TIER_CONFIG, CONFEDERATION_LABELS, getClubTier, getClubConfederation, countryCode3 } from '../lib/clubTiers'
+import { BotonCsv } from '../components/BotonCsv'
 import type { LeagueTier, Confederation } from '../lib/clubTiers'
 import { PlayerClubList, NEG_STATUSES as SHARED_NEG_STATUSES, NEG_STATUS_CONFIG } from '../components/PlayerClubList'
 import { BulkAssignModal } from '../components/BulkAssignModal'
@@ -1798,6 +1799,22 @@ export function Distribution({
                   <SlidersHorizontal className="w-4 h-4" /> Filtros
                   {clubsActiveFilters > 0 && <span className="text-xs">({clubsActiveFilters})</span>}
                 </button>
+                <BotonCsv
+                  nombre="clubes-distribucion"
+                  cabeceras={['Club', 'Liga', 'País', 'Nivel', 'Confederación', 'Encargado', 'Contacto', 'Prioritario', 'Ofrecidos', 'Necesidades', 'Contactado', 'Fecha contacto']}
+                  filas={() => filteredClubs.map(c => [
+                    c.name, c.league ?? '', c.country ?? '',
+                    getClubTier(c.league, c.country),
+                    CONFEDERATION_LABELS[getClubConfederation(c.country)] ?? '',
+                    profiles.find(p => p.avatar === c.aisManager)?.name ?? '',
+                    c.contactPerson ?? '',
+                    c.isPriority ? 'Sí' : '',
+                    (negsByClub.get(c.id) ?? SIN_NEGOCIACIONES).length,
+                    c.needs?.length ?? 0,
+                    c.contacted ? (contactedByNombre(c)) : '',
+                    c.contactedAt ? c.contactedAt.slice(0, 10) : '',
+                  ])}
+                />
                 <button
                   onClick={() => { setClubBulkMode(v => !v); if (clubBulkMode) setClubSelected(new Set()) }}
                   className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${

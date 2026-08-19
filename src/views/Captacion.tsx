@@ -21,6 +21,7 @@ import { useEscapeKey } from '../hooks/useEscapeKey'
 import { useDebounce } from '../hooks/useDebounce'
 import { isValidName } from '../lib/validate'
 import { ZONAS, ZONA_CORTA, SIN_ZONA, zonaDe, clubBase, normEquipo, type Zona } from '../lib/zonas'
+import { BotonCsv } from '../components/BotonCsv'
 
 type ShowToast = (message: string, variant?: 'success' | 'error' | 'info', action?: { label: string; fn: () => void }) => void
 
@@ -1399,6 +1400,15 @@ function EquiposTab({
           />
         </div>
         <span className="text-xs text-slate-400">{visibles.length} equipos</span>
+        <BotonCsv
+          nombre="equipos-control"
+          cabeceras={['Equipo', 'Club', 'Zona', 'Categoría', 'Relevante', 'Cubierto', 'Jugadores', 'Informes', 'Partidos temporada', 'Partidos total', 'Último partido']}
+          filas={() => visibles.map(f => [
+            f.nombre, f.club, f.zona, f.categoria,
+            f.relevante ? 'Sí' : '', f.cubierto ? 'Sí' : '',
+            f.jugadores, f.informes, f.partidos, f.partidosHist, f.ultimoPartido ?? '',
+          ])}
+        />
       </div>
 
       {/* ── Lista ── */}
@@ -6167,6 +6177,17 @@ function ContratosTab({ players, firmasEntries, isAdmin, onOpenPlayer, onSetCont
           {!!conteoZonas[SIN_ZONA] && <option value={SIN_ZONA}>{SIN_ZONA} ({conteoZonas[SIN_ZONA]})</option>}
         </select>
         <button onClick={onAbrirZonas} title="Cambiar la zona de un club" className={SELECT_CLS}>⚙</button>
+        <BotonCsv
+          nombre="fin-de-contrato"
+          cabeceras={['Jugador', 'Posición', 'Año nac.', 'Equipo', 'Liga', 'Zona', 'Agencia', 'Fin contrato', 'Año', 'Assessment', 'Pipeline']}
+          filas={() => shown.map(({ p, year, liga }) => [
+            p.fullName, p.position1 ?? '', birthYearFromBirthdate(p.birthdate),
+            p.team ?? '', liga ?? '', zonaDe(p.team, clubZonas) ?? '',
+            p.agency ?? '', p.clubContract ?? '', year ?? '',
+            p.assessment ?? '',
+            firmasByPlayer[p.id] ? FIRMAS_CONFIG[firmasByPlayer[p.id].status].label : '',
+          ])}
+        />
         <div className="relative flex-1 min-w-[140px] max-w-xs">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
           <input
@@ -7500,6 +7521,21 @@ export function Captacion({
 
               <div className="flex-1" />
               <span className="text-xs text-slate-400">{filtered.length} jugadores</span>
+              <BotonCsv
+                nombre="jugadores-captacion"
+                cabeceras={['Jugador', 'Posición 1', 'Posición 2', 'Año nac.', 'Fecha nac.', 'Equipo', 'Categoría', 'Zona', 'Assessment', 'Agencia', 'Fin contrato', 'Pipeline', 'Nacionalidad', 'Pie', 'Informes', 'Último informe']}
+                filas={() => filtered.map(p => [
+                  p.fullName, p.position1 ?? '', p.position2 ?? '',
+                  birthYearFromBirthdate(p.birthdate), p.birthdate ?? '',
+                  p.team ?? '', p.categoria ?? '',
+                  zonaDe(p.team, clubZonas) ?? '',
+                  p.assessment ?? '', p.agency ?? '', p.clubContract ?? '',
+                  firmasByPlayer[p.id] ? FIRMAS_CONFIG[firmasByPlayer[p.id].status].label : '',
+                  p.nationality ?? '', p.foot ?? '',
+                  reportCountByPlayer[p.id] ?? 0,
+                  ultimoInformeByPlayer[p.id]?.slice(0, 10) ?? '',
+                ])}
+              />
 
               {/* Vista: lista | edición rápida */}
               <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
@@ -7878,6 +7914,22 @@ export function Captacion({
                 <FileText className="w-4 h-4 text-slate-400" />
                 Últimos informes ({recentReports.length})
               </h3>
+              <BotonCsv
+                nombre="informes-captacion"
+                cabeceras={['Fecha', 'Jugador', 'Equipo', 'Scout', 'Conclusión', 'Partido', 'Texto']}
+                filas={() => recentReports.map(r => {
+                  const p = playersById.get(r.playerId)
+                  const m = r.matchId ? scoutingMatches.find(x => x.id === r.matchId) : undefined
+                  return [
+                    (r.fecha ?? r.createdAt ?? '').slice(0, 10),
+                    p?.fullName ?? '', p?.team ?? '',
+                    personaToName(r.persona, profiles) || r.persona || '',
+                    normConclusion(r.conclusion) ?? '',
+                    m ? `${m.homeTeam} - ${m.awayTeam}` : '',
+                    r.texto ?? '',
+                  ]
+                })}
+              />
               {/* Persona filter */}
               {reportPersonas.length > 0 && (
                 <select
@@ -8352,6 +8404,20 @@ export function Captacion({
                   <span>
                     Mostrando {matchPage * MATCH_PAGE_SIZE + 1}–{Math.min((matchPage + 1) * MATCH_PAGE_SIZE, filteredMatches.length)} de {filteredMatches.length} partidos
                   </span>
+                  <BotonCsv
+                    nombre="partidos-captacion"
+                    cabeceras={['Fecha', 'Hora', 'Local', 'Visitante', 'Competición', 'Modo', 'Estado', 'Scouts', 'Jugadores vinculados', 'Con informe', 'Notas']}
+                    filas={() => filteredMatches.map(m => {
+                      const c = conteoPorPartido[m.id] ?? SIN_CONTEO
+                      return [
+                        m.date, m.time ?? '', m.homeTeam, m.awayTeam, m.competition ?? '',
+                        m.viewMode === 'campo' ? 'Campo' : 'Vídeo',
+                        m.status === 'visto' ? 'Visto' : 'Pendiente',
+                        (scoutsByMatch[m.id] ?? []).map(x => x.scout).join(', '),
+                        c.total, c.conInforme, m.notes ?? '',
+                      ]
+                    })}
+                  />
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setMatchPage(p => Math.max(0, p - 1))}
