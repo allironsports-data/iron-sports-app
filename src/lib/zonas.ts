@@ -61,7 +61,7 @@ const POR_ZONA: Record<Zona, string[]> = {
     'villarreal roda', 'roda', 'villarrea cad roda', 'castellon', 'elche', 'celtic elche',
     'hercules', 'eldense', 'eldensw', 'elda', 'torrent', 'patacona', 'alboraya', 'alcoyano',
     'alzira', 'kelme', 'torrellano', 'moncadense', 'intercity', 'orihuela', 'la nucia',
-    'torre levante', 'jove espanol', 'quart', 'ud vall d uxo', 'ud vall d uixo', 'saguntino',
+    'torre levante', 'jove espanol', 'quart', 'rumbo', 'el rumbo', 'primer toque', 'historics', 'ud vall d uxo', 'ud vall d uixo', 'saguntino',
     'almassera', 'racing algemesi', 'nou jove',
   ],
   'Catalunya, Aragón y Baleares': [
@@ -73,7 +73,7 @@ const POR_ZONA: Record<Zona, string[]> = {
     'zaragoza', 'racing zaragoza', 'huesca', 'barbastro', 'teruel', 'ejea', 'utebo', 'tarazona',
     'penya arrabal',
     'mallorca', 'ibiza', 'sd ibiza', 'ibiza islas pitiusas', 'atletico baleares', 'balears',
-    'poblense', 'manacor', 'menorca', 'porreres', 'andratx', 'constancia', 'penya bons aires',
+    'poblense', 'manacor', 'menorca', 'san francisco', 'porreres', 'andratx', 'constancia', 'penya bons aires',
   ],
   'Madrid': [
     'real madrid', 'atletico madrid', 'getafe', 'leganes', 'rayo vallecano', 'rayo vall', 'rayo',
@@ -85,13 +85,13 @@ const POR_ZONA: Record<Zona, string[]> = {
     'cieza', 'pinatar', 'deportiva minera',
     'almeria', 'la canada',
     'albacete', 'atletico albacete', 'guadalajara', 'talavera', 'talavera de la reina', 'toledo',
-    'illescas', 'conquense', 'puertollano',
+    'illescas', 'conquense', 'puertollano', 'flecha negra',
   ],
   'Resto de Andalucía': [
     'betis', 'sevilla', 'cadiz', 'granada', 'malaga', 'cordoba', 'recreativo',
     'recreativo huelva', 'linense', 'atletico sanluqueno', 'sanluqueno', 'algeciras', 'marbella',
     'antequera', 'juventud torremolinos', 'torremolinos', 'xerez', 'xerez cd', 'linares', 'jaen',
-    'antoniano', 'coria', 'san fernando', 'puente genil', 'pozoblanco', 'estepona', 'alhaurino',
+    'antoniano', 'coria', 'san fernando', 'calavera', 'puente genil', 'pozoblanco', 'estepona', 'alhaurino',
     'puerto malagueno', 'cd san roque', 'ceuta', 'melilla',
   ],
   'Asturias, Galicia, León, Cantabria y Euskadi': [
@@ -139,11 +139,20 @@ const ZONA_POR_CLUB: Record<string, Zona> = (() => {
   return m
 })()
 
-/** Zona de un equipo, o null si ese club todavía no está clasificado */
-export function zonaDe(equipo?: string): Zona | null {
+/**
+ * Zona de un equipo, o null si ese club todavía no está clasificado.
+ * `correcciones` son las zonas puestas a mano desde la app (tabla
+ * scouting_club_zonas), y mandan sobre la tabla de aquí arriba.
+ */
+export function zonaDe(equipo?: string, correcciones?: Record<string, Zona>): Zona | null {
   const base = clubBase(equipo)
   if (!base) return null
-  return ZONA_POR_CLUB[base] ?? null
+  return correcciones?.[base] ?? ZONA_POR_CLUB[base] ?? null
+}
+
+/** ¿Esta zona es una de las válidas? (para leer sin miedo lo que venga de la BBDD) */
+export function esZona(z?: string | null): z is Zona {
+  return !!z && (ZONAS as readonly string[]).includes(z)
 }
 
 export const SIN_ZONA = 'Sin zona' as const

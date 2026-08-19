@@ -1578,3 +1578,33 @@ export async function fetchActivitiesByAuthor(authorId: string): Promise<PlayerA
   if (error) throw error
   return (data ?? []).map(row => dbToPlayerActivity(row as Record<string, unknown>))
 }
+
+// ── ZONAS DE CLUBES ──────────────────────────────────────────────────
+// La app trae una clasificación por defecto (src/lib/zonas.ts). Aquí solo
+// viven las correcciones hechas a mano y los clubes nuevos.
+
+export interface ClubZona { club: string; nombre?: string; zona: string }
+
+export async function fetchClubZonas(): Promise<ClubZona[]> {
+  try {
+    const { data, error } = await supabase.from('scouting_club_zonas').select('club, nombre, zona')
+    if (error) { logFetchError('zonas de clubes (¿migración pendiente?)', error, 0); return [] }
+    return (data ?? []) as ClubZona[]
+  } catch {
+    return []
+  }
+}
+
+/** Guarda (o cambia) la zona de un club. `zona = null` vuelve a la de por defecto. */
+export async function setClubZona(club: string, nombre: string, zona: string | null, quien?: string): Promise<void> {
+  if (!zona) {
+    const { error } = await supabase.from('scouting_club_zonas').delete().eq('club', club)
+    if (error) throw error
+    return
+  }
+  const { error } = await supabase.from('scouting_club_zonas').upsert(
+    { club, nombre, zona, updated_at: new Date().toISOString(), updated_by: quien ?? null },
+    { onConflict: 'club' },
+  )
+  if (error) throw error
+}

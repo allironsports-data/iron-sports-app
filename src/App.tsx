@@ -7,6 +7,7 @@ import type { Profile } from './contexts/AuthContext'
 import { LoginScreen } from './views/LoginScreen'
 import { SavingIndicator, BottomNav, GlobalSearch, SystemNotifPrompt, fireSystemNotification } from './components/GlobalExtras'
 import { BUILD_ID } from './changelog'
+import { esZona, type Zona } from './lib/zonas'
 import type { ReactNode } from 'react'
 import type { Club, DistributionEntry, ClubNegotiation } from './types'
 
@@ -38,6 +39,13 @@ const FIRMAS_STATUS_LABEL: Record<string, string> = {
   frio: 'Frío', decidir: 'Decidir', firmado: 'Firmado',
 }
 
+// Las zonas llegan como filas; dentro de la app se usan como diccionario
+function zonasAMapa(filas: db.ClubZona[]): Record<string, Zona> {
+  const m: Record<string, Zona> = {}
+  for (const f of filas) if (esZona(f.zona)) m[f.club] = f.zona
+  return m
+}
+
 const fmtShortDate = (iso: string) =>
   new Date(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
 
@@ -47,7 +55,7 @@ const SYNC_TABLES = [
   'club_negotiations', 'distribution_entries', 'clubs', 'players', 'tasks',
   'member_status', 'postpartidos', 'captacion_firmas',
   'scouting_matches', 'scouting_match_players', 'scouting_match_scouts',
-  'scouting_reports', 'scouting_players',
+  'scouting_reports', 'scouting_players', 'scouting_club_zonas',
 ] as const
 
 function Spinner() {
@@ -119,6 +127,8 @@ export default function App() {
   const [boulemaPeticiones, setBoulemaPeticiones] = useState<BoulemaPeticion[]>([])
   const [firmasEntries, setFirmasEntries] = useState<FirmasEntry[]>([])
   const [boulemaPlayers, setBoulemaPlayers] = useState<BoulemaPlayer[]>([])
+  // Correcciones de zona hechas a mano (la clasificación por defecto vive en src/lib/zonas.ts)
+  const [clubZonas, setClubZonas] = useState<Record<string, Zona>>({})
 
   // Guard anti-bucle de la sincronización Firmar ⇄ Tareas.
   // DEBE declararse aquí arriba: es un hook y no puede ir después de los
@@ -275,7 +285,8 @@ export default function App() {
         db.fetchPostpartidos().catch(() => [] as Postpartido[]),
         db.fetchFirmasEntries().catch(() => [] as FirmasEntry[]),
         db.fetchBoulemaPlayers().catch(() => [] as BoulemaPlayer[]),
-      ]).then(([cl, de, ng, sp, sr, sm, mp, msc, bp, ms, pp, fe, bpl]) => {
+        db.fetchClubZonas().catch(() => [] as db.ClubZona[]),
+      ]).then(([cl, de, ng, sp, sr, sm, mp, msc, bp, ms, pp, fe, bpl, cz]) => {
         if (cancelled) return
         setClubs(cl as Club[])
         setDistEntries(de as DistributionEntry[])
@@ -290,6 +301,7 @@ export default function App() {
         setPostpartidos(pp as Postpartido[])
         setFirmasEntries(fe as FirmasEntry[])
         setBoulemaPlayers(bpl as BoulemaPlayer[])
+        setClubZonas(zonasAMapa(cz as db.ClubZona[]))
         setPhase2Loading(false)
       }).catch((err: unknown) => {
         // No bloquea la app: Distribución/Captación mostrarán listas vacías
@@ -536,6 +548,7 @@ export default function App() {
       // Los propios jugadores de Captación también los tocan varios a la vez:
       // valoración, fin de contrato, campograma de mercado…
       case 'scouting_players':      db.fetchScoutingPlayers().then((d) => setScoutingPlayers(d as ScoutingPlayer[])).catch(ignora); break
+      case 'scouting_club_zonas':   db.fetchClubZonas().then((d) => setClubZonas(zonasAMapa(d))).catch(ignora); break
     }
   }, [])
 
@@ -818,6 +831,16 @@ export default function App() {
   }
   const handleUpdateScoutingPlayer = (p: ScoutingPlayer) => {
     setScoutingPlayers(prev => prev.map(x => x.id === p.id ? p : x))
+  }
+  /** Cambiar a mano la zona de un club (zona = null vuelve a la de por defecto) */
+  const handleSetClubZona = async (club: string, nombre: string, zona: Zona | null) => {
+    await db.setClubZona(club, nombre, zona, profile?.avatar)
+    setClubZonas(prev => {
+      const next = { ...prev }
+      if (zona) next[club] = zona
+      else delete next[club]
+      return next
+    })
   }
   const handleDeleteScoutingPlayer = (id: string) => {
     setScoutingPlayers(prev => prev.filter(x => x.id !== id))
@@ -1264,6 +1287,8 @@ export default function App() {
         onCreateFirmasEntry={handleCreateFirmasEntry}
         onUpdateFirmasEntry={handleUpdateFirmasEntry}
         onDeleteFirmasEntry={handleDeleteFirmasEntry}
+        clubZonas={clubZonas}
+        onSetClubZona={handleSetClubZona}
         restricted={!!profile.captacion_only}
       />
     )

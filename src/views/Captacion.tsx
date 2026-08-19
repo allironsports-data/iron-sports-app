@@ -19,7 +19,7 @@ import { useToast } from '../hooks/useToast'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import { useDebounce } from '../hooks/useDebounce'
 import { isValidName } from '../lib/validate'
-import { ZONAS, SIN_ZONA, zonaDe } from '../lib/zonas'
+import { ZONAS, SIN_ZONA, zonaDe, clubBase, type Zona } from '../lib/zonas'
 
 type ShowToast = (message: string, variant?: 'success' | 'error' | 'info', action?: { label: string; fn: () => void }) => void
 
@@ -769,6 +769,136 @@ function useIsDesktop(minWidth = 1024): boolean {
   return is
 }
 
+
+// ── Zonas de los clubes ──────────────────────────────────────────────
+// La zona va a nivel de CLUB, no de jugador: si cambias «Villarreal», te
+// cambian de golpe el primer equipo, el B y todos los juveniles, y los
+// fichajes futuros ya nacen con su zona. Se guarda en la base de datos
+// (tabla scouting_club_zonas), así que lo que cambia uno lo ven todos.
+function ZonasPanel({ players, clubZonas, onSetClubZona, onClose, showToast }: {
+  players: ScoutingPlayer[]
+  clubZonas: Record<string, Zona>
+  onSetClubZona: (club: string, nombre: string, zona: Zona | null) => Promise<void>
+  onClose: () => void
+  showToast: ShowToast
+}) {
+  const [q, setQ] = useState('')
+  const [soloSinZona, setSoloSinZona] = useState(false)
+  const [guardando, setGuardando] = useState<string | null>(null)
+  useEscapeKey(onClose)
+
+  // Un club por cada equipo distinto de la BBDD, con cuántos jugadores tiene
+  const clubes = useMemo(() => {
+    const m = new Map<string, { club: string; nombre: string; n: number }>()
+    for (const p of players) {
+      const club = clubBase(p.team)
+      if (!club) continue
+      const e = m.get(club)
+      if (e) e.n++
+      else m.set(club, { club, nombre: (p.team ?? '').trim(), n: 1 })
+    }
+    return [...m.values()].sort((a, b) => b.n - a.n || a.club.localeCompare(b.club))
+  }, [players])
+
+  const nq = normSearch(q)
+  const visibles = useMemo(() => clubes.filter(c => {
+    const zona = zonaDe(c.nombre, clubZonas)
+    if (soloSinZona && zona) return false
+    if (nq && !normSearch(`${c.club} ${c.nombre}`).includes(nq)) return false
+    return true
+  }), [clubes, clubZonas, soloSinZona, nq])
+
+  const sinZona = useMemo(
+    () => clubes.filter(c => !zonaDe(c.nombre, clubZonas)).length,
+    [clubes, clubZonas],
+  )
+
+  async function cambiar(c: { club: string; nombre: string }, valor: string) {
+    setGuardando(c.club)
+    try {
+      await onSetClubZona(c.club, c.nombre, valor === '' ? null : valor as Zona)
+      showToast(valor ? `${c.nombre}: ${valor}` : `${c.nombre}: vuelve a la zona por defecto`)
+    } catch {
+      showToast('No se ha podido guardar la zona', 'error')
+    } finally {
+      setGuardando(null)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center p-4 overflow-y-auto" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl mt-8 mb-8" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+          <h3 className="text-sm font-bold text-slate-800">📍 Zonas de los clubes</h3>
+          <span className="text-[11px] text-slate-400">{clubes.length} clubes · {sinZona} sin zona</span>
+          <button onClick={onClose} className="ml-auto text-slate-400 hover:text-slate-600" aria-label="Cerrar">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="px-5 py-3 border-b border-slate-100 space-y-2">
+          <p className="text-[11px] text-slate-500">
+            La zona es del club, no del jugador: al cambiar «Villarreal» cambian con él el filial y todos
+            los juveniles. Se guarda en la base de datos y lo ve todo el equipo.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 min-w-[160px]">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+              <input
+                value={q}
+                onChange={e => setQ(e.target.value)}
+                placeholder="Buscar club…"
+                autoFocus
+                className="w-full pl-8 pr-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              />
+            </div>
+            <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 cursor-pointer">
+              <input type="checkbox" checked={soloSinZona} onChange={e => setSoloSinZona(e.target.checked)} className="accent-blue-600" />
+              Solo los que no tienen zona
+            </label>
+          </div>
+        </div>
+
+        <div className="max-h-[55vh] overflow-y-auto divide-y divide-slate-50">
+          {visibles.length === 0 && (
+            <p className="text-xs text-slate-400 italic px-5 py-6 text-center">No hay clubes que coincidan.</p>
+          )}
+          {visibles.slice(0, 200).map(c => {
+            const zona = zonaDe(c.nombre, clubZonas)
+            const aMano = !!clubZonas[c.club]
+            return (
+              <div key={c.club} className="flex items-center gap-2 px-5 py-2">
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-semibold text-slate-700 truncate">
+                    {c.nombre}
+                    {aMano && <span className="ml-1.5 text-[9px] font-bold text-blue-600 uppercase">a mano</span>}
+                  </div>
+                  <div className="text-[10px] text-slate-400">{c.n} jugador{c.n !== 1 ? 'es' : ''}</div>
+                </div>
+                <select
+                  value={zona ?? ''}
+                  disabled={guardando === c.club}
+                  onChange={e => void cambiar(c, e.target.value)}
+                  className={`text-[11px] border rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 max-w-[230px] ${
+                    zona ? 'border-slate-200 text-slate-700' : 'border-amber-300 bg-amber-50 text-amber-700'
+                  }`}
+                >
+                  <option value="">— sin zona —</option>
+                  {ZONAS.map(z => <option key={z} value={z}>{z}</option>)}
+                </select>
+              </div>
+            )
+          })}
+          {visibles.length > 200 && (
+            <p className="text-[11px] text-slate-400 italic px-5 py-3 text-center">
+              Se muestran 200 de {visibles.length}. Busca por nombre para llegar al resto.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // ── PegarAlineacion ──────────────────────────────────────────────────
 // Copias la alineación de Sofascore / Flashscore / BeSoccer, la pegas y la
@@ -2020,7 +2150,7 @@ function MergeMatchesModal({ matches, scoutsByMatch, matchPlayersByMatchId, scou
 
 const MAP_ASSESSMENTS: ScoutingAssessment[] = ['Llamar', 'Seguir', 'Decidir']
 
-function ConclusionesTab({ players, reports, threshold, onThresholdChange, isAdmin, onSetCandidateSeen, onOpenPlayer }: {
+function ConclusionesTab({ players, reports, threshold, onThresholdChange, isAdmin, onSetCandidateSeen, onOpenPlayer, clubZonas, onAbrirZonas }: {
   players: ScoutingPlayer[]
   reports: ScoutingReport[]
   threshold: number
@@ -2028,6 +2158,8 @@ function ConclusionesTab({ players, reports, threshold, onThresholdChange, isAdm
   isAdmin: boolean
   onSetCandidateSeen: (p: ScoutingPlayer, seenCount?: number) => Promise<void>
   onOpenPlayer: (id: string) => void
+  clubZonas: Record<string, Zona>
+  onAbrirZonas: () => void
 }) {
   const [mapAssessment, setMapAssessment] = useState<ScoutingAssessment>('Llamar')
   const [showHidden, setShowHidden] = useState(false)
@@ -2093,9 +2225,9 @@ function ConclusionesTab({ players, reports, threshold, onThresholdChange, isAdm
   const mapPlayers = useMemo(
     () => players.filter(p =>
       p.assessment === mapAssessment &&
-      (zonaFilter === 'all' || (zonaDe(p.team) ?? SIN_ZONA) === zonaFilter)
+      (zonaFilter === 'all' || (zonaDe(p.team, clubZonas) ?? SIN_ZONA) === zonaFilter)
     ),
-    [players, mapAssessment, zonaFilter]
+    [players, mapAssessment, zonaFilter, clubZonas]
   )
 
   // Cuántos hay en cada zona con la valoración elegida (para el desplegable)
@@ -2103,11 +2235,11 @@ function ConclusionesTab({ players, reports, threshold, onThresholdChange, isAdm
     const m: Record<string, number> = {}
     for (const p of players) {
       if (p.assessment !== mapAssessment) continue
-      const z = zonaDe(p.team) ?? SIN_ZONA
+      const z = zonaDe(p.team, clubZonas) ?? SIN_ZONA
       m[z] = (m[z] ?? 0) + 1
     }
     return m
-  }, [players, mapAssessment])
+  }, [players, mapAssessment, clubZonas])
   const genRows = useMemo(() => {
     const gens = new Set<string>()
     mapPlayers.forEach(p => gens.add(p.birthdate ? p.birthdate.slice(0, 4) : '—'))
@@ -2367,6 +2499,11 @@ function ConclusionesTab({ players, reports, threshold, onThresholdChange, isAdm
                 <option value={SIN_ZONA}>{SIN_ZONA} ({conteoZonas[SIN_ZONA]})</option>
               )}
             </select>
+            <button
+              onClick={onAbrirZonas}
+              title="Cambiar la zona de un club"
+              className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-500 hover:text-slate-700 hover:border-slate-400"
+            >⚙</button>
             <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
               <button className={segBtn(mapView === 'matriz')} onClick={() => setMapView('matriz')}>Matriz</button>
               <button className={segBtn(mapView === 'campo')} onClick={() => setMapView('campo')}>⚽ Campograma</button>
@@ -4863,6 +5000,9 @@ interface Props {
   onOpenFirmasEntryConsumed?: () => void
   /** Cuenta "solo Captación": oculta el resto de secciones y deja solo Jugadores, Partidos e Informes */
   restricted?: boolean
+  /** Zonas de club corregidas a mano (mandan sobre la clasificación por defecto) */
+  clubZonas: Record<string, Zona>
+  onSetClubZona: (club: string, nombre: string, zona: Zona | null) => Promise<void>
   /** Para los avisos del pipeline Firmar y el alta en Mantenimiento al firmar */
   players: Player[]
   onCreatePlayer: (p: Player) => Promise<Player>
@@ -5031,13 +5171,15 @@ function parseContract(s?: string): { date: Date | null; year: string | null } {
   return { date: null, year: null }
 }
 
-function ContratosTab({ players, firmasEntries, isAdmin, onOpenPlayer, onSetContract, onToggleMarketMap }: {
+function ContratosTab({ players, firmasEntries, isAdmin, onOpenPlayer, onSetContract, onToggleMarketMap, clubZonas, onAbrirZonas }: {
   players: ScoutingPlayer[]
   firmasEntries: FirmasEntry[]
   isAdmin: boolean
   onOpenPlayer: (id: string) => void
   onSetContract: (p: ScoutingPlayer, value: string) => Promise<void>
   onToggleMarketMap: (p: ScoutingPlayer, value: boolean) => Promise<void>
+  clubZonas: Record<string, Zona>
+  onAbrirZonas: () => void
 }) {
   const [view, setView] = useState<'campo' | 'lista'>('lista')
   const [source, setSource] = useState<'mapa' | 'todos'>('mapa')
@@ -5107,20 +5249,20 @@ function ContratosTab({ players, firmasEntries, isAdmin, onOpenPlayer, onSetCont
   const shown = useMemo(() => parsed.filter(({ p, year: y }) => {
     if (!ignoreYear && (year === 'sin' ? !!y : year === 'otros' ? (!y || inWindow(y)) : y !== year)) return false
     if (assessFilter !== 'all' && p.assessment !== assessFilter) return false
-    if (zonaFilter !== 'all' && (zonaDe(p.team) ?? SIN_ZONA) !== zonaFilter) return false
+    if (zonaFilter !== 'all' && (zonaDe(p.team, clubZonas) ?? SIN_ZONA) !== zonaFilter) return false
     if (nq && !normSearch(`${p.fullName} ${p.team ?? ''} ${p.agency ?? ''}`).includes(nq)) return false
     return true
-  }), [parsed, year, assessFilter, zonaFilter, nq, inWindow, ignoreYear])
+  }), [parsed, year, assessFilter, zonaFilter, nq, inWindow, ignoreYear, clubZonas])
 
   // Zonas presentes en lo que se está mirando (para el desplegable)
   const conteoZonas = useMemo(() => {
     const m: Record<string, number> = {}
     for (const { p } of parsed) {
-      const z = zonaDe(p.team) ?? SIN_ZONA
+      const z = zonaDe(p.team, clubZonas) ?? SIN_ZONA
       m[z] = (m[z] ?? 0) + 1
     }
     return m
-  }, [parsed])
+  }, [parsed, clubZonas])
 
   // Reparto por posición del campograma
   const { bySlot, sinPos } = useMemo(() => {
@@ -5320,6 +5462,7 @@ function ContratosTab({ players, firmasEntries, isAdmin, onOpenPlayer, onSetCont
           ))}
           {!!conteoZonas[SIN_ZONA] && <option value={SIN_ZONA}>{SIN_ZONA} ({conteoZonas[SIN_ZONA]})</option>}
         </select>
+        <button onClick={onAbrirZonas} title="Cambiar la zona de un club" className={SELECT_CLS}>⚙</button>
         <div className="relative flex-1 min-w-[140px] max-w-xs">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
           <input
@@ -5466,6 +5609,8 @@ export function Captacion({
   openFirmasEntryId,
   onOpenFirmasEntryConsumed,
   restricted,
+  clubZonas,
+  onSetClubZona,
   players,
   onCreatePlayer,
   boulemaPeticiones,
@@ -5590,6 +5735,7 @@ export function Captacion({
   const [editingMatch, setEditingMatch] = useState<ScoutingMatch | null>(null)
   /** Ficha de partido abierta en ventana */
   const [detailMatchId, setDetailMatchId] = useState<string | null>(null)
+  const [zonasAbierto, setZonasAbierto] = useState(false)
   const isDesktop = useIsDesktop()   // en escritorio la ficha va a la derecha, no flotando
   // La tabla de partidos aparece a partir de sm (640px). Antes las dos vistas
   // —tarjetas de móvil y tabla— se pintaban SIEMPRE y una se escondía con CSS:
@@ -6809,6 +6955,8 @@ export function Captacion({
               isAdmin={isAdmin}
               onSetCandidateSeen={handleCandidateSeen}
               onOpenPlayer={id => setPanelPlayerId(id)}
+              clubZonas={clubZonas}
+              onAbrirZonas={() => setZonasAbierto(true)}
             />
           </div>
         </div>
@@ -6825,6 +6973,8 @@ export function Captacion({
               onOpenPlayer={id => setPanelPlayerId(id)}
               onSetContract={handleQuickContract}
               onToggleMarketMap={handleToggleMarketMap}
+              clubZonas={clubZonas}
+              onAbrirZonas={() => setZonasAbierto(true)}
             />
           </div>
         </div>
@@ -8118,6 +8268,16 @@ export function Captacion({
       {/* ── Ficha de partido: ventana flotante solo en móvil (en escritorio
              va al lado de la lista, dentro de la pestaña Partidos) ── */}
       {!isDesktop && renderFichaPartido('modal')}
+
+      {zonasAbierto && (
+        <ZonasPanel
+          players={scoutingPlayers}
+          clubZonas={clubZonas}
+          onSetClubZona={onSetClubZona}
+          onClose={() => setZonasAbierto(false)}
+          showToast={showToast}
+        />
+      )}
 
       {/* Toasts globales de la vista */}
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
