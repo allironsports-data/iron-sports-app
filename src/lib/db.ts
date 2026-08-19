@@ -1704,3 +1704,49 @@ export async function deleteEquipo(nombre: string): Promise<void> {
   const { error } = await supabase.from('scouting_equipos').delete().eq('nombre', nombre)
   if (error) throw error
 }
+
+/**
+ * Renombrar un equipo. Cambia el nombre en el catálogo y arrastra con él a
+ * todos sus jugadores y a sus partidos: si no, quedarían apuntando a un
+ * equipo que ya no existe y volveríamos a tener dos equipos donde hay uno.
+ */
+export async function renombrarEquipo(opts: {
+  nombreViejo: string
+  nombreNuevo: string
+  club: string
+  playerIds: string[]
+  matchIdsLocal: string[]
+  matchIdsVisitante: string[]
+  quien?: string
+}): Promise<void> {
+  const { nombreViejo, nombreNuevo, club, playerIds, matchIdsLocal, matchIdsVisitante, quien } = opts
+
+  // 1 · la fila del catálogo (nombre es la clave primaria: se copia y se borra)
+  const { data: viejo } = await supabase.from('scouting_equipos').select('*').eq('nombre', nombreViejo).maybeSingle()
+  const fila = {
+    ...(viejo ?? {}),
+    nombre: nombreNuevo,
+    club,
+    updated_at: new Date().toISOString(),
+    updated_by: quien ?? null,
+  }
+  const { error: e1 } = await supabase.from('scouting_equipos').upsert(fila, { onConflict: 'nombre' })
+  if (e1) throw e1
+  if (viejo && nombreViejo !== nombreNuevo) {
+    await supabase.from('scouting_equipos').delete().eq('nombre', nombreViejo)
+  }
+
+  // 2 · jugadores y partidos, de golpe (no uno a uno)
+  if (playerIds.length) {
+    const { error } = await supabase.from('scouting_players').update({ team: nombreNuevo }).in('id', playerIds)
+    if (error) throw error
+  }
+  if (matchIdsLocal.length) {
+    const { error } = await supabase.from('scouting_matches').update({ home_team: nombreNuevo }).in('id', matchIdsLocal)
+    if (error) throw error
+  }
+  if (matchIdsVisitante.length) {
+    const { error } = await supabase.from('scouting_matches').update({ away_team: nombreNuevo }).in('id', matchIdsVisitante)
+    if (error) throw error
+  }
+}

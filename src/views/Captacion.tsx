@@ -20,7 +20,7 @@ import { useToast } from '../hooks/useToast'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import { useDebounce } from '../hooks/useDebounce'
 import { isValidName } from '../lib/validate'
-import { ZONAS, ZONA_CORTA, SIN_ZONA, zonaDe, clubBase, type Zona } from '../lib/zonas'
+import { ZONAS, ZONA_CORTA, SIN_ZONA, zonaDe, clubBase, normEquipo, type Zona } from '../lib/zonas'
 
 type ShowToast = (message: string, variant?: 'success' | 'error' | 'info', action?: { label: string; fn: () => void }) => void
 
@@ -786,6 +786,9 @@ function ZonasPanel({ players, clubZonas, onSetClubZona, onClose, showToast }: {
   const [q, setQ] = useState('')
   const [soloSinZona, setSoloSinZona] = useState(false)
   const [guardando, setGuardando] = useState<string | null>(null)
+  // Selección múltiple: 40 clubes extranjeros de uno en uno no tiene sentido
+  const [sel, setSel] = useState<Set<string>>(new Set())
+  const [aplicando, setAplicando] = useState(false)
   useEscapeKey(onClose)
 
   // Un club por cada equipo distinto de la BBDD, con cuántos jugadores tiene
@@ -813,6 +816,23 @@ function ZonasPanel({ players, clubZonas, onSetClubZona, onClose, showToast }: {
     () => clubes.filter(c => !zonaDe(c.nombre, clubZonas)).length,
     [clubes, clubZonas],
   )
+
+  /** Poner la misma zona a todos los seleccionados */
+  async function aplicarASeleccion(valor: string) {
+    const lista = clubes.filter(c => sel.has(c.club))
+    if (lista.length === 0) return
+    setAplicando(true)
+    let fallos = 0
+    for (const c of lista) {
+      try {
+        await onSetClubZona(c.club, c.nombre, valor === '' ? null : valor as Zona)
+      } catch { fallos++ }
+    }
+    setAplicando(false)
+    setSel(new Set())
+    if (fallos) showToast(`${lista.length - fallos} guardados, ${fallos} con error`, 'error')
+    else showToast(valor ? `${lista.length} clubes → ${valor}` : `${lista.length} clubes sin zona`)
+  }
 
   async function cambiar(c: { club: string; nombre: string }, valor: string) {
     setGuardando(c.club)
@@ -860,6 +880,41 @@ function ZonasPanel({ players, clubZonas, onSetClubZona, onClose, showToast }: {
           </div>
         </div>
 
+        {/* Acciones en bloque */}
+        <div className="px-5 py-2 border-b border-slate-100 flex flex-wrap items-center gap-2 bg-slate-50/60">
+          <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 cursor-pointer">
+            <input
+              type="checkbox"
+              className="accent-blue-600"
+              checked={visibles.length > 0 && visibles.every(c => sel.has(c.club))}
+              onChange={e => {
+                const next = new Set(sel)
+                visibles.slice(0, 200).forEach(c => e.target.checked ? next.add(c.club) : next.delete(c.club))
+                setSel(next)
+              }}
+            />
+            Seleccionar los {Math.min(visibles.length, 200)} de la lista
+          </label>
+          {sel.size > 0 && (
+            <>
+              <span className="text-[11px] font-bold text-primary">{sel.size} seleccionado{sel.size !== 1 ? 's' : ''}</span>
+              <select
+                defaultValue=""
+                disabled={aplicando}
+                onChange={e => { const v = e.target.value; e.target.value = ''; void aplicarASeleccion(v) }}
+                className="text-[11px] border border-primary rounded-lg px-2 py-1 bg-white text-primary font-semibold focus:outline-none"
+              >
+                <option value="" disabled>Asignar zona a los {sel.size}…</option>
+                {ZONAS.map(z => <option key={z} value={z}>{z}</option>)}
+              </select>
+              <button onClick={() => setSel(new Set())} className="text-[11px] text-slate-500 hover:text-slate-700 underline">
+                quitar selección
+              </button>
+            </>
+          )}
+          {aplicando && <span className="text-[11px] text-slate-500">guardando…</span>}
+        </div>
+
         <div className="max-h-[55vh] overflow-y-auto divide-y divide-slate-50">
           {visibles.length === 0 && (
             <p className="text-xs text-slate-400 italic px-5 py-6 text-center">No hay clubes que coincidan.</p>
@@ -868,7 +923,18 @@ function ZonasPanel({ players, clubZonas, onSetClubZona, onClose, showToast }: {
             const zona = zonaDe(c.nombre, clubZonas)
             const aMano = !!clubZonas[c.club]
             return (
-              <div key={c.club} className="flex items-center gap-2 px-5 py-2">
+              <div key={c.club} className={`flex items-center gap-2 px-5 py-2 ${sel.has(c.club) ? 'bg-blue-50/50' : ''}`}>
+                <input
+                  type="checkbox"
+                  className="accent-blue-600 flex-shrink-0"
+                  checked={sel.has(c.club)}
+                  onChange={e => {
+                    const next = new Set(sel)
+                    if (e.target.checked) next.add(c.club); else next.delete(c.club)
+                    setSel(next)
+                  }}
+                  aria-label={`Seleccionar ${c.nombre}`}
+                />
                 <div className="flex-1 min-w-0">
                   <div className="text-xs font-semibold text-slate-700 truncate">
                     {c.nombre}
@@ -926,6 +992,8 @@ function etiquetaTemporada(desde: string): string {
 
 interface FilaEquipo {
   nombre: string
+  /** nombre normalizado: la clave con la que se cruza todo */
+  clave: string
   club: string
   categoria: string
   zona: string
@@ -953,12 +1021,19 @@ function useFilasEquipos(
   desde: string,
 ): FilaEquipo[] {
   return useMemo(() => {
-    const porEquipo = new Map<string, ScoutingPlayer[]>()
+    // ⚠ Todo se cruza por NOMBRE NORMALIZADO, nunca por el texto tal cual.
+    // Los partidos guardan el equipo como lo escribió cada scout («Castellon
+    // Juv a») y el catálogo lo tiene bien («Castellón Juv A»): comparando
+    // literales, la ficha del equipo no encontraba sus propios partidos.
+    const porEquipo = new Map<string, { nombres: Map<string, number>; jugadores: ScoutingPlayer[] }>()
     for (const p of scoutingPlayers) {
-      const t = (p.team ?? '').trim()
-      if (!t) continue
-      const l = porEquipo.get(t)
-      if (l) l.push(p); else porEquipo.set(t, [p])
+      const raw = (p.team ?? '').trim()
+      const k = normEquipo(raw)
+      if (!k) continue
+      let e = porEquipo.get(k)
+      if (!e) { e = { nombres: new Map(), jugadores: [] }; porEquipo.set(k, e) }
+      e.jugadores.push(p)
+      e.nombres.set(raw, (e.nombres.get(raw) ?? 0) + 1)
     }
 
     const informesPorJugador: Record<string, number> = {}
@@ -966,26 +1041,35 @@ function useFilasEquipos(
 
     const partidos = new Map<string, { temporada: number; total: number; ultimo?: string }>()
     const anota = (equipo: string | undefined, fecha: string) => {
-      const t = (equipo ?? '').trim()
-      if (!t) return
-      const e = partidos.get(t) ?? { temporada: 0, total: 0 }
+      const k = normEquipo(equipo)
+      if (!k) return
+      const e = partidos.get(k) ?? { temporada: 0, total: 0 }
       e.total++
       if (fecha >= desde) e.temporada++
       if (!e.ultimo || fecha > e.ultimo) e.ultimo = fecha
-      partidos.set(t, e)
+      partidos.set(k, e)
     }
     for (const m of scoutingMatches) { anota(m.homeTeam, m.date); anota(m.awayTeam, m.date) }
 
-    const nombres = new Set<string>([...equipos.map(e => e.nombre), ...porEquipo.keys()])
-    const delCatalogo = new Map(equipos.map(e => [e.nombre, e]))
+    // Nombre que se enseña: el del catálogo si está; si no, la grafía que
+    // más se repite entre los jugadores.
+    const delCatalogo = new Map<string, EquipoCatalogo>()
+    for (const e of equipos) delCatalogo.set(normEquipo(e.nombre), e)
 
+    const claves = new Set<string>([...delCatalogo.keys(), ...porEquipo.keys()])
     const out: FilaEquipo[] = []
-    for (const nombre of nombres) {
-      const cat = delCatalogo.get(nombre)
-      const jug = porEquipo.get(nombre) ?? []
-      const pt = partidos.get(nombre)
+    for (const k of claves) {
+      const cat = delCatalogo.get(k)
+      const grupo = porEquipo.get(k)
+      const jug = grupo?.jugadores ?? []
+      const masUsado = grupo
+        ? [...grupo.nombres.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0]
+        : undefined
+      const nombre = cat?.nombre ?? masUsado ?? k
+      const pt = partidos.get(k)
       out.push({
         nombre,
+        clave: k,
         club: cat?.club ?? clubBase(nombre),
         categoria: cat?.categoria || SIN_CATEGORIA,
         zona: (cat?.zona as string) || zonaDe(nombre, clubZonas) || SIN_ZONA,
@@ -1125,7 +1209,7 @@ function EquiposTab({
   async function crearEquipo() {
     const nombre = nuevoNombre.trim()
     if (!nombre) return
-    if (filas.some(f => f.nombre.toLowerCase() === nombre.toLowerCase())) {
+    if (filas.some(f => f.clave === normEquipo(nombre))) {
       showToast('Ese equipo ya está en la lista', 'info')
       return
     }
@@ -1344,9 +1428,9 @@ function EquiposTab({
                 const sem = semaforoEquipo(f, nPartidos(f))
                 return (
                   <tr
-                    key={f.nombre}
+                    key={f.clave}
                     onClick={() => onAbrirEquipo(f.nombre)}
-                    className={`cursor-pointer hover:bg-slate-50 transition-colors ${equipoAbierto === f.nombre ? 'bg-blue-50/50' : ''}`}
+                    className={`cursor-pointer hover:bg-slate-50 transition-colors ${equipoAbierto && normEquipo(equipoAbierto) === f.clave ? 'bg-blue-50/50' : ''}`}
                   >
                     <td className="px-2 py-2 text-center" onClick={e => e.stopPropagation()}>
                       <button
@@ -3236,6 +3320,23 @@ function ConclusionesTab({ players, reports, threshold, onThresholdChange, isAdm
 // historial de contactos tipados, próxima acción, semáforo de
 // desatención y avisos cruzados con el resto de la app.
 
+// Título de cada tipo de aviso: 20 líneas iguales se resumen en una sola
+const AVISO_TITULO: Record<string, string> = {
+  'sin-accion':    'Calientes sin próxima acción',
+  'sin-encargado': 'Sin encargado asignado',
+  'descartado':    'Descartados en scouting pero vivos en el pipeline',
+  'duplicado':     'Repetidos en el pipeline',
+  'recalentar':    'Fríos que acumulan informes «Llamar»',
+  'cambio-club':   'Han cambiado de club',
+  'contrato':      'Contrato de club acabando',
+  'cumple':        'Cumpleaños próximos',
+  'visto':         'Vistos hace poco en un partido',
+  'juega':         'Su equipo juega pronto',
+  'informe':       'Informes nuevos',
+  'boulema':       'Con petición en Boulema',
+  'firmado':       'Firmados sin ficha en Mantenimiento',
+}
+
 const FIRMAS_STATUSES: FirmasStatus[] = ['llamar', 'caliente', 'templado', 'frio', 'decidir', 'firmado']
 
 const FIRMAS_CONFIG: Record<FirmasStatus, { label: string; dot: string; bg: string; text: string; border: string; col: string }> = {
@@ -3631,7 +3732,7 @@ function FirmasTab({
 
   // ── avisos cruzados con el resto de la app ──
   const alerts = useMemo(() => {
-    const out: { icon: string; text: string; entryId: string; tone: 'blue' | 'green' | 'amber' | 'red' }[] = []
+    const out: { icon: string; text: string; entryId: string; tone: 'blue' | 'green' | 'amber' | 'red'; kind: string }[] = []
     const today = todayISO()
     const plus30 = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)
     const minus14 = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10)
@@ -3644,12 +3745,12 @@ function FirmasTab({
 
     // caliente sin próxima acción programada — el olvido más caro
     active.filter(e => e.status === 'caliente' && !e.nextActionDate).forEach(e => {
-      out.push({ icon: '🔥', tone: 'red', entryId: e.id, text: `${e.playerName} está caliente sin próxima acción programada — ponle fecha` })
+      out.push({ icon: '🔥', tone: 'red', entryId: e.id, kind: 'sin-accion', text: `${e.playerName} está caliente sin próxima acción programada — ponle fecha` })
     })
 
     // alta sin encargado
     active.filter(e => e.managers.length === 0).forEach(e => {
-      out.push({ icon: '👤', tone: 'red', entryId: e.id, text: `${e.playerName} no tiene encargado asignado` })
+      out.push({ icon: '👤', tone: 'red', entryId: e.id, kind: 'sin-encargado', text: `${e.playerName} no tiene encargado asignado` })
     })
 
     // incoherencia con el assessment de scouting.
@@ -3659,7 +3760,7 @@ function FirmasTab({
     active.forEach(e => {
       const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
       if (sp?.assessment === 'Descartado') {
-        out.push({ icon: '🚫', tone: 'red', entryId: e.id, text: `${e.playerName}: en scouting está Descartado — ¿sacarlo del pipeline?` })
+        out.push({ icon: '🚫', tone: 'red', entryId: e.id, kind: 'descartado', text: `${e.playerName}: en scouting está Descartado — ¿sacarlo del pipeline?` })
       }
     })
 
@@ -3667,7 +3768,7 @@ function FirmasTab({
     active.filter(e => e.status === 'frio' && e.scoutingPlayerId).forEach(e => {
       const n = (reportsByPlayer[e.scoutingPlayerId!] ?? [])
         .filter(r => (r.fecha ?? r.createdAt) >= since90 && normConclusion(r.conclusion) === 'Llamar').length
-      if (n >= 2) out.push({ icon: '📈', tone: 'amber', entryId: e.id, text: `${e.playerName} acumula ${n} informes «Llamar» recientes — candidato a recalentar` })
+      if (n >= 2) out.push({ icon: '📈', tone: 'amber', entryId: e.id, kind: 'recalentar', text: `${e.playerName} acumula ${n} informes «Llamar» recientes — candidato a recalentar` })
     })
 
     // le vieron en un partido (añadido al campograma, últimos 14 días)
@@ -3679,7 +3780,7 @@ function FirmasTab({
     })
     active.forEach(e => {
       const m = e.scoutingPlayerId ? seenByPlayer[e.scoutingPlayerId] : undefined
-      if (m) out.push({ icon: '👀', tone: 'green', entryId: e.id, text: `A ${e.playerName} le vieron el ${fmtDate(m.date)} en ${m.homeTeam} vs ${m.awayTeam} — buen momento para llamar` })
+      if (m) out.push({ icon: '👀', tone: 'green', entryId: e.id, kind: 'visto', text: `A ${e.playerName} le vieron el ${fmtDate(m.date)} en ${m.homeTeam} vs ${m.awayTeam} — buen momento para llamar` })
     })
 
     // partidos de Captación registrados (≤30 días vista) donde juega su equipo
@@ -3689,7 +3790,7 @@ function FirmasTab({
       if (!sp?.team) return
       const m = upcoming.find(m => teamsAlike(sp.team, m.homeTeam) || teamsAlike(sp.team, m.awayTeam))
       if (m) out.push({
-        icon: '🏟️', tone: 'blue', entryId: e.id,
+        icon: '🏟️', tone: 'blue', entryId: e.id, kind: 'juega',
         text: `${e.playerName}: su equipo juega ${m.homeTeam} vs ${m.awayTeam} el ${fmtDate(m.date)}${m.assignedTo ? ` (lo ve ${m.assignedTo})` : ''}`,
       })
     })
@@ -3701,7 +3802,7 @@ function FirmasTab({
       if (recent.length > 0) {
         const r = recent[0]
         out.push({
-          icon: '📄', tone: 'green', entryId: e.id,
+          icon: '📄', tone: 'green', entryId: e.id, kind: 'informe',
           text: `Informe nuevo de ${e.playerName}${r.persona ? ` (${r.persona})` : ''}${r.conclusion ? ` — conclusión: ${normConclusion(r.conclusion)}` : ''}`,
         })
       }
@@ -3712,14 +3813,14 @@ function FirmasTab({
       const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
       const names = new Set([normSearch(e.playerName), ...(sp ? [normSearch(sp.fullName)] : [])])
       const pet = boulemaPeticiones.find(p => names.has(normSearch(p.playerName)))
-      if (pet) out.push({ icon: '📥', tone: 'blue', entryId: e.id, text: `Hay una petición en Boulema sobre ${e.playerName} (pedida por ${pet.requestedBy})` })
+      if (pet) out.push({ icon: '📥', tone: 'blue', entryId: e.id, kind: 'boulema', text: `Hay una petición en Boulema sobre ${e.playerName} (pedida por ${pet.requestedBy})` })
     })
 
     // cambio de club en su ficha de scouting
     active.forEach(e => {
       const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
       if (sp?.team && e.knownTeam && !teamsAlike(e.knownTeam, sp.team)) {
-        out.push({ icon: '🔁', tone: 'amber', entryId: e.id, text: `${e.playerName} cambió de club: ${e.knownTeam} → ${sp.team} — revisa la zona (confírmalo en su panel)` })
+        out.push({ icon: '🔁', tone: 'amber', entryId: e.id, kind: 'cambio-club', text: `${e.playerName} cambió de club: ${e.knownTeam} → ${sp.team} — revisa la zona (confírmalo en su panel)` })
       }
     })
 
@@ -3736,7 +3837,7 @@ function FirmasTab({
       const turns = next.getFullYear() - by
       const key = turns === 16 || turns === 18
       out.push({
-        icon: '🎂', tone: key ? 'amber' : 'blue', entryId: e.id,
+        icon: '🎂', tone: key ? 'amber' : 'blue', entryId: e.id, kind: 'cumple',
         text: `${e.playerName} cumple ${turns} el ${fmtDate(next.toISOString())}${key ? ' — edad clave para firmar' : ''}`,
       })
     })
@@ -3751,7 +3852,7 @@ function FirmasTab({
       else if (/^\d{4}-\d{2}-\d{2}/.test(sp.clubContract)) d = new Date(sp.clubContract)
       if (!d || isNaN(d.getTime())) return
       if (d.getTime() > Date.now() && d.getTime() <= in180) {
-        out.push({ icon: '📃', tone: 'amber', entryId: e.id, text: `El contrato de club de ${e.playerName} acaba el ${fmtDate(d.toISOString())}` })
+        out.push({ icon: '📃', tone: 'amber', entryId: e.id, kind: 'contrato', text: `El contrato de club de ${e.playerName} acaba el ${fmtDate(d.toISOString())}` })
       }
     })
 
@@ -3759,7 +3860,7 @@ function FirmasTab({
     const byLink: Record<string, FirmasEntry[]> = {}
     entries.forEach(e => { if (e.scoutingPlayerId) (byLink[e.scoutingPlayerId] ??= []).push(e) })
     Object.values(byLink).filter(l => l.length > 1).forEach(l => {
-      out.push({ icon: '👥', tone: 'red', entryId: l[0].id, text: `${l[0].playerName} está ${l.length} veces en el pipeline (${l.map(x => x.zone).join(' y ')})` })
+      out.push({ icon: '👥', tone: 'red', entryId: l[0].id, kind: 'duplicado', text: `${l[0].playerName} está ${l.length} veces en el pipeline (${l.map(x => x.zone).join(' y ')})` })
     })
 
     // firmado que aún no está en Mantenimiento
@@ -3767,13 +3868,43 @@ function FirmasTab({
       const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
       const nm = normSearch(sp?.fullName ?? e.playerName)
       if (!players.some(p => normSearch(p.name) === nm)) {
-        out.push({ icon: '🎉', tone: 'green', entryId: e.id, text: `${e.playerName} está firmado y aún no está en Mantenimiento — créalo desde su panel` })
+        out.push({ icon: '🎉', tone: 'green', entryId: e.id, kind: 'firmado', text: `${e.playerName} está firmado y aún no está en Mantenimiento — créalo desde su panel` })
       }
     })
 
     const rank = { red: 0, amber: 1, blue: 2, green: 3 }
-    return out.sort((a, b) => rank[a.tone] - rank[b.tone]).slice(0, 40)
+    return out.sort((a, b) => rank[a.tone] - rank[b.tone] || a.text.localeCompare(b.text))
   }, [entries, spById, scoutingMatches, matchPlayers, reportsByPlayer, boulemaPeticiones, players])
+
+  // Avisos silenciados: cada uno decide qué tipos no quiere ver. Se guarda en
+  // este navegador, así que no molesta a nadie más.
+  const [avisosMudos, setAvisosMudos] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('firmas_avisos_mudos') ?? '[]') as string[]) }
+    catch { return new Set() }
+  })
+  const silenciar = (kind: string) => setAvisosMudos(prev => {
+    const next = new Set(prev)
+    if (next.has(kind)) next.delete(kind); else next.add(kind)
+    localStorage.setItem('firmas_avisos_mudos', JSON.stringify([...next]))
+    return next
+  })
+
+  // Agrupados por tipo: 20 líneas iguales no son 20 avisos, son uno con 20 casos
+  const gruposAviso = useMemo(() => {
+    const m = new Map<string, { kind: string; icon: string; tone: string; titulo: string; items: typeof alerts }>()
+    for (const a of alerts) {
+      if (avisosMudos.has(a.kind)) continue
+      let g = m.get(a.kind)
+      if (!g) { g = { kind: a.kind, icon: a.icon, tone: a.tone, titulo: AVISO_TITULO[a.kind] ?? a.kind, items: [] }; m.set(a.kind, g) }
+      g.items.push(a)
+    }
+    const rank: Record<string, number> = { red: 0, amber: 1, blue: 2, green: 3 }
+    return [...m.values()].sort((a, b) => rank[a.tone] - rank[b.tone] || b.items.length - a.items.length)
+  }, [alerts, avisosMudos])
+
+  const urgentes = useMemo(() => gruposAviso.filter(g => g.tone === 'red').reduce((n, g) => n + g.items.length, 0), [gruposAviso])
+  const totalAvisos = useMemo(() => gruposAviso.reduce((n, g) => n + g.items.length, 0), [gruposAviso])
+  const [grupoAbierto, setGrupoAbierto] = useState<string | null>(null)
 
   // ── agenda: todas las próximas acciones pendientes, por fecha ──
   const agenda = useMemo(() =>
@@ -4045,32 +4176,83 @@ function FirmasTab({
         />
       ) : (
         <>
-          {/* Avisos cruzados */}
-          {alerts.length > 0 && (
-            <div className="bg-amber-50 border border-amber-200 rounded-lg overflow-hidden">
+          {/* Avisos cruzados. Agrupados por tipo y con lo urgente delante:
+              una tira de 40 líneas sueltas no la lee nadie. */}
+          {totalAvisos > 0 && (
+            <div className={`border rounded-lg overflow-hidden ${urgentes > 0 ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200'}`}>
               <button
                 onClick={() => setShowAlerts(v => !v)}
-                className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-amber-100/50 transition-colors"
+                className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${urgentes > 0 ? 'hover:bg-red-100/50' : 'hover:bg-slate-100/60'}`}
               >
-                <span className="text-sm">🔔</span>
-                <span className="text-xs font-semibold text-amber-800">{alerts.length} aviso{alerts.length !== 1 ? 's' : ''}</span>
-                <span className="hidden sm:inline text-[11px] text-amber-700/70 truncate">
-                  {alerts.slice(0, 2).map(a => a.text.split(':')[0]).join(' · ')}{alerts.length > 2 ? ' · …' : ''}
+                {urgentes > 0 ? (
+                  <>
+                    <span className="text-sm">⚠️</span>
+                    <span className="text-xs font-bold text-red-700">{urgentes} que requieren acción</span>
+                    {totalAvisos > urgentes && (
+                      <span className="text-[11px] text-slate-500">· {totalAvisos - urgentes} informativos</span>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <span className="text-sm">🔔</span>
+                    <span className="text-xs font-semibold text-slate-600">{totalAvisos} avisos informativos</span>
+                  </>
+                )}
+                <span className="hidden sm:inline text-[11px] text-slate-500 truncate ml-1">
+                  {gruposAviso.slice(0, 3).map(g => `${g.titulo} (${g.items.length})`).join(' · ')}
                 </span>
-                <ChevronDown className={`w-4 h-4 text-amber-600 ml-auto flex-shrink-0 transition-transform ${showAlerts ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`w-4 h-4 text-slate-400 ml-auto flex-shrink-0 transition-transform ${showAlerts ? 'rotate-180' : ''}`} />
               </button>
+
               {showAlerts && (
-                <div className="border-t border-amber-200 divide-y divide-amber-100 max-h-64 overflow-y-auto">
-                  {alerts.map((a, i) => (
+                <div className="border-t border-slate-200 divide-y divide-slate-100 bg-white max-h-[26rem] overflow-y-auto">
+                  {gruposAviso.map(g => {
+                    const abierto = grupoAbierto === g.kind
+                    return (
+                      <div key={g.kind}>
+                        <div className="flex items-center gap-2 px-3 py-2">
+                          <button
+                            onClick={() => setGrupoAbierto(abierto ? null : g.kind)}
+                            className="flex-1 flex items-center gap-2 text-left min-w-0"
+                          >
+                            <span className="flex-shrink-0">{g.icon}</span>
+                            <span className={`text-xs font-semibold truncate ${g.tone === 'red' ? 'text-red-700' : 'text-slate-700'}`}>{g.titulo}</span>
+                            <span className={`text-[10px] font-bold rounded-full px-1.5 py-px flex-shrink-0 ${
+                              g.tone === 'red' ? 'bg-red-100 text-red-700' :
+                              g.tone === 'amber' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
+                            }`}>{g.items.length}</span>
+                            <ChevronDown className={`w-3 h-3 text-slate-300 transition-transform ${abierto ? 'rotate-180' : ''}`} />
+                          </button>
+                          <button
+                            onClick={() => silenciar(g.kind)}
+                            title="No volver a enseñarme este tipo de aviso (solo en este navegador)"
+                            className="text-[10px] text-slate-300 hover:text-slate-600 flex-shrink-0"
+                          >silenciar</button>
+                        </div>
+                        {abierto && (
+                          <div className="bg-slate-50/70 divide-y divide-slate-100">
+                            {g.items.map((a, i) => (
+                              <button
+                                key={i}
+                                onClick={() => setPanelId(a.entryId)}
+                                className="w-full text-left text-[11.5px] text-slate-700 px-3 py-1.5 pl-9 hover:bg-white transition-colors"
+                              >
+                                {a.text}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                  {avisosMudos.size > 0 && (
                     <button
-                      key={i}
-                      onClick={() => setPanelId(a.entryId)}
-                      className="w-full flex items-start gap-2 px-3 py-2 text-left text-xs text-slate-700 hover:bg-amber-100/40 transition-colors"
+                      onClick={() => { setAvisosMudos(new Set()); localStorage.removeItem('firmas_avisos_mudos') }}
+                      className="w-full text-[11px] text-slate-400 hover:text-slate-600 px-3 py-2 text-left"
                     >
-                      <span className="flex-shrink-0">{a.icon}</span>
-                      <span>{a.text}</span>
+                      Tienes {avisosMudos.size} tipo{avisosMudos.size !== 1 ? 's' : ''} de aviso silenciado{avisosMudos.size !== 1 ? 's' : ''} — volver a enseñarlos
                     </button>
-                  ))}
+                  )}
                 </div>
               )}
             </div>
@@ -6335,9 +6517,54 @@ export function Captacion({
   // Fila del equipo que se está viendo en el panel lateral
   const filasEquipos = useFilasEquipos(equipos, scoutingPlayers, scoutingReports, scoutingMatches, clubZonas, inicioTemporada())
   const filaEquipoAbierta = useMemo(
-    () => panelEquipo ? filasEquipos.find(f => f.nombre === panelEquipo) ?? null : null,
+    () => panelEquipo ? filasEquipos.find(f => f.clave === normEquipo(panelEquipo)) ?? null : null,
     [filasEquipos, panelEquipo],
   )
+
+  // Renombrar un equipo (el lápiz de la cabecera del panel). Arrastra consigo
+  // a sus jugadores y a sus partidos: si no, quedarían apuntando a un equipo
+  // que ya no existe y volveríamos a tener dos donde hay uno.
+  const [renombrando, setRenombrando] = useState<string | null>(null)
+  useEffect(() => { setRenombrando(null) }, [panelEquipo])
+
+  async function guardarRenombre() {
+    const f = filaEquipoAbierta
+    const nuevo = (renombrando ?? '').trim()
+    if (!f || !nuevo) { setRenombrando(null); return }
+    if (nuevo === f.nombre) { setRenombrando(null); return }
+
+    const jugadores = scoutingPlayers.filter(p => normEquipo(p.team) === f.clave)
+    const local = scoutingMatches.filter(m => normEquipo(m.homeTeam) === f.clave)
+    const visitante = scoutingMatches.filter(m => normEquipo(m.awayTeam) === f.clave)
+    const partidos = new Set([...local, ...visitante].map(m => m.id)).size
+
+    const yaExiste = filasEquipos.some(x => x.clave === normEquipo(nuevo) && x.clave !== f.clave)
+    const aviso = yaExiste
+      ? `Ya existe «${nuevo}». Los dos equipos quedarán fusionados en uno.\n\n`
+      : ''
+    if (!confirm(`${aviso}Renombrar «${f.nombre}» → «${nuevo}».\n\nSe actualizarán ${jugadores.length} jugador${jugadores.length !== 1 ? 'es' : ''} y ${partidos} partido${partidos !== 1 ? 's' : ''}.`)) return
+
+    try {
+      await db.renombrarEquipo({
+        nombreViejo: f.nombre,
+        nombreNuevo: nuevo,
+        club: clubBase(nuevo),
+        playerIds: jugadores.map(p => p.id),
+        matchIdsLocal: local.map(m => m.id),
+        matchIdsVisitante: visitante.map(m => m.id),
+        quien: currentProfile.avatar,
+      })
+      jugadores.forEach(p => onUpdatePlayer({ ...p, team: nuevo }))
+      local.forEach(m => onUpdateMatch({ ...m, homeTeam: nuevo }))
+      visitante.forEach(m => onUpdateMatch({ ...m, awayTeam: nuevo }))
+      await onSaveEquipo({ nombre: nuevo, club: clubBase(nuevo) })
+      setPanelEquipo(nuevo)
+      setRenombrando(null)
+      showToast(`Equipo renombrado: ${nuevo}`)
+    } catch {
+      showToast('No se ha podido renombrar el equipo', 'error')
+    }
+  }
 
   // Sugerencias del catálogo para los campos Equipo y Categoría
   const equiposOrdenados = useMemo(
@@ -8368,7 +8595,31 @@ export function Captacion({
               <div className="flex-1 min-w-0">
                 {panelEquipo && (
                   <div>
-                    <h2 className="text-base font-semibold text-slate-800 truncate">{panelEquipo}</h2>
+                    <h2 className="text-base font-semibold text-slate-800 truncate flex items-center gap-1.5">
+                      {renombrando === null ? (
+                        <>
+                          <span className="truncate">{filaEquipoAbierta?.nombre ?? panelEquipo}</span>
+                          <button
+                            onClick={() => setRenombrando(filaEquipoAbierta?.nombre ?? panelEquipo)}
+                            title="Cambiar el nombre del equipo"
+                            className="text-slate-300 hover:text-primary flex-shrink-0"
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                        </>
+                      ) : (
+                        <input
+                          value={renombrando}
+                          onChange={e => setRenombrando(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') void guardarRenombre()
+                            if (e.key === 'Escape') setRenombrando(null)
+                          }}
+                          autoFocus
+                          className="text-base font-semibold border border-primary rounded-lg px-2 py-0.5 w-full focus:outline-none"
+                        />
+                      )}
+                    </h2>
                     <div className="text-xs text-slate-500 mt-0.5">
                       {(() => {
                         const f = filaEquipoAbierta
@@ -8554,7 +8805,7 @@ export function Captacion({
               {panelEquipo && filaEquipoAbierta && (() => {
                 const f = filaEquipoAbierta
                 const partidosEquipo = scoutingMatches
-                  .filter(m => (m.homeTeam ?? '').trim() === f.nombre || (m.awayTeam ?? '').trim() === f.nombre)
+                  .filter(m => normEquipo(m.homeTeam) === f.clave || normEquipo(m.awayTeam) === f.clave)
                   .sort((a, b) => b.date.localeCompare(a.date))
                 const guardar = (campo: Partial<EquipoCatalogo>) =>
                   onSaveEquipo({ nombre: f.nombre, club: f.club, ...campo }).catch(() => showToast('No se ha podido guardar', 'error'))

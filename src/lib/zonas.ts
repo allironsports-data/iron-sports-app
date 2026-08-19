@@ -44,6 +44,25 @@ const norm = (s: string) => s
 // Sufijos de filial y categoría: «Villarreal Juv C» → «Villarreal»
 const SUFIJOS = /\s+(b|c|d|juv|juvenil|cad|cadete|inf|infantil|dh|ln|cjuv|a|femenino|fem|castilla|mestalla)$/
 
+/**
+ * Clave para comparar equipos escritos de formas distintas.
+ * «Castellón Juv A», «Castellon Juv a» y «Castellon Juvenil A» son el MISMO
+ * equipo: sin esto, la ficha del equipo no encontraba sus propios partidos,
+ * porque los partidos guardan el nombre como lo escribió cada scout.
+ * Ojo: mantiene el sufijo, así que «Castellón» y «Castellón Juv A» siguen
+ * siendo equipos distintos, que es lo correcto.
+ */
+export function normEquipo(nombre?: string): string {
+  const s = norm(nombre ?? '')
+  if (!s) return ''
+  return s
+    .replace(/\b(juvenil|juv)\b/g, 'juv')
+    .replace(/\b(cadete|cad)\b/g, 'cad')
+    .replace(/\b(infantil|inf)\b/g, 'inf')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 /** Club base de un equipo: quita filial y categoría */
 export function clubBase(equipo?: string): string {
   let s = norm(equipo ?? '')
