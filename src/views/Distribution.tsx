@@ -199,7 +199,7 @@ export function Distribution({
   onCreateClub, onUpdateClub, onDeleteClub,
   onCreateEntry, onUpdateEntry, onDeleteEntry,
   onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation,
-  onCreatePlayer, splitActive = false, activeClubId,
+  onCreatePlayer, activeClubId,
 }: Props) {
   // ── Jugador CERRADO = fuera de la UX de Distribución ────────
   // Si un jugador ya firmó en algún club (alguna negociación «cerrado»),
@@ -212,10 +212,6 @@ export function Distribution({
     return negotiationsAll.filter(n => n.status === 'cerrado' || !closed.has(n.playerId))
   }, [negotiationsAll])
 
-  // Rejilla de clubes: en pantalla partida usamos menos columnas
-  const clubGridCls = splitActive
-    ? 'grid grid-cols-1 2xl:grid-cols-2 gap-1.5'
-    : 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-1.5'
   const [tab, setTab] = useState<'jugadores' | 'clubes' | 'solicitudes' | 'oportunidades' | 'pipeline' | 'encargados'>(
     () => {
       const saved = sessionStorage.getItem('nav_dist_tab') as 'jugadores' | 'clubes' | 'solicitudes' | 'oportunidades' | 'pipeline' | 'encargados' | 'panel' | null
@@ -265,15 +261,9 @@ export function Distribution({
   const [openStatusDropId, setOpenStatusDropId]   = useState<string | null>(null)
   const [statusDropPos, setStatusDropPos]         = useState<{ top: number; right: number } | null>(null)
 
-  const [vistaClubes, setVistaClubes] = useState<'tarjetas' | 'lista'>(
-    () => (sessionStorage.getItem('dist_vista_clubes') as 'tarjetas' | 'lista') ?? 'tarjetas'
-  )
-  useEffect(() => { sessionStorage.setItem('dist_vista_clubes', vistaClubes) }, [vistaClubes])
-
-  // ── Clubes: tarjetas o lista ───────────────────────────────────────
-  // Con 1.372 clubes las tarjetas ocupan muchísimo y cuesta comparar. La
-  // lista enseña lo mismo en una fila: liga, encargado, contacto, ofrecidos
-  // y necesidades.
+  // ── Clubes en lista ───────────────────────────────────────────────
+  // Con 1.372 clubes las tarjetas ocupaban muchísimo y no dejaban comparar.
+  // Cada club es una fila: liga, encargado, contacto, ofrecidos y necesidades.
   const contactedByNombre = (club: Club) =>
     profiles.find(p => p.avatar === club.contactedBy)?.name ?? club.contactedBy ?? 'sí'
 
@@ -283,8 +273,7 @@ export function Distribution({
   }
 
   function renderClubes(lista: Club[]) {
-    if (vistaClubes === 'lista') {
-      return (
+    return (
         <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -365,45 +354,10 @@ export function Distribution({
             </table>
           </div>
         </div>
-      )
-    }
-    return (
-      <div className={clubGridCls}>
-        {lista.map(club => (
-<ClubCard
-      key={club.id}
-      club={club}
-      negotiations={negsByClub.get(club.id) ?? SIN_NEGOCIACIONES}
-      isSelected={selectedClubId === club.id || activeClubId === club.id}
-      onClick={() => {
-      if (onSelectClub) { onSelectClub(club.id) }
-      else { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(null) }
-      }}
-      onOffer={() => setShowAddNeg({ clubId: club.id })}
-      onTogglePriority={() => onUpdateClub({ ...club, isPriority: !club.isPriority }).catch(() => showToast('No se pudo guardar. Inténtalo de nuevo.', 'error'))}
-      managerName={profiles.find(p => p.avatar === club.aisManager)?.name}
-      managerDropOpen={openClubManagerId === club.id}
-      selectMode={clubBulkMode}
-      bulkSelected={clubSelected.has(club.id)}
-      onToggleBulkSelect={() => toggleClubSelected(club.id)}
-      contactedByName={profiles.find(p => p.avatar === club.contactedBy)?.name}
-      onMarkContacted={() => markClubContacted(club)}
-      onOpenContactedMenu={(pos) => {
-      if (!pos) { setOpenClubContactedId(null); setClubContactedDropPos(null) }
-      else { setOpenClubContactedId(club.id); setClubContactedDropPos(pos) }
-      }}
-      contactedDropOpen={openClubContactedId === club.id}
-      onToggleManagerDrop={(pos) => {
-      if (!pos) { setOpenClubManagerId(null); setClubManagerDropPos(null) }
-      else { setOpenClubManagerId(club.id); setClubManagerDropPos(pos) }
-      }}
-      />
-        ))}
-      </div>
     )
   }
 
-  // Encargado de hablar con el club (dropdown en ClubCard)
+  // Encargado de hablar con el club
   const [openClubManagerId, setOpenClubManagerId]   = useState<string | null>(null)
   const [clubManagerDropPos, setClubManagerDropPos] = useState<{ top: number; right: number } | null>(null)
 
@@ -1844,17 +1798,6 @@ export function Distribution({
                   <SlidersHorizontal className="w-4 h-4" /> Filtros
                   {clubsActiveFilters > 0 && <span className="text-xs">({clubsActiveFilters})</span>}
                 </button>
-                <div className="flex-shrink-0 flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
-                  <button
-                    onClick={() => setVistaClubes('tarjetas')}
-                    className={`px-2.5 py-1.5 rounded text-[11px] font-semibold transition-colors ${vistaClubes === 'tarjetas' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                  >Tarjetas</button>
-                  <button
-                    onClick={() => setVistaClubes('lista')}
-                    title="Lista compacta: liga, encargado, contacto, ofrecidos y necesidades en una fila"
-                    className={`px-2.5 py-1.5 rounded text-[11px] font-semibold transition-colors ${vistaClubes === 'lista' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                  >☰ Lista</button>
-                </div>
                 <button
                   onClick={() => { setClubBulkMode(v => !v); if (clubBulkMode) setClubSelected(new Set()) }}
                   className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
@@ -4163,170 +4106,6 @@ export function Distribution({
     </div>
   )
 }
-
-// ── CLUB CARD ────────────────────────────────────────────────
-
-function ClubCard({ club, negotiations, isSelected, onClick, onOffer, onTogglePriority, managerName, managerDropOpen, onToggleManagerDrop, selectMode, bulkSelected, onToggleBulkSelect, onMarkContacted, onOpenContactedMenu, contactedDropOpen, contactedByName }: {
-  club: Club
-  negotiations: ClubNegotiation[]
-  isSelected: boolean
-  onClick: () => void
-  onOffer?: () => void
-  onTogglePriority?: () => void
-  /** Nombre completo del encargado (para el tooltip) */
-  managerName?: string
-  managerDropOpen?: boolean
-  onToggleManagerDrop?: (pos: { top: number; right: number } | null) => void
-  /** Selección múltiple para asignar encargado en bulk */
-  selectMode?: boolean
-  bulkSelected?: boolean
-  onToggleBulkSelect?: () => void
-  /** Tick "contactado": primer clic marca automáticamente a quien lo pulsa */
-  onMarkContacted?: () => void
-  /** Ya contactado: el clic abre un menú para reasignar a otra persona o quitar la marca */
-  onOpenContactedMenu?: (pos: { top: number; right: number } | null) => void
-  contactedDropOpen?: boolean
-  /** Nombre completo de quien marcó el contacto (para el tooltip) */
-  contactedByName?: string
-}) {
-  const activeStatuses: ClubNegotiation['status'][] = ['pendiente', 'ofrecido', 'interesado', 'negociando']
-  const activeNegs = negotiations.filter(n => n.clubId === club.id && n.status !== 'descartado')
-  const activeOnlyNegs = negotiations.filter(n => n.clubId === club.id && activeStatuses.includes(n.status))
-  const tier = getClubTier(club.league, club.country)
-  const tierCfg = TIER_CONFIG[tier]
-
-  // Last activity
-  const lastUpdated = activeNegs.reduce<string | undefined>((latest, n) => {
-    if (!latest) return n.updatedAt
-    return n.updatedAt > latest ? n.updatedAt : latest
-  }, undefined)
-  const daysAgo = lastUpdated ? Math.floor((Date.now() - new Date(lastUpdated).getTime()) / 86_400_000) : null
-  const isStale = activeOnlyNegs.length > 0 && daysAgo !== null && daysAgo > 7
-  const contactedDaysAgo = club.contacted && club.contactedAt ? Math.floor((Date.now() - new Date(club.contactedAt).getTime()) / 86_400_000) : null
-
-  function fmtDays(d: number) {
-    if (d === 0) return 'hoy'
-    if (d === 1) return 'ayer'
-    if (d < 7) return `${d}d`
-    if (d < 30) return `${Math.floor(d / 7)}sem`
-    return `${Math.floor(d / 30)}m`
-  }
-
-  return (
-    <div
-      onClick={onClick}
-      className={`bg-white rounded-lg border cursor-pointer hover:shadow-sm transition-all group flex items-center gap-2.5 px-3 py-2 ${
-        isSelected ? 'border-blue-300 ring-1 ring-blue-200' : isStale ? 'border-orange-300' : 'border-slate-200'
-      } ${bulkSelected ? 'bg-blue-50/60' : ''} ${club.isPriority ? 'border-l-4 border-l-green-400' : isStale ? 'border-l-4 border-l-orange-400' : ''}`}
-    >
-      {selectMode && (
-        <input
-          type="checkbox"
-          className="w-4 h-4 rounded flex-shrink-0"
-          checked={!!bulkSelected}
-          onClick={e => e.stopPropagation()}
-          onChange={() => onToggleBulkSelect?.()}
-          aria-label={`Seleccionar ${club.name}`}
-        />
-      )}
-      <div className={`w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0 text-[11px] font-bold ${tierCfg.bg} ${tierCfg.text}`}>
-        {tier}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-start flex-wrap gap-x-1.5 gap-y-0.5 min-w-0">
-          <span className="font-medium text-slate-800 text-sm break-words">{club.name}</span>
-          {club.needs.length > 0 && (
-            <span className="text-[11px] leading-none bg-amber-50 text-amber-600 border border-amber-200 px-1.5 py-[3px] rounded-full flex-shrink-0 whitespace-nowrap mt-px">
-              {club.needs.length} nec.
-            </span>
-          )}
-          {daysAgo !== null ? (
-            <span className={`text-xs whitespace-nowrap flex-shrink-0 ml-auto pl-1 ${isStale ? 'text-orange-500 font-semibold' : 'text-slate-400'}`}>
-              {isStale ? `⏰ ${fmtDays(daysAgo)}` : fmtDays(daysAgo)}
-            </span>
-          ) : contactedDaysAgo !== null ? (
-            <span className="text-xs whitespace-nowrap flex-shrink-0 ml-auto pl-1 text-green-600">
-              ✓ {contactedByName?.split(' ')[0] ?? club.contactedBy} · {fmtDays(contactedDaysAgo)}
-            </span>
-          ) : null}
-        </div>
-        <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 mt-0.5 text-xs text-slate-500 min-w-0">
-          {club.league && <span className="text-slate-400 break-words">{club.league}</span>}
-          {club.contactPerson && <span className="break-words">{club.contactPerson}</span>}
-          {activeNegs.length > 0 && (
-            <span className="text-blue-600 whitespace-nowrap">{activeNegs.length} ofrecido{activeNegs.length !== 1 ? 's' : ''}</span>
-          )}
-        </div>
-      </div>
-      <div className="flex items-center gap-1 flex-shrink-0">
-        {onToggleManagerDrop && (
-          <button
-            onClick={e => {
-              e.stopPropagation()
-              if (managerDropOpen) { onToggleManagerDrop(null); return }
-              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-              onToggleManagerDrop({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
-            }}
-            title={club.aisManager ? `Encargado: ${managerName ?? club.aisManager}` : 'Asignar encargado'}
-            aria-label={club.aisManager ? `Encargado: ${managerName ?? club.aisManager}` : 'Asignar encargado'}
-            className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold border-2 transition-colors flex-shrink-0 ${
-              club.aisManager
-                ? 'bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-200'
-                : 'bg-slate-50 text-slate-400 border-dashed border-slate-300 hover:bg-slate-200 sm:opacity-0 sm:group-hover:opacity-100'
-            } ${managerDropOpen ? 'ring-2 ring-blue-200 sm:opacity-100' : ''}`}
-          >
-            {club.aisManager ?? '+'}
-          </button>
-        )}
-        {(onMarkContacted || onOpenContactedMenu) && (
-          <button
-            onClick={e => {
-              e.stopPropagation()
-              if (!club.contacted) { onMarkContacted?.(); return }
-              if (contactedDropOpen) { onOpenContactedMenu?.(null); return }
-              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-              onOpenContactedMenu?.({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
-            }}
-            title={club.contacted ? `Contactado por ${contactedByName ?? club.contactedBy ?? '?'} · ${fmtDateTime(club.contactedAt)} (clic para reasignar/quitar)` : 'Marcar como contactado'}
-            aria-label={club.contacted ? `Contactado por ${contactedByName ?? club.contactedBy ?? '?'}` : 'Marcar como contactado'}
-            className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold border-2 transition-colors flex-shrink-0 ${
-              club.contacted
-                ? 'bg-green-100 text-green-700 border-green-300 hover:bg-green-200'
-                : 'bg-slate-50 text-slate-300 border-dashed border-slate-300 hover:bg-slate-200 sm:opacity-0 sm:group-hover:opacity-100'
-            } ${contactedDropOpen ? 'ring-2 ring-green-200 sm:opacity-100' : ''}`}
-          >
-            {club.contacted ? (club.contactedBy ?? <Check className="w-3.5 h-3.5" />) : <Check className="w-3.5 h-3.5" />}
-          </button>
-        )}
-        {onTogglePriority && (
-          <button
-            onClick={e => { e.stopPropagation(); onTogglePriority() }}
-            title={club.isPriority ? 'Quitar prioritario' : 'Marcar como prioritario'}
-            className={`p-2 sm:p-1 rounded transition-all ${
-              club.isPriority
-                ? 'text-green-500 hover:text-green-600'
-                : 'text-slate-300 sm:opacity-0 sm:group-hover:opacity-100 hover:text-amber-400'
-            }`}
-          >
-            <Star className={`w-4 h-4 ${club.isPriority ? 'fill-green-500' : ''}`} />
-          </button>
-        )}
-        {onOffer ? (
-          <button
-            onClick={e => { e.stopPropagation(); onOffer() }}
-            className="sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium px-1.5 py-2 sm:py-1 rounded hover:bg-blue-50"
-          >
-            <Plus className="w-3 h-3" /> Ofrecer
-          </button>
-        ) : (
-          <ChevronRight className="w-4 h-4 text-slate-300" />
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ── ADD PLAYER MODAL ──────────────────────────────────────────
 
 function AddPlayerModal({ players, existingPlayerIds, season, onClose, onSave, onCreatePlayer }: {
   players: Player[]
