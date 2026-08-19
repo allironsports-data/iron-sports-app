@@ -912,8 +912,16 @@ function ZonasPanel({ players, clubZonas, onSetClubZona, onClose, showToast }: {
 
 /** Temporada actual: del 1 de julio al 30 de junio */
 function inicioTemporada(hoy = new Date()): string {
+  // getMonth() es 0-based: julio = 6. Del 1 de julio en adelante ya estamos
+  // en la temporada nueva; en junio seguimos en la que acaba.
   const y = hoy.getMonth() >= 6 ? hoy.getFullYear() : hoy.getFullYear() - 1
   return `${y}-07-01`
+}
+
+/** «2026-07-01» → «26-27» */
+function etiquetaTemporada(desde: string): string {
+  const y = Number(desde.slice(0, 4))
+  return `${String(y).slice(2)}-${String(y + 1).slice(2)}`
 }
 
 interface FilaEquipo {
@@ -985,9 +993,16 @@ function useFilasEquipos(
         cubierto: cat?.cubierto ?? false,
         enCatalogo: !!cat,
         jugadores: jug.length,
-        plantilla: [...jug].sort((a, b) =>
-          ALL_ASSESSMENTS.indexOf(a.assessment as ScoutingAssessment) - ALL_ASSESSMENTS.indexOf(b.assessment as ScoutingAssessment) ||
-          a.fullName.localeCompare(b.fullName)),
+        // Los valorados primero, y entre ellos por orden de interés
+        // (Llamar, Seguir, Decidir…). Sin valorar, al final: si no se hace
+        // así, indexOf devuelve -1 y los sin valorar salían los primeros.
+        plantilla: [...jug].sort((a, b) => {
+          const orden = (x?: string) => {
+            const i = ALL_ASSESSMENTS.indexOf(x as ScoutingAssessment)
+            return i === -1 ? ALL_ASSESSMENTS.length : i
+          }
+          return orden(a.assessment) - orden(b.assessment) || a.fullName.localeCompare(b.fullName)
+        }),
         informes: jug.reduce((n, p) => n + (informesPorJugador[p.id] ?? 0), 0),
         partidos: pt?.temporada ?? 0,
         partidosHist: pt?.total ?? 0,
@@ -1149,10 +1164,12 @@ function EquiposTab({
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
           <button
             onClick={() => setHistorico(h => !h)}
-            title="Los partidos que se cuentan: solo esta temporada o todos"
+            title={historico
+              ? 'Ahora se cuentan TODOS los partidos, de cualquier temporada. Pulsa para contar solo los de esta.'
+              : `Ahora solo se cuentan los partidos del ${fmtDate(desde)} en adelante. Pulsa para contar todo el histórico.`}
             className="text-[11px] font-semibold border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-600 hover:border-slate-400"
           >
-            {historico ? '🕓 Histórico' : `📅 Temporada ${desde.slice(2, 4)}-${String(Number(desde.slice(0, 4)) + 1).slice(2)}`}
+            {historico ? '🕓 Todo el histórico' : `📅 Temporada ${etiquetaTemporada(desde)} · desde ${fmtDate(desde)}`}
           </button>
           <button onClick={onAbrirZonas} className="text-[11px] font-semibold border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-600 hover:border-primary hover:text-primary">📍 Zonas</button>
           <button onClick={onAbrirPlantilla} className="text-[11px] font-semibold border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-600 hover:border-primary hover:text-primary">📋 Actualizar plantilla</button>
@@ -1358,9 +1375,12 @@ function EquiposTab({
                     <td className={`px-2 py-2 text-center text-xs font-semibold ${f.jugadores ? 'text-slate-700' : 'text-slate-300'}`}>{f.jugadores || '—'}</td>
                     <td className={`px-2 py-2 text-center text-xs ${f.informes ? 'text-slate-600' : 'text-slate-300'}`}>{f.informes || '—'}</td>
                     <td className="px-2 py-2 text-center text-xs">
-                      <span className={nPartidos(f) ? 'font-semibold text-slate-700' : 'text-slate-300'}>{nPartidos(f) || '—'}</span>
+                      <span
+                        className={nPartidos(f) ? 'font-semibold text-slate-700' : 'text-slate-300'}
+                        title={historico ? 'Partidos de todas las temporadas' : `Partidos desde el ${fmtDate(desde)}`}
+                      >{nPartidos(f) || '—'}</span>
                       {!historico && f.partidosHist > f.partidos && (
-                        <span className="text-[10px] text-slate-400" title="Partidos de temporadas anteriores"> ({f.partidosHist})</span>
+                        <span className="text-[10px] text-slate-400" title={`${f.partidosHist} partidos suyos en total, contando temporadas anteriores`}> ({f.partidosHist})</span>
                       )}
                     </td>
                     <td className="px-2 py-2 text-[11px] text-slate-500 whitespace-nowrap">
@@ -6245,6 +6265,14 @@ export function Captacion({
   const [detailMatchId, setDetailMatchId] = useState<string | null>(null)
   const [zonasAbierto, setZonasAbierto] = useState(false)
   const [panelEquipo, setPanelEquipo] = useState<string | null>(null)
+  // De qué equipo veníamos al abrir un jugador, para poder volver
+  const [volverAEquipo, setVolverAEquipo] = useState<string | null>(null)
+  /** Abrir la ficha de un jugador. `desdeEquipo` deja el botón «← volver». */
+  const abrirJugador = useCallback((id: string | null, desdeEquipo?: string) => {
+    setVolverAEquipo(desdeEquipo ?? null)
+    setPanelEquipo(null)
+    setPanelPlayerId(id)
+  }, [])
   const isDesktop = useIsDesktop()   // en escritorio la ficha va a la derecha, no flotando
   // La tabla de partidos aparece a partir de sm (640px). Antes las dos vistas
   // —tarjetas de móvil y tabla— se pintaban SIEMPRE y una se escondía con CSS:
@@ -6824,7 +6852,7 @@ export function Captacion({
         onLinkReportToMatch={handleLinkReportToMatch}
         onCreateAndLinkPlayer={handleCreateAndLinkPlayer}
         onFixPlayerTeam={handleFixPlayerTeam}
-        onOpenPlayer={id => { if (variant === 'modal') setDetailMatchId(null); setPanelPlayerId(id) }}
+        onOpenPlayer={id => { if (variant === 'modal') setDetailMatchId(null); abrirJugador(id) }}
         onOpenMatch={id => setDetailMatchId(id)}
         showToast={showToast}
         variant={variant}
@@ -7059,6 +7087,7 @@ export function Captacion({
 
   function closePanel() {
     setPanelEquipo(null)
+    setVolverAEquipo(null)
     setPanelPlayerId(null)
     setShowAddPlayer(false)
     setShowEditPlayer(false)
@@ -7341,7 +7370,7 @@ export function Captacion({
                       return (
                         <tr
                           key={p.id}
-                          onClick={() => { setPanelPlayerId(p.id); setShowAddPlayer(false); setShowEditPlayer(false) }}
+                          onClick={() => { abrirJugador(p.id); setShowAddPlayer(false); setShowEditPlayer(false) }}
                           className={`cursor-pointer hover:bg-slate-50 transition-colors ${panelPlayerId === p.id ? 'bg-blue-50/40' : ''}`}
                         >
                           <td className="px-3 py-2.5">
@@ -7519,7 +7548,7 @@ export function Captacion({
           onCreate={onCreateFirmasEntry}
           onUpdate={onUpdateFirmasEntry}
           onDelete={onDeleteFirmasEntry}
-          onOpenScoutingPlayer={(id) => { setCaptTab('jugadores'); setPanelPlayerId(id) }}
+          onOpenScoutingPlayer={(id) => { setCaptTab('jugadores'); abrirJugador(id) }}
           showToast={showToast}
           headerHeight={headerHeight}
         />
@@ -7535,7 +7564,7 @@ export function Captacion({
               onThresholdChange={setConclThreshold}
               isAdmin={isAdmin}
               onSetCandidateSeen={handleCandidateSeen}
-              onOpenPlayer={id => setPanelPlayerId(id)}
+              onOpenPlayer={id => abrirJugador(id)}
               clubZonas={clubZonas}
               onAbrirZonas={() => setZonasAbierto(true)}
             />
@@ -7551,7 +7580,7 @@ export function Captacion({
               players={scoutingPlayers}
               firmasEntries={firmasEntries}
               isAdmin={isAdmin}
-              onOpenPlayer={id => setPanelPlayerId(id)}
+              onOpenPlayer={id => abrirJugador(id)}
               onSetContract={handleQuickContract}
               onToggleMarketMap={handleToggleMarketMap}
               clubZonas={clubZonas}
@@ -7570,7 +7599,7 @@ export function Captacion({
           scoutingMatches={scoutingMatches}
           clubZonas={clubZonas}
           onSaveEquipo={onSaveEquipo}
-          onAbrirEquipo={n => { setPanelPlayerId(null); setPanelEquipo(n) }}
+          onAbrirEquipo={n => { abrirJugador(null); setPanelEquipo(n) }}
           equipoAbierto={panelEquipo}
           onAbrirZonas={() => setZonasAbierto(true)}
           onAbrirPlantilla={() => setShowPlantilla(true)}
@@ -7628,7 +7657,7 @@ export function Captacion({
                   <div
                     key={r.id}
                     className="bg-white border border-slate-200 rounded-xl px-4 py-3 cursor-pointer hover:border-blue-200 hover:shadow-sm transition-all"
-                    onClick={() => { setCaptTab('jugadores'); setPanelPlayerId(r.playerId) }}
+                    onClick={() => { setCaptTab('jugadores'); abrirJugador(r.playerId) }}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
@@ -8252,7 +8281,7 @@ export function Captacion({
                       ) : pretemporadaFiltered.map(({ player, matches }) => (
                         <tr
                           key={player.id}
-                          onClick={() => { setCaptTab('jugadores'); setPanelPlayerId(player.id) }}
+                          onClick={() => { setCaptTab('jugadores'); abrirJugador(player.id) }}
                           className="cursor-pointer hover:bg-slate-50/60 transition-colors"
                         >
                           <td className="px-3 py-2 font-medium text-slate-800">{player.fullName}</td>
@@ -8311,6 +8340,15 @@ export function Captacion({
           >
             {/* Panel header */}
             <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-200 bg-slate-50 flex-shrink-0">
+              {volverAEquipo && panelPlayer && !showEditPlayer && (
+                <button
+                  onClick={() => { setPanelPlayerId(null); setPanelEquipo(volverAEquipo); setVolverAEquipo(null) }}
+                  title={`Volver a ${volverAEquipo}`}
+                  className="flex-shrink-0 flex items-center gap-1 text-[11px] font-semibold text-slate-500 hover:text-primary border border-slate-200 rounded-lg px-2 py-1 bg-white"
+                >
+                  ← <span className="hidden sm:inline max-w-[110px] truncate">{volverAEquipo}</span>
+                </button>
+              )}
               <div className="flex-1 min-w-0">
                 {panelEquipo && (
                   <div>
@@ -8528,7 +8566,7 @@ export function Captacion({
                         {[
                           { n: f.jugadores, l: 'jugadores' },
                           { n: f.informes, l: 'informes' },
-                          { n: f.partidos, l: 'partidos 25-26' },
+                          { n: f.partidos, l: `partidos ${etiquetaTemporada(inicioTemporada())}` },
                           { n: f.partidosHist, l: 'partidos total' },
                         ].map(x => (
                           <div key={x.l} className="bg-slate-50 rounded-lg px-2 py-1.5">
@@ -8599,7 +8637,7 @@ export function Captacion({
                           {f.plantilla.map(p => (
                             <button
                               key={p.id}
-                              onClick={() => { setPanelEquipo(null); setPanelPlayerId(p.id) }}
+                              onClick={() => abrirJugador(p.id, f.nombre)}
                               className="w-full flex items-center gap-2 text-left bg-white border border-slate-200 rounded-lg px-2 py-1.5 hover:border-primary"
                             >
                               <span className="text-xs font-semibold text-slate-700 truncate flex-1">{p.fullName}</span>
