@@ -98,6 +98,34 @@ function logFetchError(tabla: string, error: unknown, leidas: number) {
   console.error(`[db] Fallo leyendo ${tabla} (se habían leído ${leidas} filas):`, error)
 }
 
+// ⚠ Supabase corta en 1000 filas SIN avisar. Cualquier lectura de una tabla
+// que pueda crecer tiene que ir paginada. Esto lo hace en una línea:
+//
+//   const filas = await leerTodo('postpartidos', (desde, hasta) =>
+//     supabase.from('postpartidos').select('*').order('created_at').range(desde, hasta))
+//
+// `consulta` recibe el rango y devuelve la petición ya montada.
+const PAGINA = 1000
+export async function leerTodo<T>(
+  tabla: string,
+  consulta: (desde: number, hasta: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
+): Promise<T[]> {
+  const todo: T[] = []
+  let desde = 0
+  // Tope de seguridad: 200 páginas = 200.000 filas. Si se llega ahí es que
+  // algo va mal (un bucle), no que haya tantos datos.
+  for (let i = 0; i < 200; i++) {
+    const { data, error } = await consulta(desde, desde + PAGINA - 1)
+    if (error) { logFetchError(tabla, error, todo.length); throw error }
+    const pagina = data ?? []
+    todo.push(...pagina)
+    if (pagina.length < PAGINA) return todo
+    desde += PAGINA
+  }
+  logFetchError(tabla, new Error('demasiadas páginas'), todo.length)
+  return todo
+}
+
 // ── PLAYERS ──────────────────────────────────────────────────
 
 // ⚠ Supabase corta en 1000 filas SIN avisar: todo fetch de una tabla que
@@ -255,12 +283,9 @@ function dbToComment(row: Record<string, unknown>): TaskComment {
 }
 
 export async function fetchComments(taskId: string): Promise<TaskComment[]> {
-  const { data, error } = await supabase
-    .from('task_comments')
-    .select('*, task_attachments(*)')
-    .eq('task_id', taskId)
-    .order('created_at')
-  if (error) throw error
+  const data = await leerTodo<Record<string, unknown>>('task_comments', (d, h) =>
+    supabase.from('task_comments').select('*, task_attachments(*)')
+      .eq('task_id', taskId).order('created_at').range(d, h))
   return (data ?? []).map((row: Record<string, unknown>) => ({
     ...dbToComment(row as Record<string, unknown>),
     attachments: ((row.task_attachments as Record<string, unknown>[]) ?? []).map((a) => ({
@@ -367,9 +392,8 @@ export async function deleteNote(id: string): Promise<void> {
 // ── PROFILES ─────────────────────────────────────────────────
 
 export async function fetchProfiles() {
-  const { data, error } = await supabase.from('profiles').select('*').order('name')
-  if (error) throw error
-  return data ?? []
+  return leerTodo<Record<string, unknown>>('profiles', (d, h) =>
+    supabase.from('profiles').select('*').order('name').range(d, h))
 }
 
 export async function updateProfile(id: string, updates: { name?: string; avatar?: string; is_admin?: boolean; hidden_from_status?: boolean; captacion_only?: boolean }) {
@@ -399,9 +423,9 @@ function dbToPostpartido(row: Record<string, unknown>): Postpartido {
 }
 
 export async function fetchPostpartidos(): Promise<Postpartido[]> {
-  const { data, error } = await supabase.from('postpartidos').select('*').order('created_at', { ascending: false })
-  if (error) throw error
-  return (data ?? []).map(dbToPostpartido)
+  const filas = await leerTodo<Record<string, unknown>>('postpartidos', (d, h) =>
+    supabase.from('postpartidos').select('*').order('created_at', { ascending: false }).range(d, h))
+  return filas.map(dbToPostpartido)
 }
 
 export async function createPostpartido(p: Omit<Postpartido, 'id' | 'createdAt'>): Promise<Postpartido> {
@@ -450,9 +474,9 @@ function dbToMemberStatus(row: Record<string, unknown>): MemberStatus {
 }
 
 export async function fetchMemberStatuses(): Promise<MemberStatus[]> {
-  const { data, error } = await supabase.from('member_status').select('*')
-  if (error) throw error
-  return (data ?? []).map(dbToMemberStatus)
+  const filas = await leerTodo<Record<string, unknown>>('member_status', (d, h) =>
+    supabase.from('member_status').select('*').range(d, h))
+  return filas.map(dbToMemberStatus)
 }
 
 export async function upsertMemberStatus(s: Omit<MemberStatus, 'updatedAt'>): Promise<MemberStatus> {
@@ -1233,12 +1257,9 @@ function dbToBoulemaPeticion(row: Record<string, unknown>): BoulemaPeticion {
 }
 
 export async function fetchBoulemaPeticiones(): Promise<BoulemaPeticion[]> {
-  const { data, error } = await supabase
-    .from('boulema_peticiones')
-    .select('*')
-    .order('created_at', { ascending: false })
-  if (error) throw error
-  return (data ?? []).map(dbToBoulemaPeticion)
+  const filas = await leerTodo<Record<string, unknown>>('boulema_peticiones', (d, h) =>
+    supabase.from('boulema_peticiones').select('*').order('created_at', { ascending: false }).range(d, h))
+  return filas.map(dbToBoulemaPeticion)
 }
 
 export async function createBoulemaPeticion(p: Omit<BoulemaPeticion, 'id' | 'createdAt'>): Promise<BoulemaPeticion> {
@@ -1376,13 +1397,10 @@ function dbToClubLog(row: Record<string, unknown>): ClubLog {
 }
 
 export async function fetchClubLogs(playerId: string): Promise<ClubLog[]> {
-  const { data, error } = await supabase
-    .from('club_logs')
-    .select('*')
-    .eq('player_id', playerId)
-    .order('date', { ascending: false })
-  if (error) throw error
-  return (data ?? []).map(dbToClubLog)
+  const filas = await leerTodo<Record<string, unknown>>('club_logs', (d, h) =>
+    supabase.from('club_logs').select('*').eq('player_id', playerId)
+      .order('date', { ascending: false }).range(d, h))
+  return filas.map(dbToClubLog)
 }
 
 export async function createClubLog(playerId: string, log: Omit<ClubLog, 'id' | 'playerId' | 'createdAt'>): Promise<ClubLog> {
@@ -1587,9 +1605,8 @@ export interface ClubZona { club: string; nombre?: string; zona: string }
 
 export async function fetchClubZonas(): Promise<ClubZona[]> {
   try {
-    const { data, error } = await supabase.from('scouting_club_zonas').select('club, nombre, zona')
-    if (error) { logFetchError('zonas de clubes (¿migración pendiente?)', error, 0); return [] }
-    return (data ?? []) as ClubZona[]
+    return await leerTodo<ClubZona>('zonas de clubes (¿migración pendiente?)', (d, h) =>
+      supabase.from('scouting_club_zonas').select('club, nombre, zona').range(d, h))
   } catch {
     return []
   }
@@ -1606,5 +1623,84 @@ export async function setClubZona(club: string, nombre: string, zona: string | n
     { club, nombre, zona, updated_at: new Date().toISOString(), updated_by: quien ?? null },
     { onConflict: 'club' },
   )
+  if (error) throw error
+}
+
+// ── CATÁLOGO DE EQUIPOS ──────────────────────────────────────────────
+// Un equipo = «Atlético Madrid Juv A». Lleva su club (de donde sale la
+// zona), su categoría, y dos marcas de control: relevante y cubierto.
+
+export interface Equipo {
+  nombre: string
+  club: string
+  categoria?: string
+  zona?: string
+  relevante: boolean
+  cubierto: boolean
+  cubiertoAt?: string
+  notas?: string
+  activo: boolean
+  manual: boolean
+}
+
+function dbToEquipo(row: Record<string, unknown>): Equipo {
+  return {
+    nombre: row.nombre as string,
+    club: row.club as string,
+    categoria: (row.categoria as string) ?? undefined,
+    zona: (row.zona as string) ?? undefined,
+    relevante: (row.relevante as boolean) ?? false,
+    cubierto: (row.cubierto as boolean) ?? false,
+    cubiertoAt: (row.cubierto_at as string) ?? undefined,
+    notas: (row.notas as string) ?? undefined,
+    activo: (row.activo as boolean) ?? true,
+    manual: (row.manual as boolean) ?? false,
+  }
+}
+
+export async function fetchEquipos(): Promise<Equipo[]> {
+  try {
+    const all: Equipo[] = []
+    const PAGE = 1000
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase.from('scouting_equipos').select('*')
+        .order('nombre').range(from, from + PAGE - 1)
+      if (error) { logFetchError('catálogo de equipos (¿migración pendiente?)', error, all.length); return all }
+      const page = (data ?? []).map(r => dbToEquipo(r as Record<string, unknown>))
+      all.push(...page)
+      if (page.length < PAGE) break
+      from += PAGE
+    }
+    return all
+  } catch {
+    return []
+  }
+}
+
+/** Crea o actualiza un equipo del catálogo */
+export async function upsertEquipo(e: Partial<Equipo> & { nombre: string; club: string }, quien?: string): Promise<void> {
+  const fila: Record<string, unknown> = {
+    nombre: e.nombre,
+    club: e.club,
+    updated_at: new Date().toISOString(),
+    updated_by: quien ?? null,
+  }
+  if (e.categoria !== undefined) fila.categoria = e.categoria ?? null
+  if (e.zona !== undefined) fila.zona = e.zona ?? null
+  if (e.relevante !== undefined) fila.relevante = e.relevante
+  if (e.cubierto !== undefined) {
+    fila.cubierto = e.cubierto
+    fila.cubierto_at = e.cubierto ? new Date().toISOString() : null
+  }
+  if (e.notas !== undefined) fila.notas = e.notas ?? null
+  if (e.activo !== undefined) fila.activo = e.activo
+  if (e.manual !== undefined) fila.manual = e.manual
+  const { error } = await supabase.from('scouting_equipos').upsert(fila, { onConflict: 'nombre' })
+  if (error) throw error
+}
+
+export async function deleteEquipo(nombre: string): Promise<void> {
+  const { error } = await supabase.from('scouting_equipos').delete().eq('nombre', nombre)
   if (error) throw error
 }

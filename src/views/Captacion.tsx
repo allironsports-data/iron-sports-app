@@ -1,15 +1,16 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react'
+import React, { useState, useMemo, useEffect, useCallback, Fragment } from 'react'
 import {
   Search, X, Plus, LogOut, Trash2, ChevronDown,
   FileText, Calendar, ChevronRight,
   TrendingUp, Eye, Maximize2, Minimize2, Pencil,
   ClipboardList, Users, Inbox, Send, Target, Sun,
-  PenLine, MapPin, MessageSquare, ExternalLink, LayoutGrid,
+  PenLine, MapPin, MessageSquare, ExternalLink, LayoutGrid, Shield,
 } from 'lucide-react'
 import logoImg from '../assets/logo.jpeg'
 import type { Player, ScoutingPlayer, ScoutingReport, ScoutingAssessment, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchScout, BoulemaPeticion, FirmasEntry, FirmasStatus, FirmasComment } from '../types'
 import type { Profile } from '../contexts/AuthContext'
 import * as db from '../lib/db'
+import type { Equipo as EquipoCatalogo } from '../lib/db'
 import { parsearAlineacion, emparejar, type Emparejamiento } from '../lib/lineup'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { ScoutingTable } from './ScoutingTable'
@@ -25,7 +26,7 @@ type ShowToast = (message: string, variant?: 'success' | 'error' | 'info', actio
 
 // ── Constants ────────────────────────────────────────────────
 
-type CaptacionTab = 'jugadores' | 'firmar' | 'conclusiones' | 'contratos' | 'informes' | 'partidos' | 'pretemporada'
+type CaptacionTab = 'jugadores' | 'firmar' | 'conclusiones' | 'contratos' | 'equipos' | 'informes' | 'partidos' | 'pretemporada'
 
 const ASSESSMENT_CONFIG: Record<ScoutingAssessment, { label: string; bg: string; text: string; border: string }> = {
   Llamar:     { label: 'Llamar',     bg: 'bg-amber-100',   text: 'text-amber-700',   border: 'border-amber-200' },
@@ -895,6 +896,463 @@ function ZonasPanel({ players, clubZonas, onSetClubZona, onClose, showToast }: {
             </p>
           )}
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Pestaña EQUIPOS · control de cobertura ───────────────────────────
+// Para qué: saber, zona a zona y categoría a categoría, de qué equipos
+// tenemos control real y de cuáles no. «Control» aquí no es una opinión:
+// son jugadores apuntados, informes escritos y partidos vistos.
+//
+//   ★ relevante → este equipo nos importa (lo pones tú)
+//   ✓ cubierto  → ya lo hemos cubierto esta temporada (lo pones tú)
+//   y al lado, lo que dicen los datos: jugadores, informes y partidos.
+
+/** Temporada actual: del 1 de julio al 30 de junio */
+function inicioTemporada(hoy = new Date()): string {
+  const y = hoy.getMonth() >= 6 ? hoy.getFullYear() : hoy.getFullYear() - 1
+  return `${y}-07-01`
+}
+
+interface FilaEquipo {
+  nombre: string
+  club: string
+  categoria: string
+  zona: string
+  relevante: boolean
+  cubierto: boolean
+  enCatalogo: boolean
+  jugadores: number
+  destacados: ScoutingPlayer[]
+  informes: number
+  partidos: number
+  partidosHist: number
+  ultimoPartido?: string
+}
+
+const SIN_CATEGORIA = 'Sin categoría'
+
+function EquiposTab({
+  equipos, scoutingPlayers, scoutingReports, scoutingMatches, clubZonas,
+  onSaveEquipo, onOpenPlayer, onAbrirZonas, showToast,
+}: {
+  equipos: EquipoCatalogo[]
+  scoutingPlayers: ScoutingPlayer[]
+  scoutingReports: ScoutingReport[]
+  scoutingMatches: ScoutingMatch[]
+  clubZonas: Record<string, Zona>
+  onSaveEquipo: (e: Partial<EquipoCatalogo> & { nombre: string; club: string }) => Promise<void>
+  onOpenPlayer: (id: string) => void
+  onAbrirZonas: () => void
+  showToast: ShowToast
+}) {
+  const [zonaSel, setZonaSel] = useState<string>('all')
+  const [catSel, setCatSel] = useState<string>('all')
+  const [soloRelevantes, setSoloRelevantes] = useState(false)
+  const [historico, setHistorico] = useState(false)
+  const [q, setQ] = useState('')
+  const [abierto, setAbierto] = useState<string | null>(null)
+  const [altaAbierta, setAltaAbierta] = useState(false)
+  const [nuevoNombre, setNuevoNombre] = useState('')
+  const [nuevaCat, setNuevaCat] = useState('')
+  const desde = useMemo(() => inicioTemporada(), [])
+
+  // ── Datos por equipo ───────────────────────────────────────────────
+  const filas = useMemo<FilaEquipo[]>(() => {
+    // jugadores agrupados por nombre de equipo tal cual está escrito
+    const porEquipo = new Map<string, ScoutingPlayer[]>()
+    for (const p of scoutingPlayers) {
+      const t = (p.team ?? '').trim()
+      if (!t) continue
+      const l = porEquipo.get(t)
+      if (l) l.push(p); else porEquipo.set(t, [p])
+    }
+
+    const informesPorJugador: Record<string, number> = {}
+    for (const r of scoutingReports) informesPorJugador[r.playerId] = (informesPorJugador[r.playerId] ?? 0) + 1
+
+    // partidos por nombre de equipo (local y visitante cuentan igual)
+    const partidos = new Map<string, { temporada: number; total: number; ultimo?: string }>()
+    const anota = (equipo: string | undefined, fecha: string) => {
+      const t = (equipo ?? '').trim()
+      if (!t) return
+      const e = partidos.get(t) ?? { temporada: 0, total: 0 }
+      e.total++
+      if (fecha >= desde) e.temporada++
+      if (!e.ultimo || fecha > e.ultimo) e.ultimo = fecha
+      partidos.set(t, e)
+    }
+    for (const m of scoutingMatches) { anota(m.homeTeam, m.date); anota(m.awayTeam, m.date) }
+
+    // El catálogo manda; si hay equipos con jugadores que aún no están en
+    // él (alta reciente), se enseñan igual para que no se escondan.
+    const nombres = new Set<string>([...equipos.map(e => e.nombre), ...porEquipo.keys()])
+    const delCatalogo = new Map(equipos.map(e => [e.nombre, e]))
+
+    const out: FilaEquipo[] = []
+    for (const nombre of nombres) {
+      const cat = delCatalogo.get(nombre)
+      const club = cat?.club ?? clubBase(nombre)
+      const jug = porEquipo.get(nombre) ?? []
+      const pt = partidos.get(nombre)
+      out.push({
+        nombre,
+        club,
+        categoria: cat?.categoria || SIN_CATEGORIA,
+        zona: (cat?.zona as string) || zonaDe(nombre, clubZonas) || SIN_ZONA,
+        relevante: cat?.relevante ?? false,
+        cubierto: cat?.cubierto ?? false,
+        enCatalogo: !!cat,
+        jugadores: jug.length,
+        destacados: jug
+          .filter(p => p.assessment === 'Llamar' || p.assessment === 'Basque' || p.assessment === 'Seguir')
+          .sort((a, b) => ALL_ASSESSMENTS.indexOf(a.assessment as ScoutingAssessment) - ALL_ASSESSMENTS.indexOf(b.assessment as ScoutingAssessment))
+          .slice(0, 12),
+        informes: jug.reduce((n, p) => n + (informesPorJugador[p.id] ?? 0), 0),
+        partidos: pt?.temporada ?? 0,
+        partidosHist: pt?.total ?? 0,
+        ultimoPartido: pt?.ultimo,
+      })
+    }
+    return out.sort((a, b) => a.nombre.localeCompare(b.nombre))
+  }, [equipos, scoutingPlayers, scoutingReports, scoutingMatches, clubZonas, desde])
+
+  const categorias = useMemo(
+    () => [...new Set(filas.map(f => f.categoria))].sort((a, b) =>
+      a === SIN_CATEGORIA ? 1 : b === SIN_CATEGORIA ? -1 : a.localeCompare(b)),
+    [filas],
+  )
+  const zonas = useMemo(
+    () => [...new Set(filas.map(f => f.zona))].sort((a, b) =>
+      a === SIN_ZONA ? 1 : b === SIN_ZONA ? -1 : a.localeCompare(b)),
+    [filas],
+  )
+
+  const nPartidos = (f: FilaEquipo) => historico ? f.partidosHist : f.partidos
+
+  // ── Matriz zona × categoría ────────────────────────────────────────
+  // Cada celda: cuántos equipos relevantes hay y cuántos están cubiertos.
+  const matriz = useMemo(() => {
+    const m: Record<string, Record<string, { total: number; relevantes: number; cubiertos: number; sinNadie: number }>> = {}
+    for (const z of zonas) {
+      m[z] = {}
+      for (const c of categorias) m[z][c] = { total: 0, relevantes: 0, cubiertos: 0, sinNadie: 0 }
+    }
+    for (const f of filas) {
+      const celda = m[f.zona]?.[f.categoria]
+      if (!celda) continue
+      celda.total++
+      if (f.relevante) {
+        celda.relevantes++
+        if (f.cubierto || nPartidos(f) > 0) celda.cubiertos++
+        if (f.jugadores === 0) celda.sinNadie++
+      }
+    }
+    return m
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filas, zonas, categorias, historico])
+
+  const nq = normSearch(q)
+  const visibles = useMemo(() => filas.filter(f => {
+    if (zonaSel !== 'all' && f.zona !== zonaSel) return false
+    if (catSel !== 'all' && f.categoria !== catSel) return false
+    if (soloRelevantes && !f.relevante) return false
+    if (nq && !normSearch(`${f.nombre} ${f.club}`).includes(nq)) return false
+    return true
+  }), [filas, zonaSel, catSel, soloRelevantes, nq])
+
+  async function marcar(f: FilaEquipo, campo: 'relevante' | 'cubierto') {
+    try {
+      await onSaveEquipo({
+        nombre: f.nombre,
+        club: f.club,
+        categoria: f.categoria === SIN_CATEGORIA ? undefined : f.categoria,
+        [campo]: !f[campo],
+      })
+    } catch {
+      showToast('No se ha podido guardar', 'error')
+    }
+  }
+
+  async function crearEquipo() {
+    const nombre = nuevoNombre.trim()
+    if (!nombre) return
+    if (filas.some(f => f.nombre.toLowerCase() === nombre.toLowerCase())) {
+      showToast('Ese equipo ya está en la lista', 'info')
+      return
+    }
+    try {
+      await onSaveEquipo({
+        nombre,
+        club: clubBase(nombre),
+        categoria: nuevaCat || undefined,
+        relevante: true,
+        manual: true,
+      })
+      showToast(`${nombre} añadido como relevante`)
+      setNuevoNombre(''); setNuevaCat(''); setAltaAbierta(false)
+    } catch {
+      showToast('No se ha podido crear el equipo', 'error')
+    }
+  }
+
+  // Semáforo de cobertura de un equipo relevante
+  function semaforo(f: FilaEquipo): { cls: string; txt: string } {
+    if (!f.relevante) return { cls: 'bg-slate-100 text-slate-400 border-slate-200', txt: '—' }
+    if (f.jugadores === 0) return { cls: 'bg-red-100 text-red-700 border-red-200', txt: 'sin nadie' }
+    if (nPartidos(f) === 0) return { cls: 'bg-amber-100 text-amber-700 border-amber-200', txt: 'sin partidos' }
+    if (f.informes === 0) return { cls: 'bg-amber-100 text-amber-700 border-amber-200', txt: 'sin informes' }
+    return { cls: 'bg-green-100 text-green-700 border-green-200', txt: 'controlado' }
+  }
+
+  return (
+    <div className="flex-1 max-w-[1500px] mx-auto w-full px-3 sm:px-6 py-4 space-y-4">
+
+      {/* ── Matriz de control ── */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-center gap-2">
+          <h3 className="text-sm font-bold text-slate-800">🗂️ Control por zona y categoría</h3>
+          <span className="text-[11px] text-slate-400">
+            cubiertos / relevantes · {historico ? 'todo el histórico' : 'temporada ' + desde.slice(0, 4) + '-' + String(Number(desde.slice(0, 4)) + 1).slice(2)}
+          </span>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={() => setHistorico(h => !h)}
+              className="text-[11px] font-semibold border border-slate-200 rounded-lg px-2 py-1 bg-white text-slate-600 hover:border-slate-400"
+            >
+              {historico ? '📅 Ver temporada actual' : '🕓 Ver histórico'}
+            </button>
+            <button onClick={onAbrirZonas} title="Zonas de los clubes" className="text-[11px] font-semibold border border-slate-200 rounded-lg px-2 py-1 bg-white text-slate-600 hover:border-slate-400">📍 Zonas</button>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200">
+                <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide">Zona</th>
+                {categorias.map(c => (
+                  <th key={c} className="px-2 py-2 font-semibold text-slate-500 uppercase tracking-wide text-center whitespace-nowrap">{c}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {zonas.map(z => (
+                <tr key={z} className="hover:bg-slate-50/60">
+                  <td className="px-3 py-2 font-semibold text-slate-700 whitespace-nowrap">
+                    {z === SIN_ZONA ? <span className="text-amber-600">{z}</span> : (ZONA_CORTA[z as Zona] ?? z)}
+                  </td>
+                  {categorias.map(c => {
+                    const d = matriz[z]?.[c]
+                    if (!d || d.total === 0) return <td key={c} className="px-2 py-2 text-center text-slate-200">·</td>
+                    const sinRelevantes = d.relevantes === 0
+                    const pct = d.relevantes ? d.cubiertos / d.relevantes : 0
+                    return (
+                      <td key={c} className="px-2 py-2 text-center">
+                        <button
+                          onClick={() => { setZonaSel(z); setCatSel(c); setSoloRelevantes(!sinRelevantes) }}
+                          title={`${d.total} equipos · ${d.relevantes} marcados como relevantes · ${d.cubiertos} cubiertos${d.sinNadie ? ` · ${d.sinNadie} relevantes sin ningún jugador` : ''}`}
+                          className={`min-w-[54px] rounded-lg px-2 py-1 font-bold border transition-colors ${
+                            sinRelevantes ? 'bg-slate-50 text-slate-400 border-slate-200 hover:border-slate-400'
+                            : pct >= 1 ? 'bg-green-100 text-green-700 border-green-200 hover:border-green-400'
+                            : pct >= 0.5 ? 'bg-amber-100 text-amber-700 border-amber-200 hover:border-amber-400'
+                            : 'bg-red-100 text-red-700 border-red-200 hover:border-red-400'
+                          }`}
+                        >
+                          {sinRelevantes ? d.total : `${d.cubiertos}/${d.relevantes}`}
+                        </button>
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="px-4 py-2 text-[10.5px] text-slate-400 border-t border-slate-50">
+          En gris, los equipos que hay en esa casilla cuando todavía no has marcado ninguno como relevante.
+          En cuanto marcas alguno con ★, la casilla pasa a «cubiertos / relevantes». Pulsa cualquier casilla para ver esos equipos.
+        </p>
+      </div>
+
+      {/* ── Filtros ── */}
+      <div className="flex flex-wrap items-center gap-2">
+        <select value={zonaSel} onChange={e => setZonaSel(e.target.value)} className={SELECT_CLS}>
+          <option value="all">📍 Todas las zonas</option>
+          {zonas.map(z => <option key={z} value={z}>{z}</option>)}
+        </select>
+        <select value={catSel} onChange={e => setCatSel(e.target.value)} className={SELECT_CLS}>
+          <option value="all">Todas las categorías</option>
+          {categorias.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 cursor-pointer">
+          <input type="checkbox" checked={soloRelevantes} onChange={e => setSoloRelevantes(e.target.checked)} className="accent-blue-600" />
+          Solo los ★ relevantes
+        </label>
+        <div className="relative flex-1 min-w-[150px] max-w-xs">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+          <input
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            placeholder="Buscar equipo…"
+            className="w-full pl-8 pr-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+          />
+        </div>
+        <span className="text-xs text-slate-400">{visibles.length} equipos</span>
+        <button
+          onClick={() => setAltaAbierta(a => !a)}
+          className="ml-auto flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-primary text-white rounded-lg hover:bg-primary/90"
+        >
+          <Plus className="w-3.5 h-3.5" /> Añadir equipo
+        </button>
+      </div>
+
+      {altaAbierta && (
+        <div className="bg-blue-50/50 border border-blue-200 rounded-xl p-3 flex flex-wrap items-end gap-2">
+          <div className="flex-1 min-w-[200px]">
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Equipo</label>
+            <input
+              value={nuevoNombre}
+              onChange={e => setNuevoNombre(e.target.value)}
+              placeholder="Ej.: Rayo Vallecano Juv A"
+              autoFocus
+              onKeyDown={e => { if (e.key === 'Enter') void crearEquipo() }}
+              className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+            />
+          </div>
+          <div className="min-w-[160px]">
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Categoría</label>
+            <select value={nuevaCat} onChange={e => setNuevaCat(e.target.value)} className={SELECT_CLS + ' w-full'}>
+              <option value="">— sin categoría —</option>
+              {categorias.filter(c => c !== SIN_CATEGORIA).map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <button onClick={() => void crearEquipo()} className="px-3 py-1.5 text-xs font-bold bg-primary text-white rounded-lg hover:bg-primary/90">
+            Añadir como ★ relevante
+          </button>
+          <p className="w-full text-[10.5px] text-slate-500">
+            Para equipos que te importan y de los que <strong>todavía no tienes a nadie apuntado</strong>. La zona
+            se deduce del nombre del club; si no la acierta, corrígela en 📍 Zonas.
+          </p>
+        </div>
+      )}
+
+      {/* ── Lista de equipos ── */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200 text-[11px] text-slate-500 uppercase tracking-wide">
+                <th className="px-2 py-2.5 font-semibold w-8" title="Relevante: este equipo nos importa">★</th>
+                <th className="px-2 py-2.5 font-semibold w-8" title="Cubierto esta temporada">✓</th>
+                <th className="text-left px-3 py-2.5 font-semibold">Equipo</th>
+                <th className="text-left px-2 py-2.5 font-semibold">Zona</th>
+                <th className="text-left px-2 py-2.5 font-semibold">Categoría</th>
+                <th className="text-center px-2 py-2.5 font-semibold" title="Jugadores en la BBDD">Jug.</th>
+                <th className="text-center px-2 py-2.5 font-semibold" title="Informes escritos sobre jugadores de este equipo">Inf.</th>
+                <th className="text-center px-2 py-2.5 font-semibold" title="Partidos suyos en la pestaña Partidos">Part.</th>
+                <th className="text-left px-2 py-2.5 font-semibold">Último</th>
+                <th className="text-left px-2 py-2.5 font-semibold">Control</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {visibles.length === 0 && (
+                <tr><td colSpan={10} className="text-center py-10 text-slate-400 text-sm">No hay equipos que coincidan.</td></tr>
+              )}
+              {visibles.slice(0, 300).map(f => {
+                const sem = semaforo(f)
+                const abiertoAqui = abierto === f.nombre
+                return (
+                  <Fragment key={f.nombre}>
+                    <tr className={`hover:bg-slate-50/60 ${abiertoAqui ? 'bg-blue-50/40' : ''}`}>
+                      <td className="px-2 py-2 text-center">
+                        <button
+                          onClick={() => void marcar(f, 'relevante')}
+                          title={f.relevante ? 'Quitar de relevantes' : 'Marcar como relevante'}
+                          className={`text-base leading-none ${f.relevante ? 'text-amber-500' : 'text-slate-200 hover:text-amber-400'}`}
+                        >★</button>
+                      </td>
+                      <td className="px-2 py-2 text-center">
+                        <button
+                          onClick={() => void marcar(f, 'cubierto')}
+                          title={f.cubierto ? 'Marcar como NO cubierto' : 'Marcar como cubierto esta temporada'}
+                          className={`text-sm leading-none font-bold ${f.cubierto ? 'text-green-600' : 'text-slate-200 hover:text-green-500'}`}
+                        >✓</button>
+                      </td>
+                      <td className="px-3 py-2">
+                        <button
+                          onClick={() => setAbierto(abiertoAqui ? null : f.nombre)}
+                          className="text-left font-medium text-slate-800 hover:text-primary"
+                        >
+                          {f.nombre}
+                          {f.jugadores > 0 && <ChevronDown className={`inline w-3 h-3 ml-1 text-slate-300 transition-transform ${abiertoAqui ? 'rotate-180' : ''}`} />}
+                        </button>
+                        {!f.enCatalogo && <span className="ml-1.5 text-[9px] font-bold text-blue-500 uppercase" title="Todavía no está en el catálogo: se dará de alta al marcarlo">nuevo</span>}
+                      </td>
+                      <td className="px-2 py-2 text-[11px] text-slate-500 whitespace-nowrap">
+                        {f.zona === SIN_ZONA ? <span className="text-amber-600">sin zona</span> : (ZONA_CORTA[f.zona as Zona] ?? f.zona)}
+                      </td>
+                      <td className="px-2 py-2 text-[11px] text-slate-500 whitespace-nowrap">
+                        {f.categoria === SIN_CATEGORIA ? <span className="text-amber-600">—</span> : f.categoria}
+                      </td>
+                      <td className={`px-2 py-2 text-center text-xs font-semibold ${f.jugadores ? 'text-slate-700' : 'text-slate-300'}`}>{f.jugadores || '—'}</td>
+                      <td className={`px-2 py-2 text-center text-xs ${f.informes ? 'text-slate-600' : 'text-slate-300'}`}>{f.informes || '—'}</td>
+                      <td className="px-2 py-2 text-center text-xs">
+                        <span className={nPartidos(f) ? 'font-semibold text-slate-700' : 'text-slate-300'}>{nPartidos(f) || '—'}</span>
+                        {!historico && f.partidosHist > f.partidos && (
+                          <span className="text-[10px] text-slate-400" title="Partidos de temporadas anteriores"> ({f.partidosHist})</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-2 text-[11px] text-slate-500 whitespace-nowrap">
+                        {f.ultimoPartido ? fmtDate(f.ultimoPartido) : <span className="text-slate-300">—</span>}
+                      </td>
+                      <td className="px-2 py-2">
+                        <span className={`inline-flex text-[10px] font-bold rounded-full border px-2 py-0.5 ${sem.cls}`}>{sem.txt}</span>
+                      </td>
+                    </tr>
+                    {abiertoAqui && (
+                      <tr className="bg-slate-50/70">
+                        <td colSpan={10} className="px-4 py-3">
+                          {f.destacados.length === 0 ? (
+                            <p className="text-[11px] text-slate-400 italic">
+                              {f.jugadores === 0
+                                ? 'Ningún jugador de este equipo en la base de datos.'
+                                : `${f.jugadores} jugadores apuntados, pero ninguno valorado como Llamar, Basque o Seguir.`}
+                            </p>
+                          ) : (
+                            <>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase mb-1.5">Destacados de {f.nombre}</p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {f.destacados.map(p => (
+                                  <button
+                                    key={p.id}
+                                    onClick={() => onOpenPlayer(p.id)}
+                                    className="inline-flex items-center gap-1.5 bg-white border border-slate-200 rounded-full px-2 py-1 text-[11px] hover:border-primary"
+                                  >
+                                    <span className="font-semibold text-slate-700">{p.fullName}</span>
+                                    <span className="text-slate-400">{p.position1 ?? '—'}</span>
+                                    <span className="text-slate-400">{birthYearFromBirthdate(p.birthdate)}</span>
+                                    <AssessmentChip a={p.assessment} small />
+                                  </button>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+        {visibles.length > 300 && (
+          <p className="text-[11px] text-slate-400 italic px-4 py-3 text-center border-t border-slate-100">
+            Se muestran 300 de {visibles.length}. Filtra por zona o categoría para ver el resto.
+          </p>
+        )}
       </div>
     </div>
   )
@@ -5000,6 +5458,9 @@ interface Props {
   onOpenFirmasEntryConsumed?: () => void
   /** Cuenta "solo Captación": oculta el resto de secciones y deja solo Jugadores, Partidos e Informes */
   restricted?: boolean
+  /** Catálogo de equipos (pestaña Equipos) */
+  equipos: EquipoCatalogo[]
+  onSaveEquipo: (e: Partial<EquipoCatalogo> & { nombre: string; club: string }) => Promise<void>
   /** Zonas de club corregidas a mano (mandan sobre la clasificación por defecto) */
   clubZonas: Record<string, Zona>
   onSetClubZona: (club: string, nombre: string, zona: Zona | null) => Promise<void>
@@ -5609,6 +6070,8 @@ export function Captacion({
   openFirmasEntryId,
   onOpenFirmasEntryConsumed,
   restricted,
+  equipos,
+  onSaveEquipo,
   clubZonas,
   onSetClubZona,
   players,
@@ -6627,6 +7090,7 @@ export function Captacion({
             { id: 'conclusiones' as CaptacionTab, label: 'Conclusiones', labelMobile: 'Concl.', icon: <Target className="w-3.5 h-3.5" /> },
             { id: 'contratos' as CaptacionTab, label: 'Fin de contrato', labelMobile: 'Contratos', icon: <Calendar className="w-3.5 h-3.5" /> },
             { id: 'jugadores' as CaptacionTab, label: 'Jugadores', labelMobile: 'Jugadores', icon: <Users className="w-3.5 h-3.5" /> },
+            { id: 'equipos' as CaptacionTab, label: 'Equipos', labelMobile: 'Equipos', icon: <Shield className="w-3.5 h-3.5" /> },
             { id: 'informes' as CaptacionTab, label: 'Informes recientes', labelMobile: 'Informes', icon: <FileText className="w-3.5 h-3.5" /> },
             { id: 'partidos' as CaptacionTab, label: 'Partidos', labelMobile: 'Partidos', icon: <ClipboardList className="w-3.5 h-3.5" /> },
             { id: 'pretemporada' as CaptacionTab, label: 'Pretemporada', labelMobile: 'Pretemp.', icon: <Sun className="w-3.5 h-3.5" /> },
@@ -7056,6 +7520,20 @@ export function Captacion({
       )}
 
       {/* ── INFORMES RECIENTES TAB ─────────────────────────── */}
+      {captTab === 'equipos' && (
+        <EquiposTab
+          equipos={equipos}
+          scoutingPlayers={scoutingPlayers}
+          scoutingReports={scoutingReports}
+          scoutingMatches={scoutingMatches}
+          clubZonas={clubZonas}
+          onSaveEquipo={onSaveEquipo}
+          onOpenPlayer={id => setPanelPlayerId(id)}
+          onAbrirZonas={() => setZonasAbierto(true)}
+          showToast={showToast}
+        />
+      )}
+
       {captTab === 'informes' && (
         <div className="flex-1 max-w-5xl mx-auto w-full px-3 sm:px-6 py-4 space-y-4">
           {/* Per-author stats */}

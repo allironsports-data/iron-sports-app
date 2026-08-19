@@ -55,7 +55,7 @@ const SYNC_TABLES = [
   'club_negotiations', 'distribution_entries', 'clubs', 'players', 'tasks',
   'member_status', 'postpartidos', 'captacion_firmas',
   'scouting_matches', 'scouting_match_players', 'scouting_match_scouts',
-  'scouting_reports', 'scouting_players', 'scouting_club_zonas',
+  'scouting_reports', 'scouting_players', 'scouting_club_zonas', 'scouting_equipos',
 ] as const
 
 function Spinner() {
@@ -129,6 +129,8 @@ export default function App() {
   const [boulemaPlayers, setBoulemaPlayers] = useState<BoulemaPlayer[]>([])
   // Correcciones de zona hechas a mano (la clasificación por defecto vive en src/lib/zonas.ts)
   const [clubZonas, setClubZonas] = useState<Record<string, Zona>>({})
+  // Catálogo de equipos (pestaña Captación → Equipos)
+  const [equipos, setEquipos] = useState<db.Equipo[]>([])
 
   // Guard anti-bucle de la sincronización Firmar ⇄ Tareas.
   // DEBE declararse aquí arriba: es un hook y no puede ir después de los
@@ -286,7 +288,8 @@ export default function App() {
         db.fetchFirmasEntries().catch(() => [] as FirmasEntry[]),
         db.fetchBoulemaPlayers().catch(() => [] as BoulemaPlayer[]),
         db.fetchClubZonas().catch(() => [] as db.ClubZona[]),
-      ]).then(([cl, de, ng, sp, sr, sm, mp, msc, bp, ms, pp, fe, bpl, cz]) => {
+        db.fetchEquipos().catch(() => [] as db.Equipo[]),
+      ]).then(([cl, de, ng, sp, sr, sm, mp, msc, bp, ms, pp, fe, bpl, cz, eq]) => {
         if (cancelled) return
         setClubs(cl as Club[])
         setDistEntries(de as DistributionEntry[])
@@ -302,6 +305,7 @@ export default function App() {
         setFirmasEntries(fe as FirmasEntry[])
         setBoulemaPlayers(bpl as BoulemaPlayer[])
         setClubZonas(zonasAMapa(cz as db.ClubZona[]))
+        setEquipos(eq as db.Equipo[])
         setPhase2Loading(false)
       }).catch((err: unknown) => {
         // No bloquea la app: Distribución/Captación mostrarán listas vacías
@@ -549,6 +553,7 @@ export default function App() {
       // valoración, fin de contrato, campograma de mercado…
       case 'scouting_players':      db.fetchScoutingPlayers().then((d) => setScoutingPlayers(d as ScoutingPlayer[])).catch(ignora); break
       case 'scouting_club_zonas':   db.fetchClubZonas().then((d) => setClubZonas(zonasAMapa(d))).catch(ignora); break
+      case 'scouting_equipos':      db.fetchEquipos().then((d) => setEquipos(d)).catch(ignora); break
     }
   }, [])
 
@@ -832,6 +837,23 @@ export default function App() {
   const handleUpdateScoutingPlayer = (p: ScoutingPlayer) => {
     setScoutingPlayers(prev => prev.map(x => x.id === p.id ? p : x))
   }
+  /** Guardar un equipo del catálogo (marcas de control, categoría, alta manual) */
+  const handleSaveEquipo = async (e: Partial<db.Equipo> & { nombre: string; club: string }) => {
+    await db.upsertEquipo(e, profile?.avatar)
+    setEquipos(prev => {
+      const i = prev.findIndex(x => x.nombre === e.nombre)
+      if (i === -1) {
+        return [...prev, {
+          categoria: undefined, zona: undefined, relevante: false, cubierto: false,
+          activo: true, manual: false, ...e,
+        } as db.Equipo].sort((a, b) => a.nombre.localeCompare(b.nombre))
+      }
+      const next = [...prev]
+      next[i] = { ...next[i], ...e, cubiertoAt: e.cubierto ? new Date().toISOString() : next[i].cubiertoAt }
+      return next
+    })
+  }
+
   /** Cambiar a mano la zona de un club (zona = null vuelve a la de por defecto) */
   const handleSetClubZona = async (club: string, nombre: string, zona: Zona | null) => {
     await db.setClubZona(club, nombre, zona, profile?.avatar)
@@ -1289,6 +1311,8 @@ export default function App() {
         onDeleteFirmasEntry={handleDeleteFirmasEntry}
         clubZonas={clubZonas}
         onSetClubZona={handleSetClubZona}
+        equipos={equipos}
+        onSaveEquipo={handleSaveEquipo}
         restricted={!!profile.captacion_only}
       />
     )
