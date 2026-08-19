@@ -393,7 +393,7 @@ export async function deleteNote(id: string): Promise<void> {
 
 export async function fetchProfiles() {
   return leerTodo<Record<string, unknown>>('profiles', (d, h) =>
-    supabase.from('profiles').select('*').order('name').range(d, h))
+    supabase.from('profiles').select('*').order('name').range(d, h)) as Promise<unknown[]>
 }
 
 export async function updateProfile(id: string, updates: { name?: string; avatar?: string; is_admin?: boolean; hidden_from_status?: boolean; captacion_only?: boolean }) {

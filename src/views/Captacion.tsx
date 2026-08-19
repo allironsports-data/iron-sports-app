@@ -6262,6 +6262,18 @@ export function Captacion({
   const PAGE_SIZE = 50
   const [page, setPage] = useState(0)
 
+  // Sugerencias del catálogo para los campos Equipo y Categoría
+  const equiposOrdenados = useMemo(
+    () => [...equipos].filter(e => e.activo !== false).sort((a, b) => a.nombre.localeCompare(b.nombre)),
+    [equipos],
+  )
+  const categoriasConocidas = useMemo(() => {
+    const set = new Set<string>()
+    for (const e of equipos) if (e.categoria) set.add(e.categoria)
+    for (const p of scoutingPlayers) if (p.categoria) set.add(p.categoria)
+    return [...set].sort((a, b) => a.localeCompare(b))
+  }, [equipos, scoutingPlayers])
+
   // Índice id → jugador. Sin esto, cada sitio que necesita «quién es este id»
   // recorría los 3.700 jugadores enteros, y algunos lo hacían dentro de un map.
   const playersById = useMemo(() => {
@@ -8358,14 +8370,39 @@ export function Captacion({
                       </select>
                     </FormRow>
                   </div>
+                  {/* Equipo y categoría: se sugiere el catálogo, pero se puede
+                      escribir cualquier cosa (un equipo nuevo se da de alta solo). */}
+                  <datalist id="lista-equipos">
+                    {equiposOrdenados.map(e => (
+                      <option key={e.nombre} value={e.nombre}>{e.categoria ?? ''}</option>
+                    ))}
+                  </datalist>
+                  <datalist id="lista-categorias">
+                    {categoriasConocidas.map(c => <option key={c} value={c} />)}
+                  </datalist>
                   <FormRow label="Equipo">
-                    <input value={form.team ?? ''} onChange={e => setForm(f => ({ ...f, team: e.target.value }))}
-                      className="field" placeholder="Club actual" />
+                    <input
+                      list="lista-equipos"
+                      value={form.team ?? ''}
+                      onChange={e => {
+                        const team = e.target.value
+                        // Al elegir uno del catálogo, la categoría se rellena sola
+                        const delCatalogo = equipos.find(x => x.nombre === team)
+                        setForm(f => ({
+                          ...f,
+                          team,
+                          categoria: delCatalogo?.categoria && !f.categoria ? delCatalogo.categoria : f.categoria,
+                        }))
+                      }}
+                      className="field" placeholder="Escribe y elige, o pon uno nuevo" />
                   </FormRow>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <FormRow label="Categoría">
-                      <input value={form.categoria ?? ''} onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))}
-                        className="field" placeholder="Primera, Sub-18..." />
+                      <input
+                        list="lista-categorias"
+                        value={form.categoria ?? ''}
+                        onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))}
+                        className="field" placeholder="Juveniles, Segunda RFEF..." />
                     </FormRow>
                     <FormRow label="Nac.">
                       <input value={form.nationality ?? ''} onChange={e => setForm(f => ({ ...f, nationality: e.target.value }))}
