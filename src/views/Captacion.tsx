@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback, Fragment } from 'react'
+import React, { useState, useMemo, useEffect, useCallback } from 'react'
 import {
   Search, X, Plus, LogOut, Trash2, ChevronDown,
   FileText, Calendar, ChevronRight,
@@ -925,7 +925,7 @@ interface FilaEquipo {
   cubierto: boolean
   enCatalogo: boolean
   jugadores: number
-  destacados: ScoutingPlayer[]
+  plantilla: ScoutingPlayer[]
   informes: number
   partidos: number
   partidosHist: number
@@ -934,34 +934,17 @@ interface FilaEquipo {
 
 const SIN_CATEGORIA = 'Sin categoría'
 
-function EquiposTab({
-  equipos, scoutingPlayers, scoutingReports, scoutingMatches, clubZonas,
-  onSaveEquipo, onOpenPlayer, onAbrirZonas, showToast,
-}: {
-  equipos: EquipoCatalogo[]
-  scoutingPlayers: ScoutingPlayer[]
-  scoutingReports: ScoutingReport[]
-  scoutingMatches: ScoutingMatch[]
-  clubZonas: Record<string, Zona>
-  onSaveEquipo: (e: Partial<EquipoCatalogo> & { nombre: string; club: string }) => Promise<void>
-  onOpenPlayer: (id: string) => void
-  onAbrirZonas: () => void
-  showToast: ShowToast
-}) {
-  const [zonaSel, setZonaSel] = useState<string>('all')
-  const [catSel, setCatSel] = useState<string>('all')
-  const [soloRelevantes, setSoloRelevantes] = useState(false)
-  const [historico, setHistorico] = useState(false)
-  const [q, setQ] = useState('')
-  const [abierto, setAbierto] = useState<string | null>(null)
-  const [altaAbierta, setAltaAbierta] = useState(false)
-  const [nuevoNombre, setNuevoNombre] = useState('')
-  const [nuevaCat, setNuevaCat] = useState('')
-  const desde = useMemo(() => inicioTemporada(), [])
 
-  // ── Datos por equipo ───────────────────────────────────────────────
-  const filas = useMemo<FilaEquipo[]>(() => {
-    // jugadores agrupados por nombre de equipo tal cual está escrito
+/** Todo lo que sabemos de cada equipo: lo que tú marcas y lo que dicen los datos */
+function useFilasEquipos(
+  equipos: EquipoCatalogo[],
+  scoutingPlayers: ScoutingPlayer[],
+  scoutingReports: ScoutingReport[],
+  scoutingMatches: ScoutingMatch[],
+  clubZonas: Record<string, Zona>,
+  desde: string,
+): FilaEquipo[] {
+  return useMemo(() => {
     const porEquipo = new Map<string, ScoutingPlayer[]>()
     for (const p of scoutingPlayers) {
       const t = (p.team ?? '').trim()
@@ -973,7 +956,6 @@ function EquiposTab({
     const informesPorJugador: Record<string, number> = {}
     for (const r of scoutingReports) informesPorJugador[r.playerId] = (informesPorJugador[r.playerId] ?? 0) + 1
 
-    // partidos por nombre de equipo (local y visitante cuentan igual)
     const partidos = new Map<string, { temporada: number; total: number; ultimo?: string }>()
     const anota = (equipo: string | undefined, fecha: string) => {
       const t = (equipo ?? '').trim()
@@ -986,30 +968,26 @@ function EquiposTab({
     }
     for (const m of scoutingMatches) { anota(m.homeTeam, m.date); anota(m.awayTeam, m.date) }
 
-    // El catálogo manda; si hay equipos con jugadores que aún no están en
-    // él (alta reciente), se enseñan igual para que no se escondan.
     const nombres = new Set<string>([...equipos.map(e => e.nombre), ...porEquipo.keys()])
     const delCatalogo = new Map(equipos.map(e => [e.nombre, e]))
 
     const out: FilaEquipo[] = []
     for (const nombre of nombres) {
       const cat = delCatalogo.get(nombre)
-      const club = cat?.club ?? clubBase(nombre)
       const jug = porEquipo.get(nombre) ?? []
       const pt = partidos.get(nombre)
       out.push({
         nombre,
-        club,
+        club: cat?.club ?? clubBase(nombre),
         categoria: cat?.categoria || SIN_CATEGORIA,
         zona: (cat?.zona as string) || zonaDe(nombre, clubZonas) || SIN_ZONA,
         relevante: cat?.relevante ?? false,
         cubierto: cat?.cubierto ?? false,
         enCatalogo: !!cat,
         jugadores: jug.length,
-        destacados: jug
-          .filter(p => p.assessment === 'Llamar' || p.assessment === 'Basque' || p.assessment === 'Seguir')
-          .sort((a, b) => ALL_ASSESSMENTS.indexOf(a.assessment as ScoutingAssessment) - ALL_ASSESSMENTS.indexOf(b.assessment as ScoutingAssessment))
-          .slice(0, 12),
+        plantilla: [...jug].sort((a, b) =>
+          ALL_ASSESSMENTS.indexOf(a.assessment as ScoutingAssessment) - ALL_ASSESSMENTS.indexOf(b.assessment as ScoutingAssessment) ||
+          a.fullName.localeCompare(b.fullName)),
         informes: jug.reduce((n, p) => n + (informesPorJugador[p.id] ?? 0), 0),
         partidos: pt?.temporada ?? 0,
         partidosHist: pt?.total ?? 0,
@@ -1018,6 +996,45 @@ function EquiposTab({
     }
     return out.sort((a, b) => a.nombre.localeCompare(b.nombre))
   }, [equipos, scoutingPlayers, scoutingReports, scoutingMatches, clubZonas, desde])
+}
+
+/** Semáforo de control. No es una opinión: sale de los datos. */
+function semaforoEquipo(f: FilaEquipo, partidos: number): { cls: string; txt: string } {
+  if (!f.relevante) return { cls: 'bg-slate-100 text-slate-400 border-slate-200', txt: '—' }
+  if (f.jugadores === 0) return { cls: 'bg-red-100 text-red-700 border-red-200', txt: 'sin nadie' }
+  if (partidos === 0) return { cls: 'bg-amber-100 text-amber-700 border-amber-200', txt: 'sin partidos' }
+  if (f.informes === 0) return { cls: 'bg-amber-100 text-amber-700 border-amber-200', txt: 'sin informes' }
+  return { cls: 'bg-green-100 text-green-700 border-green-200', txt: 'controlado' }
+}
+
+function EquiposTab({
+  equipos, scoutingPlayers, scoutingReports, scoutingMatches, clubZonas,
+  onSaveEquipo, onAbrirEquipo, equipoAbierto, onAbrirZonas, onAbrirPlantilla, showToast,
+}: {
+  equipos: EquipoCatalogo[]
+  scoutingPlayers: ScoutingPlayer[]
+  scoutingReports: ScoutingReport[]
+  scoutingMatches: ScoutingMatch[]
+  clubZonas: Record<string, Zona>
+  onSaveEquipo: (e: Partial<EquipoCatalogo> & { nombre: string; club: string }) => Promise<void>
+  onAbrirEquipo: (nombre: string) => void
+  equipoAbierto: string | null
+  onAbrirZonas: () => void
+  onAbrirPlantilla: () => void
+  showToast: ShowToast
+}) {
+  const [zonaSel, setZonaSel] = useState<string>('all')
+  const [catSel, setCatSel] = useState<string>('all')
+  const [soloRelevantes, setSoloRelevantes] = useState(false)
+  const [historico, setHistorico] = useState(false)
+  const [q, setQ] = useState('')
+  const [verMatriz, setVerMatriz] = useState(false)
+  const [altaAbierta, setAltaAbierta] = useState(false)
+  const [nuevoNombre, setNuevoNombre] = useState('')
+  const [nuevaCat, setNuevaCat] = useState('')
+  const desde = useMemo(() => inicioTemporada(), [])
+
+  const filas = useFilasEquipos(equipos, scoutingPlayers, scoutingReports, scoutingMatches, clubZonas, desde)
 
   const categorias = useMemo(
     () => [...new Set(filas.map(f => f.categoria))].sort((a, b) =>
@@ -1030,29 +1047,43 @@ function EquiposTab({
     [filas],
   )
 
-  const nPartidos = (f: FilaEquipo) => historico ? f.partidosHist : f.partidos
+  const nPartidos = useCallback(
+    (f: FilaEquipo) => historico ? f.partidosHist : f.partidos,
+    [historico],
+  )
+  const cubierto = useCallback((f: FilaEquipo) => f.cubierto || nPartidos(f) > 0, [nPartidos])
 
-  // ── Matriz zona × categoría ────────────────────────────────────────
-  // Cada celda: cuántos equipos relevantes hay y cuántos están cubiertos.
-  const matriz = useMemo(() => {
-    const m: Record<string, Record<string, { total: number; relevantes: number; cubiertos: number; sinNadie: number }>> = {}
-    for (const z of zonas) {
-      m[z] = {}
-      for (const c of categorias) m[z][c] = { total: 0, relevantes: 0, cubiertos: 0, sinNadie: 0 }
-    }
+  // ── Resumen: en vez de una matriz enorme, dos tiras de chips que
+  //    además FILTRAN. Cada chip dice cuántos relevantes hay cubiertos.
+  const resumen = useMemo(() => {
+    const porZona: Record<string, { rel: number; cub: number }> = {}
+    const porCat: Record<string, { rel: number; cub: number }> = {}
+    let rel = 0, cub = 0
+    const huecos: { zona: string; cat: string; falta: number }[] = []
+    const celdas: Record<string, { rel: number; cub: number }> = {}
     for (const f of filas) {
-      const celda = m[f.zona]?.[f.categoria]
-      if (!celda) continue
-      celda.total++
-      if (f.relevante) {
-        celda.relevantes++
-        if (f.cubierto || nPartidos(f) > 0) celda.cubiertos++
-        if (f.jugadores === 0) celda.sinNadie++
+      if (!f.relevante) continue
+      rel++
+      const ok = cubierto(f)
+      if (ok) cub++
+      porZona[f.zona] ??= { rel: 0, cub: 0 }
+      porZona[f.zona].rel++; if (ok) porZona[f.zona].cub++
+      porCat[f.categoria] ??= { rel: 0, cub: 0 }
+      porCat[f.categoria].rel++; if (ok) porCat[f.categoria].cub++
+      const k = f.zona + '§' + f.categoria
+      celdas[k] ??= { rel: 0, cub: 0 }
+      celdas[k].rel++; if (ok) celdas[k].cub++
+    }
+    for (const [k, v] of Object.entries(celdas)) {
+      const falta = v.rel - v.cub
+      if (falta > 0) {
+        const [zona, cat] = k.split('§')
+        huecos.push({ zona, cat, falta })
       }
     }
-    return m
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filas, zonas, categorias, historico])
+    huecos.sort((a, b) => b.falta - a.falta)
+    return { porZona, porCat, rel, cub, huecos, celdas }
+  }, [filas, cubierto])
 
   const nq = normSearch(q)
   const visibles = useMemo(() => filas.filter(f => {
@@ -1084,13 +1115,7 @@ function EquiposTab({
       return
     }
     try {
-      await onSaveEquipo({
-        nombre,
-        club: clubBase(nombre),
-        categoria: nuevaCat || undefined,
-        relevante: true,
-        manual: true,
-      })
+      await onSaveEquipo({ nombre, club: clubBase(nombre), categoria: nuevaCat || undefined, relevante: true, manual: true })
       showToast(`${nombre} añadido como relevante`)
       setNuevoNombre(''); setNuevaCat(''); setAltaAbierta(false)
     } catch {
@@ -1098,114 +1123,43 @@ function EquiposTab({
     }
   }
 
-  // Semáforo de cobertura de un equipo relevante
-  function semaforo(f: FilaEquipo): { cls: string; txt: string } {
-    if (!f.relevante) return { cls: 'bg-slate-100 text-slate-400 border-slate-200', txt: '—' }
-    if (f.jugadores === 0) return { cls: 'bg-red-100 text-red-700 border-red-200', txt: 'sin nadie' }
-    if (nPartidos(f) === 0) return { cls: 'bg-amber-100 text-amber-700 border-amber-200', txt: 'sin partidos' }
-    if (f.informes === 0) return { cls: 'bg-amber-100 text-amber-700 border-amber-200', txt: 'sin informes' }
-    return { cls: 'bg-green-100 text-green-700 border-green-200', txt: 'controlado' }
+  const chipCls = (d: { rel: number; cub: number } | undefined, activo: boolean) => {
+    if (activo) return 'bg-primary text-white border-primary'
+    if (!d || d.rel === 0) return 'bg-white text-slate-400 border-slate-200 hover:border-slate-400'
+    const pct = d.cub / d.rel
+    if (pct >= 1) return 'bg-green-50 text-green-700 border-green-300 hover:border-green-500'
+    if (pct >= 0.5) return 'bg-amber-50 text-amber-700 border-amber-300 hover:border-amber-500'
+    return 'bg-red-50 text-red-700 border-red-300 hover:border-red-500'
   }
 
   return (
-    <div className="flex-1 max-w-[1500px] mx-auto w-full px-3 sm:px-6 py-4 space-y-4">
+    <div className="flex-1 max-w-[1500px] mx-auto w-full px-3 sm:px-6 py-4 space-y-3">
 
-      {/* ── Matriz de control ── */}
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-center gap-2">
-          <h3 className="text-sm font-bold text-slate-800">🗂️ Control por zona y categoría</h3>
-          <span className="text-[11px] text-slate-400">
-            cubiertos / relevantes · {historico ? 'todo el histórico' : 'temporada ' + desde.slice(0, 4) + '-' + String(Number(desde.slice(0, 4)) + 1).slice(2)}
-          </span>
-          <div className="ml-auto flex items-center gap-2">
-            <button
-              onClick={() => setHistorico(h => !h)}
-              className="text-[11px] font-semibold border border-slate-200 rounded-lg px-2 py-1 bg-white text-slate-600 hover:border-slate-400"
-            >
-              {historico ? '📅 Ver temporada actual' : '🕓 Ver histórico'}
-            </button>
-            <button onClick={onAbrirZonas} title="Zonas de los clubes" className="text-[11px] font-semibold border border-slate-200 rounded-lg px-2 py-1 bg-white text-slate-600 hover:border-slate-400">📍 Zonas</button>
-          </div>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200">
-                <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide">Zona</th>
-                {categorias.map(c => (
-                  <th key={c} className="px-2 py-2 font-semibold text-slate-500 uppercase tracking-wide text-center whitespace-nowrap">{c}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {zonas.map(z => (
-                <tr key={z} className="hover:bg-slate-50/60">
-                  <td className="px-3 py-2 font-semibold text-slate-700 whitespace-nowrap">
-                    {z === SIN_ZONA ? <span className="text-amber-600">{z}</span> : (ZONA_CORTA[z as Zona] ?? z)}
-                  </td>
-                  {categorias.map(c => {
-                    const d = matriz[z]?.[c]
-                    if (!d || d.total === 0) return <td key={c} className="px-2 py-2 text-center text-slate-200">·</td>
-                    const sinRelevantes = d.relevantes === 0
-                    const pct = d.relevantes ? d.cubiertos / d.relevantes : 0
-                    return (
-                      <td key={c} className="px-2 py-2 text-center">
-                        <button
-                          onClick={() => { setZonaSel(z); setCatSel(c); setSoloRelevantes(!sinRelevantes) }}
-                          title={`${d.total} equipos · ${d.relevantes} marcados como relevantes · ${d.cubiertos} cubiertos${d.sinNadie ? ` · ${d.sinNadie} relevantes sin ningún jugador` : ''}`}
-                          className={`min-w-[54px] rounded-lg px-2 py-1 font-bold border transition-colors ${
-                            sinRelevantes ? 'bg-slate-50 text-slate-400 border-slate-200 hover:border-slate-400'
-                            : pct >= 1 ? 'bg-green-100 text-green-700 border-green-200 hover:border-green-400'
-                            : pct >= 0.5 ? 'bg-amber-100 text-amber-700 border-amber-200 hover:border-amber-400'
-                            : 'bg-red-100 text-red-700 border-red-200 hover:border-red-400'
-                          }`}
-                        >
-                          {sinRelevantes ? d.total : `${d.cubiertos}/${d.relevantes}`}
-                        </button>
-                      </td>
-                    )
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="px-4 py-2 text-[10.5px] text-slate-400 border-t border-slate-50">
-          En gris, los equipos que hay en esa casilla cuando todavía no has marcado ninguno como relevante.
-          En cuanto marcas alguno con ★, la casilla pasa a «cubiertos / relevantes». Pulsa cualquier casilla para ver esos equipos.
-        </p>
-      </div>
-
-      {/* ── Filtros ── */}
+      {/* ── Cabecera: una línea con el estado y las herramientas ── */}
       <div className="flex flex-wrap items-center gap-2">
-        <select value={zonaSel} onChange={e => setZonaSel(e.target.value)} className={SELECT_CLS}>
-          <option value="all">📍 Todas las zonas</option>
-          {zonas.map(z => <option key={z} value={z}>{z}</option>)}
-        </select>
-        <select value={catSel} onChange={e => setCatSel(e.target.value)} className={SELECT_CLS}>
-          <option value="all">Todas las categorías</option>
-          {categorias.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
-        <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 cursor-pointer">
-          <input type="checkbox" checked={soloRelevantes} onChange={e => setSoloRelevantes(e.target.checked)} className="accent-blue-600" />
-          Solo los ★ relevantes
-        </label>
-        <div className="relative flex-1 min-w-[150px] max-w-xs">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-          <input
-            value={q}
-            onChange={e => setQ(e.target.value)}
-            placeholder="Buscar equipo…"
-            className="w-full pl-8 pr-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-          />
+        <h2 className="text-sm font-bold text-slate-800">Control de equipos</h2>
+        {resumen.rel > 0 ? (
+          <span className="text-xs text-slate-500">
+            <strong className="text-slate-800">{resumen.cub}</strong> de {resumen.rel} relevantes cubiertos
+            {resumen.huecos.length > 0 && <span className="text-red-600 font-semibold"> · {resumen.rel - resumen.cub} sin cubrir</span>}
+          </span>
+        ) : (
+          <span className="text-xs text-slate-400">Marca con ★ los equipos que te importan y esto se convierte en tu cuadro de control</span>
+        )}
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          <button
+            onClick={() => setHistorico(h => !h)}
+            title="Los partidos que se cuentan: solo esta temporada o todos"
+            className="text-[11px] font-semibold border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-600 hover:border-slate-400"
+          >
+            {historico ? '🕓 Histórico' : `📅 Temporada ${desde.slice(2, 4)}-${String(Number(desde.slice(0, 4)) + 1).slice(2)}`}
+          </button>
+          <button onClick={onAbrirZonas} className="text-[11px] font-semibold border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-600 hover:border-primary hover:text-primary">📍 Zonas</button>
+          <button onClick={onAbrirPlantilla} className="text-[11px] font-semibold border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-600 hover:border-primary hover:text-primary">📋 Actualizar plantilla</button>
+          <button onClick={() => setAltaAbierta(a => !a)} className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold bg-primary text-white rounded-lg hover:bg-primary/90">
+            <Plus className="w-3.5 h-3.5" /> Equipo
+          </button>
         </div>
-        <span className="text-xs text-slate-400">{visibles.length} equipos</span>
-        <button
-          onClick={() => setAltaAbierta(a => !a)}
-          className="ml-auto flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-primary text-white rounded-lg hover:bg-primary/90"
-        >
-          <Plus className="w-3.5 h-3.5" /> Añadir equipo
-        </button>
       </div>
 
       {altaAbierta && (
@@ -1229,120 +1183,194 @@ function EquiposTab({
             </select>
           </div>
           <button onClick={() => void crearEquipo()} className="px-3 py-1.5 text-xs font-bold bg-primary text-white rounded-lg hover:bg-primary/90">
-            Añadir como ★ relevante
+            Añadir como ★
           </button>
           <p className="w-full text-[10.5px] text-slate-500">
-            Para equipos que te importan y de los que <strong>todavía no tienes a nadie apuntado</strong>. La zona
-            se deduce del nombre del club; si no la acierta, corrígela en 📍 Zonas.
+            Para equipos que te importan y de los que <strong>todavía no tienes a nadie apuntado</strong>.
           </p>
         </div>
       )}
 
-      {/* ── Lista de equipos ── */}
+      {/* ── Zonas y categorías: chips que resumen Y filtran ── */}
+      <div className="space-y-1.5">
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="text-[10px] font-bold text-slate-400 uppercase w-14">Zona</span>
+          <button onClick={() => setZonaSel('all')} className={`text-[11px] font-semibold rounded-full border px-2 py-0.5 ${chipCls(undefined, zonaSel === 'all')}`}>Todas</button>
+          {zonas.map(z => {
+            const d = resumen.porZona[z]
+            return (
+              <button
+                key={z}
+                onClick={() => setZonaSel(zonaSel === z ? 'all' : z)}
+                title={z}
+                className={`text-[11px] font-semibold rounded-full border px-2 py-0.5 ${chipCls(d, zonaSel === z)}`}
+              >
+                {z === SIN_ZONA ? 'Sin zona' : (ZONA_CORTA[z as Zona] ?? z)}
+                {d && <span className="ml-1 opacity-70">{d.cub}/{d.rel}</span>}
+              </button>
+            )
+          })}
+        </div>
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="text-[10px] font-bold text-slate-400 uppercase w-14">Categ.</span>
+          <button onClick={() => setCatSel('all')} className={`text-[11px] font-semibold rounded-full border px-2 py-0.5 ${chipCls(undefined, catSel === 'all')}`}>Todas</button>
+          {categorias.map(c => {
+            const d = resumen.porCat[c]
+            return (
+              <button
+                key={c}
+                onClick={() => setCatSel(catSel === c ? 'all' : c)}
+                className={`text-[11px] font-semibold rounded-full border px-2 py-0.5 ${chipCls(d, catSel === c)}`}
+              >
+                {c === SIN_CATEGORIA ? 'Sin categoría' : c}
+                {d && <span className="ml-1 opacity-70">{d.cub}/{d.rel}</span>}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* ── Huecos: lo accionable de verdad ── */}
+      {resumen.huecos.length > 0 && (
+        <div className="bg-red-50/60 border border-red-200 rounded-xl px-3 py-2 flex flex-wrap items-center gap-1.5">
+          <span className="text-[11px] font-bold text-red-700">Dónde falta control:</span>
+          {resumen.huecos.slice(0, 8).map(h => (
+            <button
+              key={h.zona + h.cat}
+              onClick={() => { setZonaSel(h.zona); setCatSel(h.cat); setSoloRelevantes(true) }}
+              className="text-[11px] font-semibold bg-white border border-red-200 text-red-700 rounded-full px-2 py-0.5 hover:border-red-400"
+            >
+              {(ZONA_CORTA[h.zona as Zona] ?? h.zona)} · {h.cat === SIN_CATEGORIA ? '—' : h.cat}
+              <span className="ml-1 font-bold">{h.falta}</span>
+            </button>
+          ))}
+          {resumen.huecos.length > 8 && <span className="text-[11px] text-red-600">y {resumen.huecos.length - 8} más</span>}
+          <button onClick={() => setVerMatriz(v => !v)} className="ml-auto text-[11px] font-semibold text-red-700 hover:underline">
+            {verMatriz ? 'Ocultar cuadro' : 'Ver cuadro completo'}
+          </button>
+        </div>
+      )}
+
+      {/* ── Cuadro completo, plegado por defecto ── */}
+      {verMatriz && (
+        <div className="bg-white border border-slate-200 rounded-xl overflow-x-auto">
+          <table className="w-full text-[11px]">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200">
+                <th className="text-left px-3 py-1.5 font-semibold text-slate-500 uppercase">Zona</th>
+                {categorias.map(c => <th key={c} className="px-2 py-1.5 font-semibold text-slate-500 uppercase text-center whitespace-nowrap">{c}</th>)}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {zonas.map(z => (
+                <tr key={z} className="hover:bg-slate-50/60">
+                  <td className="px-3 py-1.5 font-semibold text-slate-700 whitespace-nowrap">{z === SIN_ZONA ? 'Sin zona' : (ZONA_CORTA[z as Zona] ?? z)}</td>
+                  {categorias.map(c => {
+                    const d = resumen.celdas[z + '§' + c]
+                    return (
+                      <td key={c} className="px-2 py-1.5 text-center">
+                        {d
+                          ? <button onClick={() => { setZonaSel(z); setCatSel(c); setSoloRelevantes(true) }} className={`rounded px-1.5 py-0.5 font-bold border ${chipCls(d, false)}`}>{d.cub}/{d.rel}</button>
+                          : <span className="text-slate-200">·</span>}
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ── Filtros finos ── */}
+      <div className="flex flex-wrap items-center gap-2 pt-1">
+        <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 cursor-pointer">
+          <input type="checkbox" checked={soloRelevantes} onChange={e => setSoloRelevantes(e.target.checked)} className="accent-blue-600" />
+          Solo ★ relevantes
+        </label>
+        <div className="relative flex-1 min-w-[150px] max-w-xs">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+          <input
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            placeholder="Buscar equipo…"
+            className="w-full pl-8 pr-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+          />
+        </div>
+        <span className="text-xs text-slate-400">{visibles.length} equipos</span>
+      </div>
+
+      {/* ── Lista ── */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-[11px] text-slate-500 uppercase tracking-wide">
-                <th className="px-2 py-2.5 font-semibold w-8" title="Relevante: este equipo nos importa">★</th>
-                <th className="px-2 py-2.5 font-semibold w-8" title="Cubierto esta temporada">✓</th>
-                <th className="text-left px-3 py-2.5 font-semibold">Equipo</th>
-                <th className="text-left px-2 py-2.5 font-semibold">Zona</th>
-                <th className="text-left px-2 py-2.5 font-semibold">Categoría</th>
-                <th className="text-center px-2 py-2.5 font-semibold" title="Jugadores en la BBDD">Jug.</th>
-                <th className="text-center px-2 py-2.5 font-semibold" title="Informes escritos sobre jugadores de este equipo">Inf.</th>
-                <th className="text-center px-2 py-2.5 font-semibold" title="Partidos suyos en la pestaña Partidos">Part.</th>
-                <th className="text-left px-2 py-2.5 font-semibold">Último</th>
-                <th className="text-left px-2 py-2.5 font-semibold">Control</th>
+                <th className="px-2 py-2 font-semibold w-8" title="Relevante: este equipo nos importa">★</th>
+                <th className="px-2 py-2 font-semibold w-8" title="Cubierto esta temporada">✓</th>
+                <th className="text-left px-3 py-2 font-semibold">Equipo</th>
+                <th className="text-left px-2 py-2 font-semibold">Zona</th>
+                <th className="text-left px-2 py-2 font-semibold">Categoría</th>
+                <th className="text-center px-2 py-2 font-semibold" title="Jugadores en la BBDD">Jug.</th>
+                <th className="text-center px-2 py-2 font-semibold" title="Informes sobre jugadores de este equipo">Inf.</th>
+                <th className="text-center px-2 py-2 font-semibold" title="Partidos suyos en la pestaña Partidos">Part.</th>
+                <th className="text-left px-2 py-2 font-semibold">Último</th>
+                <th className="text-left px-2 py-2 font-semibold">Control</th>
+                <th className="px-2 py-2 w-6" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {visibles.length === 0 && (
-                <tr><td colSpan={10} className="text-center py-10 text-slate-400 text-sm">No hay equipos que coincidan.</td></tr>
+                <tr><td colSpan={11} className="text-center py-10 text-slate-400 text-sm">No hay equipos que coincidan.</td></tr>
               )}
               {visibles.slice(0, 300).map(f => {
-                const sem = semaforo(f)
-                const abiertoAqui = abierto === f.nombre
+                const sem = semaforoEquipo(f, nPartidos(f))
                 return (
-                  <Fragment key={f.nombre}>
-                    <tr className={`hover:bg-slate-50/60 ${abiertoAqui ? 'bg-blue-50/40' : ''}`}>
-                      <td className="px-2 py-2 text-center">
-                        <button
-                          onClick={() => void marcar(f, 'relevante')}
-                          title={f.relevante ? 'Quitar de relevantes' : 'Marcar como relevante'}
-                          className={`text-base leading-none ${f.relevante ? 'text-amber-500' : 'text-slate-200 hover:text-amber-400'}`}
-                        >★</button>
-                      </td>
-                      <td className="px-2 py-2 text-center">
-                        <button
-                          onClick={() => void marcar(f, 'cubierto')}
-                          title={f.cubierto ? 'Marcar como NO cubierto' : 'Marcar como cubierto esta temporada'}
-                          className={`text-sm leading-none font-bold ${f.cubierto ? 'text-green-600' : 'text-slate-200 hover:text-green-500'}`}
-                        >✓</button>
-                      </td>
-                      <td className="px-3 py-2">
-                        <button
-                          onClick={() => setAbierto(abiertoAqui ? null : f.nombre)}
-                          className="text-left font-medium text-slate-800 hover:text-primary"
-                        >
-                          {f.nombre}
-                          {f.jugadores > 0 && <ChevronDown className={`inline w-3 h-3 ml-1 text-slate-300 transition-transform ${abiertoAqui ? 'rotate-180' : ''}`} />}
-                        </button>
-                        {!f.enCatalogo && <span className="ml-1.5 text-[9px] font-bold text-blue-500 uppercase" title="Todavía no está en el catálogo: se dará de alta al marcarlo">nuevo</span>}
-                      </td>
-                      <td className="px-2 py-2 text-[11px] text-slate-500 whitespace-nowrap">
-                        {f.zona === SIN_ZONA ? <span className="text-amber-600">sin zona</span> : (ZONA_CORTA[f.zona as Zona] ?? f.zona)}
-                      </td>
-                      <td className="px-2 py-2 text-[11px] text-slate-500 whitespace-nowrap">
-                        {f.categoria === SIN_CATEGORIA ? <span className="text-amber-600">—</span> : f.categoria}
-                      </td>
-                      <td className={`px-2 py-2 text-center text-xs font-semibold ${f.jugadores ? 'text-slate-700' : 'text-slate-300'}`}>{f.jugadores || '—'}</td>
-                      <td className={`px-2 py-2 text-center text-xs ${f.informes ? 'text-slate-600' : 'text-slate-300'}`}>{f.informes || '—'}</td>
-                      <td className="px-2 py-2 text-center text-xs">
-                        <span className={nPartidos(f) ? 'font-semibold text-slate-700' : 'text-slate-300'}>{nPartidos(f) || '—'}</span>
-                        {!historico && f.partidosHist > f.partidos && (
-                          <span className="text-[10px] text-slate-400" title="Partidos de temporadas anteriores"> ({f.partidosHist})</span>
-                        )}
-                      </td>
-                      <td className="px-2 py-2 text-[11px] text-slate-500 whitespace-nowrap">
-                        {f.ultimoPartido ? fmtDate(f.ultimoPartido) : <span className="text-slate-300">—</span>}
-                      </td>
-                      <td className="px-2 py-2">
-                        <span className={`inline-flex text-[10px] font-bold rounded-full border px-2 py-0.5 ${sem.cls}`}>{sem.txt}</span>
-                      </td>
-                    </tr>
-                    {abiertoAqui && (
-                      <tr className="bg-slate-50/70">
-                        <td colSpan={10} className="px-4 py-3">
-                          {f.destacados.length === 0 ? (
-                            <p className="text-[11px] text-slate-400 italic">
-                              {f.jugadores === 0
-                                ? 'Ningún jugador de este equipo en la base de datos.'
-                                : `${f.jugadores} jugadores apuntados, pero ninguno valorado como Llamar, Basque o Seguir.`}
-                            </p>
-                          ) : (
-                            <>
-                              <p className="text-[10px] font-bold text-slate-400 uppercase mb-1.5">Destacados de {f.nombre}</p>
-                              <div className="flex flex-wrap gap-1.5">
-                                {f.destacados.map(p => (
-                                  <button
-                                    key={p.id}
-                                    onClick={() => onOpenPlayer(p.id)}
-                                    className="inline-flex items-center gap-1.5 bg-white border border-slate-200 rounded-full px-2 py-1 text-[11px] hover:border-primary"
-                                  >
-                                    <span className="font-semibold text-slate-700">{p.fullName}</span>
-                                    <span className="text-slate-400">{p.position1 ?? '—'}</span>
-                                    <span className="text-slate-400">{birthYearFromBirthdate(p.birthdate)}</span>
-                                    <AssessmentChip a={p.assessment} small />
-                                  </button>
-                                ))}
-                              </div>
-                            </>
-                          )}
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
+                  <tr
+                    key={f.nombre}
+                    onClick={() => onAbrirEquipo(f.nombre)}
+                    className={`cursor-pointer hover:bg-slate-50 transition-colors ${equipoAbierto === f.nombre ? 'bg-blue-50/50' : ''}`}
+                  >
+                    <td className="px-2 py-2 text-center" onClick={e => e.stopPropagation()}>
+                      <button
+                        onClick={() => void marcar(f, 'relevante')}
+                        title={f.relevante ? 'Quitar de relevantes' : 'Marcar como relevante'}
+                        className={`text-base leading-none ${f.relevante ? 'text-amber-500' : 'text-slate-200 hover:text-amber-400'}`}
+                      >★</button>
+                    </td>
+                    <td className="px-2 py-2 text-center" onClick={e => e.stopPropagation()}>
+                      <button
+                        onClick={() => void marcar(f, 'cubierto')}
+                        title={f.cubierto ? 'Marcar como NO cubierto' : 'Marcar como cubierto esta temporada'}
+                        className={`text-sm leading-none font-bold ${f.cubierto ? 'text-green-600' : 'text-slate-200 hover:text-green-500'}`}
+                      >✓</button>
+                    </td>
+                    <td className="px-3 py-2 font-medium text-slate-800">
+                      {f.nombre}
+                      {!f.enCatalogo && <span className="ml-1.5 text-[9px] font-bold text-blue-500 uppercase" title="Todavía no está en el catálogo">nuevo</span>}
+                    </td>
+                    <td className="px-2 py-2 text-[11px] text-slate-500 whitespace-nowrap">
+                      {f.zona === SIN_ZONA ? <span className="text-amber-600">sin zona</span> : (ZONA_CORTA[f.zona as Zona] ?? f.zona)}
+                    </td>
+                    <td className="px-2 py-2 text-[11px] text-slate-500 whitespace-nowrap">
+                      {f.categoria === SIN_CATEGORIA ? <span className="text-amber-600">—</span> : f.categoria}
+                    </td>
+                    <td className={`px-2 py-2 text-center text-xs font-semibold ${f.jugadores ? 'text-slate-700' : 'text-slate-300'}`}>{f.jugadores || '—'}</td>
+                    <td className={`px-2 py-2 text-center text-xs ${f.informes ? 'text-slate-600' : 'text-slate-300'}`}>{f.informes || '—'}</td>
+                    <td className="px-2 py-2 text-center text-xs">
+                      <span className={nPartidos(f) ? 'font-semibold text-slate-700' : 'text-slate-300'}>{nPartidos(f) || '—'}</span>
+                      {!historico && f.partidosHist > f.partidos && (
+                        <span className="text-[10px] text-slate-400" title="Partidos de temporadas anteriores"> ({f.partidosHist})</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-2 text-[11px] text-slate-500 whitespace-nowrap">
+                      {f.ultimoPartido ? fmtDate(f.ultimoPartido) : <span className="text-slate-300">—</span>}
+                    </td>
+                    <td className="px-2 py-2">
+                      <span className={`inline-flex text-[10px] font-bold rounded-full border px-2 py-0.5 ${sem.cls}`}>{sem.txt}</span>
+                    </td>
+                    <td className="px-2 py-2 text-right"><ChevronRight className="w-3.5 h-3.5 text-slate-300 inline" /></td>
+                  </tr>
                 )
               })}
             </tbody>
@@ -6216,6 +6244,7 @@ export function Captacion({
   /** Ficha de partido abierta en ventana */
   const [detailMatchId, setDetailMatchId] = useState<string | null>(null)
   const [zonasAbierto, setZonasAbierto] = useState(false)
+  const [panelEquipo, setPanelEquipo] = useState<string | null>(null)
   const isDesktop = useIsDesktop()   // en escritorio la ficha va a la derecha, no flotando
   // La tabla de partidos aparece a partir de sm (640px). Antes las dos vistas
   // —tarjetas de móvil y tabla— se pintaban SIEMPRE y una se escondía con CSS:
@@ -6261,6 +6290,13 @@ export function Captacion({
   // ── pagination ──
   const PAGE_SIZE = 50
   const [page, setPage] = useState(0)
+
+  // Fila del equipo que se está viendo en el panel lateral
+  const filasEquipos = useFilasEquipos(equipos, scoutingPlayers, scoutingReports, scoutingMatches, clubZonas, inicioTemporada())
+  const filaEquipoAbierta = useMemo(
+    () => panelEquipo ? filasEquipos.find(f => f.nombre === panelEquipo) ?? null : null,
+    [filasEquipos, panelEquipo],
+  )
 
   // Sugerencias del catálogo para los campos Equipo y Categoría
   const equiposOrdenados = useMemo(
@@ -7022,6 +7058,7 @@ export function Captacion({
 
 
   function closePanel() {
+    setPanelEquipo(null)
     setPanelPlayerId(null)
     setShowAddPlayer(false)
     setShowEditPlayer(false)
@@ -7040,7 +7077,7 @@ export function Captacion({
 
   // ── render ───────────────────────────────────────────────────
 
-  const hasPanel = !!panelPlayer || showAddPlayer || showEditPlayer
+  const hasPanel = !!panelPlayer || showAddPlayer || showEditPlayer || !!panelEquipo
 
   useEscapeKey(
     closePanel,
@@ -7049,8 +7086,16 @@ export function Captacion({
       editingReportCount === 0
   )
 
+  // Pantalla partida: en escritorio el panel NO tapa la lista, la estrecha.
+  // «Ampliar» (⤢) lo abre entero, ocupando toda la pantalla.
+  const anchoPanel = 480
+  const pantallaPartida = hasPanel && isDesktop && !fullscreen
+
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div
+      className="min-h-screen bg-slate-50 flex flex-col transition-[padding] duration-150"
+      style={pantallaPartida ? { paddingRight: anchoPanel } : undefined}
+    >
       {/* Header */}
       <header ref={headerRef} className="bg-white border-b border-slate-200 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center gap-3 h-12 sm:h-14">
@@ -7216,23 +7261,8 @@ export function Captacion({
                 </button>
               </div>
 
-              {/* Zonas de los clubes */}
-              <button
-                onClick={() => setZonasAbierto(true)}
-                title="Zonas de los clubes: asignar o corregir la zona geográfica"
-                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold border border-slate-200 text-slate-600 rounded-lg hover:border-primary hover:text-primary transition-colors"
-              >
-                📍 <span className="hidden sm:inline">Zonas</span>
-              </button>
-
-              {/* Poner al día los equipos de golpe pegando una plantilla */}
-              <button
-                onClick={() => setShowPlantilla(true)}
-                title="Pega la plantilla de un club y actualiza el equipo de todos esos jugadores de una vez"
-                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold border border-slate-200 text-slate-600 rounded-lg hover:border-primary hover:text-primary transition-colors"
-              >
-                📋 <span className="hidden sm:inline">Actualizar plantilla</span>
-              </button>
+              {/* «Zonas» y «Actualizar plantilla» viven ahora en la pestaña
+                  Equipos, que es donde tienen sentido */}
 
               {/* Add player — available to all users */}
               <button
@@ -7540,8 +7570,10 @@ export function Captacion({
           scoutingMatches={scoutingMatches}
           clubZonas={clubZonas}
           onSaveEquipo={onSaveEquipo}
-          onOpenPlayer={id => setPanelPlayerId(id)}
+          onAbrirEquipo={n => { setPanelPlayerId(null); setPanelEquipo(n) }}
+          equipoAbierto={panelEquipo}
           onAbrirZonas={() => setZonasAbierto(true)}
+          onAbrirPlantilla={() => setShowPlantilla(true)}
           showToast={showToast}
         />
       )}
@@ -8258,7 +8290,7 @@ export function Captacion({
       {/* ── Side panel (persists across tabs) ─────────────────── */}
       {hasPanel && (
         <>
-          {!fullscreen && (
+          {!fullscreen && !isDesktop && (
             <div
               className="fixed inset-x-0 bottom-0 bg-black/20 z-30"
               style={{ top: headerHeight }}
@@ -8280,6 +8312,19 @@ export function Captacion({
             {/* Panel header */}
             <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-200 bg-slate-50 flex-shrink-0">
               <div className="flex-1 min-w-0">
+                {panelEquipo && (
+                  <div>
+                    <h2 className="text-base font-semibold text-slate-800 truncate">{panelEquipo}</h2>
+                    <div className="text-xs text-slate-500 mt-0.5">
+                      {(() => {
+                        const f = filaEquipoAbierta
+                        if (!f) return null
+                        const z = f.zona === SIN_ZONA ? 'sin zona' : (ZONA_CORTA[f.zona as Zona] ?? f.zona)
+                        return `${z} · ${f.categoria === SIN_CATEGORIA ? 'sin categoría' : f.categoria}`
+                      })()}
+                    </div>
+                  </div>
+                )}
                 {panelPlayer && !showEditPlayer && (
                   <div>
                     <h2 className="text-base font-semibold text-slate-800 truncate">{panelPlayer.fullName}</h2>
@@ -8450,6 +8495,125 @@ export function Captacion({
                   </div>
                 </div>
               )}
+
+              {/* ── Ficha del equipo ── */}
+              {panelEquipo && filaEquipoAbierta && (() => {
+                const f = filaEquipoAbierta
+                const partidosEquipo = scoutingMatches
+                  .filter(m => (m.homeTeam ?? '').trim() === f.nombre || (m.awayTeam ?? '').trim() === f.nombre)
+                  .sort((a, b) => b.date.localeCompare(a.date))
+                const guardar = (campo: Partial<EquipoCatalogo>) =>
+                  onSaveEquipo({ nombre: f.nombre, club: f.club, ...campo }).catch(() => showToast('No se ha podido guardar', 'error'))
+                return (
+                  <div className={`p-4 space-y-4 ${fullscreen ? 'grid grid-cols-1 lg:grid-cols-2 gap-6 items-start' : ''}`}>
+                    <div className="space-y-4">
+                      {/* Marcas de control */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          onClick={() => void guardar({ relevante: !f.relevante })}
+                          className={`inline-flex items-center gap-1.5 text-xs font-bold rounded-lg border px-3 py-1.5 transition-colors ${
+                            f.relevante ? 'bg-amber-100 text-amber-700 border-amber-300' : 'bg-white text-slate-500 border-slate-200 hover:border-amber-400'
+                          }`}
+                        >★ {f.relevante ? 'Relevante' : 'Marcar relevante'}</button>
+                        <button
+                          onClick={() => void guardar({ cubierto: !f.cubierto })}
+                          className={`inline-flex items-center gap-1.5 text-xs font-bold rounded-lg border px-3 py-1.5 transition-colors ${
+                            f.cubierto ? 'bg-green-100 text-green-700 border-green-300' : 'bg-white text-slate-500 border-slate-200 hover:border-green-400'
+                          }`}
+                        >✓ {f.cubierto ? 'Cubierto' : 'Marcar cubierto'}</button>
+                      </div>
+
+                      {/* Los números */}
+                      <div className="grid grid-cols-4 gap-2">
+                        {[
+                          { n: f.jugadores, l: 'jugadores' },
+                          { n: f.informes, l: 'informes' },
+                          { n: f.partidos, l: 'partidos 25-26' },
+                          { n: f.partidosHist, l: 'partidos total' },
+                        ].map(x => (
+                          <div key={x.l} className="bg-slate-50 rounded-lg px-2 py-1.5">
+                            <div className="text-base font-bold text-slate-800 leading-none">{x.n}</div>
+                            <div className="text-[10px] text-slate-500 mt-0.5">{x.l}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Categoría (la zona se cambia en 📍 Zonas, porque es del club) */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Categoría</label>
+                          <select
+                            value={f.categoria === SIN_CATEGORIA ? '' : f.categoria}
+                            onChange={e => void guardar({ categoria: e.target.value || undefined })}
+                            className="field"
+                          >
+                            <option value="">— sin categoría —</option>
+                            {categoriasConocidas.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Zona (del club {f.club})</label>
+                          <button onClick={() => setZonasAbierto(true)} className="field text-left hover:border-primary">
+                            {f.zona === SIN_ZONA ? <span className="text-amber-600">sin zona — asignar</span> : f.zona}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Últimos partidos */}
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1.5">Partidos suyos ({partidosEquipo.length})</p>
+                        {partidosEquipo.length === 0 ? (
+                          <p className="text-[11px] text-slate-400 italic">Ninguno todavía.</p>
+                        ) : (
+                          <div className="space-y-1">
+                            {partidosEquipo.slice(0, 8).map(m => (
+                              <button
+                                key={m.id}
+                                onClick={() => { closePanel(); setCaptTab('partidos'); setDetailMatchId(m.id) }}
+                                className="w-full text-left text-[11px] bg-white border border-slate-200 rounded-lg px-2 py-1 hover:border-primary flex items-center gap-2"
+                              >
+                                <span className="text-slate-400 w-14 flex-shrink-0">{fmtDate(m.date)}</span>
+                                <span className="text-slate-700 truncate">{m.homeTeam} – {m.awayTeam}</span>
+                                {m.status === 'visto' && <span className="ml-auto text-green-600">✓</span>}
+                              </button>
+                            ))}
+                            {partidosEquipo.length > 8 && (
+                              <p className="text-[10.5px] text-slate-400 italic">y {partidosEquipo.length - 8} más</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Plantilla */}
+                    <div>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase mb-1.5">
+                        Jugadores en la BBDD ({f.plantilla.length})
+                      </p>
+                      {f.plantilla.length === 0 ? (
+                        <p className="text-[11px] text-slate-400 italic">
+                          Ninguno. Usa «📋 Actualizar plantilla» para pegar la plantilla del club de golpe.
+                        </p>
+                      ) : (
+                        <div className="space-y-1">
+                          {f.plantilla.map(p => (
+                            <button
+                              key={p.id}
+                              onClick={() => { setPanelEquipo(null); setPanelPlayerId(p.id) }}
+                              className="w-full flex items-center gap-2 text-left bg-white border border-slate-200 rounded-lg px-2 py-1.5 hover:border-primary"
+                            >
+                              <span className="text-xs font-semibold text-slate-700 truncate flex-1">{p.fullName}</span>
+                              <span className="text-[10px] text-slate-400 w-10 text-right">{p.position1 ?? '—'}</span>
+                              <span className="text-[10px] text-slate-400 w-8 text-right">{birthYearFromBirthdate(p.birthdate)}</span>
+                              <AssessmentChip a={p.assessment} small />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })()}
 
               {/* ── Player detail ── */}
               {panelPlayer && !showEditPlayer && (

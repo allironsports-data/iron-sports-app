@@ -21,6 +21,11 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-08-18',
     items: [
+      'Nueva pestaña Captación → Equipos: el cuadro de control de qué equipos tenéis cubiertos por zona y categoría. Marcas con ★ los que te importan, y la app te dice de cada uno cuántos jugadores tienes apuntados, cuántos informes y cuántos partidos suyos habéis visto esta temporada',
+      'Una tira roja arriba te señala dónde falta control («Madrid · Cadetes: 3 sin cubrir») y un clic te lleva a esos equipos',
+      'Y puedes dar de alta equipos de los que todavía no tienes a nadie apuntado: son justo los que quieres detectar',
+      'Al pulsar un equipo se abre a pantalla partida —la lista se estrecha, no se tapa— con su plantilla, sus partidos y sus marcas. El botón ⤢ lo abre entero',
+      'Los botones «📍 Zonas» y «📋 Actualizar plantilla» se mudan de Jugadores a Equipos, que es su sitio',
       'Captación → Jugadores: tercera vista «⊞ Ampliada» con agencia, fin de contrato, zona, estatus en el pipeline y fecha del último informe, además de lo de siempre',
       'Y un botón «📍 Zonas» en esa misma barra para asignar o corregir la zona de cualquier club',
       'Filtro por zona geográfica en los campogramas: en Conclusiones y en Fin de contrato eliges zona (C. Valenciana, Cat/Ara/Bal, Madrid, Mur/Alm/CLM, Andalucía, Norte, CyL/Nav/Rioja, Canarias, Extremadura o Extranjero) y el campograma se queda solo con esos jugadores',
