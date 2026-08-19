@@ -264,6 +264,145 @@ export function Distribution({
   // Cambiar estado de negociación desde la vista tabla, sin abrir la ficha
   const [openStatusDropId, setOpenStatusDropId]   = useState<string | null>(null)
   const [statusDropPos, setStatusDropPos]         = useState<{ top: number; right: number } | null>(null)
+
+  const [vistaClubes, setVistaClubes] = useState<'tarjetas' | 'lista'>(
+    () => (sessionStorage.getItem('dist_vista_clubes') as 'tarjetas' | 'lista') ?? 'tarjetas'
+  )
+  useEffect(() => { sessionStorage.setItem('dist_vista_clubes', vistaClubes) }, [vistaClubes])
+
+  // ── Clubes: tarjetas o lista ───────────────────────────────────────
+  // Con 1.372 clubes las tarjetas ocupan muchísimo y cuesta comparar. La
+  // lista enseña lo mismo en una fila: liga, encargado, contacto, ofrecidos
+  // y necesidades.
+  const contactedByNombre = (club: Club) =>
+    profiles.find(p => p.avatar === club.contactedBy)?.name ?? club.contactedBy ?? 'sí'
+
+  const abrirClub = (id: string) => {
+    if (onSelectClub) { onSelectClub(id) }
+    else { setSelectedClubId(id); setSelectedEntryId(null); setSelectedNeedPosition(null) }
+  }
+
+  function renderClubes(lista: Club[]) {
+    if (vistaClubes === 'lista') {
+      return (
+        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-[10.5px] text-slate-500 uppercase tracking-wide">
+                  {clubBulkMode && <th className="w-8 px-2 py-2" />}
+                  <th className="w-6 px-1 py-2" />
+                  <th className="text-left px-2 py-2 font-semibold">Club</th>
+                  <th className="text-left px-2 py-2 font-semibold">Liga</th>
+                  <th className="text-left px-2 py-2 font-semibold">Encargado</th>
+                  <th className="text-left px-2 py-2 font-semibold">Contacto</th>
+                  <th className="text-center px-2 py-2 font-semibold" title="Jugadores ofrecidos a este club">Ofr.</th>
+                  <th className="text-center px-2 py-2 font-semibold" title="Necesidades declaradas">Nec.</th>
+                  <th className="text-left px-2 py-2 font-semibold">Contactado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {lista.map(club => {
+                  const negs = negsByClub.get(club.id) ?? SIN_NEGOCIACIONES
+                  const tier = getClubTier(club.league, club.country)
+                  const cfg = TIER_CONFIG[tier]
+                  const nNec = club.needs?.length ?? 0
+                  const activo = selectedClubId === club.id || activeClubId === club.id
+                  return (
+                    <tr
+                      key={club.id}
+                      onClick={() => clubBulkMode ? toggleClubSelected(club.id) : abrirClub(club.id)}
+                      className={`cursor-pointer transition-colors ${activo ? 'bg-blue-50/60' : clubSelected.has(club.id) ? 'bg-blue-50/40' : 'hover:bg-slate-50'}`}
+                    >
+                      {clubBulkMode && (
+                        <td className="px-2 py-1.5 text-center" onClick={e => e.stopPropagation()}>
+                          <input type="checkbox" className="accent-blue-600" checked={clubSelected.has(club.id)} onChange={() => toggleClubSelected(club.id)} />
+                        </td>
+                      )}
+                      <td className="px-1 py-1.5 text-center" onClick={e => e.stopPropagation()}>
+                        <button
+                          onClick={() => onUpdateClub({ ...club, isPriority: !club.isPriority }).catch(() => showToast('No se pudo guardar. Inténtalo de nuevo.', 'error'))}
+                          title={club.isPriority ? 'Quitar de prioritarios' : 'Marcar como prioritario'}
+                          className={`text-sm leading-none ${club.isPriority ? 'text-green-500' : 'text-slate-200 hover:text-green-400'}`}
+                        >★</button>
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className={`text-[9.5px] font-bold px-1 rounded flex-shrink-0 ${cfg.bg} ${cfg.text}`}>{tier}</span>
+                          <span className="font-medium text-slate-800 truncate">{club.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-2 py-1.5 text-[11px] text-slate-500 whitespace-nowrap">
+                        {club.league ?? '—'}{club.country ? ` · ${countryCode3(club.country)}` : ''}
+                      </td>
+                      <td className="px-2 py-1.5 text-[11px] text-slate-600 max-w-[110px] truncate">
+                        {profiles.find(p => p.avatar === club.aisManager)?.name ?? <span className="text-slate-300">—</span>}
+                      </td>
+                      <td className="px-2 py-1.5 text-[11px] text-slate-500 max-w-[160px] truncate" title={club.contactPerson ?? ''}>
+                        {club.contactPerson || <span className="text-slate-300">—</span>}
+                      </td>
+                      <td className="px-2 py-1.5 text-center text-[11px]">
+                        {negs.length ? <span className="font-semibold text-blue-600">{negs.length}</span> : <span className="text-slate-300">—</span>}
+                      </td>
+                      <td className="px-2 py-1.5 text-center text-[11px]">
+                        {nNec ? <span className="font-semibold text-amber-600">{nNec}</span> : <span className="text-slate-300">—</span>}
+                      </td>
+                      <td className="px-2 py-1.5 text-[11px] whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                        {club.contacted ? (
+                          <span className="text-emerald-600" title={fmtDateTime(club.contactedAt)}>✓ {contactedByNombre(club)}</span>
+                        ) : (
+                          <button
+                            onClick={() => markClubContacted(club)}
+                            className="text-slate-300 hover:text-emerald-600"
+                            title="Marcar como contactado hoy"
+                          >marcar</button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )
+    }
+    return (
+      <div className={clubGridCls}>
+        {lista.map(club => (
+<ClubCard
+      key={club.id}
+      club={club}
+      negotiations={negsByClub.get(club.id) ?? SIN_NEGOCIACIONES}
+      isSelected={selectedClubId === club.id || activeClubId === club.id}
+      onClick={() => {
+      if (onSelectClub) { onSelectClub(club.id) }
+      else { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(null) }
+      }}
+      onOffer={() => setShowAddNeg({ clubId: club.id })}
+      onTogglePriority={() => onUpdateClub({ ...club, isPriority: !club.isPriority }).catch(() => showToast('No se pudo guardar. Inténtalo de nuevo.', 'error'))}
+      managerName={profiles.find(p => p.avatar === club.aisManager)?.name}
+      managerDropOpen={openClubManagerId === club.id}
+      selectMode={clubBulkMode}
+      bulkSelected={clubSelected.has(club.id)}
+      onToggleBulkSelect={() => toggleClubSelected(club.id)}
+      contactedByName={profiles.find(p => p.avatar === club.contactedBy)?.name}
+      onMarkContacted={() => markClubContacted(club)}
+      onOpenContactedMenu={(pos) => {
+      if (!pos) { setOpenClubContactedId(null); setClubContactedDropPos(null) }
+      else { setOpenClubContactedId(club.id); setClubContactedDropPos(pos) }
+      }}
+      contactedDropOpen={openClubContactedId === club.id}
+      onToggleManagerDrop={(pos) => {
+      if (!pos) { setOpenClubManagerId(null); setClubManagerDropPos(null) }
+      else { setOpenClubManagerId(club.id); setClubManagerDropPos(pos) }
+      }}
+      />
+        ))}
+      </div>
+    )
+  }
+
   // Encargado de hablar con el club (dropdown en ClubCard)
   const [openClubManagerId, setOpenClubManagerId]   = useState<string | null>(null)
   const [clubManagerDropPos, setClubManagerDropPos] = useState<{ top: number; right: number } | null>(null)
@@ -1705,6 +1844,17 @@ export function Distribution({
                   <SlidersHorizontal className="w-4 h-4" /> Filtros
                   {clubsActiveFilters > 0 && <span className="text-xs">({clubsActiveFilters})</span>}
                 </button>
+                <div className="flex-shrink-0 flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
+                  <button
+                    onClick={() => setVistaClubes('tarjetas')}
+                    className={`px-2.5 py-1.5 rounded text-[11px] font-semibold transition-colors ${vistaClubes === 'tarjetas' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >Tarjetas</button>
+                  <button
+                    onClick={() => setVistaClubes('lista')}
+                    title="Lista compacta: liga, encargado, contacto, ofrecidos y necesidades en una fila"
+                    className={`px-2.5 py-1.5 rounded text-[11px] font-semibold transition-colors ${vistaClubes === 'lista' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >☰ Lista</button>
+                </div>
                 <button
                   onClick={() => { setClubBulkMode(v => !v); if (clubBulkMode) setClubSelected(new Set()) }}
                   className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
@@ -1722,38 +1872,7 @@ export function Distribution({
 
               {/* Clubs grid — grouped by league when no filter, flat when filtered */}
               {(leagueFilter.length > 0 || countryFilter.length > 0 || tierFilter.length > 0 || confederationFilter.length > 0 || priorityOnly || hasNeedsOnly || hasContactOnly || !!search) ? (
-                <div className={clubGridCls}>
-                  {filteredClubs.map(club => (
-                    <ClubCard
-                      key={club.id}
-                      club={club}
-                      negotiations={negsByClub.get(club.id) ?? SIN_NEGOCIACIONES}
-                      isSelected={selectedClubId === club.id || activeClubId === club.id}
-                      onClick={() => {
-                        if (onSelectClub) { onSelectClub(club.id) }
-                        else { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(null) }
-                      }}
-                      onOffer={() => setShowAddNeg({ clubId: club.id })}
-                      onTogglePriority={() => onUpdateClub({ ...club, isPriority: !club.isPriority }).catch(() => showToast('No se pudo guardar. Inténtalo de nuevo.', 'error'))}
-                      managerName={profiles.find(p => p.avatar === club.aisManager)?.name}
-                      managerDropOpen={openClubManagerId === club.id}
-                              selectMode={clubBulkMode}
-                              bulkSelected={clubSelected.has(club.id)}
-                              onToggleBulkSelect={() => toggleClubSelected(club.id)}
-                              contactedByName={profiles.find(p => p.avatar === club.contactedBy)?.name}
-                              onMarkContacted={() => markClubContacted(club)}
-                              onOpenContactedMenu={(pos) => {
-                                if (!pos) { setOpenClubContactedId(null); setClubContactedDropPos(null) }
-                                else { setOpenClubContactedId(club.id); setClubContactedDropPos(pos) }
-                              }}
-                              contactedDropOpen={openClubContactedId === club.id}
-                      onToggleManagerDrop={(pos) => {
-                        if (!pos) { setOpenClubManagerId(null); setClubManagerDropPos(null) }
-                        else { setOpenClubManagerId(club.id); setClubManagerDropPos(pos) }
-                      }}
-                    />
-                  ))}
-                </div>
+                renderClubes(filteredClubs)
               ) : groupByTier ? (
                 <div className="space-y-4">
                   {(['A', 'B', 'C', 'D'] as LeagueTier[]).map(t => {
@@ -1768,38 +1887,7 @@ export function Distribution({
                           <span className="text-xs text-slate-400">({tierClubs.length})</span>
                           <div className="flex-1 h-px bg-slate-200" />
                         </div>
-                        <div className={clubGridCls}>
-                          {tierClubs.map(club => (
-                            <ClubCard
-                              key={club.id}
-                              club={club}
-                              negotiations={negsByClub.get(club.id) ?? SIN_NEGOCIACIONES}
-                              isSelected={selectedClubId === club.id || activeClubId === club.id}
-                              onClick={() => {
-                                if (onSelectClub) { onSelectClub(club.id) }
-                                else { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(null) }
-                              }}
-                              onOffer={() => setShowAddNeg({ clubId: club.id })}
-                              onTogglePriority={() => onUpdateClub({ ...club, isPriority: !club.isPriority }).catch(() => showToast('No se pudo guardar. Inténtalo de nuevo.', 'error'))}
-                              managerName={profiles.find(p => p.avatar === club.aisManager)?.name}
-                              managerDropOpen={openClubManagerId === club.id}
-                              selectMode={clubBulkMode}
-                              bulkSelected={clubSelected.has(club.id)}
-                              onToggleBulkSelect={() => toggleClubSelected(club.id)}
-                              contactedByName={profiles.find(p => p.avatar === club.contactedBy)?.name}
-                              onMarkContacted={() => markClubContacted(club)}
-                              onOpenContactedMenu={(pos) => {
-                                if (!pos) { setOpenClubContactedId(null); setClubContactedDropPos(null) }
-                                else { setOpenClubContactedId(club.id); setClubContactedDropPos(pos) }
-                              }}
-                              contactedDropOpen={openClubContactedId === club.id}
-                              onToggleManagerDrop={(pos) => {
-                                if (!pos) { setOpenClubManagerId(null); setClubManagerDropPos(null) }
-                                else { setOpenClubManagerId(club.id); setClubManagerDropPos(pos) }
-                              }}
-                            />
-                          ))}
-                        </div>
+                        {renderClubes(tierClubs)}
                       </div>
                     )
                   })}
@@ -1819,38 +1907,7 @@ export function Distribution({
                           <span className="text-xs text-slate-300">{CONFEDERATION_LABELS[confederation]}</span>
                           <div className="flex-1 h-px bg-slate-200" />
                         </div>
-                        <div className={clubGridCls}>
-                          {leagueClubs.map(club => (
-                            <ClubCard
-                              key={club.id}
-                              club={club}
-                              negotiations={negsByClub.get(club.id) ?? SIN_NEGOCIACIONES}
-                              isSelected={selectedClubId === club.id || activeClubId === club.id}
-                              onClick={() => {
-                                if (onSelectClub) { onSelectClub(club.id) }
-                                else { setSelectedClubId(club.id); setSelectedEntryId(null); setSelectedNeedPosition(null) }
-                              }}
-                              onOffer={() => setShowAddNeg({ clubId: club.id })}
-                              onTogglePriority={() => onUpdateClub({ ...club, isPriority: !club.isPriority }).catch(() => showToast('No se pudo guardar. Inténtalo de nuevo.', 'error'))}
-                              managerName={profiles.find(p => p.avatar === club.aisManager)?.name}
-                              managerDropOpen={openClubManagerId === club.id}
-                              selectMode={clubBulkMode}
-                              bulkSelected={clubSelected.has(club.id)}
-                              onToggleBulkSelect={() => toggleClubSelected(club.id)}
-                              contactedByName={profiles.find(p => p.avatar === club.contactedBy)?.name}
-                              onMarkContacted={() => markClubContacted(club)}
-                              onOpenContactedMenu={(pos) => {
-                                if (!pos) { setOpenClubContactedId(null); setClubContactedDropPos(null) }
-                                else { setOpenClubContactedId(club.id); setClubContactedDropPos(pos) }
-                              }}
-                              contactedDropOpen={openClubContactedId === club.id}
-                              onToggleManagerDrop={(pos) => {
-                                if (!pos) { setOpenClubManagerId(null); setClubManagerDropPos(null) }
-                                else { setOpenClubManagerId(club.id); setClubManagerDropPos(pos) }
-                              }}
-                            />
-                          ))}
-                        </div>
+                        {renderClubes(leagueClubs)}
                       </div>
                     )
                   })}
