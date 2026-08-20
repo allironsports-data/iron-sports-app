@@ -87,6 +87,17 @@ interface Props {
   onAddScoutingMatch?: (m: ScoutingMatch) => void;
 }
 
+/**
+ * Fecha en AAAA-MM-DD en hora LOCAL.
+ *
+ * Con .toISOString() se pasa a UTC: el lunes a las 00:00 en España sale como
+ * el domingo anterior. La tabla de carga semanal por equipos estaba
+ * desplazada un día SIEMPRE, no solo de madrugada.
+ */
+function fechaLocal(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 // Birthday helpers
 function isBirthdayToday(birthDate: string): boolean {
   const today = new Date();
@@ -305,7 +316,7 @@ export function Dashboard({
   function openAddEvent() {
     setEvtPlayer("");
     setEvtPlayerQ("");
-    setEvtDate(new Date().toISOString().slice(0, 10));
+    setEvtDate(fechaLocal(new Date()));
     setEvtType(ACTIVITY_TYPES_DASH[0]);
     setEvtCustomType("");
     setEvtNotes("");
@@ -448,10 +459,7 @@ export function Dashboard({
   // Fecha LOCAL, no UTC: con toISOString(), entre las 00:00 y las 2:00 de la
   // madrugada española "hoy" seguía siendo ayer y las tareas del día no se
   // marcaban como vencidas.
-  const todayStr = (() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  })();
+  const todayStr = fechaLocal(new Date());
   // Week window (driven by weekOffset for the Equipo view)
   const weekMonday = (() => {
     const d = new Date();
@@ -1396,7 +1404,7 @@ export function Dashboard({
                 base.setDate(base.getDate() - day + taskWeekOffset * 7);
                 const days = Array.from({ length: 7 }, (_, i) => {
                   const d = new Date(base); d.setDate(base.getDate() + i);
-                  return d.toISOString().slice(0, 10);
+                  return fechaLocal(d);
                 });
                 const DOW = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
                 const noDate = filteredBoard.filter(t => !t.dueDate);
@@ -1971,8 +1979,8 @@ export function Dashboard({
 
           {/* Workload table */}
           {(() => {
-            const weekMonStr = weekMonday.toISOString().slice(0, 10);
-            const weekSunStr = weekSunday.toISOString().slice(0, 10);
+            const weekMonStr = fechaLocal(weekMonday);
+            const weekSunStr = fechaLocal(weekSunday);
 
             // Eventos deduplicados (los grupales comparten groupId)
             const dedupedEvents = (acts: PlayerActivity[]) => {
@@ -2002,8 +2010,8 @@ export function Dashboard({
               const spark = [3, 2, 1, 0].map(i => {
                 const ws = new Date(weekMonday.getTime() - i * 7 * 24 * 60 * 60 * 1000);
                 const we = new Date(ws.getTime() + 6 * 24 * 60 * 60 * 1000);
-                const wsStr = ws.toISOString().slice(0, 10);
-                const weStr = we.toISOString().slice(0, 10);
+                const wsStr = fechaLocal(ws);
+                const weStr = fechaLocal(we);
                 const nDone = visibleTasks.filter(t =>
                   t.status === 'completada' && t.assigneeId === p.id &&
                   t.completedAt && t.completedAt.slice(0, 10) >= wsStr && t.completedAt.slice(0, 10) <= weStr

@@ -19,6 +19,26 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-08-20',
+    items: [
+      'Contactos abre mucho más rápido y, sobre todo, el resto de la app también: los 3.065 contactos iban metidos dentro del programa y se los descargaba todo el mundo aunque no entrase nunca ahí. Ahora se piden solo al abrir la pestaña',
+      'La tabla de carga semanal por equipos estaba desplazada un día. Corregido',
+      'Si al abrir la app falla la carga de algo (partidos, informes, clubes…), sale un aviso rojo diciendo QUÉ ha fallado, en vez de enseñar la lista vacía como si no hubiera datos',
+      'Panel de tarea: si alguien cambiaba el estado de la tarea mientras tú escribías, te borraba el texto sin guardar. Ya no',
+      'Avisos de «partido nuevo de su equipo»: dejan de saltar por confundir clubes distintos que empiezan igual (Real Madrid / Real Sociedad)',
+    ],
+    adminItems: [
+      'Seguridad: las cuentas nuevas nacen PENDIENTES. Hasta que un admin las activa desde el panel, la base de datos no les entrega absolutamente nada. Antes, cualquiera que se registrase entraba con acceso completo a teléfonos, contratos y pasaportes',
+      'Nuevo botón «Activar / ✓ Activa» en Admin → Equipo, y chip «Pendiente» en las cuentas sin aprobar. Sirve también para cortarle el acceso a alguien sin borrar su cuenta ni su historial',
+      'Freno de borrado masivo: nadie que no sea admin puede borrar más de 25 filas de una tabla de una sola vez',
+      'Pasaportes y contratos: los enlaces guardados duraban 10 AÑOS y abrían el documento sin login. Ahora se guarda la ruta y el enlace se firma al abrirlo, con 5 minutos de validez',
+      'Paginación: varias consultas ordenaban por columnas repetidas (sort_pos, fecha, priority…), y en tablas de más de 1.000 filas eso hace que Postgres repita filas y se salte otras sin avisar. Todas llevan ya desempate por id',
+      'Cuatro consultas más que seguían sin paginar (apuntes, reuniones y actividades) ya lo están',
+      'La comparación de nombres de equipo vivía duplicada en dos sitios, con una versión antigua y con fallo en App.tsx. Ahora hay una sola en lib/equipos.ts',
+      'Los enlaces a PDF que salen de las notas del contrato ya no se pintan directos: se validan y se firman al abrirlos',
+    ],
+  },
+  {
     date: '2026-08-18',
     items: [
       'Nueva pestaña Captación → Equipos: el cuadro de control de qué equipos tenéis cubiertos por zona y categoría. Marcas con ★ los que te importan, y la app te dice de cada uno cuántos jugadores tienes apuntados, cuántos informes y cuántos partidos suyos habéis visto esta temporada',

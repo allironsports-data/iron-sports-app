@@ -160,6 +160,17 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
     await onRefresh()
   }
 
+  /**
+   * Activar / desactivar la cuenta. Mientras está desactivada, la base de
+   * datos no le entrega NADA: no es que la app se lo esconda, es que no se
+   * lo da. Así, quien se registre por su cuenta no ve nada hasta que un
+   * admin lo apruebe.
+   */
+  const handleToggleActivo = async (p: Profile) => {
+    await updateProfile(p.id, { activo: p.activo === false })
+    await onRefresh()
+  }
+
   /** Cuenta restringida: solo ve Captación (Jugadores, Partidos e Informes) */
   const handleToggleCaptacionOnly = async (p: Profile) => {
     await updateProfile(p.id, { captacion_only: !p.captacion_only })
@@ -191,6 +202,11 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
               <div>Email: <strong>{createdInfo.email}</strong></div>
               <div>Contraseña: <strong>{createdInfo.password}</strong></div>
               <div className="text-xs text-slate-400 mt-1">allironsports.vercel.app</div>
+            </div>
+            <div className="bg-amber-50 border border-amber-200 rounded px-3 py-2 text-xs text-amber-800 mb-2">
+              La cuenta nace <strong>pendiente</strong>: hasta que la actives en la lista
+              de abajo no podrá ver nada. Es lo que impide que un desconocido se
+              registre y entre.
             </div>
             <div className="flex items-center gap-3">
               <button onClick={handleCopy} className="text-xs flex items-center gap-1 text-emerald-700 hover:text-emerald-900">
@@ -285,6 +301,11 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
                             <Shield className="w-2.5 h-2.5" /> Admin
                           </span>
                         )}
+                        {p.activo === false && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+                            Pendiente
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-slate-400">{managedCount} jugador{managedCount !== 1 ? 'es' : ''}</p>
                     </div>
@@ -302,6 +323,17 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
                     <button onClick={() => setDeleteId(deleteId === p.id ? null : p.id)}
                       className="p-2 sm:p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-red-500" title="Eliminar" aria-label="Eliminar">
                       <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => handleToggleActivo(p)}
+                      title={p.activo === false
+                        ? 'La cuenta no recibe ningún dato de la base de datos — clic para darle acceso'
+                        : 'Cortar el acceso de esta cuenta sin borrarla'}
+                      className={`text-[11px] px-2 py-1 rounded border transition-colors ${
+                        p.activo === false
+                          ? 'border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 font-semibold'
+                          : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'
+                      }`}>
+                      {p.activo === false ? 'Activar' : '✓ Activa'}
                     </button>
                     <button onClick={() => handleToggleAdmin(p)}
                       className={`text-[11px] px-2 py-1 rounded border transition-colors ${

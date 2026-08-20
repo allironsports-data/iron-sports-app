@@ -265,8 +265,17 @@ export function Distribution({
   // ── Clubes en lista ───────────────────────────────────────────────
   // Con 1.372 clubes las tarjetas ocupaban muchísimo y no dejaban comparar.
   // Cada club es una fila: liga, encargado, contacto, ofrecidos y necesidades.
+  // «Borja» y «Borja» eran indistinguibles en los desplegables: se enseña
+  // nombre y primer apellido, y si aun así coinciden, las siglas.
+  const nombreCorto = (p: Profile) => {
+    const partes = p.name.trim().split(/\s+/)
+    const corto = partes.slice(0, 2).join(' ')
+    const repetido = profiles.filter(x => x.name.trim().split(/\s+/).slice(0, 2).join(' ') === corto).length > 1
+    return repetido ? `${corto} (${p.avatar})` : corto
+  }
+
   const contactedByNombre = (club: Club) =>
-    profiles.find(p => p.avatar === club.contactedBy)?.name ?? club.contactedBy ?? 'sí'
+    (() => { const p = profiles.find(x => x.avatar === club.contactedBy); return p ? nombreCorto(p) : (club.contactedBy ?? 'sí') })()
 
   const abrirClub = (id: string) => {
     if (onSelectClub) { onSelectClub(id) }
@@ -330,11 +339,11 @@ export function Distribution({
                           value={club.aisManager ?? ''}
                           onChange={e => onUpdateClub({ ...club, aisManager: e.target.value || undefined })
                             .catch(() => showToast('No se pudo guardar. Inténtalo de nuevo.', 'error'))}
-                          className="text-[11px] border border-transparent hover:border-slate-300 rounded px-1 py-0.5 bg-transparent w-full max-w-[120px] focus:outline-none focus:border-primary"
+                          className="text-[11px] border border-transparent hover:border-slate-300 rounded px-1 py-0.5 bg-transparent w-full max-w-[150px] focus:outline-none focus:border-primary"
                         >
                           <option value="">—</option>
                           {profiles.filter(p => p.avatar).map(p => (
-                            <option key={p.id} value={p.avatar}>{p.name.split(' ')[0]}</option>
+                            <option key={p.id} value={p.avatar}>{nombreCorto(p)}</option>
                           ))}
                         </select>
                       </td>
@@ -372,7 +381,7 @@ export function Distribution({
                         >
                           <option value="__no__">sin contactar</option>
                           {profiles.filter(p => p.avatar).map(p => (
-                            <option key={p.id} value={p.avatar}>✓ {p.name.split(' ')[0]}</option>
+                            <option key={p.id} value={p.avatar}>✓ {nombreCorto(p)}</option>
                           ))}
                         </select>
                       </td>

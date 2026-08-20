@@ -4,7 +4,7 @@ import {
   Users, Star, Plus, Pencil, Check, Trash2,
   List, LayoutList, AlertCircle, UserX,
 } from 'lucide-react'
-import { CONTACTS as STATIC_CONTACTS, type Contact } from '../data/contactos'
+import { cargarContactos, type Contact } from '../data/contactos'
 
 // ── Confederation grouping ────────────────────────────────────────────────────
 
@@ -130,6 +130,22 @@ export function Contactos({ onBack }: { onBack: () => void }) {
   const [deleteState,    setDeleteState]    = useState<DeleteState | null>(null)
   const [selected,       setSelected]       = useState<Set<string>>(new Set())
 
+  // Los 3.065 contactos se descargan al abrir la pestaña (public/contactos.json),
+  // no van compilados dentro de la app.
+  const [STATIC_CONTACTS, setStaticContacts] = useState<Contact[]>([])
+  const [cargando, setCargando] = useState(true)
+  const [errorCarga, setErrorCarga] = useState(false)
+  useEffect(() => {
+    let cancelado = false
+    cargarContactos()
+      .then(cs => { if (!cancelado) { setStaticContacts(cs); setCargando(false) } })
+      .catch(err => {
+        console.error('[contactos]', err)
+        if (!cancelado) { setErrorCarga(true); setCargando(false) }
+      })
+    return () => { cancelado = true }
+  }, [])
+
   // ── Merged contact list ──
   const ALL_CONTACTS = useMemo(() => {
     const base = STATIC_CONTACTS
@@ -137,7 +153,7 @@ export function Contactos({ onBack }: { onBack: () => void }) {
       .map(c => overrides[c.id] ? { ...c, ...overrides[c.id] } : c)
     const extra = extraContacts.filter(c => !deleted.has(c.id))
     return [...base, ...extra]
-  }, [extraContacts, overrides, deleted])
+  }, [STATIC_CONTACTS, extraContacts, overrides, deleted])
 
   // Real contacts (with a person) vs. empty club placeholders
   const REAL_CONTACTS = useMemo(() =>
@@ -449,6 +465,23 @@ export function Contactos({ onBack }: { onBack: () => void }) {
           </div>
         </div>
       </header>
+      {cargando && (
+        <div className="max-w-6xl mx-auto w-full px-4 pt-3">
+          <div className="flex items-center gap-2 text-sm text-slate-500">
+            <span className="w-4 h-4 border-2 border-slate-200 border-t-slate-500 rounded-full animate-spin" />
+            Cargando contactos…
+          </div>
+        </div>
+      )}
+      {errorCarga && (
+        <div className="max-w-6xl mx-auto w-full px-4 pt-3">
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-rose-50 border border-rose-200 text-sm text-rose-700">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            No se ha podido cargar la agenda de contactos.
+            <button onClick={() => window.location.reload()} className="underline font-medium">reintentar</button>
+          </div>
+        </div>
+      )}
 
       <div className="max-w-6xl mx-auto w-full flex flex-col sm:flex-row flex-1 gap-0 px-4 py-4">
 

@@ -8,7 +8,7 @@ import type {
 } from "../types";
 import { calcAge } from "../types";
 import type { Profile } from "../contexts/AuthContext";
-import { uploadContractPdf, fetchNotes, createNote, updateNote, deleteNote,
+import { uploadContractPdf, urlDocumento, fetchNotes, createNote, updateNote, deleteNote,
   fetchPlayerActivities, createPlayerActivity, createGroupActivity,
   updatePlayerActivity, updateGroupActivity, deletePlayerActivity, deleteGroupActivity,
 } from "../lib/db";
@@ -32,6 +32,27 @@ import { BulkAssignModal } from "../components/BulkAssignModal";
 import { POSITIONS, positionLabel } from "../lib/positions";
 
 const PRIMARY = "hsl(220,72%,26%)";
+
+/**
+ * Abre un pasaporte o un contrato firmando el enlace en ese momento
+ * (5 minutos de validez). Nunca metemos el valor guardado directamente en
+ * un href: además de que esos enlaces duraban 10 años, las notas del
+ * contrato son texto libre y alguien podría colar ahí un `javascript:…`.
+ *
+ * El window.open va ANTES del await: si se abre después, el navegador lo
+ * bloquea por no venir de una pulsación.
+ */
+async function abrirDocumento(referencia: string, onError: (msg: string) => void) {
+  const ventana = window.open("", "_blank", "noopener,noreferrer");
+  try {
+    const url = await urlDocumento(referencia);
+    if (ventana) ventana.location.href = url;
+    else window.location.href = url;
+  } catch {
+    ventana?.close();
+    onError("No se pudo abrir el documento");
+  }
+}
 
 interface Props {
   player: Player;
@@ -964,11 +985,13 @@ function ContractTab({ player, onUpdate, isAdmin }: { player: Player; onUpdate: 
                   {player.clubContract.notes.split("\n").map((line, i) => {
                     const pdfMatch = line.match(/\[PDF: (.+?)\]\((.+?)\)/);
                     if (pdfMatch) {
+                      const ref = pdfMatch[2];
                       return (
-                        <a key={i} href={pdfMatch[2]} target="_blank" rel="noreferrer"
+                        <button key={i} type="button"
+                          onClick={() => abrirDocumento(ref, (m) => showToast(m, "error"))}
                           className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 text-xs">
                           <ExternalLink className="w-3 h-3" />{pdfMatch[1]}
-                        </a>
+                        </button>
                       );
                     }
                     return line ? <span key={i}>{line}<br/></span> : null;
@@ -1501,10 +1524,11 @@ function InfoTab({ player, onUpdate }: { player: Player; onUpdate: (p: Player) =
         <p className="text-xs font-medium text-slate-500 mb-1">Pasaporte</p>
         {i.passportUrl ? (
           <div className="flex items-center gap-2">
-            <a href={i.passportUrl} target="_blank" rel="noopener noreferrer"
+            <button type="button"
+              onClick={() => abrirDocumento(i.passportUrl!, (m) => showToast(m, "error"))}
               className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
               <Download className="w-3 h-3" /> Ver pasaporte
-            </a>
+            </button>
             <button onClick={() => passportRef.current?.click()}
               className="text-xs text-slate-400 hover:text-slate-600">
               (reemplazar)

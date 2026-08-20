@@ -10,6 +10,7 @@ export interface Profile {
   is_admin: boolean
   hidden_from_status?: boolean   // oculto en el panel de estado del equipo (lo gestiona un admin)
   captacion_only?: boolean       // cuenta restringida: solo ve Captación (Jugadores, Partidos, Informes)
+  activo?: boolean               // cuenta aprobada por un admin. Sin esto, la base de datos no le entrega nada
 }
 
 interface AuthState {
@@ -44,6 +45,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         is_admin: data.is_admin ?? false,
         hidden_from_status: data.hidden_from_status ?? false,
         captacion_only: data.captacion_only ?? false,
+        // Si la columna todavía no existe en la base de datos (migración sin
+        // ejecutar), se da por activa: así nadie se queda fuera por esperar.
+        activo: data.activo ?? true,
       })
     }
   }

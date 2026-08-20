@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { X, Trash2, ChevronRight, Send } from "lucide-react";
 import type { Task, Player, TaskLabel } from "../types";
 import type { Profile } from "../contexts/AuthContext";
@@ -55,7 +55,17 @@ export function TaskDetailPanel({
 
   useEffect(() => { loadComments(); }, [loadComments]);
 
+  // Al abrir OTRA tarea se rellena el formulario entero. Antes esto también
+  // se disparaba con task.status, así que si alguien cambiaba el estado de la
+  // tarea desde otro sitio mientras tú escribías, te BORRABA el texto sin
+  // guardar. Ahora un cambio de estado de fuera solo actualiza el estado.
+  const tareaAbierta = useRef<string | null>(null);
   useEffect(() => {
+    if (tareaAbierta.current === task.id) {
+      setStatus(task.status);
+      return;
+    }
+    tareaAbierta.current = task.id;
     setTitle(task.title);
     setDescription(task.description);
     setStatus(task.status);

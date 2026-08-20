@@ -61,35 +61,62 @@ function playerToDb(p: Partial<Player>) {
   }
 }
 
-// ── PASSPORT UPLOAD ──────────────────────────────────────────
+// ── PASAPORTES Y CONTRATOS ───────────────────────────────────
+//
+// Antes esto guardaba en la base de datos un enlace firmado de 10 AÑOS.
+// Un pasaporte de un chaval de 16 con una URL que abre sin login hasta
+// 2036, metida en un campo de texto que se copia y se reenvía. Y encima
+// no había forma de anularla.
+//
+// Ahora se guarda la RUTA dentro del bucket privado y el enlace se firma
+// en el momento de abrir el documento, con 5 minutos de vida. Si alguien
+// reenvía la URL, a los 5 minutos ya no abre nada.
+const DOC_URL_TTL = 5 * 60 // 5 minutos
 
-// El bucket 'attachments' es privado: getPublicUrl devuelve enlaces que dan 403.
-// Usamos URLs firmadas de larga duración (10 años), válidas con bucket privado o público.
-const SIGNED_URL_TTL = 10 * 365 * 24 * 60 * 60 // 10 años en segundos
-
-async function uploadAndSign(path: string, file: File): Promise<string> {
+async function subirDocumento(path: string, file: File): Promise<string> {
   const { error } = await supabase.storage.from('attachments').upload(path, file, { upsert: true })
   if (error) throw error
-  const { data, error: signError } = await supabase.storage
+  return path // ← la ruta, no la URL
+}
+
+/**
+ * Saca la ruta dentro del bucket. Acepta rutas nuevas
+ * («passports/xxx.pdf») y los enlaces antiguos de 10 años que siguen
+ * guardados en la base de datos, para poder volver a firmarlos cortos.
+ */
+export function rutaDeDocumento(rutaOEnlace: string): string {
+  const v = (rutaOEnlace ?? '').trim()
+  if (!/^https?:\/\//i.test(v)) return v.replace(/^\/+/, '')
+  try {
+    const u = new URL(v)
+    // …/storage/v1/object/sign/attachments/passports/xxx.pdf?token=…
+    const m = u.pathname.match(/\/object\/(?:sign|public|authenticated)\/attachments\/(.+)$/)
+    if (m) return decodeURIComponent(m[1])
+  } catch { /* no era una URL válida: se devuelve tal cual */ }
+  return v
+}
+
+/** Enlace temporal (5 min) para abrir un pasaporte o un contrato. */
+export async function urlDocumento(rutaOEnlace: string): Promise<string> {
+  const ruta = rutaDeDocumento(rutaOEnlace)
+  if (!ruta) throw new Error('Documento sin ruta')
+  const { data, error } = await supabase.storage
     .from('attachments')
-    .createSignedUrl(path, SIGNED_URL_TTL)
-  if (signError || !data?.signedUrl) {
-    // Fallback por si el bucket es público
-    return supabase.storage.from('attachments').getPublicUrl(path).data.publicUrl
-  }
-  return data.signedUrl
+    .createSignedUrl(ruta, DOC_URL_TTL)
+  if (data?.signedUrl) return data.signedUrl
+  // Enlace antiguo que no sabemos convertir: al menos que se pueda abrir.
+  if (/^https?:\/\//i.test(rutaOEnlace)) return rutaOEnlace
+  throw error ?? new Error('No se pudo generar el enlace del documento')
 }
 
 export async function uploadPassport(playerId: string, file: File): Promise<string> {
   const ext = file.name.split('.').pop()
-  return uploadAndSign(`passports/${playerId}.${ext}`, file)
+  return subirDocumento(`passports/${playerId}.${ext}`, file)
 }
-
-// ── CONTRACT PDF UPLOAD ─────────────────────────────────────
 
 export async function uploadContractPdf(playerId: string, file: File): Promise<string> {
   const ext = file.name.split('.').pop()
-  return uploadAndSign(`contracts/${playerId}_${Date.now()}.${ext}`, file)
+  return subirDocumento(`contracts/${playerId}_${Date.now()}.${ext}`, file)
 }
 
 // Un fallo a media carga dejaba la lista corta sin que nadie se enterase:
@@ -102,9 +129,16 @@ function logFetchError(tabla: string, error: unknown, leidas: number) {
 // que pueda crecer tiene que ir paginada. Esto lo hace en una línea:
 //
 //   const filas = await leerTodo('postpartidos', (desde, hasta) =>
-//     supabase.from('postpartidos').select('*').order('created_at').range(desde, hasta))
+//     supabase.from('postpartidos').select('*').order('created_at').order('id').range(desde, hasta))
 //
 // `consulta` recibe el rango y devuelve la petición ya montada.
+//
+// ⚠⚠ Y OTRA COSA IGUAL DE IMPORTANTE: el .order() TIENE que acabar en una
+// columna única (normalmente 'id'). Si ordenas solo por 'fecha', 'priority'
+// o 'sort_pos' —que se repiten— Postgres NO garantiza el orden entre las
+// filas empatadas: al pedir la página 2 puede repetir filas de la 1 y, lo
+// que es peor, SALTARSE otras. Desaparecen sin error y sin avisar. Con
+// sort_pos = 0 en toda la tabla esto no es teoría, pasa.
 const PAGINA = 1000
 export async function leerTodo<T>(
   tabla: string,
@@ -136,7 +170,7 @@ export async function fetchPlayers(): Promise<Player[]> {
   let from = 0
   while (true) {
     const { data, error } = await supabase.from('players').select('*').order('name')
-      .range(from, from + pageSize - 1)
+      .order('id').range(from, from + pageSize - 1)
     if (error) throw error
     const page = (data ?? []).map(dbToPlayer)
     all.push(...page)
@@ -214,7 +248,7 @@ export async function fetchTasks(playerId?: string): Promise<Task[]> {
     // Sin paginar, al pasar de 1000 tareas desaparecían las más antiguas
     // (van ordenadas por fecha de creación descendente)
     let q = supabase.from('tasks').select('*').order('created_at', { ascending: false })
-      .range(from, from + pageSize - 1)
+      .order('id').range(from, from + pageSize - 1)
     if (playerId) q = q.eq('player_id', playerId)
     const { data, error } = await q
     if (error) throw error
@@ -285,7 +319,7 @@ function dbToComment(row: Record<string, unknown>): TaskComment {
 export async function fetchComments(taskId: string): Promise<TaskComment[]> {
   const data = await leerTodo<Record<string, unknown>>('task_comments', (d, h) =>
     supabase.from('task_comments').select('*, task_attachments(*)')
-      .eq('task_id', taskId).order('created_at').range(d, h))
+      .eq('task_id', taskId).order('created_at').order('id').range(d, h))
   return (data ?? []).map((row: Record<string, unknown>) => ({
     ...dbToComment(row as Record<string, unknown>),
     attachments: ((row.task_attachments as Record<string, unknown>[]) ?? []).map((a) => ({
@@ -349,13 +383,11 @@ function dbToNote(row: Record<string, unknown>): PerformanceNote {
 }
 
 export async function fetchNotes(playerId: string): Promise<PerformanceNote[]> {
-  const { data, error } = await supabase
-    .from('performance_notes')
-    .select('*')
-    .eq('player_id', playerId)
-    .order('date', { ascending: false })
-  if (error) throw error
-  return (data ?? []).map(dbToNote)
+  const filas = await leerTodo<Record<string, unknown>>('performance_notes', (d, h) =>
+    supabase.from('performance_notes').select('*')
+      .eq('player_id', playerId)
+      .order('date', { ascending: false }).order('id').range(d, h))
+  return filas.map(dbToNote)
 }
 
 export async function createNote(playerId: string, note: Omit<PerformanceNote, 'id'>): Promise<PerformanceNote> {
@@ -393,10 +425,10 @@ export async function deleteNote(id: string): Promise<void> {
 
 export async function fetchProfiles() {
   return leerTodo<Record<string, unknown>>('profiles', (d, h) =>
-    supabase.from('profiles').select('*').order('name').range(d, h)) as Promise<unknown[]>
+    supabase.from('profiles').select('*').order('name').order('id').range(d, h)) as Promise<unknown[]>
 }
 
-export async function updateProfile(id: string, updates: { name?: string; avatar?: string; is_admin?: boolean; hidden_from_status?: boolean; captacion_only?: boolean }) {
+export async function updateProfile(id: string, updates: { name?: string; avatar?: string; is_admin?: boolean; hidden_from_status?: boolean; captacion_only?: boolean; activo?: boolean }) {
   const { error } = await supabase.from('profiles').update(updates).eq('id', id)
   if (error) throw error
 }
@@ -424,7 +456,7 @@ function dbToPostpartido(row: Record<string, unknown>): Postpartido {
 
 export async function fetchPostpartidos(): Promise<Postpartido[]> {
   const filas = await leerTodo<Record<string, unknown>>('postpartidos', (d, h) =>
-    supabase.from('postpartidos').select('*').order('created_at', { ascending: false }).range(d, h))
+    supabase.from('postpartidos').select('*').order('created_at', { ascending: false }).order('id').range(d, h))
   return filas.map(dbToPostpartido)
 }
 
@@ -475,7 +507,7 @@ function dbToMemberStatus(row: Record<string, unknown>): MemberStatus {
 
 export async function fetchMemberStatuses(): Promise<MemberStatus[]> {
   const filas = await leerTodo<Record<string, unknown>>('member_status', (d, h) =>
-    supabase.from('member_status').select('*').range(d, h))
+    supabase.from('member_status').select('*').order('profile_id').range(d, h))
   return filas.map(dbToMemberStatus)
 }
 
@@ -520,7 +552,7 @@ export async function fetchClubs(): Promise<Club[]> {
   while (true) {
     const { data, error } = await supabase
       .from('clubs').select('*').order('name')
-      .range(from, from + pageSize - 1)
+      .order('id').range(from, from + pageSize - 1)
     if (error) throw error
     const page = (data ?? []).map(dbToClub)
     all.push(...page)
@@ -591,7 +623,7 @@ export async function fetchDistributionEntries(season?: string): Promise<Distrib
   while (true) {
     let q = supabase.from('distribution_entries').select('*').eq('active', true)
       .order('priority')
-      .range(from, from + pageSize - 1)
+      .order('id').range(from, from + pageSize - 1)
     if (season) q = q.eq('season', season)
     const { data, error } = await q
     if (error) throw error
@@ -660,7 +692,7 @@ export async function fetchNegotiations(playerId?: string, clubId?: string): Pro
   while (true) {
     let q = supabase.from('club_negotiations').select('*')
       .order('updated_at', { ascending: false })
-      .range(from, from + pageSize - 1)
+      .order('id').range(from, from + pageSize - 1)
     if (playerId) q = q.eq('player_id', playerId)
     if (clubId) q = q.eq('club_id', clubId)
     const { data, error } = await q
@@ -752,7 +784,7 @@ export async function fetchScoutingPlayers(): Promise<ScoutingPlayer[]> {
   while (true) {
     const { data, error } = await supabase
       .from('scouting_players').select('*').order('full_name')
-      .range(from, from + pageSize - 1)
+      .order('id').range(from, from + pageSize - 1)
     if (error) throw error
     const page = (data ?? []).map(dbToScoutingPlayer)
     all.push(...page)
@@ -769,7 +801,7 @@ export async function fetchScoutingReports(playerId?: string): Promise<ScoutingR
   while (true) {
     let q = supabase.from('scouting_reports').select('*')
       .order('fecha', { ascending: false })
-      .range(from, from + pageSize - 1)
+      .order('id').range(from, from + pageSize - 1)
     if (playerId) q = q.eq('player_id', playerId)
     const { data, error } = await q
     if (error) throw error
@@ -889,7 +921,7 @@ export async function fetchMatchPlayers(): Promise<ScoutingMatchPlayer[]> {
       const { data, error } = await supabase.from('scouting_match_players')
         .select('*')
         .order('created_at', { ascending: true })
-        .range(from, from + pageSize - 1)
+        .order('id').range(from, from + pageSize - 1)
       if (error) { logFetchError('scouting/partidos', error, all.length); return all }
       const page = (data ?? []).map(dbToMatchPlayer)
       all.push(...page)
@@ -950,7 +982,7 @@ export async function fetchMatchScouts(): Promise<ScoutingMatchScout[]> {
       const { data, error } = await supabase.from('scouting_match_scouts')
         .select('*')
         .order('created_at', { ascending: true })
-        .range(from, from + pageSize - 1)
+        .order('id').range(from, from + pageSize - 1)
       if (error) { logFetchError('scouting/partidos', error, all.length); return all }
       const page = (data ?? []).map(dbToMatchScout)
       all.push(...page)
@@ -1082,7 +1114,7 @@ export async function fetchScoutingMatches(): Promise<ScoutingMatch[]> {
         .from('scouting_matches')
         .select('*')
         .order('date', { ascending: false })
-        .range(from, from + PAGE - 1)
+        .order('id').range(from, from + PAGE - 1)
       if (error) { logFetchError('tabla opcional (¿migración pendiente?)', error, all.length); return all }
       const rows = (data ?? []).map(dbToScoutingMatch)
       all.push(...rows)
@@ -1167,7 +1199,7 @@ export async function fetchFirmasEntries(): Promise<FirmasEntry[]> {
     while (true) {
       const { data, error } = await supabase
         .from('captacion_firmas').select('*').order('sort_pos')
-        .range(from, from + pageSize - 1)
+        .order('id').range(from, from + pageSize - 1)
       if (error) { logFetchError('tabla opcional (¿migración pendiente?)', error, all.length); return all }
       const page = (data ?? []).map(dbToFirmasEntry)
       all.push(...page)
@@ -1258,7 +1290,7 @@ function dbToBoulemaPeticion(row: Record<string, unknown>): BoulemaPeticion {
 
 export async function fetchBoulemaPeticiones(): Promise<BoulemaPeticion[]> {
   const filas = await leerTodo<Record<string, unknown>>('boulema_peticiones', (d, h) =>
-    supabase.from('boulema_peticiones').select('*').order('created_at', { ascending: false }).range(d, h))
+    supabase.from('boulema_peticiones').select('*').order('created_at', { ascending: false }).order('id').range(d, h))
   return filas.map(dbToBoulemaPeticion)
 }
 
@@ -1331,7 +1363,7 @@ export async function fetchBoulemaPlayers(): Promise<BoulemaPlayer[]> {
   try {
     while (true) {
       const { data, error } = await supabase.from('boulema_players').select('*').order('full_name')
-        .range(from, from + pageSize - 1)
+        .order('id').range(from, from + pageSize - 1)
       if (error) { logFetchError('boulema_players', error, all.length); return all }
       const page = (data ?? []).map(dbToBoulemaPlayer)
       all.push(...page)
@@ -1399,7 +1431,7 @@ function dbToClubLog(row: Record<string, unknown>): ClubLog {
 export async function fetchClubLogs(playerId: string): Promise<ClubLog[]> {
   const filas = await leerTodo<Record<string, unknown>>('club_logs', (d, h) =>
     supabase.from('club_logs').select('*').eq('player_id', playerId)
-      .order('date', { ascending: false }).range(d, h))
+      .order('date', { ascending: false }).order('id').range(d, h))
   return filas.map(dbToClubLog)
 }
 
@@ -1444,13 +1476,11 @@ function dbToMeeting(row: Record<string, unknown>): PlayerMeeting {
 }
 
 export async function fetchMeetings(playerId: string): Promise<PlayerMeeting[]> {
-  const { data, error } = await supabase
-    .from('player_meetings')
-    .select('*')
-    .eq('player_id', playerId)
-    .order('date', { ascending: false })
-  if (error) throw error
-  return (data ?? []).map(dbToMeeting)
+  const filas = await leerTodo<Record<string, unknown>>('player_meetings', (d, h) =>
+    supabase.from('player_meetings').select('*')
+      .eq('player_id', playerId)
+      .order('date', { ascending: false }).order('id').range(d, h))
+  return filas.map(dbToMeeting)
 }
 
 export async function createMeeting(playerId: string, meeting: Omit<PlayerMeeting, 'id' | 'playerId' | 'createdAt'>): Promise<PlayerMeeting> {
@@ -1496,13 +1526,11 @@ function dbToPlayerActivity(row: Record<string, unknown>): PlayerActivity {
 }
 
 export async function fetchPlayerActivities(playerId: string): Promise<PlayerActivity[]> {
-  const { data, error } = await supabase
-    .from('player_activities')
-    .select('*')
-    .eq('player_id', playerId)
-    .order('date', { ascending: false })
-  if (error) throw error
-  return (data ?? []).map(row => dbToPlayerActivity(row as Record<string, unknown>))
+  const filas = await leerTodo<Record<string, unknown>>('player_activities', (d, h) =>
+    supabase.from('player_activities').select('*')
+      .eq('player_id', playerId)
+      .order('date', { ascending: false }).order('id').range(d, h))
+  return filas.map(row => dbToPlayerActivity(row))
 }
 
 /** Create a single-player activity (no group). */
@@ -1588,13 +1616,11 @@ export async function deleteGroupActivity(groupId: string): Promise<void> {
 export async function fetchActivitiesByAuthor(authorId: string): Promise<PlayerActivity[]> {
   // authorId se interpola en un filtro .or(): validar que es un UUID
   if (!/^[0-9a-f-]{36}$/i.test(authorId)) throw new Error('authorId inválido')
-  const { data, error } = await supabase
-    .from('player_activities')
-    .select('*')
-    .or(`author_id.eq.${authorId},participant_profile_ids.cs.{${authorId}}`)
-    .order('date', { ascending: false })
-  if (error) throw error
-  return (data ?? []).map(row => dbToPlayerActivity(row as Record<string, unknown>))
+  const filas = await leerTodo<Record<string, unknown>>('player_activities', (d, h) =>
+    supabase.from('player_activities').select('*')
+      .or(`author_id.eq.${authorId},participant_profile_ids.cs.{${authorId}}`)
+      .order('date', { ascending: false }).order('id').range(d, h))
+  return filas.map(row => dbToPlayerActivity(row))
 }
 
 // ── ZONAS DE CLUBES ──────────────────────────────────────────────────
@@ -1606,7 +1632,7 @@ export interface ClubZona { club: string; nombre?: string; zona: string }
 export async function fetchClubZonas(): Promise<ClubZona[]> {
   try {
     return await leerTodo<ClubZona>('zonas de clubes (¿migración pendiente?)', (d, h) =>
-      supabase.from('scouting_club_zonas').select('club, nombre, zona').range(d, h))
+      supabase.from('scouting_club_zonas').select('club, nombre, zona').order('club').range(d, h))
   } catch {
     return []
   }

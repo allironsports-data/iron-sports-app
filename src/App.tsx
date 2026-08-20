@@ -8,6 +8,7 @@ import { LoginScreen } from './views/LoginScreen'
 import { SavingIndicator, BottomNav, GlobalSearch, SystemNotifPrompt, fireSystemNotification } from './components/GlobalExtras'
 import { BUILD_ID } from './changelog'
 import { esZona, type Zona } from './lib/zonas'
+import { teamsAlike } from './lib/equipos'
 import type { ReactNode } from 'react'
 import type { Club, DistributionEntry, ClubNegotiation } from './types'
 
@@ -101,6 +102,10 @@ export default function App() {
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [searchOpen, setSearchOpen] = useState(false)
   const [phase2Loading, setPhase2Loading] = useState(false)
+  // Qué tablas han fallado al cargar. Antes fallaban en silencio y la app
+  // enseñaba listas vacías: parecía «no hay datos» cuando era «no he podido
+  // preguntar». Ahora sale un aviso rojo con el nombre de lo que falta.
+  const [cargasFallidas, setCargasFallidas] = useState<string[]>([])
   const [updateAvailable, setUpdateAvailable] = useState(false)
 
   // Distribution state
@@ -273,22 +278,33 @@ export default function App() {
 
       // Fase 2 en background
       setPhase2Loading(true)
+      // Cada lectura va protegida por separado: si una falla, las demás
+      // siguen cargando y apuntamos cuál ha sido para avisar en pantalla.
+      // (Antes, un fallo en cualquiera de las 7 primeras tiraba la fase
+      //  entera y las otras 8 devolvían [] sin decir nada.)
+      const fallos: string[] = []
+      const opc = <T,>(nombre: string, p: Promise<T>, vacio: T): Promise<T> =>
+        p.catch((err: unknown) => {
+          console.error(`[carga] ${nombre}:`, err)
+          fallos.push(nombre)
+          return vacio
+        })
       Promise.all([
-        db.fetchClubs(),
-        db.fetchDistributionEntries(),
-        db.fetchNegotiations(),
-        db.fetchScoutingPlayers(),
-        db.fetchScoutingReports(),
-        db.fetchScoutingMatches(),
-        db.fetchMatchPlayers(),
-        db.fetchMatchScouts().catch(() => [] as ScoutingMatchScout[]),
-        db.fetchBoulemaPeticiones().catch(() => [] as BoulemaPeticion[]),
-        db.fetchMemberStatuses().catch(() => [] as MemberStatus[]),
-        db.fetchPostpartidos().catch(() => [] as Postpartido[]),
-        db.fetchFirmasEntries().catch(() => [] as FirmasEntry[]),
-        db.fetchBoulemaPlayers().catch(() => [] as BoulemaPlayer[]),
-        db.fetchClubZonas().catch(() => [] as db.ClubZona[]),
-        db.fetchEquipos().catch(() => [] as db.Equipo[]),
+        opc('Clubes', db.fetchClubs(), []),
+        opc('Distribución', db.fetchDistributionEntries(), []),
+        opc('Negociaciones', db.fetchNegotiations(), []),
+        opc('Jugadores de captación', db.fetchScoutingPlayers(), []),
+        opc('Informes', db.fetchScoutingReports(), []),
+        opc('Partidos', db.fetchScoutingMatches(), []),
+        opc('Alineaciones', db.fetchMatchPlayers(), []),
+        opc('Scouts de partido', db.fetchMatchScouts(), [] as ScoutingMatchScout[]),
+        opc('Peticiones Boulema', db.fetchBoulemaPeticiones(), [] as BoulemaPeticion[]),
+        opc('Estado del equipo', db.fetchMemberStatuses(), [] as MemberStatus[]),
+        opc('Postpartidos', db.fetchPostpartidos(), [] as Postpartido[]),
+        opc('Pipeline de firmas', db.fetchFirmasEntries(), [] as FirmasEntry[]),
+        opc('Jugadores Boulema', db.fetchBoulemaPlayers(), [] as BoulemaPlayer[]),
+        opc('Zonas', db.fetchClubZonas(), [] as db.ClubZona[]),
+        opc('Catálogo de equipos', db.fetchEquipos(), [] as db.Equipo[]),
       ]).then(([cl, de, ng, sp, sr, sm, mp, msc, bp, ms, pp, fe, bpl, cz, eq]) => {
         if (cancelled) return
         setClubs(cl as Club[])
@@ -306,6 +322,7 @@ export default function App() {
         setBoulemaPlayers(bpl as BoulemaPlayer[])
         setClubZonas(zonasAMapa(cz as db.ClubZona[]))
         setEquipos(eq as db.Equipo[])
+        setCargasFallidas(fallos)
         setPhase2Loading(false)
       }).catch((err: unknown) => {
         // No bloquea la app: Distribución/Captación mostrarán listas vacías
@@ -412,13 +429,10 @@ export default function App() {
         const home = (row.home_team as string) ?? ''
         const away = (row.away_team as string) ?? ''
         const date = (row.date as string) ?? ''
-        const NOISE = new Set(['cf','cd','ud','fc','sd','ad','ce','sad','club','juv','juvenil','cadete','cad','inf','infantil','alevin','a','b','c','equipo','filial'])
-        const normTeam = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-          .replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(t => t && !NOISE.has(t)).join(' ')
-        const alike = (a: string, b: string) => {
-          const na = normTeam(a), nb = normTeam(b)
-          return !!na && !!nb && (na === nb || na.includes(nb) || nb.includes(na))
-        }
+        // Antes hab\u00eda aqu\u00ed una comparaci\u00f3n propia que daba por buenos
+        // \u00abReal Madrid\u00bb \u2194 \u00abReal Sociedad\u00bb (una contiene a la otra) y soltaba
+        // avisos de partidos que no eran. Ahora usa la misma que Captaci\u00f3n.
+        const alike = teamsAlike
         // leer estado actual sin cerrar sobre valores viejos
         setScoutingPlayers((prevSp) => {
           setFirmasEntries((prevFe) => {
@@ -637,6 +651,28 @@ export default function App() {
         </div>
       </div>
     ) : <Spinner />
+  }
+  if (profile.activo === false) {
+    // La cuenta existe pero un admin todavía no la ha activado. La base de
+    // datos no le entrega nada, así que sin esta pantalla vería la app
+    // entera vacía sin entender por qué.
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+        <div className="max-w-sm text-center bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+          <p className="text-sm font-semibold text-slate-800">Cuenta pendiente de activar</p>
+          <p className="text-xs text-slate-500 mt-2">
+            Tu cuenta se ha creado correctamente, pero un administrador tiene que
+            darle acceso antes de que puedas entrar. Avísale y vuelve a intentarlo.
+          </p>
+          <button
+            onClick={signOut}
+            className="mt-4 px-4 py-2 text-xs font-bold bg-slate-800 text-white rounded-lg hover:bg-slate-700"
+          >
+            Volver al login
+          </button>
+        </div>
+      </div>
+    )
   }
   if (dataLoading) return <Spinner />
   if (dataError) {
@@ -1079,6 +1115,19 @@ export default function App() {
           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800/90 text-white text-[11px] font-medium shadow-lg">
             <span className="w-2.5 h-2.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
             Sincronizando datos…
+          </span>
+        </div>
+      )}
+      {!phase2Loading && cargasFallidas.length > 0 && (
+        <div className="fixed bottom-16 sm:bottom-3 left-1/2 -translate-x-1/2 z-[46] px-3 max-w-[92vw]">
+          <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-600 text-white text-[11px] font-semibold shadow-lg">
+            <span className="truncate">No se ha podido cargar: {cargasFallidas.join(', ')}</span>
+            <button onClick={() => window.location.reload()} className="underline underline-offset-2 flex-shrink-0">
+              reintentar
+            </button>
+            <button onClick={() => setCargasFallidas([])} className="opacity-70 hover:opacity-100 flex-shrink-0">
+              ✕
+            </button>
           </span>
         </div>
       )}
