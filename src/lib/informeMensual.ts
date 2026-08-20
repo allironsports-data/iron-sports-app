@@ -117,27 +117,38 @@ export function generarInformeMensual(d: DatosInformeMensual): void {
   const informesPeriodo = d.scoutingReports.filter(r => fechaR(r) >= desdeISO)
 
   // ── Quién entra en el informe ──────────────────────────────────────
-  // Los jugadores de los que este mes se ha concluido que interesan, más
-  // los que han pasado a destacados en el mismo periodo.
+  // SOLO los vistos en el periodo: si a alguien no se le ha visto este mes,
+  // no es novedad para el club aunque lleve tiempo en «Llamar».
+  // De los vistos, entran los que interesan: o el informe de este mes
+  // concluye que sí, o su valoración actual es de destacado.
+  const vistosAhora = new Set(informesPeriodo.map(r => r.playerId))
+  const concluyeLlamar = new Set(
+    informesPeriodo.filter(r => normConcl(r.conclusion) === 'Llamar').map(r => r.playerId),
+  )
   const interesantes = new Set<string>()
-  for (const r of informesPeriodo) {
-    if (normConcl(r.conclusion) === 'Llamar') interesantes.add(r.playerId)
-  }
-  for (const p of d.scoutingPlayers) {
-    if ((p.assessment === 'Llamar' || p.assessment === 'Basque') &&
-        p.assessmentUpdatedAt && p.assessmentUpdatedAt >= desdeISO) {
-      interesantes.add(p.id)
+  for (const id of vistosAhora) {
+    const p = playersById.get(id)
+    if (!p) continue
+    if (concluyeLlamar.has(id) || p.assessment === 'Llamar' || p.assessment === 'Basque') {
+      interesantes.add(id)
     }
   }
 
   const seleccion = [...interesantes]
     .map(id => playersById.get(id))
     .filter((p): p is ScoutingPlayer => !!p)
+    // A los mayores (nacidos antes de 2002) solo se les incluye si están en
+    // «Llamar»: a esa edad, un simple seguimiento ya no es noticia para un club.
+    .filter(p => {
+      const y = Number(anyo(p.birthdate))
+      if (!Number.isFinite(y)) return true
+      return y >= 2002 || p.assessment === 'Llamar'
+    })
 
   // Descripción de cada uno: el informe más reciente que tenga
   const textoDe = new Map<string, string>()
   for (const p of seleccion) {
-    const suyos = d.scoutingReports
+    const suyos = informesPeriodo
       .filter(r => r.playerId === p.id && (r.texto ?? '').trim().length > 20)
       .sort((a, b) => fechaR(b).localeCompare(fechaR(a)))
     if (suyos[0]) textoDe.set(p.id, resumir(suyos[0].texto))
@@ -191,7 +202,7 @@ export function generarInformeMensual(d: DatosInformeMensual): void {
 <html lang="es"><head><meta charset="utf-8">
 <title>All Iron Sports · Seguimiento de captación · ${esc(mes)}</title>
 <style>
-  @page { size: A4; margin: 18mm 17mm 15mm; }
+  @page { size: A4; margin: 20mm 28mm 18mm; }
   * { box-sizing: border-box; }
   body {
     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -204,9 +215,8 @@ export function generarInformeMensual(d: DatosInformeMensual): void {
   .portada h1 { font-size: 21pt; font-weight: 600; letter-spacing: -0.5px; margin: 4px 0 2px; color: #1a2029; }
   .portada .rango { font-size: 9pt; color: #6f7883; }
 
-  .intro { font-size: 9pt; color: #4c5560; margin: 12px 0 0; max-width: 135mm; }
 
-  .cifras { display: flex; gap: 30px; margin: 16px 0 2px; }
+  .cifras { display: flex; gap: 30px; margin: 20px 0 2px; }
   .cifra .n { font-size: 20pt; font-weight: 600; color: #1a2029; line-height: 1; letter-spacing: -0.6px; }
   .cifra .l { font-size: 7.5pt; letter-spacing: 1.2px; text-transform: uppercase; color: #9aa3ae; margin-top: 4px; }
 
@@ -269,12 +279,6 @@ export function generarInformeMensual(d: DatosInformeMensual): void {
     <div class="rango">${esc(mes.charAt(0).toUpperCase() + mes.slice(1))} · ${esc(rango)}</div>
   </div>
 
-  <p class="intro">
-    Selección de jugadores observados durante el periodo por nuestro departamento de captación.
-    Se recogen los que, tras el seguimiento, consideramos de interés. Quedamos a su disposición
-    para ampliar información o facilitar vídeo de cualquiera de ellos.
-  </p>
-
   <div class="cifras">
     <div class="cifra"><div class="n">${seleccion.length}</div><div class="l">Jugadores de interés</div></div>
     <div class="cifra"><div class="n">${partidos.length}</div><div class="l">Partidos observados</div></div>
@@ -282,7 +286,7 @@ export function generarInformeMensual(d: DatosInformeMensual): void {
     <div class="cifra"><div class="n">${informesPeriodo.length}</div><div class="l">Observaciones</div></div>
   </div>
 
-  ${bloquesPorLinea || '<p class="intro">No hay jugadores destacados en este periodo.</p>'}
+  ${bloquesPorLinea || '<p class="desc">No hay jugadores destacados en este periodo.</p>'}
 
   <section class="linea">
     <h2>Partidos observados <span class="cuenta">${partidos.length}</span></h2>
