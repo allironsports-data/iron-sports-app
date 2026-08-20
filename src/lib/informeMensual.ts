@@ -22,12 +22,18 @@ export interface DatosInformeMensual {
 const esc = (s: unknown): string => String(s ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
+const fechaCorta = (iso?: string): string => {
+  if (!iso) return ''
+  const d = new Date(iso.length <= 10 ? iso + 'T12:00:00' : iso)
+  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
+}
+
 const anyo = (bd?: string): string => (bd && /^\d{4}/.test(bd)) ? bd.slice(0, 4) : '—'
 
 const normConcl = (c?: string) => c === 'Firmar' ? 'Llamar' : (c || undefined)
 
 /** Descripción corta a partir del informe, sin cortar a mitad de palabra */
-function resumir(texto?: string, max = 300): string {
+function resumir(texto?: string, max = 420): string {
   const t = (texto ?? '').replace(/\s+/g, ' ').trim()
   if (t.length <= max) return t
   const corte = t.slice(0, max)
@@ -145,13 +151,23 @@ export function generarInformeMensual(d: DatosInformeMensual): void {
       return y >= 2002 || p.assessment === 'Llamar'
     })
 
-  // Descripción de cada uno: el informe más reciente que tenga
-  const textoDe = new Map<string, string>()
+  // TODAS las observaciones del periodo de cada jugador, de la más reciente
+  // a la más antigua, cada una con su fecha y el partido en el que se hizo.
+  const partidoDe = new Map<string, ScoutingMatch>(d.scoutingMatches.map(m => [m.id, m]))
+  const observacionesDe = new Map<string, { fecha: string; partido?: string; texto: string }[]>()
   for (const p of seleccion) {
-    const suyos = informesPeriodo
+    const suyas = informesPeriodo
       .filter(r => r.playerId === p.id && (r.texto ?? '').trim().length > 20)
       .sort((a, b) => fechaR(b).localeCompare(fechaR(a)))
-    if (suyos[0]) textoDe.set(p.id, resumir(suyos[0].texto))
+      .map(r => {
+        const m = r.matchId ? partidoDe.get(r.matchId) : undefined
+        return {
+          fecha: fechaCorta(fechaR(r)),
+          partido: m ? `${m.homeTeam} – ${m.awayTeam}` : undefined,
+          texto: resumir(r.texto),
+        }
+      })
+    if (suyas.length) observacionesDe.set(p.id, suyas)
   }
 
   // Agrupados por línea
@@ -193,7 +209,11 @@ export function generarInformeMensual(d: DatosInformeMensual): void {
                 ${p.clubContract ? `<span>Contrato hasta ${esc(p.clubContract)}</span>` : ''}
               </div>
             </header>
-            ${textoDe.get(p.id) ? `<p class="desc">${esc(textoDe.get(p.id))}</p>` : ''}
+            ${(observacionesDe.get(p.id) ?? []).map(o => `
+              <div class="obs">
+                <div class="obs-cab">${esc(o.fecha)}${o.partido ? ` · ${esc(o.partido)}` : ''}</div>
+                <p class="desc">${esc(o.texto)}</p>
+              </div>`).join('')}
           </article>`).join('')}
       </section>`
     }).join('')
@@ -227,12 +247,14 @@ export function generarInformeMensual(d: DatosInformeMensual): void {
   }
   .cuenta { float: right; font-weight: 400; color: #9aa3ae; letter-spacing: 0; }
 
-  .jug { padding: 0 0 11px; margin-bottom: 11px; border-bottom: 0.5pt solid #eef1f4; page-break-inside: avoid; }
+  .jug { padding: 0 0 13px; margin-bottom: 13px; border-bottom: 0.5pt solid #eef1f4; page-break-inside: avoid; }
   .linea .jug:last-child { border-bottom: none; margin-bottom: 0; }
   .jug h3 { font-size: 11pt; font-weight: 600; margin: 0; color: #1a2029; letter-spacing: -0.2px; }
   .meta { font-size: 8pt; color: #6f7883; margin-top: 2px; }
   .meta span + span::before { content: "·"; margin: 0 6px; color: #c3cad2; }
-  .desc { margin: 6px 0 0; font-size: 8.8pt; color: #4c5560; }
+  .obs { margin-top: 7px; }
+  .obs-cab { font-size: 7.5pt; letter-spacing: 0.4px; color: #9aa3ae; }
+  .desc { margin: 1px 0 0; font-size: 8.8pt; color: #4c5560; }
 
   .pagina { page-break-after: always; }
 
