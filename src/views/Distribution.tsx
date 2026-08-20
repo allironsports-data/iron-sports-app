@@ -325,11 +325,32 @@ export function Distribution({
                       <td className="px-2 py-1.5 text-[11px] text-slate-500 whitespace-nowrap">
                         {club.league ?? '—'}{club.country ? ` · ${countryCode3(club.country)}` : ''}
                       </td>
-                      <td className="px-2 py-1.5 text-[11px] text-slate-600 max-w-[110px] truncate">
-                        {profiles.find(p => p.avatar === club.aisManager)?.name ?? <span className="text-slate-300">—</span>}
+                      <td className="px-2 py-1.5" onClick={e => e.stopPropagation()}>
+                        <select
+                          value={club.aisManager ?? ''}
+                          onChange={e => onUpdateClub({ ...club, aisManager: e.target.value || undefined })
+                            .catch(() => showToast('No se pudo guardar. Inténtalo de nuevo.', 'error'))}
+                          className="text-[11px] border border-transparent hover:border-slate-300 rounded px-1 py-0.5 bg-transparent w-full max-w-[120px] focus:outline-none focus:border-primary"
+                        >
+                          <option value="">—</option>
+                          {profiles.filter(p => p.avatar).map(p => (
+                            <option key={p.id} value={p.avatar}>{p.name.split(' ')[0]}</option>
+                          ))}
+                        </select>
                       </td>
-                      <td className="px-2 py-1.5 text-[11px] text-slate-500 max-w-[160px] truncate" title={club.contactPerson ?? ''}>
-                        {club.contactPerson || <span className="text-slate-300">—</span>}
+                      <td className="px-2 py-1.5" onClick={e => e.stopPropagation()}>
+                        <input
+                          defaultValue={club.contactPerson ?? ''}
+                          placeholder="—"
+                          onBlur={e => {
+                            const v = e.target.value.trim()
+                            if (v === (club.contactPerson ?? '')) return
+                            onUpdateClub({ ...club, contactPerson: v || undefined })
+                              .catch(() => showToast('No se pudo guardar. Inténtalo de nuevo.', 'error'))
+                          }}
+                          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                          className="text-[11px] border border-transparent hover:border-slate-300 rounded px-1 py-0.5 bg-transparent w-full max-w-[160px] focus:outline-none focus:border-primary"
+                        />
                       </td>
                       <td className="px-2 py-1.5 text-center text-[11px]">
                         {negs.length ? <span className="font-semibold text-blue-600">{negs.length}</span> : <span className="text-slate-300">—</span>}
@@ -337,16 +358,23 @@ export function Distribution({
                       <td className="px-2 py-1.5 text-center text-[11px]">
                         {nNec ? <span className="font-semibold text-amber-600">{nNec}</span> : <span className="text-slate-300">—</span>}
                       </td>
-                      <td className="px-2 py-1.5 text-[11px] whitespace-nowrap" onClick={e => e.stopPropagation()}>
-                        {club.contacted ? (
-                          <span className="text-emerald-600" title={fmtDateTime(club.contactedAt)}>✓ {contactedByNombre(club)}</span>
-                        ) : (
-                          <button
-                            onClick={() => markClubContacted(club)}
-                            className="text-slate-300 hover:text-emerald-600"
-                            title="Marcar como contactado hoy"
-                          >marcar</button>
-                        )}
+                      <td className="px-2 py-1.5 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                        <select
+                          value={club.contacted ? (club.contactedBy ?? '') : '__no__'}
+                          onChange={e => {
+                            const v = e.target.value
+                            void reassignClubContacted(club, v === '__no__' ? undefined : v)
+                          }}
+                          title={club.contacted ? `Contactado · ${fmtDateTime(club.contactedAt)}` : 'Sin contactar'}
+                          className={`text-[11px] border border-transparent hover:border-slate-300 rounded px-1 py-0.5 bg-transparent focus:outline-none focus:border-primary ${
+                            club.contacted ? 'text-emerald-700 font-semibold' : 'text-slate-300'
+                          }`}
+                        >
+                          <option value="__no__">sin contactar</option>
+                          {profiles.filter(p => p.avatar).map(p => (
+                            <option key={p.id} value={p.avatar}>✓ {p.name.split(' ')[0]}</option>
+                          ))}
+                        </select>
                       </td>
                     </tr>
                   )
@@ -384,14 +412,6 @@ export function Distribution({
   // Tick "contactado" — el primer clic marca automáticamente a quien lo pulsa (quién y cuándo),
   // independiente de negociaciones/solicitudes. Si ya está contactado, se abre un menú
   // (openClubContactedId) para reasignar a otra persona o quitar la marca.
-  async function markClubContacted(club: Club) {
-    try {
-      await onUpdateClub({ ...club, contacted: true, contactedBy: currentProfile.avatar, contactedAt: new Date().toISOString() })
-      showToast(`${club.name} marcado como contactado`)
-    } catch {
-      showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
-    }
-  }
 
   // Reasignar manualmente quién contactó (o quitar la marca)
   async function reassignClubContacted(club: Club, avatar: string | undefined) {

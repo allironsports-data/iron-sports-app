@@ -22,6 +22,7 @@ import { useDebounce } from '../hooks/useDebounce'
 import { isValidName } from '../lib/validate'
 import { ZONAS, ZONA_CORTA, SIN_ZONA, zonaDe, clubBase, normEquipo, type Zona } from '../lib/zonas'
 import { BotonCsv } from '../components/BotonCsv'
+import { generarInformeSemanal } from '../lib/informeSemanal'
 
 type ShowToast = (message: string, variant?: 'success' | 'error' | 'info', action?: { label: string; fn: () => void }) => void
 
@@ -7393,6 +7394,17 @@ export function Captacion({
           <img src={logoImg} alt="All Iron Sports" className="h-7 sm:h-8 w-auto rounded" />
           <span className="text-xs font-bold text-slate-800 tracking-wide uppercase hidden sm:block">All Iron Sports</span>
           <div className="flex-1" />
+          {/* Informe semanal en PDF: se abre listo para imprimir → «Guardar como PDF» */}
+          <button
+            onClick={() => generarInformeSemanal({
+              scoutingPlayers, scoutingReports, scoutingMatches, matchPlayers,
+              firmasEntries, profiles, clubZonas,
+            })}
+            title="Informe semanal de Captación en PDF, con campogramas para compartir"
+            className="text-xs font-semibold text-slate-500 hover:text-primary px-2 py-2 sm:py-1 rounded hover:bg-slate-100 whitespace-nowrap"
+          >
+            📄 <span className="hidden sm:inline">Informe semanal</span>
+          </button>
           {onAdmin && (
             <button onClick={onAdmin} className="text-xs text-slate-500 hover:text-slate-800 px-2 py-2 sm:py-1 rounded hover:bg-slate-100">Admin</button>
           )}
