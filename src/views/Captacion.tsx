@@ -7398,7 +7398,7 @@ export function Captacion({
           <button
             onClick={() => generarInformeSemanal({
               scoutingPlayers, scoutingReports, scoutingMatches, matchPlayers,
-              firmasEntries, profiles, clubZonas,
+              profiles, clubZonas,
             })}
             title="Informe semanal de Captación en PDF, con campogramas para compartir"
             className="text-xs font-semibold text-slate-500 hover:text-primary px-2 py-2 sm:py-1 rounded hover:bg-slate-100 whitespace-nowrap"

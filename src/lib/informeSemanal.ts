@@ -9,7 +9,7 @@
 //   3 · Lo que requiere decisión
 //   4 · Campogramas por posición (la hoja que se comparte con clubes)
 
-import type { ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, FirmasEntry } from '../types'
+import type { ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer } from '../types'
 import type { Profile } from '../contexts/AuthContext'
 import { zonaDe, ZONA_CORTA, type Zona } from './zonas'
 
@@ -18,7 +18,6 @@ export interface DatosInforme {
   scoutingReports: ScoutingReport[]
   scoutingMatches: ScoutingMatch[]
   matchPlayers: ScoutingMatchPlayer[]
-  firmasEntries: FirmasEntry[]
   profiles: Profile[]
   clubZonas: Record<string, Zona>
   /** Días que abarca el informe (7 por defecto) */
@@ -87,35 +86,34 @@ function campograma(titulo: string, jugadores: ScoutingPlayer[]): string {
     if (!sl) { sinPos++; continue }
     ;(porSlot[sl] ??= []).push(p)
   }
+
+  // Las etiquetas son HTML posicionado en %, no texto dentro del SVG: el
+  // texto SVG con preserveAspectRatio="none" salía estirado y gigante.
   const marcas = SLOTS.map(s => {
     const pls = porSlot[s.id] ?? []
-    const visibles = pls.slice(0, 4)
-    const alto = 11 + visibles.length * 13
-    const nombres = visibles.map((p, i) => `
-      <text x="${s.x}" y="${s.y + 9 + i * 13}" text-anchor="middle" font-size="9.5" fill="#fff" font-family="Arial">
-        ${esc(p.fullName.length > 22 ? p.fullName.slice(0, 21) + '…' : p.fullName)} <tspan fill="#cbd5e1">'${anyo(p.birthdate).slice(2)}</tspan>
-      </text>`).join('')
-    const extra = pls.length > 4
-      ? `<text x="${s.x}" y="${s.y + 9 + 4 * 13}" text-anchor="middle" font-size="8.5" fill="#cbd5e1" font-family="Arial">+${pls.length - 4} más</text>`
-      : ''
+    const visibles = pls.slice(0, 5)
     return `
-      <rect x="${s.x - 33}" y="${s.y - 8}" width="66" height="${alto}" rx="5" fill="rgba(0,0,0,.28)" />
-      <text x="${s.x}" y="${s.y}" text-anchor="middle" font-size="9" font-weight="bold" fill="#fde68a" font-family="Arial">${s.id}${pls.length ? ` (${pls.length})` : ''}</text>
-      ${nombres}${extra}`
+      <div class="slot" style="left:${s.x}%; top:${s.y}%">
+        <div class="slot-pos${pls.length ? '' : ' vacio'}">${s.id}${pls.length ? ` <b>${pls.length}</b>` : ''}</div>
+        ${visibles.map(p => `<div class="slot-jug">${esc(p.fullName)} <span>'${anyo(p.birthdate).slice(2)}</span></div>`).join('')}
+        ${pls.length > visibles.length ? `<div class="slot-mas">+${pls.length - visibles.length} más</div>` : ''}
+      </div>`
   }).join('')
 
   return `
   <div class="campo-bloque">
     <h3>${esc(titulo)} <span class="gris">· ${jugadores.length} jugador${jugadores.length !== 1 ? 'es' : ''}</span></h3>
-    <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="campo">
-      <rect x="0" y="0" width="100" height="100" fill="#15803d" />
-      <rect x="1" y="1" width="98" height="98" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="0.4" />
-      <line x1="1" y1="50" x2="99" y2="50" stroke="rgba(255,255,255,.5)" stroke-width="0.4" />
-      <circle cx="50" cy="50" r="9" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="0.4" />
-      <rect x="30" y="1" width="40" height="14" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="0.4" />
-      <rect x="30" y="85" width="40" height="14" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="0.4" />
-    </svg>
-    <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="campo capa">${marcas}</svg>
+    <div class="campo">
+      <svg class="lineas" viewBox="0 0 100 150" preserveAspectRatio="none">
+        <rect x="0" y="0" width="100" height="150" fill="#1e4d3b" />
+        <rect x="2" y="2" width="96" height="146" fill="none" stroke="rgba(255,255,255,.32)" stroke-width="0.5" />
+        <line x1="2" y1="75" x2="98" y2="75" stroke="rgba(255,255,255,.32)" stroke-width="0.5" />
+        <circle cx="50" cy="75" r="12" fill="none" stroke="rgba(255,255,255,.32)" stroke-width="0.5" />
+        <rect x="28" y="2" width="44" height="20" fill="none" stroke="rgba(255,255,255,.32)" stroke-width="0.5" />
+        <rect x="28" y="128" width="44" height="20" fill="none" stroke="rgba(255,255,255,.32)" stroke-width="0.5" />
+      </svg>
+      ${marcas}
+    </div>
     ${sinPos > 0 ? `<p class="nota">${sinPos} sin posición asignada.</p>` : ''}
   </div>`
 }
@@ -188,10 +186,6 @@ export function generarInformeSemanal(d: DatosInforme): void {
     .filter(p => p.assessment && p.assessmentUpdatedAt && p.assessmentUpdatedAt >= desdeISO)
     .sort((a, b) => (b.assessmentUpdatedAt ?? '').localeCompare(a.assessmentUpdatedAt ?? ''))
 
-  // Pipeline
-  const nuevosPipeline = d.firmasEntries.filter(e => e.createdAt && e.createdAt >= desdeISO)
-  const firmados = d.firmasEntries.filter(e => e.status === 'firmado' && e.signedAt && e.signedAt >= desdeDia)
-
   // ── 2 · Actividad y cobertura ──────────────────────────────────────
   const porScout = new Map<string, { informes: number; jugadores: Set<string>; partidos: Set<string> }>()
   for (const r of reportesSemana) {
@@ -238,24 +232,6 @@ export function generarInformeSemanal(d: DatosInforme): void {
     .map(([id, m]) => ({ p: playersById.get(id), m }))
     .filter((x): x is { p: ScoutingPlayer; m: Map<string, string> } => !!x.p)
 
-  const ultimoInforme = new Map<string, string>()
-  for (const r of d.scoutingReports) {
-    const f = fechaR(r)
-    if (!ultimoInforme.has(r.playerId) || f > ultimoInforme.get(r.playerId)!) ultimoInforme.set(r.playerId, f)
-  }
-  const hace60 = new Date(Date.now() - 60 * 86400000).toISOString()
-  const enfriandose = d.scoutingPlayers
-    .filter(p => (p.assessment === 'Llamar' || p.assessment === 'Basque') && (ultimoInforme.get(p.id) ?? '') < hace60)
-    .sort((a, b) => (ultimoInforme.get(a.id) ?? '').localeCompare(ultimoInforme.get(b.id) ?? ''))
-    .slice(0, 15)
-
-  const calientesSinAccion = d.firmasEntries.filter(e => e.status === 'caliente' && !e.nextActionDate)
-
-  const agenda = d.firmasEntries
-    .filter(e => e.status !== 'firmado' && e.nextActionDate && e.nextActionDate >= hoy.toISOString().slice(0, 10))
-    .sort((a, b) => (a.nextActionDate ?? '').localeCompare(b.nextActionDate ?? ''))
-    .slice(0, 15)
-
   const proximosPartidos = d.scoutingMatches
     .filter(m => m.date > hoy.toISOString().slice(0, 10))
     .sort((a, b) => a.date.localeCompare(b.date))
@@ -272,39 +248,108 @@ export function generarInformeSemanal(d: DatosInforme): void {
 <html lang="es"><head><meta charset="utf-8">
 <title>Captación · informe semanal ${rango}</title>
 <style>
-  @page { size: A4; margin: 14mm 12mm; }
+  @page { size: A4; margin: 16mm 15mm 14mm; }
   * { box-sizing: border-box; }
-  body { font-family: Arial, Helvetica, sans-serif; color: #1e293b; font-size: 10pt; margin: 0; line-height: 1.35; }
-  h1 { font-size: 17pt; margin: 0 0 2px; }
-  h2 { font-size: 12pt; margin: 16px 0 6px; padding-bottom: 3px; border-bottom: 2px solid #1e293b; }
-  h3 { font-size: 10.5pt; margin: 10px 0 4px; }
-  .cab { display: flex; align-items: baseline; gap: 10px; border-bottom: 3px solid #1e293b; padding-bottom: 6px; margin-bottom: 4px; }
-  .gris { color: #64748b; font-weight: normal; font-size: 9pt; }
-  .nota { color: #94a3b8; font-size: 8.5pt; font-style: italic; margin: 3px 0; }
-  table { width: 100%; border-collapse: collapse; margin: 4px 0 10px; font-size: 8.5pt; }
-  th { text-align: left; background: #f1f5f9; padding: 3px 5px; border-bottom: 1px solid #cbd5e1; font-size: 8pt; text-transform: uppercase; color: #475569; }
-  td { padding: 3px 5px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
-  .ficha { border: 1px solid #e2e8f0; border-radius: 6px; padding: 7px 9px; margin-bottom: 7px; page-break-inside: avoid; }
-  .ficha-cab { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 3px; }
-  .pill { margin-left: auto; font-size: 8pt; font-weight: bold; background: #fef3c7; color: #92400e; border-radius: 10px; padding: 1px 7px; }
-  .informe { margin: 4px 0 0; font-size: 8.8pt; }
-  .autor { font-weight: bold; }
+  body {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    color: #1f2933; font-size: 9.5pt; line-height: 1.45; margin: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Cabecera del documento */
+  .portada { border-bottom: 1.5pt solid #16233a; padding-bottom: 9px; margin-bottom: 18px; }
+  .marca { font-size: 7.5pt; letter-spacing: 2.4px; text-transform: uppercase; color: #8794a6; }
+  .portada h1 { font-size: 20pt; font-weight: 600; letter-spacing: -0.4px; margin: 3px 0 2px; color: #16233a; }
+  .portada .rango { font-size: 9pt; color: #6b7686; }
+
+  /* Cifras de cabecera */
+  .cifras { display: flex; gap: 26px; margin: 14px 0 4px; }
+  .cifra .n { font-size: 19pt; font-weight: 600; color: #16233a; line-height: 1; letter-spacing: -0.5px; }
+  .cifra .l { font-size: 7.5pt; letter-spacing: 1.1px; text-transform: uppercase; color: #8794a6; margin-top: 3px; }
+
+  /* Secciones */
+  h2 {
+    font-size: 8.5pt; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase;
+    color: #16233a; margin: 22px 0 8px; padding-bottom: 5px; border-bottom: 0.75pt solid #d5dae2;
+  }
+  h2:first-of-type { margin-top: 16px; }
+  h3 { font-size: 9pt; font-weight: 600; margin: 14px 0 5px; color: #3d4a5c; }
+  h3 .gris { font-weight: 400; }
+
+  .gris { color: #8794a6; font-weight: 400; font-size: 8.5pt; }
+  .nota { color: #a3adba; font-size: 8pt; font-style: italic; margin: 4px 0 8px; }
+
+  /* Tablas */
+  table { width: 100%; border-collapse: collapse; margin: 5px 0 12px; font-size: 8.5pt; }
+  th {
+    text-align: left; padding: 4px 7px 4px 0; border-bottom: 0.75pt solid #c3cbd6;
+    font-size: 7pt; letter-spacing: 1px; text-transform: uppercase; color: #8794a6; font-weight: 600;
+  }
+  td { padding: 4px 7px 4px 0; border-bottom: 0.5pt solid #eef1f5; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td strong { font-weight: 600; color: #16233a; }
+
+  /* Fichas de jugador */
+  .ficha {
+    border-left: 2pt solid #16233a; padding: 2px 0 6px 11px;
+    margin-bottom: 13px; page-break-inside: avoid;
+  }
+  .ficha-cab { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+  .ficha-cab strong { font-size: 10.5pt; font-weight: 600; color: #16233a; letter-spacing: -0.2px; }
+  .pill {
+    margin-left: auto; font-size: 7pt; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;
+    color: #16233a; border: 0.75pt solid #c3cbd6; border-radius: 2px; padding: 1px 7px;
+  }
+  .informe { margin: 6px 0 0; font-size: 8.5pt; color: #3d4a5c; }
+  .autor { font-weight: 600; color: #16233a; }
+
   .pagina { page-break-after: always; }
-  .campo-bloque { page-break-inside: avoid; margin-bottom: 12px; position: relative; }
-  .campo { width: 100%; height: 150mm; display: block; border-radius: 6px; }
-  .capa { position: absolute; left: 0; top: 22px; height: 150mm; }
-  .dos { display: flex; gap: 14px; }
-  .dos > * { flex: 1; }
-  @media print { .noimp { display: none; } }
+
+  /* Campograma */
+  .campo-bloque { page-break-inside: avoid; margin-bottom: 12px; }
+  .campo { position: relative; width: 100%; height: 202mm; overflow: hidden; }
+  .lineas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .slot {
+    position: absolute; transform: translate(-50%, -50%); width: 44mm;
+    display: flex; flex-direction: column; align-items: center; gap: 1.5px;
+  }
+  .slot-pos {
+    font-size: 6.5pt; font-weight: 700; letter-spacing: 1px; color: rgba(255,255,255,.85);
+  }
+  .slot-pos.vacio { color: rgba(255,255,255,.3); }
+  .slot-pos b { color: #fff; font-weight: 700; }
+  .slot-jug {
+    font-size: 7.5pt; line-height: 1.35; color: #16233a; background: #fff;
+    border-radius: 2px; padding: 0.5px 6px; max-width: 100%;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    box-shadow: 0 0.5pt 1.5pt rgba(0,0,0,.25);
+  }
+  .slot-jug span { color: #8794a6; font-size: 6.5pt; }
+  .slot-mas { font-size: 6.5pt; color: rgba(255,255,255,.75); }
+
+  .pie { margin-top: 14px; padding-top: 6px; border-top: 0.5pt solid #e4e8ee;
+         font-size: 7pt; letter-spacing: 0.8px; text-transform: uppercase; color: #a3adba; }
+
+  @media print {
+    .noimp { display: none; }
+    /* Sin esto el verde del campo no se imprime */
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
 </style></head>
 <body>
 
 <div class="pagina">
-  <div class="cab">
-    <h1>Captación · informe semanal</h1>
-    <span class="gris">${esc(rango)}</span>
+  <div class="portada">
+    <div class="marca">All Iron Sports · Captación</div>
+    <h1>Informe semanal</h1>
+    <div class="rango">${esc(rango)}</div>
   </div>
-  <p class="gris">${fichasLlamar.length} nuevos en Llamar · ${reportesSemana.length} informes · ${partidosSemana.length} partidos vistos</p>
+  <div class="cifras">
+    <div class="cifra"><div class="n">${fichasLlamar.length}</div><div class="l">Nuevos en Llamar</div></div>
+    <div class="cifra"><div class="n">${reportesSemana.length}</div><div class="l">Informes</div></div>
+    <div class="cifra"><div class="n">${partidosSemana.length}</div><div class="l">Partidos vistos</div></div>
+    <div class="cifra"><div class="n">${actividad.length}</div><div class="l">Scouts activos</div></div>
+  </div>
 
   <h2>Nuevos en «Llamar»</h2>
   ${bloquesLlamar || '<p class="nota">Ningún jugador nuevo en Llamar esta semana.</p>'}
@@ -331,12 +376,8 @@ export function generarInformeSemanal(d: DatosInforme): void {
   ${tabla(['Zona', 'Jugadores en BBDD', 'Informes esta semana'], cobertura.map(([z, e]) => [
     esc(z), String(e.jugadores), String(e.informes),
   ]))}
+  <div class="pie">All Iron Sports · Captación · ${esc(rango)}</div>
 
-  <h2>Pipeline</h2>
-  ${tabla(['Jugador', 'Zona', 'Estatus', 'Encargado'], nuevosPipeline.map(e => [
-    esc(e.playerName), esc(e.zone ?? '—'), esc(e.status), esc(e.managers.map(m => nombreDe(m, d.profiles)).join(', ') || '—'),
-  ]), 'Nadie nuevo en el pipeline esta semana.')}
-  ${firmados.length ? `<p><strong>Firmados:</strong> ${firmados.map(e => esc(e.playerName)).join(' · ')}</p>` : ''}
 </div>
 
 <div class="pagina">
@@ -348,43 +389,36 @@ export function generarInformeSemanal(d: DatosInforme): void {
     [...m.entries()].map(([a, c]) => `${esc(nombreDe(a, d.profiles))}: ${esc(c)}`).join(' · '),
   ]), 'Sin debates pendientes.')}
 
-  <h3>Destacados que se enfrían <span class="gris">(sin informe en 60 días)</span></h3>
-  ${tabla(['Jugador', 'Equipo', 'Valoración', 'Último informe'], enfriandose.map(p => [
-    esc(p.fullName), esc(p.team ?? '—'), esc(p.assessment), fecha(ultimoInforme.get(p.id)),
-  ]), 'Ninguno.')}
-
-  <h3>Calientes sin próxima acción</h3>
-  ${tabla(['Jugador', 'Zona', 'Encargado'], calientesSinAccion.map(e => [
-    esc(e.playerName), esc(e.zone ?? '—'), esc(e.managers.map(m => nombreDe(m, d.profiles)).join(', ') || '—'),
-  ]), 'Ninguno.')}
-
-  <h3>Agenda de los próximos días</h3>
-  <div class="dos">
-    <div>
-      ${tabla(['Fecha', 'Acción'], agenda.map(e => [
-        fecha(e.nextActionDate), `${esc(e.playerName)} — ${esc(e.nextAction ?? '—')}`,
-      ]), 'Sin acciones programadas.')}
-    </div>
-    <div>
-      ${tabla(['Fecha', 'Partido'], proximosPartidos.map(m => [
-        fecha(m.date), `${esc(m.homeTeam)} – ${esc(m.awayTeam)}`,
-      ]), 'Sin partidos programados.')}
-    </div>
-  </div>
+  <h3>Próximos partidos programados</h3>
+  ${tabla(['Fecha', 'Partido', 'Competición', 'Scout'], proximosPartidos.map(m => [
+    fecha(m.date), `${esc(m.homeTeam)} – ${esc(m.awayTeam)}`, esc(m.competition ?? '—'),
+    esc(m.assignedTo ? nombreDe(m.assignedTo, d.profiles) : '—'),
+  ]), 'Sin partidos programados.')}
 </div>
 
 <div class="pagina">
-  <div class="cab"><h1>Campograma · nuevos en Llamar</h1><span class="gris">${esc(rango)}</span></div>
+  <div class="portada">
+    <div class="marca">All Iron Sports · Captación</div>
+    <h1>Campograma · nuevos en Llamar</h1>
+    <div class="rango">${esc(rango)}</div>
+  </div>
   ${campograma('Nuevos esta semana', nuevosSemana)}
 </div>
 
 <div class="pagina">
-  <div class="cab"><h1>Campograma · Llamar</h1><span class="gris">Todos los jugadores en Llamar</span></div>
+  <div class="portada">
+    <div class="marca">All Iron Sports · Captación</div>
+    <h1>Campograma · Llamar</h1>
+    <div class="rango">Todos los jugadores en seguimiento activo</div>
+  </div>
   ${campograma('En Llamar', enLlamar)}
 </div>
 
 ${enBasque.length ? `<div>
-  <div class="cab"><h1>Campograma · Basque</h1></div>
+  <div class="portada">
+    <div class="marca">All Iron Sports · Captación</div>
+    <h1>Campograma · Basque</h1>
+  </div>
   ${campograma('En Basque', enBasque)}
 </div>` : ''}
 
