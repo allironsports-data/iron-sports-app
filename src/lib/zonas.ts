@@ -1,3 +1,5 @@
+import { normClave as norm } from './texto'
+
 // ── Zonas geográficas de los clubes ──────────────────────────────────
 // Sirve para filtrar los campogramas de Captación por zona: «enséñame solo
 // los extremos de la Comunidad Valenciana», «¿a quién tenemos en Andalucía?».
@@ -37,9 +39,6 @@ export const ZONA_CORTA: Record<Zona, string> = {
   'Extranjero': 'Extranjero',
 }
 
-const norm = (s: string) => s
-  .normalize('NFD').replace(/[̀-ͯ]/g, '')
-  .toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim()
 
 // Sufijos de filial y categoría: «Villarreal Juv C» → «Villarreal»
 const SUFIJOS = /\s+(b|c|d|juv|juvenil|cad|cadete|inf|infantil|dh|ln|cjuv|a|femenino|fem|castilla|mestalla)$/
@@ -175,3 +174,30 @@ export function esZona(z?: string | null): z is Zona {
 }
 
 export const SIN_ZONA = 'Sin zona' as const
+
+
+// ── OJO: en la app conviven DOS vocabularios de zona ──────────────────
+//
+// 1. Las de arriba (ZONAS): se deducen del club del jugador. Son las que
+//    filtran los campogramas, la pestaña Equipos y las listas.
+//
+// 2. Estas de abajo: las que venían del Trello del pipeline de firmas.
+//    Son un campo suyo, guardado en captacion_firmas.zone, escrito a mano
+//    en su día. Por eso «Valencia» y no «Comunidad Valenciana».
+//
+// No son lo mismo y no se pueden cruzar sin decidir antes qué hacer con
+// las que no encajan («Andalucia / Murcia» cae a caballo entre dos de las
+// nuestras). Estaban las dos sueltas en Captacion.tsx, una encima de otra,
+// que es la mejor forma de confundirlas. Aquí al menos está escrito.
+//
+// Unificarlas cambiaría las columnas del tablero de firmas, así que es una
+// decisión de producto, no de código.
+export const ZONAS_PIPELINE = [
+  'Valencia',
+  'Andalucia / Murcia',
+  'Catalunya / Aragon / Baleares / Canarias',
+  'Madrid',
+  'CyL/Cantabria/Asturias',
+  'Cantabria/Galicia/Euskadi',
+  'Europa/Resto Mundo',
+]

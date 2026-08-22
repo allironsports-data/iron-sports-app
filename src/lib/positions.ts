@@ -1,3 +1,5 @@
+import { norm as strip } from './texto'
+
 // ── Posiciones estándar (única fuente de verdad) ──────────────
 // Se usan los mismos códigos en jugadores (Mantenimiento) y en
 // peticiones de clubes (Distribución), con correspondencia castellana.
@@ -39,9 +41,6 @@ export function positionLabel(code?: string): string {
 
 // ── Normalización de valores antiguos/libres → código estándar ──
 
-function strip(s: string): string {
-  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
-}
 
 // alias (ya sin acentos, en minúscula) → código
 const ALIASES: Record<string, string> = {
@@ -98,17 +97,32 @@ const NEED_FAMILY: Record<string, string[]> = {
   FW:  ['FW'],
 }
 
+/** Códigos estándar de una lista de posiciones, sin los que no se reconocen. */
+export function normalizePositions(list: string[]): string[] {
+  return list.map(p => normalizePosition(p)).filter((c): c is string => !!c)
+}
+
+/**
+ * Qué códigos satisfacen una petición, o null si la petición no se entiende.
+ *
+ * Se expone aparte para poder calcularla UNA vez por petición de club, en
+ * vez de por cada pareja jugador × club: el cruce de oportunidades hace
+ * decenas de miles de comparaciones y antes normalizaba los mismos textos
+ * una y otra vez.
+ */
+export function needFamily(needRaw: string): string[] | null {
+  const need = normalizePosition(needRaw)
+  if (!need) return null
+  return NEED_FAMILY[need] ?? [need]
+}
+
 /** ¿Las posiciones del jugador satisfacen la petición indicada? */
 export function needMatchesPlayer(needRaw: string, playerPositions: string[]): boolean {
-  const need = normalizePosition(needRaw)
-  const playerCodes = playerPositions
-    .map(p => normalizePosition(p))
-    .filter((c): c is string => !!c)
-  if (!need) {
+  const fam = needFamily(needRaw)
+  if (!fam) {
     // valor de petición no reconocido → coincidencia textual de respaldo
     const q = strip(needRaw)
     return playerPositions.some(p => strip(p).includes(q) || q.includes(strip(p)))
   }
-  const fam = NEED_FAMILY[need] ?? [need]
-  return playerCodes.some(c => fam.includes(c))
+  return normalizePositions(playerPositions).some(c => fam.includes(c))
 }

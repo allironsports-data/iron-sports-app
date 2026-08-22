@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Brain, Flame, AlertTriangle, FlaskConical } from 'lucide-react'
 import type { ScoutingPlayer, ScoutingReport } from '../types'
 import type { Profile } from '../contexts/AuthContext'
+import { normClave } from '../lib/texto'
 
 // ── Modelo «¿esto es un Llamar?» ─────────────────────────────────────
 //
@@ -29,10 +30,7 @@ const STOP = new Set([
 ])
 
 function tokenize(raw: string): string[] {
-  const clean = raw
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9ñ\s]/g, ' ')
+  const clean = normClave(raw)
   const words = clean.split(/\s+/).filter(w => w.length >= 3 && !/^\d+$/.test(w) && !STOP.has(w))
   const out: string[] = []
   for (let i = 0; i < words.length; i++) {

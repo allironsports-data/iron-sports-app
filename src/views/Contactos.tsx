@@ -5,6 +5,7 @@ import {
   List, LayoutList, AlertCircle, UserX,
 } from 'lucide-react'
 import { cargarContactos, type Contact } from '../data/contactos'
+import { normClave } from '../lib/texto'
 
 // ── Confederation grouping ────────────────────────────────────────────────────
 
@@ -78,9 +79,7 @@ function generateId(c: Omit<Contact, 'id'>): string {
   return 'custom_' + Math.abs(h).toString(16).padStart(8, '0')
 }
 
-function normalise(s: string) {
-  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim()
-}
+const normalise = normClave
 
 const TIER_COLORS: Record<string, { bg: string; text: string }> = {
   'Tier 1': { bg: 'bg-amber-100', text: 'text-amber-800' },

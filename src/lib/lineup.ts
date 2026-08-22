@@ -1,3 +1,5 @@
+import { normClave as norm } from './texto'
+
 import type { ScoutingPlayer } from '../types'
 
 // ── Alineaciones pegadas ─────────────────────────────────────────────
@@ -6,9 +8,6 @@ import type { ScoutingPlayer } from '../types'
 // Captación. No hace falta que el formato sea ninguno en concreto: se
 // limpian dorsales, minutos, notas, iconos y códigos de posición.
 
-const norm = (s?: string) => (s ?? '')
-  .normalize('NFD').replace(/[̀-ͯ]/g, '')
-  .toLowerCase().replace(/[^a-z0-9ñ ]/g, ' ').replace(/\s+/g, ' ').trim()
 
 const CABECERAS = /^(alineaci|once|suplent|entrenador|banquillo|titular|formaci|estad|arbitr|árbitr|sustitu|cambio|gol|amarilla|roja|tarjeta|posesi|tiro|falta|corner|córner|fuera de juego|paradas|local|visitante|equipo|minuto|resumen|previa|clasificaci|jornada|lesion|no convocad|reserva|técnico|tecnico|coach)/i
 

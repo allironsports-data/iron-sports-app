@@ -10,6 +10,11 @@ function celda(v: unknown): string {
   return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
+/** Una fila ya montada. Suelta para poder probarla sin navegador. */
+export function filaCsv(valores: unknown[]): string {
+  return valores.map(celda).join(';')
+}
+
 /**
  * Descarga una tabla como CSV.
  * @param nombre  nombre del archivo, sin extensión («jugadores-captacion»)
@@ -17,7 +22,7 @@ function celda(v: unknown): string {
  * @param filas  una lista por fila, en el mismo orden que las cabeceras
  */
 export function exportarCsv(nombre: string, cabeceras: string[], filas: unknown[][]): void {
-  const texto = [cabeceras, ...filas].map(f => f.map(celda).join(';')).join('\r\n')
+  const texto = [cabeceras, ...filas].map(filaCsv).join('\r\n')
   const hoy = new Date()
   const sello = `${hoy.getFullYear()}${String(hoy.getMonth() + 1).padStart(2, '0')}${String(hoy.getDate()).padStart(2, '0')}`
   const blob = new Blob(['﻿' + texto], { type: 'text/csv;charset=utf-8;' })

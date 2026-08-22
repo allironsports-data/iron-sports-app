@@ -19,9 +19,16 @@ import { EmptyState } from '../components/EmptyState'
 import { useToast } from '../hooks/useToast'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import { useDebounce } from '../hooks/useDebounce'
+import { useIsDesktop } from '../hooks/useIsDesktop'
 import { isValidName } from '../lib/validate'
-import { ZONAS, ZONA_CORTA, SIN_ZONA, zonaDe, clubBase, normEquipo, type Zona } from '../lib/zonas'
+import { ZONAS, ZONA_CORTA, SIN_ZONA, ZONAS_PIPELINE as FIRMAS_ZONE_ORDER, zonaDe, clubBase, normEquipo, type Zona } from '../lib/zonas'
 import { teamMatchKind, teamsAlike } from '../lib/equipos'
+import {
+  PITCH_SLOTS, SLOT_LABELS, SLOT_ORDER, POS_GROUPS,
+  slotDe as pitchSlotOf, grupoDe as posGroupOf,
+  type PosGroup,
+} from '../lib/campo'
+import { norm as normSearch } from '../lib/texto'
 import { BotonCsv } from '../components/BotonCsv'
 import { generarInformeMensual } from '../lib/informeMensual'
 
@@ -170,61 +177,9 @@ const SUGGEST_LABEL: Record<SuggestWhy, string> = {
 /** Tope de resultados del buscador libre (las sugerencias por equipo no tienen tope) */
 const SEARCH_LIMIT = 60
 
-// ── Grupos de posición y slots del campograma ────────────────
-type PosGroup = 'POR' | 'DEF' | 'MED' | 'EXT' | 'DEL'
-const POS_GROUPS: PosGroup[] = ['POR', 'DEF', 'MED', 'EXT', 'DEL']
-
-function normPos(pos?: string): string {
-  return (pos ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
-}
-
-function posGroupOf(pos?: string): PosGroup | null {
-  const s = normPos(pos)
-  if (!s) return null
-  if (s.includes('portero') || s === 'por' || s === 'gk') return 'POR'
-  if (s.includes('lateral') || s.includes('central') || s.includes('defensa') || s.includes('carrilero')) return 'DEF'
-  if (s.includes('mediapunta') || s.includes('media punta') || s.includes('enganche')) return 'MED'
-  if (s.includes('pivote') || s.includes('medio') || s.includes('interior') || s.includes('volante')) return 'MED'
-  if (s.includes('extremo') || s.includes('banda')) return 'EXT'
-  if (s.includes('delantero') || s.includes('punta') || s.includes('ariete') || s.includes('killer')) return 'DEL'
-  return null
-}
-
-// Slots del campograma (x/y en % — portería propia abajo)
-type PitchSlotId = 'POR' | 'LD' | 'CTD' | 'CT' | 'CTI' | 'LI' | 'PIV' | 'MC' | 'MP' | 'ED' | 'EI' | 'DEL'
-const PITCH_SLOTS: { id: PitchSlotId; x: number; y: number }[] = [
-  { id: 'POR', x: 50, y: 93 },
-  { id: 'LD',  x: 84, y: 74 },
-  { id: 'CTD', x: 66, y: 82 },
-  { id: 'CT',  x: 50, y: 84 },
-  { id: 'CTI', x: 34, y: 82 },
-  { id: 'LI',  x: 16, y: 74 },
-  { id: 'PIV', x: 50, y: 62 },
-  { id: 'MC',  x: 32, y: 49 },
-  { id: 'MP',  x: 60, y: 40 },
-  { id: 'ED',  x: 85, y: 26 },
-  { id: 'EI',  x: 15, y: 26 },
-  { id: 'DEL', x: 50, y: 12 },
-]
-
-function pitchSlotOf(pos?: string): PitchSlotId | null {
-  const s = normPos(pos)
-  if (!s) return null
-  if (s.includes('portero')) return 'POR'
-  if (s.includes('lateral') && s.includes('der')) return 'LD'
-  if (s.includes('lateral') && s.includes('izq')) return 'LI'
-  if (s.includes('lateral') || s.includes('carrilero')) return 'LD'
-  if (s.includes('central') && s.includes('der')) return 'CTD'
-  if (s.includes('central') && s.includes('izq')) return 'CTI'
-  if (s.includes('central') || s.includes('defensa')) return 'CT'
-  if (s.includes('pivote')) return 'PIV'
-  if (s.includes('mediapunta') || s.includes('media punta') || s.includes('enganche')) return 'MP'
-  if (s.includes('mediocentro') || s.includes('medio') || s.includes('interior') || s.includes('volante')) return 'MC'
-  if (s.includes('extremo') && s.includes('izq')) return 'EI'
-  if (s.includes('extremo') || s.includes('banda')) return 'ED'
-  if (s.includes('delantero') || s.includes('punta') || s.includes('ariete')) return 'DEL'
-  return null
-}
+// Los grupos de posición, los puestos del campograma y su clasificación
+// viven ahora en lib/campo.ts, compartidos con el PDF mensual y con las
+// estadísticas de scouts.
 
 // ── Sub-components ───────────────────────────────────────────
 
@@ -704,19 +659,6 @@ function FichaCarcasa({ esPanel, onClose, children }: {
 const SIN_CONTEO = { total: 0, conInforme: 0 }
 const SIN_PARTIDOS: ScoutingMatch[] = []
 
-// ¿Hay sitio para la pantalla partida? (a partir de lg = 1024px)
-function useIsDesktop(minWidth = 1024): boolean {
-  const [is, setIs] = useState(() =>
-    typeof window !== 'undefined' && window.matchMedia(`(min-width:${minWidth}px)`).matches)
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const mq = window.matchMedia(`(min-width:${minWidth}px)`)
-    const onChange = () => setIs(mq.matches)
-    mq.addEventListener('change', onChange)
-    return () => mq.removeEventListener('change', onChange)
-  }, [minWidth])
-  return is
-}
 
 
 // ── Zonas de los clubes ──────────────────────────────────────────────
@@ -3335,20 +3277,6 @@ const necesitaTelefono = (e: FirmasEntry): boolean =>
     /tel[eé]fono|n[uú]mero|\btlf\b|m[oó]vil/i.test(e.nextAction ?? '')
   )
 
-// Orden canónico de zonas (las del Trello); las nuevas van después, alfabéticas
-const FIRMAS_ZONE_ORDER = [
-  'Valencia',
-  'Andalucia / Murcia',
-  'Catalunya / Aragon / Baleares / Canarias',
-  'Madrid',
-  'CyL/Cantabria/Asturias',
-  'Cantabria/Galicia/Euskadi',
-  'Europa/Resto Mundo',
-]
-
-function normSearch(s: string): string {
-  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
-}
 
 // Última vez que una entrada se "tocó" (cualquier edición, comentario o cambio de estatus)
 function firmasLastTouch(e: FirmasEntry): string {
@@ -5752,24 +5680,6 @@ function MatchFormPanel({ initial, profiles, onSave, onCancel, showToast }: {
 // FIN DE CONTRATO: el campograma de mercado por año de expiración.
 // Eliges un año (2026, 2027…) y ves quién se queda libre, colocado por
 // posición, con su equipo y su agencia: la versión viva del Excel.
-
-const SLOT_LABELS: Record<PitchSlotId, string> = {
-  POR: 'Portero',
-  LD: 'Lateral derecho',
-  CTD: 'Central derecho',
-  CT: 'Central',
-  CTI: 'Central izquierdo',
-  LI: 'Lateral izquierdo',
-  PIV: 'Pivote',
-  MC: 'Mediocentro',
-  MP: 'Mediapunta',
-  ED: 'Extremo derecho',
-  EI: 'Extremo izquierdo',
-  DEL: 'Delantero',
-}
-
-// Orden de lectura de la lista (arriba atrás, abajo arriba), como el Excel
-const SLOT_ORDER: PitchSlotId[] = ['POR', 'CTD', 'CT', 'CTI', 'LD', 'LI', 'PIV', 'MC', 'MP', 'ED', 'EI', 'DEL']
 
 // ── Ligas ────────────────────────────────────────────────────
 // Composición real de la temporada 2026-27 (LaLiga EA Sports, Hypermotion

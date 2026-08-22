@@ -21,6 +21,24 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-08-20',
     items: [
+      'Las posiciones ya significan lo mismo en toda la app: «Segunda punta» salía como delantero en Captación y en el PDF, pero como «Otros» en las estadísticas de scouts. El mismo jugador contaba distinto según dónde lo mirases',
+      'Boulema → Mantenimiento: la lista va más ligera (se pintaba dos veces, una para móvil y otra para escritorio, y se escondía una con CSS)',
+      'Distribución → Oportunidades: el cruce de jugadores con las necesidades de los clubes va notablemente más rápido, sobre todo al escribir en los filtros',
+    ],
+    adminItems: [
+      'Un solo clasificador de posición en lib/campo.ts. El grupo, la línea del PDF y la etiqueta de las estadísticas se DEDUCEN de él, así que ya no pueden volver a separarse',
+      'Los 14 quita-acentos escritos a mano por toda la app pasan a ser uno solo en lib/texto.ts. Tres de ellos ya se habían separado del resto',
+      'Descubierto de paso: esos 14 llevaban una «ñ» en la expresión regular que no servía de nada — NFD ya la había convertido en «n» dos pasos antes. Peña y Pena siempre han sido lo mismo al buscar (que es lo correcto, pero conviene saberlo)',
+      'Los dos vocabularios de zona (el de los clubes y el que venía del Trello de firmas) estaban sueltos en el mismo archivo, uno encima del otro. Ahora están separados y explicados en lib/zonas.ts',
+      'Oportunidades: buscaba cada jugador recorriendo la lista entera y volvía a normalizar el texto de cada petición dentro del bucle — decenas de miles de veces para sacar siempre lo mismo',
+      'seasonEntries no estaba memoizado e invalidaba los tres cálculos más caros de Distribución en cada repintado',
+      'Primeros tests: 41 sobre zonas, equipos, posiciones, texto, CSV y el pegado de alineaciones. Se ejecutan con «npm test»',
+      'El primer test que escribí ya encontró un fallo: «C.F. Villarreal» dejaba colgando una «f» como si fuera parte del nombre del club, según se escribiera con puntos o sin ellos',
+    ],
+  },
+  {
+    date: '2026-08-20',
+    items: [
       'Contactos abre mucho más rápido y, sobre todo, el resto de la app también: los 3.065 contactos iban metidos dentro del programa y se los descargaba todo el mundo aunque no entrase nunca ahí. Ahora se piden solo al abrir la pestaña',
       'La tabla de carga semanal por equipos estaba desplazada un día. Corregido',
       'Si al abrir la app falla la carga de algo (partidos, informes, clubes…), sale un aviso rojo diciendo QUÉ ha fallado, en vez de enseñar la lista vacía como si no hubiera datos',

@@ -16,12 +16,13 @@ import { ToastStack } from '../components/ToastStack'
 import { useToast } from '../hooks/useToast'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import { isValidName, isValidDate } from '../lib/validate'
-import { POSITIONS, POSITION_CODES, positionLabel, positionEs, needMatchesPlayer, normalizePosition } from '../lib/positions'
+import { POSITIONS, POSITION_CODES, positionLabel, positionEs, needMatchesPlayer, needFamily, normalizePositions, normalizePosition } from '../lib/positions'
 import { TIER_CONFIG, CONFEDERATION_LABELS, getClubTier, getClubConfederation, countryCode3 } from '../lib/clubTiers'
 import { BotonCsv } from '../components/BotonCsv'
 import type { LeagueTier, Confederation } from '../lib/clubTiers'
 import { PlayerClubList, NEG_STATUSES as SHARED_NEG_STATUSES, NEG_STATUS_CONFIG } from '../components/PlayerClubList'
 import { BulkAssignModal } from '../components/BulkAssignModal'
+import { norm } from '../lib/texto'
 
 /** Spinner pequeño para botones de guardado */
 function BtnSpinner() {
@@ -556,7 +557,14 @@ export function Distribution({
     )
   }
 
-  const seasonEntries = entries.filter(e => e.season === season)
+  // Sin memo, esto creaba un array NUEVO en cada render y con él se
+  // invalidaban los tres cálculos más caros de la vista (la lista filtrada,
+  // el resumen por jugador y las oportunidades, que lleva bucles anidados).
+  // Una línea, pero se rehacía todo al mover el ratón.
+  const seasonEntries = useMemo(
+    () => entries.filter(e => e.season === season),
+    [entries, season],
+  )
 
   const filteredEntries = useMemo(() => {
     let result = seasonEntries
@@ -809,19 +817,32 @@ export function Distribution({
     }
     const closedPlayerIds = new Set(negotiations.filter(n => n.status === 'cerrado').map(n => n.playerId))
     const existingPairs = new Set(negotiations.map(n => `${n.playerId}|${n.clubId}`))
-    const clubsWithNeeds = clubs.filter(c => c.needs && c.needs.length > 0)
+    // Las peticiones de cada club, con su familia de posiciones ya resuelta.
+    // Antes se normalizaba el texto de la petición DENTRO del bucle, o sea
+    // una vez por cada jugador y cada club: decenas de miles de veces para
+    // sacar siempre lo mismo.
+    const clubsWithNeeds = clubs
+      .filter(c => c.needs && c.needs.length > 0)
+      .map(c => ({
+        club: c,
+        needs: c.needs.map(n => ({ need: n, fam: needFamily(n.position) })),
+      }))
 
     const out: Array<{ player: Player; entry: DistributionEntry; club: Club; need: ClubNeed; tier: LeagueTier; age: number | null }> = []
     for (const entry of seasonEntries) {
-      const player = players.find(p => p.id === entry.playerId)
+      const player = playersById.get(entry.playerId)
       if (!player || player.hiddenFromManagement) continue
       if (closedPlayerIds.has(player.id)) continue
       const age = ageOf(player.birthDate)
-      for (const club of clubsWithNeeds) {
+      const codes = normalizePositions(player.positions)
+      for (const { club, needs } of clubsWithNeeds) {
         if (existingPairs.has(`${player.id}|${club.id}`)) continue
         let matched: ClubNeed | null = null
-        for (const need of club.needs) {
-          if (!needMatchesPlayer(need.position, player.positions)) continue
+        for (const { need, fam } of needs) {
+          const encaja = fam
+            ? codes.some(c => fam.includes(c))
+            : needMatchesPlayer(need.position, player.positions)
+          if (!encaja) continue
           if (need.ageMax && age !== null && age > need.ageMax) continue   // edad estricta
           matched = need; break
         }
@@ -836,7 +857,7 @@ export function Distribution({
       a.club.name.localeCompare(b.club.name)
     )
     return out
-  }, [seasonEntries, players, clubs, negotiations])
+  }, [seasonEntries, playersById, clubs, negotiations])
 
   const oppLeagues = useMemo(
     () => Array.from(new Set(opportunities.map(o => o.club.league).filter(Boolean) as string[])).sort(),
@@ -2976,7 +2997,7 @@ export function Distribution({
             const goToClubs = (avatar: string) => { setClubManagerFilter(avatar); setTab('clubes') }
 
             // ── Salud de datos ──────────────────────────────────
-            const strip = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+            const strip = norm
             const clubsSinEnc = clubs.filter(c => !c.aisManager)
             // Duplicados por nombre normalizado
             const byName = new Map<string, Club[]>()
@@ -4706,8 +4727,6 @@ function ClubSearchSelect({ clubs, value, onChange }: {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
 
-  const norm = (s: string) =>
-    s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 
   const selected = clubs.find(c => c.id === value)
 

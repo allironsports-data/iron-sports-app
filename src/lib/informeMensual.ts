@@ -10,6 +10,7 @@
 // Se abre listo para imprimir → «Guardar como PDF».
 
 import type { ScoutingPlayer, ScoutingReport, ScoutingMatch } from '../types'
+import { PITCH_SLOTS as SLOTS, ORDEN_LINEAS, slotDeJugador, lineaDeSlot } from './campo'
 
 export interface DatosInformeMensual {
   scoutingPlayers: ScoutingPlayer[]
@@ -42,47 +43,13 @@ function resumir(texto?: string, max = 420): string {
 }
 
 // ── Posiciones ───────────────────────────────────────────────────────
-const SLOTS: { id: string; x: number; y: number }[] = [
-  { id: 'POR', x: 50, y: 92 },
-  { id: 'LD',  x: 84, y: 74 }, { id: 'CTD', x: 66, y: 82 }, { id: 'CT', x: 50, y: 84 },
-  { id: 'CTI', x: 34, y: 82 }, { id: 'LI',  x: 16, y: 74 },
-  { id: 'PIV', x: 50, y: 62 }, { id: 'MC',  x: 32, y: 49 }, { id: 'MP', x: 60, y: 40 },
-  { id: 'ED',  x: 85, y: 26 }, { id: 'EI',  x: 15, y: 26 }, { id: 'DEL', x: 50, y: 12 },
-]
-
-function slotDe(pos?: string): string | null {
-  const s = (pos ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
-  if (!s) return null
-  if (s.includes('portero')) return 'POR'
-  if (s.includes('lateral') && s.includes('der')) return 'LD'
-  if (s.includes('lateral') && s.includes('izq')) return 'LI'
-  if (s.includes('lateral') || s.includes('carrilero')) return 'LD'
-  if (s.includes('central') && s.includes('der')) return 'CTD'
-  if (s.includes('central') && s.includes('izq')) return 'CTI'
-  if (s.includes('central') || s.includes('defensa')) return 'CT'
-  if (s.includes('pivote')) return 'PIV'
-  if (s.includes('mediapunta') || s.includes('media punta') || s.includes('enganche')) return 'MP'
-  if (s.includes('mediocentro') || s.includes('medio') || s.includes('interior') || s.includes('volante')) return 'MC'
-  if (s.includes('extremo') && s.includes('izq')) return 'EI'
-  if (s.includes('extremo') || s.includes('banda')) return 'ED'
-  if (s.includes('delantero') || s.includes('punta') || s.includes('ariete')) return 'DEL'
-  return null
-}
-
-/** Los doce puestos, agrupados en las cinco líneas de siempre */
-const LINEA: Record<string, string> = {
-  POR: 'Porteros',
-  LD: 'Defensas', CTD: 'Defensas', CT: 'Defensas', CTI: 'Defensas', LI: 'Defensas',
-  PIV: 'Centro del campo', MC: 'Centro del campo', MP: 'Centro del campo',
-  ED: 'Bandas', EI: 'Bandas',
-  DEL: 'Delanteros',
-}
-const ORDEN_LINEAS = ['Porteros', 'Defensas', 'Centro del campo', 'Bandas', 'Delanteros', 'Otros']
+// Los puestos, su clasificación y las líneas viven en lib/campo.ts,
+// compartidos con Captación y con las estadísticas de scouts.
 
 function campograma(jugadores: ScoutingPlayer[]): string {
   const porSlot: Record<string, ScoutingPlayer[]> = {}
   for (const p of jugadores) {
-    const sl = slotDe(p.position1) ?? slotDe(p.position2)
+    const sl = slotDeJugador(p.position1, p.position2)
     if (!sl) continue
     ;(porSlot[sl] ??= []).push(p)
   }
@@ -173,8 +140,8 @@ export function generarInformeMensual(d: DatosInformeMensual): void {
   // Agrupados por línea
   const porLinea = new Map<string, ScoutingPlayer[]>()
   for (const p of seleccion) {
-    const sl = slotDe(p.position1) ?? slotDe(p.position2)
-    const l = sl ? LINEA[sl] : 'Otros'
+    const sl = slotDeJugador(p.position1, p.position2)
+    const l = lineaDeSlot(sl)
     ;(porLinea.get(l) ?? porLinea.set(l, []).get(l)!).push(p)
   }
   for (const lista of porLinea.values()) {

@@ -1,3 +1,5 @@
+import { norm } from './texto'
+
 // ── ¿Estos dos nombres se refieren al mismo club? ─────────────────────
 //
 // Esto vivía suelto dentro de Captacion.tsx, y App.tsx tenía SU PROPIA
@@ -17,11 +19,13 @@ const TEAM_NOISE_TOKENS = new Set([
 ])
 
 export function normTeamTokens(name: string): string[] {
-  return name
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
+  return norm(name)
     .split(/[^a-z0-9]+/)
-    .filter(t => t.length > 0 && !TEAM_NOISE_TOKENS.has(t))
+    // Fuera las letras sueltas. Ya estaban 'a', 'b' y 'c' (el filial), pero
+    // «C.F. Villarreal» dejaba colgando una «f» y «U.D. Logroñés» una «u»,
+    // según se escribiera con puntos o sin ellos. Ningún club se distingue
+    // por una letra suelta.
+    .filter(t => t.length > 1 && !TEAM_NOISE_TOKENS.has(t))
 }
 
 // Palabras que comparten decenas de clubes distintos: por sí solas NO identifican

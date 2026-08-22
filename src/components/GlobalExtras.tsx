@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { Search, X, Home, TrendingUp, Eye, Inbox, Bell } from 'lucide-react'
 import type { Player, ScoutingPlayer, FirmasEntry, Club, Task } from '../types'
 import { onSavingChange } from '../lib/supabase'
+import { norm } from '../lib/texto'
 
 // ═════════════════════════════════════════════════════════════
 // Extras globales de la app: indicador de guardado, barra de
@@ -9,9 +10,7 @@ import { onSavingChange } from '../lib/supabase'
 // de notificaciones del sistema.
 // ═════════════════════════════════════════════════════════════
 
-function norm(s: string): string {
-  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
-}
+
 
 // ── Indicador global de guardado ─────────────────────────────
 export function SavingIndicator() {

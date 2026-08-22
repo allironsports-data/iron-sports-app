@@ -9,6 +9,7 @@ import type { Profile } from '../contexts/AuthContext'
 import { ToastStack } from '../components/ToastStack'
 import { useToast } from '../hooks/useToast'
 import { useEscapeKey } from '../hooks/useEscapeKey'
+import { useIsDesktop } from '../hooks/useIsDesktop'
 import * as db from '../lib/db'
 
 type ShowToast = (message: string, variant?: 'success' | 'error' | 'info') => void
@@ -688,6 +689,10 @@ export function Boulema({
   onAdmin,
 }: Props) {
   const { toasts, showToast, dismissToast } = useToast()
+  // Antes se pintaban SIEMPRE las dos versiones de la lista (la tabla de
+  // escritorio y la lista de móvil) y una se escondía con CSS. Ahora se
+  // decide aquí y solo se construye la que se ve.
+  const esAncha = useIsDesktop(640)
 
   // ── estado local ──
   // ── pestañas de la sección ──
@@ -1180,7 +1185,8 @@ export function Boulema({
             ) : (
               <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
                 {/* Escritorio: tabla */}
-                <div className="hidden sm:block overflow-x-auto">
+                {esAncha && (
+                <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-slate-50 border-b border-slate-200">
@@ -1228,8 +1234,10 @@ export function Boulema({
                     </tbody>
                   </table>
                 </div>
+                )}
                 {/* Móvil: lista */}
-                <div className="sm:hidden divide-y divide-slate-100">
+                {!esAncha && (
+                <div className="divide-y divide-slate-100">
                   {filtered.map(p => (
                     <button key={p.id} onClick={() => setEditingMantPlayer(p)} className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left active:bg-slate-50">
                       <span className="min-w-0 flex-1">
@@ -1242,6 +1250,7 @@ export function Boulema({
                     </button>
                   ))}
                 </div>
+                )}
               </div>
             )}
           </div>

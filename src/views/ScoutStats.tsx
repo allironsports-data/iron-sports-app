@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import { FileText, Users, Target, Fingerprint, Handshake, Eye, AlertTriangle } from 'lucide-react'
 import type { ScoutingPlayer, ScoutingReport, ScoutingMatch, FirmasEntry } from '../types'
 import type { Profile } from '../contexts/AuthContext'
+import { grupoLargoDe } from '../lib/campo'
+import { norm } from '../lib/texto'
 
 // ── Estadísticas por scout ───────────────────────────────────
 // Evalúa el trabajo de cada persona a partir de sus informes:
@@ -31,11 +33,7 @@ const STOP = new Set([
 ])
 
 function tokenize(text: string): string[] {
-  return text
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .split(/[^a-zñ]+/)
-    .filter(t => t.length > 1)
+  return norm(text).split(/[^a-z]+/).filter(t => t.length > 1)
 }
 
 function ngrams(tokens: string[], n: number): string[] {
@@ -367,20 +365,9 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
     const cargaMax = reports.length ? Math.round((reparto[0][1] / reports.length) * 100) : 0
 
     // Posiciones cubiertas (grupo grueso)
-    const grupoDe = (pos?: string) => {
-      const s = (pos ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
-      if (!s) return 'Sin posición'
-      if (s.includes('portero') || s === 'por' || s === 'gk') return 'Portero'
-      if (s.includes('lateral') || s.includes('central') || s.includes('defensa') || s.includes('carrilero')) return 'Defensa'
-      if (s.includes('pivote') || s.includes('medio') || s.includes('interior') || s.includes('volante') || s.includes('punta') && s.includes('media')) return 'Medio'
-      if (s.includes('mediapunta') || s.includes('enganche')) return 'Medio'
-      if (s.includes('extremo') || s.includes('banda')) return 'Extremo'
-      if (s.includes('delantero') || s.includes('ariete') || s === 'punta') return 'Delantero'
-      return 'Otros'
-    }
     const porPosicion = new Map<string, number>()
     for (const r of reports) {
-      const g = grupoDe(playersById.get(r.playerId)?.position1)
+      const g = grupoLargoDe(playersById.get(r.playerId)?.position1)
       porPosicion.set(g, (porPosicion.get(g) ?? 0) + 1)
     }
     const posiciones = ['Portero', 'Defensa', 'Medio', 'Extremo', 'Delantero']
