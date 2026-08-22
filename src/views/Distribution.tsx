@@ -244,9 +244,11 @@ export function Distribution({
   // Filtros de la pestaña Clubes — persistidos en sessionStorage para que
   // se conserven al navegar a fichas y volver, y entre refrescos.
   const FILTERS_KEY = 'dist_club_filters'
-  const storedF: Record<string, unknown> = (() => {
+  // Se leía y se parseaba el JSON de sessionStorage en CADA render, cuando
+  // solo hace falta al montar para rellenar los valores iniciales.
+  const [storedF] = useState<Record<string, unknown>>(() => {
     try { return JSON.parse(sessionStorage.getItem(FILTERS_KEY) || '{}') } catch { return {} }
-  })()
+  })
   const [search, setSearch] = useState<string>((storedF.search as string) ?? '')
 
   // toasts + confirmaciones
@@ -268,12 +270,40 @@ export function Distribution({
   // Cada club es una fila: liga, encargado, contacto, ofrecidos y necesidades.
   // «Borja» y «Borja» eran indistinguibles en los desplegables: se enseña
   // nombre y primer apellido, y si aun así coinciden, las siglas.
-  const nombreCorto = (p: Profile) => {
-    const partes = p.name.trim().split(/\s+/)
-    const corto = partes.slice(0, 2).join(' ')
-    const repetido = profiles.filter(x => x.name.trim().split(/\s+/).slice(0, 2).join(' ') === corto).length > 1
-    return repetido ? `${corto} (${p.avatar})` : corto
-  }
+  // El nombre corto se calculaba DENTRO de cada <option> de cada fila, y
+  // encima recorriendo la lista de perfiles entera para ver si estaba
+  // repetido. Con 1.500 clubes × 2 desplegables × 10 perfiles eran 30.000
+  // llamadas y ~300.000 troceos con expresión regular EN CADA REPINTADO —
+  // por ejemplo, en cada tecla del buscador. Ahora se calcula una vez.
+  const nombresCortos = useMemo(() => {
+    const corto = (p: Profile) => p.name.trim().split(/\s+/).slice(0, 2).join(' ')
+    const cuantos = new Map<string, number>()
+    profiles.forEach(p => { const c = corto(p); cuantos.set(c, (cuantos.get(c) ?? 0) + 1) })
+    const m = new Map<string, string>()
+    profiles.forEach(p => {
+      const c = corto(p)
+      m.set(p.id, (cuantos.get(c) ?? 0) > 1 ? `${c} (${p.avatar})` : c)
+    })
+    return m
+  }, [profiles])
+
+  const nombreCorto = (p: Profile) => nombresCortos.get(p.id) ?? p.name
+
+  // Las opciones de los desplegables son las mismas en las 1.500 filas:
+  // se construyen una vez y se reutilizan. React admite reusar los mismos
+  // elementos en varios sitios.
+  const opcionesEncargado = useMemo(
+    () => profiles.filter(p => p.avatar).map(p => (
+      <option key={p.id} value={p.avatar}>{nombresCortos.get(p.id) ?? p.name}</option>
+    )),
+    [profiles, nombresCortos],
+  )
+  const opcionesContactado = useMemo(
+    () => profiles.filter(p => p.avatar).map(p => (
+      <option key={p.id} value={p.avatar}>✓ {nombresCortos.get(p.id) ?? p.name}</option>
+    )),
+    [profiles, nombresCortos],
+  )
 
   const contactedByNombre = (club: Club) =>
     (() => { const p = profiles.find(x => x.avatar === club.contactedBy); return p ? nombreCorto(p) : (club.contactedBy ?? 'sí') })()
@@ -343,9 +373,7 @@ export function Distribution({
                           className="text-[11px] border border-transparent hover:border-slate-300 rounded px-1 py-0.5 bg-transparent w-full max-w-[150px] focus:outline-none focus:border-primary"
                         >
                           <option value="">—</option>
-                          {profiles.filter(p => p.avatar).map(p => (
-                            <option key={p.id} value={p.avatar}>{nombreCorto(p)}</option>
-                          ))}
+                          {opcionesEncargado}
                         </select>
                       </td>
                       <td className="px-2 py-1.5" onClick={e => e.stopPropagation()}>
@@ -381,9 +409,7 @@ export function Distribution({
                           }`}
                         >
                           <option value="__no__">sin contactar</option>
-                          {profiles.filter(p => p.avatar).map(p => (
-                            <option key={p.id} value={p.avatar}>✓ {nombreCorto(p)}</option>
-                          ))}
+                          {opcionesContactado}
                         </select>
                       </td>
                     </tr>
@@ -566,51 +592,6 @@ export function Distribution({
     [entries, season],
   )
 
-  const filteredEntries = useMemo(() => {
-    let result = seasonEntries
-    if (search) {
-      const q = search.toLowerCase()
-      result = result.filter(e => {
-        const p = players.find(pl => pl.id === e.playerId)
-        return p?.name.toLowerCase().includes(q)
-      })
-    }
-    if (posFilters.length > 0) {
-      result = result.filter(e => {
-        const p = players.find(pl => pl.id === e.playerId)
-        return p?.positions[0] && posFilters.includes(p.positions[0])
-      })
-    }
-    if (yearFilters.length > 0) {
-      result = result.filter(e => {
-        const p = players.find(pl => pl.id === e.playerId)
-        const y = p?.birthDate?.slice(0, 4) ?? ''
-        return yearFilters.includes(y)
-      })
-    }
-    if (activityFilter) {
-      result = result.filter(e =>
-        negotiations.some(n => n.playerId === e.playerId && n.status !== 'descartado')
-      )
-    }
-    if (hideClosed) {
-      result = result.filter(e =>
-        !negotiations.some(n => n.playerId === e.playerId && n.status === 'cerrado')
-      )
-    }
-    return result
-  }, [seasonEntries, search, players, posFilters, yearFilters, activityFilter, hideClosed, negotiations])
-
-  const distributionYears = useMemo(() => {
-    const years = new Set<string>()
-    seasonEntries.forEach(e => {
-      const p = players.find(pl => pl.id === e.playerId)
-      const y = p?.birthDate?.slice(0, 4)
-      if (y) years.add(y)
-    })
-    return Array.from(years).sort((a, b) => Number(b) - Number(a))
-  }, [seasonEntries, players])
-
   // ── Índices ─────────────────────────────────────────────────
   // Antes cada fila de la tabla y cada tarjeta de club recorría el array
   // entero de negociaciones (miles) varias veces: con 1.400 clubes eran
@@ -651,6 +632,56 @@ export function Distribution({
     return m
   }, [entries])
 
+  const filteredEntries = useMemo(() => {
+    let result = seasonEntries
+    if (search) {
+      const q = search.toLowerCase()
+      result = result.filter(e => playersById.get(e.playerId)?.name.toLowerCase().includes(q))
+    }
+    if (posFilters.length > 0) {
+      result = result.filter(e => {
+        const p = playersById.get(e.playerId)
+        return !!p?.positions[0] && posFilters.includes(p.positions[0])
+      })
+    }
+    if (yearFilters.length > 0) {
+      result = result.filter(e => {
+        const y = playersById.get(e.playerId)?.birthDate?.slice(0, 4) ?? ''
+        return yearFilters.includes(y)
+      })
+    }
+    if (activityFilter) {
+      result = result.filter(e =>
+        (negsByPlayer.get(e.playerId) ?? []).some(n => n.status !== 'descartado')
+      )
+    }
+    if (hideClosed) {
+      result = result.filter(e =>
+        !(negsByPlayer.get(e.playerId) ?? []).some(n => n.status === 'cerrado')
+      )
+    }
+    return result
+  }, [seasonEntries, search, playersById, posFilters, yearFilters, activityFilter, hideClosed, negsByPlayer])
+
+  const distributionYears = useMemo(() => {
+    const years = new Set<string>()
+    seasonEntries.forEach(e => {
+      const y = playersById.get(e.playerId)?.birthDate?.slice(0, 4)
+      if (y) years.add(y)
+    })
+    return Array.from(years).sort((a, b) => Number(b) - Number(a))
+  }, [seasonEntries, playersById])
+
+
+  // Cuántos jugadores han firmado ya en algún sitio. Iba calculado a pelo
+  // dentro de la etiqueta de un checkbox: 300 entries × 2.000 negociaciones
+  // en cada repintado para enseñar un número entre paréntesis.
+  const nCerrados = useMemo(
+    () => seasonEntries.filter(e =>
+      (negsByPlayer.get(e.playerId) ?? []).some(n => n.status === 'cerrado')).length,
+    [seasonEntries, negsByPlayer],
+  )
+
   const filteredClubs = useMemo(() => {
     let result = clubs
     if (leagueFilter.length > 0) result = result.filter(c => leagueFilter.includes(`${c.league ?? 'Sin liga'}|${c.country ?? ''}`))
@@ -678,6 +709,51 @@ export function Distribution({
     const q = search.toLowerCase()
     return result.filter(c => c.name.toLowerCase().includes(q) || c.league?.toLowerCase().includes(q))
   }, [clubs, negotiations, negsByClub, search, leagueFilter, countryFilter, tierFilter, confederationFilter, priorityOnly, hasNeedsOnly, hasContactOnly, clubManagerFilter, staleOnly, contactedFilter])
+
+  // Los clubes ya agrupados por liga+país. Antes, la vista agrupada
+  // recorría los 1.500 clubes UNA VEZ POR LIGA (~300 ligas): medio millón
+  // de comparaciones en cada repintado para partir una lista en trozos.
+  // Cuántos jugadores hay ofrecidos para cada necesidad de cada club.
+  // Iba a pelo dentro del JSX: por cada una de las ~400 solicitudes recorría
+  // las 2.000 negociaciones y, dentro, buscaba al jugador entre los 300.
+  // Y como la lista se pintaba dos veces (móvil y escritorio), el doble.
+  const ofrecidos = useMemo(() => {
+    const m = new Map<string, number>()
+    negotiations.forEach(n => {
+      if (n.status === 'descartado') return
+      if (n.needPosition) {
+        const k = `${n.clubId}|${n.needPosition}`
+        m.set(k, (m.get(k) ?? 0) + 1)
+        return
+      }
+      // Sin posición apuntada: cuenta en las necesidades que encajen con
+      // las posiciones del jugador.
+      const p = playersById.get(n.playerId)
+      const club = clubsById.get(n.clubId)
+      if (!p || !club) return
+      club.needs?.forEach(need => {
+        if (!needMatchesPlayer(need.position, p.positions)) return
+        const k = `${n.clubId}|${need.position}`
+        m.set(k, (m.get(k) ?? 0) + 1)
+      })
+    })
+    return m
+  }, [negotiations, playersById, clubsById])
+
+  const ofrecidosPorNecesidad = useCallback(
+    (club: Club, need: ClubNeed) => ofrecidos.get(`${club.id}|${need.position}`) ?? 0,
+    [ofrecidos],
+  )
+
+  const clubesPorLiga = useMemo(() => {
+    const m = new Map<string, Club[]>()
+    filteredClubs.forEach(c => {
+      const k = `${c.league ?? 'Sin liga'}|${c.country ?? ''}`
+      const l = m.get(k)
+      if (l) l.push(c); else m.set(k, [c])
+    })
+    return m
+  }, [filteredClubs])
 
   const sortedLeagues = useMemo(() => {
     // Clave liga+país: "Serie A" de Italia y la de Brasil son entradas distintas
@@ -766,8 +842,9 @@ export function Distribution({
     return Array.from(m.entries()).sort((a, b) => a[0].localeCompare(b[0]))
   }, [clubs])
 
-  const selectedEntry = seasonEntries.find(e => e.id === selectedEntryId) ?? null
-  const selectedClub = clubs.find(c => c.id === selectedClubId) ?? null
+  const selectedEntry = selectedEntryId
+    ? (seasonEntries.find(e => e.id === selectedEntryId) ?? null) : null
+  const selectedClub = selectedClubId ? (clubsById.get(selectedClubId) ?? null) : null
 
   // ── helpers ───────────────────────────────────────────────────
   function daysSince(iso: string | undefined): number {
@@ -789,14 +866,14 @@ export function Distribution({
     return negotiations
       .filter(n => n.status === 'pendiente')
       .map(n => {
-        const club = clubs.find(c => c.id === n.clubId)
-        const player = players.find(p => p.id === n.playerId)
+        const club = clubsById.get(n.clubId)
+        const player = playersById.get(n.playerId)
         return { neg: n, club, player }
       })
       // Solo las de los clubes de los que soy encargado: es quien debe mover la propuesta
       .filter(({ club }) => club?.aisManager === currentProfile.avatar)
       .sort((a, b) => (b.neg.createdAt ?? '').localeCompare(a.neg.createdAt ?? ''))
-  }, [negotiations, clubs, players, currentProfile.avatar])
+  }, [negotiations, clubsById, playersById, currentProfile.avatar])
 
   // ── MOTOR DE OPORTUNIDADES ──────────────────────────────────
   // Cruza tu cartera (entries) con las necesidades abiertas de los clubes,
@@ -963,7 +1040,7 @@ export function Distribution({
   // group entries by priority — intermediar players always go to D
   const byPriority = useMemo(() => {
     const withEffectivePriority = filteredEntries.map(e => {
-      const player = players.find(p => p.id === e.playerId)
+      const player = playersById.get(e.playerId)
       const effectivePriority = player?.hiddenFromManagement ? 'D' : e.priority
       return { ...e, priority: effectivePriority as 'A' | 'B' | 'C' | 'D' }
     })
@@ -973,7 +1050,7 @@ export function Distribution({
       C: withEffectivePriority.filter(e => e.priority === 'C'),
       D: withEffectivePriority.filter(e => e.priority === 'D'),
     }
-  }, [filteredEntries, players])
+  }, [filteredEntries, playersById])
 
 
   return (
@@ -1146,7 +1223,7 @@ export function Distribution({
                 />
                 <FilterCheck label="Con actividad" checked={activityFilter} onClick={() => setActivityFilter(!activityFilter)} />
                 <FilterCheck
-                  label={`Ocultar cerrados${(() => { const n = seasonEntries.filter(e => negotiations.some(x => x.playerId === e.playerId && x.status === 'cerrado')).length; return n > 0 ? ` (${n})` : '' })()}`}
+                  label={`Ocultar cerrados${nCerrados > 0 ? ` (${nCerrados})` : ''}`}
                   checked={hideClosed}
                   onClick={() => setHideClosed(!hideClosed)}
                 />
@@ -1368,11 +1445,12 @@ export function Distribution({
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-1.5">
                         {group.map(entry => {
-                          const player = players.find(p => p.id === entry.playerId)
+                          const player = playersById.get(entry.playerId)
                           if (!player) return null
-                          const negCount = negotiations.filter(n => n.playerId === entry.playerId).length
-                          const activeNegs = negotiations.filter(n => n.playerId === entry.playerId && !['descartado'].includes(n.status))
-                          const hasClosed = negotiations.some(n => n.playerId === entry.playerId && n.status === 'cerrado')
+                          const negsDelJugador = negsByPlayer.get(entry.playerId) ?? SIN_NEGOCIACIONES
+                          const negCount = negsDelJugador.length
+                          const activeNegs = negsDelJugador.filter(n => n.status !== 'descartado')
+                          const hasClosed = negsDelJugador.some(n => n.status === 'cerrado')
                           const topStatus = activeNegs.find(n => n.status === 'negociando')?.status
                             ?? activeNegs.find(n => n.status === 'interesado')?.status
                             ?? activeNegs.find(n => n.status === 'ofrecido')?.status
@@ -1905,8 +1983,8 @@ export function Distribution({
               ) : (
                 <div className="space-y-4">
                   {sortedLeagues.map(({ key, league, country, tier, confederation }) => {
-                    const leagueClubs = filteredClubs.filter(c => (c.league ?? 'Sin liga') === league && (c.country ?? '') === country)
-                    if (leagueClubs.length === 0) return null
+                    const leagueClubs = clubesPorLiga.get(`${league}|${country}`)
+                    if (!leagueClubs || leagueClubs.length === 0) return null
                     const tierCfg = TIER_CONFIG[tier]
                     return (
                       <div key={key}>
@@ -2142,12 +2220,7 @@ export function Distribution({
                   {clubNeeds.map(({ club, need }, i) => {
                     const tier = getClubTier(club.league, club.country)
                     const tierCfg = TIER_CONFIG[tier]
-                    const offeredCount = negotiations.filter(n => {
-                      if (n.clubId !== club.id || n.status === 'descartado') return false
-                      if (n.needPosition) return n.needPosition === need.position
-                      const p = players.find(pl => pl.id === n.playerId)
-                      return p ? needMatchesPlayer(need.position, p.positions) : false
-                    }).length
+                    const offeredCount = ofrecidosPorNecesidad(club, need)
                     return (
                       <div
                         key={`${club.id}-mobile-${i}`}
@@ -2219,12 +2292,7 @@ export function Distribution({
                         const isEditing = editingNeed?.clubId === club.id && editingNeed?.index === needIndex
                         const tier = getClubTier(club.league, club.country)
                         const tierCfg = TIER_CONFIG[tier]
-                        const offeredCount = negotiations.filter(n => {
-                          if (n.clubId !== club.id || n.status === 'descartado') return false
-                          if (n.needPosition) return n.needPosition === need.position
-                          const p = players.find(pl => pl.id === n.playerId)
-                          return p ? needMatchesPlayer(need.position, p.positions) : false
-                        }).length
+                        const offeredCount = ofrecidosPorNecesidad(club, need)
                         return (
                           <tr
                             key={`${club.id}-${i}`}
@@ -2363,6 +2431,9 @@ export function Distribution({
               players.filter(p => distPlayerIds.has(p.id)).flatMap(p => p.positions)
             )).sort()
 
+            // El buscador se pasaba a minúsculas DENTRO del filtro: una vez por
+            // negociación (miles) y por cada tecla.
+            const qPipeline = pipelineSearch.toLowerCase()
             // Build enriched deals, applying filters
             // Los .find() por negociación recorrían players/clubs/entries
             // enteros en cada tecla del buscador: con índices es O(1) por fila
@@ -2377,7 +2448,7 @@ export function Distribution({
                 if (!player || !club) return false
                 if (!distPlayerIds.has(player.id)) return false
                 if (pipelineMyOnly && neg.aisManager !== currentProfile.avatar) return false
-                if (pipelineSearch && !player.name.toLowerCase().includes(pipelineSearch.toLowerCase())) return false
+                if (qPipeline && !player.name.toLowerCase().includes(qPipeline)) return false
                 if (pipelinePosFilter && !player.positions.some(p => p === pipelinePosFilter)) return false
                 if (!pipelineMyOnly && pipelineGestorFilter && neg.aisManager !== pipelineGestorFilter) return false
                 return true
@@ -2875,7 +2946,7 @@ export function Distribution({
               // Priority D never shown in encargados view
               if (entry.priority === 'D') continue
               // Intermediar (hiddenFromManagement) players not shown
-              const entryPlayer = players.find(p => p.id === entry.playerId)
+              const entryPlayer = playersById.get(entry.playerId)
               if (entryPlayer?.hiddenFromManagement) continue
               const key = entry.aisManager ?? '__sin__'
               if (!grouped[key]) grouped[key] = []
@@ -2903,11 +2974,10 @@ export function Distribution({
             }
 
             const renderRow = (entry: DistributionEntry) => {
-              const player = players.find(p => p.id === entry.playerId)
+              const player = playersById.get(entry.playerId)
               if (!player) return null
-              const activeNegs = negotiations.filter(n =>
-                n.playerId === entry.playerId && !['descartado'].includes(n.status)
-              )
+              const activeNegs = (negsByPlayer.get(entry.playerId) ?? SIN_NEGOCIACIONES)
+                .filter(n => n.status !== 'descartado')
               const topStatus = activeNegs.find(n => n.status === 'negociando')?.status
                 ?? activeNegs.find(n => n.status === 'interesado')?.status
                 ?? activeNegs.find(n => n.status === 'ofrecido')?.status

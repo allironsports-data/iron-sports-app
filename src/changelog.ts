@@ -19,6 +19,23 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-08-21',
+    items: [
+      'Distribución vuelve a ir rápida. La había ralentizado yo al poner los desplegables de encargado y contacto en cada fila de la lista de clubes: escribir en el buscador costaba una décima de segundo por tecla solo en recalcular los nombres de esos desplegables, y eso con 1.500 clubes en pantalla',
+      'Las pestañas de Solicitudes, Encargados y el pipeline también van más ligeras',
+    ],
+    adminItems: [
+      'nombreCorto() se llamaba dentro de cada <option> de cada fila (1.500 clubes × 2 desplegables × 10 perfiles = 30.000 llamadas por repintado) y cada una recorría la lista de perfiles entera para detectar nombres repetidos: ~300.000 troceos con regex. Medido en banco: 105 ms → 0,07 ms',
+      'Las opciones de los desplegables se construyen una vez y se reutilizan en las 1.500 filas, en vez de crear 30.000 elementos',
+      'Solicitudes: el contador de «ofrecidos» hacía un bucle anidado (400 solicitudes × 2.000 negociaciones × búsqueda del jugador) y encima duplicado, porque la lista se pinta para móvil y para escritorio. Ahora es un índice',
+      'Clubes agrupados por liga: recorría los 1.500 clubes una vez por liga (~300) para partir la lista en trozos. Ahora se agrupa de una pasada',
+      'Cambiados a índice los .find()/.filter() anidados de filteredEntries, distributionYears, byPriority, myPending, las tarjetas de Jugadores y la pestaña Encargados',
+      'El contador del checkbox «Ocultar cerrados» costaba 600.000 comparaciones por repintado para enseñar un número entre paréntesis',
+      'sessionStorage: se leía y parseaba el JSON de filtros en cada render; ahora solo al montar',
+      'El buscador del pipeline hacía toLowerCase() una vez por negociación y por tecla',
+    ],
+  },
+  {
     date: '2026-08-20',
     items: [
       'Las posiciones ya significan lo mismo en toda la app: «Segunda punta» salía como delantero en Captación y en el PDF, pero como «Otros» en las estadísticas de scouts. El mismo jugador contaba distinto según dónde lo mirases',
