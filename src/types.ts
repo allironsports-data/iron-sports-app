@@ -37,7 +37,9 @@ export interface TaskComment {
   attachments: TaskAttachment[];
 }
 
-export type TaskLabel = 'General' | 'Scouting' | 'Distribución' | 'Negociación' | 'Reunión/Comida' | 'Administrativa' | 'Seguimiento' | 'Informe' | 'Marketing' | 'Comunicación' | 'Postpartido'
+/** Tipos de tarea. ÚNICA lista: los <select> de tipo deben iterar TASK_LABELS, no copiarla. */
+export const TASK_LABELS = ['General', 'Scouting', 'Distribución', 'Negociación', 'Reunión/Comida', 'Administrativa', 'Seguimiento', 'Informe', 'Marketing', 'Comunicación', 'Postpartido'] as const
+export type TaskLabel = typeof TASK_LABELS[number]
 
 export interface Task {
   id: string;

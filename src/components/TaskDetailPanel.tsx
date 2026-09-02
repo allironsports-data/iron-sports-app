@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { X, Trash2, ChevronRight, Send } from "lucide-react";
-import type { Task, Player, TaskLabel } from "../types";
+import { TASK_LABELS, type Task, type Player, type TaskLabel } from "../types";
+import { parseDia, esVencida } from "../lib/fechas";
 import type { Profile } from "../contexts/AuthContext";
 import * as db from "../lib/db";
 import { ConfirmModal } from "./ConfirmModal";
@@ -70,6 +71,8 @@ export function TaskDetailPanel({
     setDescription(task.description);
     setStatus(task.status);
     setAssigneeId(task.assigneeId);
+    // Sin esto, al saltar de una tarea a otra se arrastraba el jugador de la anterior
+    setPlayerId(task.playerId === "general" ? "" : task.playerId);
     setLabel(task.label ?? "");
     setWatchers(task.watchers ?? []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -123,10 +126,9 @@ export function TaskDetailPanel({
     name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
 
   const assignee = profiles.find(p => p.id === (canEdit ? assigneeId : task.assigneeId));
-  // OJO: new Date('2026-08-18') es medianoche UTC = 2:00 de la madrugada en
-  // España, así que una tarea que vence HOY salía "Vencida" todo el día.
-  // Comparando a mediodía local (como ya hace el Dashboard) se arregla.
-  const isOverdue = task.dueDate && new Date(task.dueDate + "T12:00:00") < new Date() && task.status !== "completada";
+  // Comparación de texto AAAA-MM-DD: a mediodía local seguía saliendo «Vencida»
+  // por la tarde del mismo día. Vencer HOY no es estar vencida.
+  const isOverdue = esVencida(task.dueDate) && task.status !== "completada";
 
   const priorityBorderColor =
     task.priority === "alta"  ? "#E24B4A" :
@@ -318,7 +320,7 @@ export function TaskDetailPanel({
                     {task.dueDate ? (
                       <>
                         <p className={`text-sm font-medium ${isOverdue ? "text-red-600" : "text-slate-700"}`}>
-                          {new Date(task.dueDate).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" })}
+                          {parseDia(task.dueDate).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" })}
                         </p>
                         {isOverdue && <p className="text-[11px] text-red-500 mt-0.5">Vencida</p>}
                       </>
@@ -348,7 +350,7 @@ export function TaskDetailPanel({
                         className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
                       >
                         <option value="">— Sin tipo —</option>
-                        {(['General','Scouting','Distribución','Negociación','Reunión/Comida','Administrativa','Seguimiento','Informe'] as const).map(l => (
+                        {TASK_LABELS.map(l => (
                           <option key={l} value={l}>{l}</option>
                         ))}
                       </select>
@@ -506,7 +508,7 @@ export function TaskDetailPanel({
                   type="text"
                   value={commentText}
                   onChange={e => setCommentText(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter" && commentText.trim()) handleSendComment(); }}
+                  onKeyDown={e => { if (e.key === "Enter" && commentText.trim() && !sendingComment) handleSendComment(); }}
                   placeholder="Escribe un comentario…"
                   className="flex-1 min-w-0 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-100"
                 />

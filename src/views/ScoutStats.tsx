@@ -115,20 +115,23 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
     }
 
     // Conclusión (la última) de cada scout sobre cada jugador — para congruencia y acierto
+    // Se guarda la fecha junto a la conclusión para quedarse con la MÁS RECIENTE por scout
+    // sin volver a recorrer `reports` (el find anterior era O(n²) y además podía encontrar
+    // un informe distinto con la misma conclusión).
     const conclusionDe = new Map<string, Map<string, string>>()   // playerId → persona → conclusión
-    for (const r of reports) {
-      if (!esVeredicto(r.conclusion)) continue
-      const c = normConclusion(r.conclusion)
-      if (!c) continue
-      let m = conclusionDe.get(r.playerId)
-      if (!m) { m = new Map(); conclusionDe.set(r.playerId, m) }
-      const prev = m.get(r.persona!)
-      // nos quedamos con la más reciente
-      if (!prev) m.set(r.persona!, c)
-      else {
-        const prevR = reports.find(x => x.playerId === r.playerId && x.persona === r.persona && normConclusion(x.conclusion) === prev)
-        if (!prevR || (r.fecha ?? r.createdAt) > (prevR.fecha ?? prevR.createdAt)) m.set(r.persona!, c)
+    {
+      const ultima = new Map<string, Map<string, { c: string; f: string }>>()
+      for (const r of reports) {
+        if (!esVeredicto(r.conclusion)) continue
+        const c = normConclusion(r.conclusion)
+        if (!c) continue
+        let m = ultima.get(r.playerId)
+        if (!m) { m = new Map(); ultima.set(r.playerId, m) }
+        const f = r.fecha ?? r.createdAt
+        const prev = m.get(r.persona!)
+        if (!prev || f > prev.f) m.set(r.persona!, { c, f })
       }
+      for (const [pid, m] of ultima) conclusionDe.set(pid, new Map([...m].map(([sc, v]) => [sc, v.c])))
     }
 
     // Primer informe de cada jugador (para detección temprana)
@@ -316,17 +319,25 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
 
     // Conclusiones por scout y jugador → consenso, debates, doble opinión.
     // Solo veredictos: un «Visto» no discrepa de nadie.
+    // Se conserva la conclusión MÁS RECIENTE de cada scout (antes se quedaba la última
+    // procesada, que depende del orden de llegada y no de la fecha).
     const conclusionDe = new Map<string, Map<string, string>>()
-    for (const r of reports) {
-      if (!esVeredicto(r.conclusion)) continue
-      const c = normConclusion(r.conclusion)
-      if (!c) continue
-      let m = conclusionDe.get(r.playerId)
-      if (!m) { m = new Map(); conclusionDe.set(r.playerId, m) }
-      m.set(r.persona!, c)   // aproximación: se queda la última procesada
+    {
+      const ultima = new Map<string, Map<string, { c: string; f: string }>>()
+      for (const r of reports) {
+        if (!esVeredicto(r.conclusion)) continue
+        const c = normConclusion(r.conclusion)
+        if (!c) continue
+        let m = ultima.get(r.playerId)
+        if (!m) { m = new Map(); ultima.set(r.playerId, m) }
+        const f = fecha(r)
+        const prev = m.get(r.persona!)
+        if (!prev || f > prev.f) m.set(r.persona!, { c, f })
+      }
+      for (const [pid, m] of ultima) conclusionDe.set(pid, new Map([...m].map(([sc, v]) => [sc, v.c])))
     }
     let unanime = 0, dividido = 0, multi = 0
-    const debates: { nombre: string; detalle: string }[] = []
+    const debates: { id: string; nombre: string; detalle: string }[] = []
     for (const [pid, m] of conclusionDe) {
       if (m.size < 2) continue
       multi++
@@ -337,6 +348,7 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
         if (cs.has('Llamar') && cs.has('Descartar')) {
           const p = playersById.get(pid)
           if (p) debates.push({
+            id: p.id,
             nombre: p.fullName,
             detalle: [...m.entries()].map(([sc, c]) => `${sc}: ${c}`).join(' · '),
           })
@@ -379,6 +391,7 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
       partidosConInforme, partidosTotal: _sm.length,
       friosCount: frios.length,
       friosTop: frios.map(p => ({
+        id: p.id,
         nombre: p.fullName,
         ultimo: (ultimoInformeDe.get(p.id) ?? '').slice(0, 10) || 'nunca',
         equipo: p.team ?? '',
@@ -526,7 +539,7 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
               <>
                 <ul className={`space-y-1 text-[11px] text-slate-700 ${verTodo.debates ? 'max-h-72 overflow-y-auto pr-1' : ''}`}>
                   {(verTodo.debates ? team.debates : team.debates.slice(0, 8)).map(d => (
-                    <li key={d.nombre}><strong>{d.nombre}</strong> <span className="text-slate-400">— {d.detalle}</span></li>
+                    <li key={d.id}><strong>{d.nombre}</strong> <span className="text-slate-400">— {d.detalle}</span></li>
                   ))}
                 </ul>
                 {team.debates.length > 8 && (
@@ -564,7 +577,7 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
               <>
                 <ul className={`space-y-1 text-[11px] text-slate-700 ${verTodo.frios ? 'max-h-72 overflow-y-auto pr-1' : ''}`}>
                   {(verTodo.frios ? team.friosTop : team.friosTop.slice(0, 6)).map(f => (
-                    <li key={f.nombre}>
+                    <li key={f.id}>
                       <strong>{f.nombre}</strong>
                       <span className="text-slate-400">
                         {[f.equipo, f.pos, f.anyo].filter(Boolean).length > 0 && ` (${[f.equipo, f.pos, f.anyo].filter(Boolean).join(' · ')})`}

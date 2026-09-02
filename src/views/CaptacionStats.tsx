@@ -53,6 +53,8 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
   const [statsTab, setStatsTab] = useState<'general' | 'scouts' | 'modelo'>('general')
   // ── statistics ──
   const stats = useMemo(() => {
+    // Índice por id: evita un `find` lineal por cada informe
+    const byId = new Map(scoutingPlayers.map(p => [p.id, p]))
     // Reports per persona
     const byPersona: Record<string, number> = {}
     scoutingReports.forEach(r => {
@@ -78,7 +80,7 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
     // Positions most scouted (from player position1)
     const byPosition: Record<string, number> = {}
     scoutingReports.forEach(r => {
-      const p = scoutingPlayers.find(pl => pl.id === r.playerId)
+      const p = byId.get(r.playerId)
       const pos = p?.position1 ?? '—'
       byPosition[pos] = (byPosition[pos] ?? 0) + 1
     })
@@ -100,7 +102,7 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
     scoutingReports.forEach(r => { reportsByPlayer[r.playerId] = (reportsByPlayer[r.playerId] ?? 0) + 1 })
     const topPlayers = Object.entries(reportsByPlayer)
       .sort((a, b) => b[1] - a[1]).slice(0, 30)
-      .map(([id, count]) => ({ name: scoutingPlayers.find(p => p.id === id)?.fullName ?? id, count }))
+      .map(([id, count]) => ({ id, name: byId.get(id)?.fullName ?? id, count }))
 
     return { byPersona, personaRanked, byConclusion, byAssessment, positionRanked, months, topPlayers }
   }, [scoutingReports, scoutingPlayers])
@@ -372,9 +374,9 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
                 <span className="ml-2 text-xs font-normal text-slate-400">top {stats.topPlayers.length}</span>
               </h3>
               <div className="overflow-y-auto max-h-72 space-y-2 pr-1">
-                {stats.topPlayers.map(({ name, count }) => (
+                {stats.topPlayers.map(({ id, name, count }) => (
                   <StatBar
-                    key={name}
+                    key={id}
                     label={name}
                     value={count}
                     max={stats.topPlayers[0]?.count ?? 1}

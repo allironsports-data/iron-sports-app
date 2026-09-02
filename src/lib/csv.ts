@@ -5,7 +5,13 @@
 
 function celda(v: unknown): string {
   if (v === null || v === undefined) return ''
-  const s = String(v)
+  let s = String(v)
+  // Inyección de fórmulas: Excel ejecuta celdas que empiezan por = + - @ (o
+  // tab/CR). Un nombre tecleado en la app como «=HYPERLINK(...)» acabaría
+  // ejecutándose en la hoja de quien exporta. Se antepone una comilla simple
+  // (Excel la trata como «texto literal»). Los números (typeof number) no se
+  // tocan: un -3 sigue siendo un número.
+  if (typeof v === 'string' && /^[=+\-@\t\r]/.test(s)) s = `'${s}`
   // Comillas dobles duplicadas y entrecomillado si hay separador, salto o comilla
   return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }

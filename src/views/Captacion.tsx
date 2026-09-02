@@ -29,6 +29,7 @@ import {
   type PosGroup,
 } from '../lib/campo'
 import { norm as normSearch } from '../lib/texto'
+import { hoyISO, parseDia, sumarDias } from '../lib/fechas'
 import { BotonCsv } from '../components/BotonCsv'
 import { generarInformeMensual } from '../lib/informeMensual'
 
@@ -129,7 +130,8 @@ function personaToName(persona: string | undefined, profiles: Profile[]): string
 
 function fmtDate(iso?: string): string {
   if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
+  // parseDia ancla los AAAA-MM-DD a mediodía local: new Date('AAAA-MM-DD') es UTC y cambia de día
+  return parseDia(iso).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
 function todayISO(): string {
@@ -274,8 +276,11 @@ function ReportCard({
   const [editMode, setEditMode] = useState(false)
   const [editTitle, setEditTitle] = useState(report.titulo ?? '')
   const [editText, setEditText] = useState(report.texto ?? '')
+  // ¿La conclusión guardada es una de las opciones editables? Si no (p.ej. «Más video, prioritario»
+  // de Boulema o «Decidir» legado), al guardar solo texto hay que conservarla en vez de mandar null.
+  const known = (CONCLUSION_OPTIONS as readonly string[]).includes(normConclusion(report.conclusion) ?? '')
   const initialConclusion: ConclusionOption =
-    (CONCLUSION_OPTIONS as readonly string[]).includes(normConclusion(report.conclusion) ?? '') ? (normConclusion(report.conclusion) ?? '') as ConclusionOption : ''
+    known ? (normConclusion(report.conclusion) ?? '') as ConclusionOption : ''
   const [editConclusion, setEditConclusion] = useState<ConclusionOption>(initialConclusion)
   const [saving, setSaving] = useState(false)
   const [confirmDiscard, setConfirmDiscard] = useState(false)
@@ -316,7 +321,8 @@ function ReportCard({
         ...report,
         titulo: editTitle.trim() || undefined,
         texto: editText.trim() || undefined,
-        conclusion: editConclusion || undefined,
+        // Si la conclusión original no es editable, se conserva tal cual; updateScoutingReport manda undefined → null
+        conclusion: known ? (editConclusion || undefined) : report.conclusion,
       }
       await onUpdate(updated)
       setEditing(false)
@@ -471,7 +477,9 @@ function scoutColor(avatar: string) {
 
 // ── MatchRow ──────────────────────────────────────────────────
 
-function MatchRow({
+// React.memo: la tabla de partidos re-renderiza a cada tecleo del buscador; con props estables
+// (handlers en useCallback, SIN_SCOUTS compartido) las filas que no cambian no se vuelven a pintar.
+const MatchRow = React.memo(function MatchRow({
   match, scoutName, scouts, profiles, currentProfile, isAdmin,
   conteo,
   onEdit, onDelete, onToggleStatus, onOpenDetail,
@@ -631,7 +639,7 @@ function MatchRow({
       </td>
     </tr>
   )
-}
+})
 
 // Carcasa de la ficha de partido: la MISMA ficha se pinta como columna fija
 // a la derecha en escritorio y como ventana flotante en móvil. Va a nivel de
@@ -657,6 +665,8 @@ function FichaCarcasa({ esPanel, onClose, children }: {
 // Objeto estable para los partidos sin jugadores vinculados: si se creara uno
 // nuevo en cada render, MatchRow se repintaría siempre aunque no cambie nada.
 const SIN_CONTEO = { total: 0, conInforme: 0 }
+// Referencia estable para las filas sin scouts (un `?? []` nuevo por render rompería el memo de MatchRow)
+const SIN_SCOUTS: MatchScoutInfo[] = []
 const SIN_PARTIDOS: ScoutingMatch[] = []
 
 
@@ -1658,7 +1668,7 @@ function ActualizarPlantilla({ scoutingPlayers, onClose, onFixTeam, onCreate, sh
   useEscapeKey(onClose)
 
   const equiposConocidos = useMemo(
-    () => Array.from(new Set(scoutingPlayers.map(p => p.team).filter(Boolean) as string[])).sort(),
+    () => Array.from(new Set(scoutingPlayers.map(p => p.team).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b, 'es')),
     [scoutingPlayers])
 
   function analizar() {
@@ -3619,8 +3629,9 @@ function FirmasTab({
   const alerts = useMemo(() => {
     const out: { icon: string; text: string; entryId: string; tone: 'blue' | 'green' | 'amber' | 'red'; kind: string }[] = []
     const today = todayISO()
-    const plus30 = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)
-    const minus14 = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10)
+    // sumarDias trabaja en día local; toISOString() daba el día UTC (entre 00:00 y 02:00 «hoy» aún es ayer)
+    const plus30 = sumarDias(hoyISO(), 30)
+    const minus14 = sumarDias(hoyISO(), -14)
     const since14 = new Date(Date.now() - 14 * 86400000).toISOString()
     const since90 = new Date(Date.now() - 90 * 86400000).toISOString()
     const in30 = Date.now() + 30 * 86400000
@@ -3807,7 +3818,7 @@ function FirmasTab({
     }
   }
 
-  const changeStatus = (e: FirmasEntry, s: FirmasStatus) => {
+  const changeStatus = async (e: FirmasEntry, s: FirmasStatus) => {
     const now = new Date().toISOString()
     // el cambio queda registrado en el historial automáticamente
     const log: FirmasComment = {
@@ -3818,13 +3829,20 @@ function FirmasTab({
       authorId: currentProfile.id,
       kind: 'estatus',
     }
-    void patch(e, {
-      status: s,
-      statusUpdatedAt: now,
-      signedAt: s === 'firmado' ? (e.signedAt ?? now) : e.signedAt,
-      comments: [...e.comments, log],
-    })
-    showToast(s === 'firmado' ? `🎉 ${e.playerName} firmado` : `${e.playerName} → ${FIRMAS_CONFIG[s].label}`)
+    // El toast de éxito va DESPUÉS del await: antes se mostraba aunque el guardado fallara
+    try {
+      await onUpdate({
+        ...e,
+        status: s,
+        statusUpdatedAt: now,
+        signedAt: s === 'firmado' ? (e.signedAt ?? now) : e.signedAt,
+        comments: [...e.comments, log],
+      })
+      showToast(s === 'firmado' ? `🎉 ${e.playerName} firmado` : `${e.playerName} → ${FIRMAS_CONFIG[s].label}`)
+    } catch (err) {
+      console.error(err)
+      showToast('No se pudo guardar el cambio', 'error')
+    }
   }
 
   const clearFilters = () => { setSearch(''); setZoneFilter('all'); setStatusFilter('all'); setManagerFilter('all'); setOverdueOnly(false) }
@@ -3885,7 +3903,7 @@ function FirmasTab({
               className={`flex-shrink-0 font-medium ${actionOverdue ? 'text-red-500' : actionToday ? 'text-blue-600' : 'text-slate-400'}`}
               title={`${e.nextAction ?? 'Próxima acción'} · ${fmtDate(e.nextActionDate)}`}
             >
-              {FIRMAS_ACTION_KIND_META[e.nextActionKind ?? '']?.icon ?? '📌'} {actionOverdue ? 'vencida' : actionToday ? 'hoy' : new Date(e.nextActionDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+              {FIRMAS_ACTION_KIND_META[e.nextActionKind ?? '']?.icon ?? '📌'} {actionOverdue ? 'vencida' : actionToday ? 'hoy' : parseDia(e.nextActionDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
             </span>
           )}
           {e.comments.filter(c => c.kind !== 'estatus').length > 0 && (
@@ -3959,7 +3977,7 @@ function FirmasTab({
             )}
             {e.nextActionDate && e.status !== 'firmado' && (
               <span className={`ml-1.5 font-medium ${actionOverdue ? 'text-red-500' : actionToday ? 'text-blue-600' : 'text-slate-400'}`}>
-                {FIRMAS_ACTION_KIND_META[e.nextActionKind ?? '']?.icon ?? '📌'} {actionOverdue ? 'vencida' : actionToday ? 'hoy' : new Date(e.nextActionDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                {FIRMAS_ACTION_KIND_META[e.nextActionKind ?? '']?.icon ?? '📌'} {actionOverdue ? 'vencida' : actionToday ? 'hoy' : parseDia(e.nextActionDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
               </span>
             )}
           </span>
@@ -4193,7 +4211,7 @@ function FirmasTab({
                         className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-blue-100/40 transition-colors"
                       >
                         <span className={`flex-shrink-0 font-semibold tabular-nums ${overdue ? 'text-red-600' : isToday ? 'text-blue-700' : 'text-slate-500'}`}>
-                          {overdue ? '⚠ ' : ''}{isToday ? 'hoy' : new Date(e.nextActionDate!).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                          {overdue ? '⚠ ' : ''}{isToday ? 'hoy' : parseDia(e.nextActionDate!).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
                         </span>
                         <span className="flex-shrink-0">{FIRMAS_ACTION_KIND_META[e.nextActionKind ?? '']?.icon ?? '📌'}</span>
                         <span className="font-semibold truncate">{e.playerName}</span>
@@ -6372,11 +6390,11 @@ export function Captacion({
   const [mergeSelected, setMergeSelected] = useState<Set<string>>(new Set())
   const [showMergeModal, setShowMergeModal] = useState(false)
   const [merging, setMerging] = useState(false)
-  const toggleMergeSelected = (id: string) => setMergeSelected(prev => {
+  const toggleMergeSelected = useCallback((id: string) => setMergeSelected(prev => {
     const next = new Set(prev)
     if (next.has(id)) next.delete(id); else next.add(id)
     return next
-  })
+  }), [])
   const [reportPersonaFilter, setReportPersonaFilter] = useState('all')
 
   // ── pretemporada filters ──
@@ -6475,7 +6493,7 @@ export function Captacion({
   const allCategories = useMemo(() => {
     const cats = new Set<string>()
     scoutingPlayers.forEach(p => { if (p.categoria) cats.add(p.categoria) })
-    return Array.from(cats).sort()
+    return Array.from(cats).sort((a, b) => a.localeCompare(b, 'es'))
   }, [scoutingPlayers])
 
   const filtered = useMemo(() => {
@@ -6564,7 +6582,7 @@ export function Captacion({
 
   // El desplegable de competiciones se recalculaba con cada tecla del buscador
   const competicionesDisponibles = useMemo(
-    () => Array.from(new Set(scoutingMatches.map(m => m.competition).filter(Boolean))).sort(),
+    () => Array.from(new Set(scoutingMatches.map(m => m.competition).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b, 'es')),
     [scoutingMatches],
   )
 
@@ -6681,7 +6699,7 @@ export function Captacion({
   const preCatOptions = useMemo(() => {
     const set = new Set<string>()
     pretemporadaData.players.forEach(({ player }) => { if (player.categoria) set.add(player.categoria) })
-    return Array.from(set).sort()
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'es'))
   }, [pretemporadaData])
 
   const pretemporadaFiltered = useMemo(() => {
@@ -6726,7 +6744,7 @@ export function Captacion({
   // ── recent reports ──
   const reportPersonas = useMemo(() => {
     const set = new Set(scoutingReports.map(r => r.persona).filter(Boolean) as string[])
-    return Array.from(set).sort()
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'es'))
   }, [scoutingReports])
 
   // Ordenar los 12.000 informes es lo caro, y no depende del scout elegido:
@@ -6784,6 +6802,32 @@ export function Captacion({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showAddReportForm, panelPlayerId])
 
+  // Partidos del panel ordenados (los del equipo del jugador primero). Memoizado: antes se
+  // copiaba y ordenaba toda la lista en cada render del componente.
+  const panelSortedMatches = useMemo(() => {
+    const playerTeam = panelPlayer?.team?.toLowerCase() ?? ''
+    const sortedMatches = [...scoutingMatches].sort((a, b) => {
+      const aMatch = playerTeam && (a.homeTeam.toLowerCase().includes(playerTeam) || a.awayTeam.toLowerCase().includes(playerTeam))
+      const bMatch = playerTeam && (b.homeTeam.toLowerCase().includes(playerTeam) || b.awayTeam.toLowerCase().includes(playerTeam))
+      if (aMatch && !bMatch) return -1
+      if (!aMatch && bMatch) return 1
+      return 0
+    })
+    return { playerTeam, sortedMatches }
+  }, [scoutingMatches, panelPlayer?.team])
+
+  // Al cambiar de jugador (o cerrar el panel) el formulario «Nuevo informe» vuelve a cero:
+  // antes el texto/partido a medio escribir se arrastraba al siguiente jugador.
+  // Va después del efecto de autoselección para que este reset sea el que prevalezca.
+  useEffect(() => {
+    setShowAddReportForm(false)
+    setReportTitle('')
+    setReportText('')
+    setReportConclusion('')
+    setReportMatchId('')
+    setMatchSearchInput('')
+  }, [panelPlayerId])
+
   // ── handlers ──
 
   async function handleAddReport() {
@@ -6801,15 +6845,23 @@ export function Captacion({
         authorId: currentProfile.id,
       })
       onAddReport(saved)
-      // Also link player to the match if one was selected
-      if (reportMatchId) {
-        await onAddMatchPlayer(reportMatchId, panelPlayer.id)
-      }
+      // El informe ya está guardado: se limpia el formulario ANTES de vincular al partido,
+      // para que un fallo del vínculo no deje el texto ahí y se acabe guardando dos veces.
+      const matchId = reportMatchId
       setReportTitle('')
       setReportText('')
       setReportConclusion('')
       setReportMatchId('')
-      showToast('Informe guardado')
+      if (matchId) {
+        try {
+          await onAddMatchPlayer(matchId, panelPlayer.id)
+          showToast('Informe guardado')
+        } catch {
+          showToast('Informe guardado, pero no se pudo vincular al partido', 'error')
+        }
+      } else {
+        showToast('Informe guardado')
+      }
     } catch {
       showToast('Error al guardar el informe', 'error')
     } finally {
@@ -7070,10 +7122,11 @@ export function Captacion({
     setShowAddMatch(true)
   }
 
-  function openEditMatch(m: ScoutingMatch) {
+  // useCallback en los handlers de fila para que el React.memo de MatchRow tenga efecto
+  const openEditMatch = useCallback((m: ScoutingMatch) => {
     setEditingMatch(m)
     setShowAddMatch(true)
-  }
+  }, [])
 
   async function handleSaveMatch(form: MatchFormState) {
     const payload = {
@@ -7099,7 +7152,7 @@ export function Captacion({
     setEditingMatch(null)
   }
 
-  async function handleDeleteMatch(id: string) {
+  const handleDeleteMatch = useCallback(async (id: string) => {
     try {
       await db.deleteScoutingMatch(id)
       onDeleteMatch(id)
@@ -7107,9 +7160,9 @@ export function Captacion({
     } catch {
       showToast('Error al eliminar el partido', 'error')
     }
-  }
+  }, [onDeleteMatch, showToast])
 
-  async function handleToggleMatchStatus(m: ScoutingMatch) {
+  const handleToggleMatchStatus = useCallback(async (m: ScoutingMatch) => {
     try {
       const updated: ScoutingMatch = { ...m, status: m.status === 'visto' ? 'pendiente' : 'visto' }
       await db.updateScoutingMatch(updated)
@@ -7117,7 +7170,7 @@ export function Captacion({
     } catch {
       showToast('Error al actualizar el estado del partido', 'error')
     }
-  }
+  }, [onUpdateMatch, showToast])
 
   // ── Varios scouts por partido ──
   // assigned_to sigue guardando al responsable principal (Dashboard, avisos).
@@ -7921,7 +7974,7 @@ export function Captacion({
                 <div className="flex items-center gap-2 mb-2">
                   <button onClick={() => setMatchWeekOffset(o => o - 1)} className="px-2 py-1 rounded-lg border border-slate-200 text-xs text-slate-500 hover:bg-slate-50">←</button>
                   <span className="text-xs font-semibold text-slate-700">
-                    {new Date(days[0]).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} – {new Date(days[6]).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                    {parseDia(days[0]).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} – {parseDia(days[6]).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
                     {matchWeekOffset === 0 && <span className="text-slate-400 font-normal"> · esta semana</span>}
                   </span>
                   {matchWeekOffset !== 0 && (
@@ -8089,7 +8142,7 @@ export function Captacion({
             return (
               <ActiveFilterChips
                 chips={chips}
-                onClearAll={() => { setMatchSearch(''); setMatchPersonaFilter('all'); setMatchCompFilter('all'); setMatchModeFilter('all'); setMatchStatusFilter('all') }}
+                onClearAll={() => { setMatchSearch(''); setMatchPersonaFilter('all'); setMatchCompFilter('all'); setMatchModeFilter('all'); setMatchStatusFilter('all'); setHideFutureMatches(false) }}
               />
             )
           })()}
@@ -8235,7 +8288,7 @@ export function Captacion({
                             key={m.id}
                             match={m}
                             scoutName={scoutName}
-                            scouts={scoutsByMatch[m.id] ?? []}
+                            scouts={scoutsByMatch[m.id] ?? SIN_SCOUTS}
                             profiles={profiles}
                             currentProfile={currentProfile}
                             isAdmin={isAdmin}
@@ -8945,15 +8998,7 @@ export function Captacion({
                     <div>
                       {/* Header informes + botón añadir */}
                       {(() => {
-                        // Matches sorted: player's team first, then rest by date
-                        const playerTeam = panelPlayer?.team?.toLowerCase() ?? ''
-                        const sortedMatches = [...scoutingMatches].sort((a, b) => {
-                          const aMatch = playerTeam && (a.homeTeam.toLowerCase().includes(playerTeam) || a.awayTeam.toLowerCase().includes(playerTeam))
-                          const bMatch = playerTeam && (b.homeTeam.toLowerCase().includes(playerTeam) || b.awayTeam.toLowerCase().includes(playerTeam))
-                          if (aMatch && !bMatch) return -1
-                          if (!aMatch && bMatch) return 1
-                          return 0
-                        })
+                        const { playerTeam, sortedMatches } = panelSortedMatches
 
                         return (
                           <>

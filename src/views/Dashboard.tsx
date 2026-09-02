@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { TaskDetailPanel } from "../components/TaskDetailPanel";
 import { BUILD_ID, CHANGELOG } from "../changelog";
 import { ConfirmModal } from "../components/ConfirmModal";
@@ -10,7 +10,8 @@ import { useDebounce } from "../hooks/useDebounce";
 import { isValidName, isValidBirthDate } from "../lib/validate";
 import logoImg from '../assets/logo.jpeg';
 import type { Player, Task, TaskLabel, PlayerActivity, ScoutingMatch, MemberStatus, Postpartido, FirmasEntry } from "../types";
-import { calcAge, clubsLabel } from "../types";
+import { calcAge, clubsLabel, TASK_LABELS } from "../types";
+import { fechaLocal, hoyISO, lunesDe, esVencida, parseDia } from "../lib/fechas";
 import { createPlayerActivity, fetchActivitiesByAuthor, createScoutingMatch } from "../lib/db";
 import type { Profile } from "../contexts/AuthContext";
 import type { AppNotification } from "../App";
@@ -85,17 +86,6 @@ interface Props {
   onDeletePostpartido?: (p: Postpartido) => Promise<void>;
   /** Sincroniza en App un partido creado desde aquí (aparece en Captación → Partidos) */
   onAddScoutingMatch?: (m: ScoutingMatch) => void;
-}
-
-/**
- * Fecha en AAAA-MM-DD en hora LOCAL.
- *
- * Con .toISOString() se pasa a UTC: el lunes a las 00:00 en España sale como
- * el domingo anterior. La tabla de carga semanal por equipos estaba
- * desplazada un día SIEMPRE, no solo de madrugada.
- */
-function fechaLocal(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 // Birthday helpers
@@ -354,7 +344,6 @@ export function Dashboard({
       setEvtSaving(false);
     }
   }
-  const [editingGeneralTask, setEditingGeneralTask] = useState<Task | null>(null);
   const [managerFilter, setManagerFilter] = useState<string>("all");
   // quick filter from stat cards: overlays on top of the person filter
   const [quickFilter, setQuickFilter] = useState<"overdue" | "today" | "week" | "inprogress" | null>(null);
@@ -449,6 +438,23 @@ export function Dashboard({
   // ── Unified board: one dataset filtered by personFilter ────
   // Glosario único: una tarea "es de" alguien si es responsable o watcher.
   const visibleTasks = tasks.filter(t => !(t.adminOnly && !currentProfile.is_admin));
+
+  // Tareas abiertas por jugador, calculado una vez: antes cada tarjeta/fila
+  // de jugador recorría todas las tareas con un filter.
+  const openTasksByPlayer = useMemo(() => {
+    const m = new Map<string, Task[]>();
+    for (const t of tasks) {
+      if (t.status === 'completada') continue;
+      const arr = m.get(t.playerId);
+      if (arr) arr.push(t); else m.set(t.playerId, [t]);
+    }
+    return m;
+  }, [tasks]);
+  // Ids de tareas completadas, para contar postpartidos pendientes sin un find por cada uno
+  const completedTaskIds = useMemo(
+    () => new Set(tasks.filter(t => t.status === 'completada').map(t => t.id)),
+    [tasks],
+  );
   const boardPersonId = personFilter === 'me' ? currentProfile.id : personFilter;
   const matchesPerson = (t: Task) =>
     personFilter === 'all' || involvesProfile(t, boardPersonId);
@@ -459,31 +465,29 @@ export function Dashboard({
   // Fecha LOCAL, no UTC: con toISOString(), entre las 00:00 y las 2:00 de la
   // madrugada española "hoy" seguía siendo ayer y las tareas del día no se
   // marcaban como vencidas.
-  const todayStr = fechaLocal(new Date());
+  const todayStr = hoyISO();
   // Week window (driven by weekOffset for the Equipo view)
-  const weekMonday = (() => {
-    const d = new Date();
-    const day = d.getDay();
-    d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day) + weekOffset * 7);
-    d.setHours(0, 0, 0, 0);
+  // Domingo con setDate, no sumando milisegundos: al cambiar el horario de
+  // verano la semana tiene 167 o 169 horas y la suma en ms se comía un día.
+  // Y a las 23:59:59.999, no a las 00:00: si no, lo que vence en domingo
+  // (parseado a mediodía) quedaba fuera de «esta semana».
+  const finDeSemana = (lunes: Date) => {
+    const d = new Date(lunes);
+    d.setDate(d.getDate() + 6);
+    d.setHours(23, 59, 59, 999);
     return d;
-  })();
-  const weekSunday = new Date(weekMonday.getTime() + 6 * 24 * 60 * 60 * 1000);
+  };
+  const weekMonday = lunesDe(new Date(), weekOffset);
+  const weekSunday = finDeSemana(weekMonday);
   // For the "esta semana" stat in the board we always use offset=0
-  const thisMonday = (() => {
-    const d = new Date();
-    const day = d.getDay();
-    d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
-    d.setHours(0, 0, 0, 0);
-    return d;
-  })();
-  const thisSunday = new Date(thisMonday.getTime() + 6 * 24 * 60 * 60 * 1000);
+  const thisMonday = lunesDe(new Date());
+  const thisSunday = finDeSemana(thisMonday);
 
   const boardOverdue = boardTasks.filter(t => t.dueDate && t.dueDate < todayStr);
   const boardDueToday = boardTasks.filter(t => t.dueDate === todayStr);
   const boardDueThisWeek = boardTasks.filter(t => {
     if (!t.dueDate) return false;
-    const d = new Date(t.dueDate + 'T12:00:00');
+    const d = parseDia(t.dueDate);
     return d >= thisMonday && d <= thisSunday;
   });
   const boardInProgress = boardTasks.filter(t => t.status === 'en_progreso');
@@ -776,10 +780,7 @@ export function Dashboard({
               ]).map(tab => {
                 const isActive = activeTab === tab.id;
                 const ppPending = tab.id === 'postpartidos'
-                  ? postpartidos.filter(pp => {
-                      const t = pp.taskId ? tasks.find(x => x.id === pp.taskId) : undefined;
-                      return !t || t.status !== 'completada';
-                    }).length
+                  ? postpartidos.filter(pp => !pp.taskId || !completedTaskIds.has(pp.taskId)).length
                   : 0;
                 return (
                   <button
@@ -1338,7 +1339,7 @@ export function Dashboard({
                   : quickFilter === 'week'
                     ? boardTasks.filter(t => {
                         if (!t.dueDate) return false;
-                        const d = new Date(t.dueDate + 'T12:00:00');
+                        const d = parseDia(t.dueDate);
                         return d >= thisMonday && d <= thisSunday;
                       })
                     : quickFilter === 'inprogress'
@@ -1638,7 +1639,7 @@ export function Dashboard({
         {playerView === 'grid' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {filtered.map((player) => {
-              const playerTasks = tasks.filter((t) => t.playerId === player.id && t.status !== "completada");
+              const playerTasks = openTasksByPlayer.get(player.id) ?? [];
               const urgent = playerTasks.filter((t) => t.priority === "alta");
               const age = calcAge(player.birthDate);
               const repEnd = new Date(player.representationContract.end).getTime();
@@ -1726,7 +1727,7 @@ export function Dashboard({
         {playerView === 'list' && (
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
             {filtered.map((player, idx) => {
-              const playerTasks = tasks.filter((t) => t.playerId === player.id && t.status !== "completada");
+              const playerTasks = openTasksByPlayer.get(player.id) ?? [];
               const urgent = playerTasks.filter((t) => t.priority === "alta");
               const age = calcAge(player.birthDate);
               const clubDaysLeft = Math.ceil((new Date(player.clubContract.endDate).getTime() - Date.now()) / (1000*60*60*24));
@@ -1827,7 +1828,7 @@ export function Dashboard({
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {filtered.map((player) => {
-                  const playerTasks = tasks.filter(t => t.playerId === player.id && t.status !== 'completada')
+                  const playerTasks = openTasksByPlayer.get(player.id) ?? []
                   const urgent = playerTasks.filter(t => t.priority === 'alta')
                   const age = calcAge(player.birthDate)
                   const repEnd = player.representationContract.end
@@ -2008,8 +2009,9 @@ export function Dashboard({
 
               // Actividad 4 semanas (completadas + eventos), terminando en la semana visible
               const spark = [3, 2, 1, 0].map(i => {
-                const ws = new Date(weekMonday.getTime() - i * 7 * 24 * 60 * 60 * 1000);
-                const we = new Date(ws.getTime() + 6 * 24 * 60 * 60 * 1000);
+                // setDate y no aritmética en ms: con el cambio de hora se desplazaba un día
+                const ws = lunesDe(weekMonday, -i);
+                const we = new Date(ws); we.setDate(we.getDate() + 6);
                 const wsStr = fechaLocal(ws);
                 const weStr = fechaLocal(we);
                 const nDone = visibleTasks.filter(t =>
@@ -2279,7 +2281,7 @@ export function Dashboard({
                         {statusBadge(task)}
                         {task?.dueDate && !isDone && (
                           <span className={`text-[11px] ${isOverdue ? 'text-red-500 font-semibold' : 'text-slate-400'}`}>
-                            {new Date(task.dueDate + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}{isOverdue ? ' ⚠' : ''}
+                            {parseDia(task.dueDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}{isOverdue ? ' ⚠' : ''}
                           </span>
                         )}
                       </div>
@@ -2393,33 +2395,6 @@ export function Dashboard({
           }} />
       )}
 
-      {editingGeneralTask && (
-        <EditGeneralTaskModal
-          task={editingGeneralTask}
-          profiles={profiles}
-          players={players}
-          onClose={() => setEditingGeneralTask(null)}
-          onUpdate={async (updated) => {
-            try {
-              if (onUpdateGeneralTask) await Promise.resolve(onUpdateGeneralTask(updated));
-              setEditingGeneralTask(null);
-              showToast("Tarea actualizada", "success");
-            } catch {
-              showToast("No se pudo guardar. Inténtalo de nuevo.", "error");
-            }
-          }}
-          onDelete={onDeleteGeneralTask ? async (id) => {
-            try {
-              await Promise.resolve(onDeleteGeneralTask(id));
-              setEditingGeneralTask(null);
-              showToast("Tarea eliminada", "info");
-            } catch {
-              showToast("No se pudo guardar. Inténtalo de nuevo.", "error");
-            }
-          } : undefined}
-        />
-      )}
-
       {quickTaskPlayer && onAddGeneralTask && (
         <QuickTaskModal
           player={quickTaskPlayer}
@@ -2441,7 +2416,7 @@ export function Dashboard({
       {showSearch && (
         <GlobalSearch
           players={players}
-          tasks={tasks}
+          tasks={visibleTasks}
           profiles={profiles}
           onSelectPlayer={(id) => { onSelectPlayer(id); setShowSearch(false); }}
           onSelectTask={(t) => { setDetailTask(t); setShowSearch(false); }}
@@ -3041,7 +3016,7 @@ function TaskListRow({
           )}
           {task.dueDate && (
             <span className={`text-xs ${overdue ? "text-red-500 font-medium" : "text-slate-400"}`}>
-              {new Date(task.dueDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
+              {parseDia(task.dueDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
               {overdue ? " ⚠" : ""}
             </span>
           )}
@@ -3100,7 +3075,7 @@ function CompactTaskList({ tasks, completedTasks, players, profiles, onCycleStat
   showCompleted: boolean;
   onToggleCompleted: () => void;
 }) {
-  const now = new Date();
+  const hoy = hoyISO();
   const prioBorderColor = (t: Task) =>
     t.status === 'completada' ? '#10b981'
     : t.status === 'en_progreso' ? '#3b82f6'
@@ -3110,7 +3085,7 @@ function CompactTaskList({ tasks, completedTasks, players, profiles, onCycleStat
   const renderRow = (t: Task) => {
     const player   = players.find(p => p.id === t.playerId);
     const assignee = profiles.find(m => m.id === t.assigneeId);
-    const isOverdue = !!(t.dueDate && new Date(t.dueDate + 'T12:00:00') < now && t.status !== 'completada');
+    const isOverdue = esVencida(t.dueDate, hoy) && t.status !== 'completada';
     const isSelected = detailTaskId === t.id;
     const isDone = t.status === 'completada';
     return (
@@ -3141,7 +3116,7 @@ function CompactTaskList({ tasks, completedTasks, players, profiles, onCycleStat
         )}
         {t.dueDate && (
           <span className={`text-[11px] flex-shrink-0 ${isOverdue ? 'text-red-500 font-medium' : 'text-slate-400'}`}>
-            {new Date(t.dueDate + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+            {parseDia(t.dueDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
             {isOverdue ? ' ⚠' : ''}
           </span>
         )}
@@ -3189,17 +3164,19 @@ function TaskTableView({ tasks, players, profiles, onOpenDetail, onCycleStatus, 
   sortDir: 'asc' | 'desc';
   onSort: (col: TaskSortCol) => void;
 }) {
-  const now = new Date();
+  const hoy = hoyISO();
   const prioOrder: Record<string, number> = { alta: 0, media: 1, baja: 2 };
   const statusOrder: Record<string, number> = { en_progreso: 0, pendiente: 1, completada: 2 };
 
+  // Nombre por id calculado una vez: el comparador se llama O(n log n) veces
+  const playerNameById = useMemo(() => new Map(players.map(p => [p.id, p.name])), [players]);
   const sorted = [...tasks].sort((a, b) => {
     let cmp = 0;
     if (sortCol === 'title') {
       cmp = a.title.localeCompare(b.title);
     } else if (sortCol === 'player') {
-      const pa = players.find(p => p.id === a.playerId)?.name ?? '';
-      const pb = players.find(p => p.id === b.playerId)?.name ?? '';
+      const pa = playerNameById.get(a.playerId) ?? '';
+      const pb = playerNameById.get(b.playerId) ?? '';
       cmp = pa.localeCompare(pb);
     } else if (sortCol === 'priority') {
       cmp = (prioOrder[a.priority ?? 'baja'] ?? 2) - (prioOrder[b.priority ?? 'baja'] ?? 2);
@@ -3254,7 +3231,7 @@ function TaskTableView({ tasks, players, profiles, onOpenDetail, onCycleStatus, 
           {sorted.map((t, i) => {
             const player   = players.find(p => p.id === t.playerId);
             const assignee = profiles.find(m => m.id === t.assigneeId);
-            const isOverdue = !!(t.dueDate && new Date(t.dueDate + 'T12:00:00') < now && t.status !== 'completada');
+            const isOverdue = esVencida(t.dueDate, hoy) && t.status !== 'completada';
             const isSelected = detailTaskId === t.id;
             return (
               <tr
@@ -3296,7 +3273,7 @@ function TaskTableView({ tasks, players, profiles, onOpenDetail, onCycleStatus, 
                 </td>
                 <td className={`px-3 py-2 font-medium ${isOverdue ? 'text-red-500' : 'text-slate-500'}`}>
                   {t.dueDate
-                    ? `${new Date(t.dueDate + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}${isOverdue ? ' ⚠' : ''}`
+                    ? `${parseDia(t.dueDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}${isOverdue ? ' ⚠' : ''}`
                     : '—'}
                 </td>
                 <td className="px-3 py-2">
@@ -3332,7 +3309,7 @@ function KanbanCol({
   completedTasks?: Task[];
   isCompletedCol?: boolean;
 }) {
-  const now = new Date();
+  const hoy = hoyISO();
   const prioBorder = (t: Task) =>
     t.priority === "alta"  ? "#E24B4A" :
     t.priority === "media" ? "#EF9F27" : "#94a3b8";
@@ -3342,7 +3319,8 @@ function KanbanCol({
   const renderTask = (task: Task, dimmed = false) => {
     const player   = players.find(p => p.id === task.playerId);
     const assignee = profiles.find(m => m.id === task.assigneeId);
-    const isOverdue = !dimmed && task.dueDate && new Date(task.dueDate) < now && task.status !== "completada";
+    // new Date('AAAA-MM-DD') es medianoche UTC: la tarea que vence hoy salía vencida
+    const isOverdue = !dimmed && esVencida(task.dueDate, hoy) && task.status !== "completada";
     const isSelected = detailTaskId === task.id;
 
     return (
@@ -3387,7 +3365,7 @@ function KanbanCol({
                 )}
                 {task.dueDate && (
                   <span className={`text-[11px] ${isOverdue ? "text-red-500 font-medium" : "text-slate-400"}`}>
-                    {new Date(task.dueDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
+                    {parseDia(task.dueDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
                     {isOverdue ? " ⚠" : ""}
                   </span>
                 )}
@@ -3414,10 +3392,8 @@ function KanbanCol({
 
       {isCompletedCol ? (
         <div>
-          {showCompleted
-            ? completedTasks.slice(0, 5).map(t => renderTask(t, true))
-            : completedTasks.slice(0, 2).map(t => renderTask(t, true))
-          }
+          {/* «Ver todas» debe enseñar todas: antes se quedaba en 5 */}
+          {(showCompleted ? completedTasks : completedTasks.slice(0, 2)).map(t => renderTask(t, true))}
           {completedCount > 2 && onToggleCompleted && (
             <button
               onClick={onToggleCompleted}
@@ -3704,7 +3680,7 @@ function AddGeneralTaskModal({ profiles, players, currentProfileId, onClose, onA
               <select value={label} onChange={(e) => setLabel(e.target.value as TaskLabel | "")}
                 className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
                 <option value="">— Sin tipo —</option>
-                {(['General','Scouting','Distribución','Negociación','Reunión/Comida','Administrativa','Seguimiento','Informe','Marketing','Comunicación'] as const).map(l => (
+                {TASK_LABELS.map(l => (
                   <option key={l} value={l}>{l}</option>
                 ))}
               </select>
@@ -3734,138 +3710,6 @@ function AddGeneralTaskModal({ profiles, players, currentProfileId, onClose, onA
             </button>
           </div>
         </form>
-      </div>
-    </div>
-  );
-}
-
-function EditGeneralTaskModal({ task, profiles, players, onClose, onUpdate, onDelete }: {
-  task: Task; profiles: Profile[]; players: Player[]; onClose: () => void;
-  onUpdate: (task: Task) => void; onDelete?: (id: string) => void;
-}) {
-  const [title, setTitle] = useState(task.title);
-  const [description, setDescription] = useState(task.description);
-  const [assigneeId, setAssigneeId] = useState(task.assigneeId);
-  const [selectedPlayerId, setSelectedPlayerId] = useState(task.playerId === "general" ? "" : task.playerId);
-  const [priority, setPriority] = useState<"alta" | "media" | "baja">(task.priority);
-  const [label, setLabel] = useState<TaskLabel | "">(task.label ?? "");
-  const [status, setStatus] = useState<"pendiente" | "en_progreso" | "completada">(task.status);
-  const [dueDate, setDueDate] = useState(task.dueDate ?? "");
-  const [confirmDelete, setConfirmDelete] = useState(false);
-
-  useEscapeKey(onClose, !confirmDelete);
-
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    onUpdate({
-      ...task,
-      title,
-      description,
-      playerId: selectedPlayerId || "general",
-      assigneeId,
-      priority,
-      label: label || undefined,
-      status,
-      dueDate: dueDate || undefined,
-    });
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-0 sm:p-4">
-      <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-md max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white z-10">
-          <h2 className="text-sm font-semibold text-slate-800">Editar tarea</h2>
-          <button onClick={onClose} aria-label="Cerrar" className="text-slate-500 hover:text-slate-700 p-2 -m-2 sm:p-0 sm:m-0"><X className="w-4 h-4" /></button>
-        </div>
-        <form onSubmit={handleSave} className="p-4 space-y-3 pb-8 safe-area-bottom">
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Jugador (opcional)</label>
-            <select value={selectedPlayerId} onChange={(e) => setSelectedPlayerId(e.target.value)}
-              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
-              <option value="">— Tarea general —</option>
-              {[...players].sort((a, b) => a.name.localeCompare(b.name)).map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-          </div>
-          <F label="Título" value={title} onChange={setTitle} required />
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Descripción</label>
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)}
-              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none h-24" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Estado</label>
-              <select value={status} onChange={(e) => setStatus(e.target.value as typeof status)}
-                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
-                <option value="pendiente">Pendiente</option>
-                <option value="en_progreso">En progreso</option>
-                <option value="completada">Completada</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Prioridad</label>
-              <select value={priority} onChange={(e) => setPriority(e.target.value as typeof priority)}
-                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
-                <option value="baja">Baja</option>
-                <option value="media">Media</option>
-                <option value="alta">Alta</option>
-              </select>
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Asignado a</label>
-            <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}
-              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
-              <option value="">— Sin asignar —</option>
-              {profiles.map((m) => <option key={m.id} value={m.id}>{m.avatar} {m.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Tipo</label>
-            <select value={label} onChange={(e) => setLabel(e.target.value as TaskLabel | "")}
-              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
-              <option value="">— Sin tipo —</option>
-              {(['General','Scouting','Distribución','Negociación','Reunión/Comida','Administrativa','Seguimiento','Informe','Marketing','Comunicación'] as const).map(l => (
-                <option key={l} value={l}>{l}</option>
-              ))}
-            </select>
-          </div>
-          <F label="Fecha de vencimiento" value={dueDate} onChange={setDueDate} type="date" />
-          <div className="pt-2 flex gap-2">
-            <button type="submit" disabled={!title}
-              className="flex-1 rounded-md text-white text-sm font-medium py-2.5 disabled:opacity-40 transition-colors bg-primary hover:bg-primary/90">
-              Guardar cambios
-            </button>
-            {onDelete && (
-              <button type="button" onClick={() => setConfirmDelete(true)} aria-label="Eliminar tarea"
-                className="rounded-md text-red-600 border border-red-200 text-sm font-medium px-4 py-2.5 hover:bg-red-50 transition-colors">
-                <Trash2 className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-        </form>
-        {onDelete && (
-          <ConfirmModal
-            open={confirmDelete}
-            title="¿Eliminar esta tarea?"
-            message="Esta acción no se puede deshacer."
-            confirmLabel="Eliminar"
-            variant="danger"
-            onConfirm={async () => {
-              await Promise.resolve(onDelete(task.id));
-              setConfirmDelete(false);
-            }}
-            onCancel={() => setConfirmDelete(false)}
-          />
-        )}
-        {/* Task info */}
-        <div className="px-4 pb-4 border-t border-slate-100 pt-3">
-          <p className="text-[11px] text-slate-400">
-            Creada: {new Date(task.createdAt).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}
-          </p>
-        </div>
       </div>
     </div>
   );

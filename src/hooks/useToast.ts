@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 
 export type ToastVariant = "success" | "error" | "info";
 
@@ -16,13 +16,23 @@ export interface Toast {
 
 export function useToast() {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  // Timers vivos, para cancelarlos al desmontar y no hacer setState
+  // sobre un componente que ya no existe.
+  const timers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+
+  useEffect(() => {
+    const set = timers.current;
+    return () => { set.forEach(clearTimeout); set.clear(); };
+  }, []);
 
   const showToast = useCallback((message: string, variant: ToastVariant = "success", action?: ToastAction) => {
     const id = `t-${Date.now()}-${Math.random()}`;
     setToasts(prev => [...prev, { id, message, variant, action }]);
-    setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
+    const t = setTimeout(() => {
+      timers.current.delete(t);
+      setToasts(prev => prev.filter(x => x.id !== id));
     }, action ? 6000 : 3500); // con acción (Deshacer) damos más margen
+    timers.current.add(t);
   }, []);
 
   const dismissToast = useCallback((id: string) => {

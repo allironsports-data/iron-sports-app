@@ -15,4 +15,13 @@ describe('csv', () => {
   it('los huecos quedan vacíos, no dicen «null»', () => {
     expect(filaCsv([null, undefined, ''])).toBe(';;')
   })
+
+  it('neutraliza fórmulas: = + - @ al inicio llevan comilla simple delante', () => {
+    expect(filaCsv(['=HYPERLINK("x")'])).toBe(`"'=HYPERLINK(""x"")"`)
+    expect(filaCsv(['+1', '-cmd', '@SUM'])).toBe(`'+1;'-cmd;'@SUM`)
+  })
+
+  it('los números negativos de verdad no se tocan', () => {
+    expect(filaCsv([-3, -0.5, 'texto normal'])).toBe('-3;-0.5;texto normal')
+  })
 })

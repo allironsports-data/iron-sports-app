@@ -125,6 +125,20 @@ function logFetchError(tabla: string, error: unknown, leidas: number) {
   console.error(`[db] Fallo leyendo ${tabla} (se habían leído ${leidas} filas):`, error)
 }
 
+/** 42P01 = «relation does not exist»: la tabla aún no está migrada. */
+function esTablaInexistente(error: unknown): boolean {
+  return (error as { code?: string } | null)?.code === '42P01'
+}
+
+// Para los fetchers de tablas opcionales: si la tabla no existe se devuelve
+// [] (la app funciona sin ella); cualquier otro fallo se propaga para que
+// App.tsx avise de la carga incompleta en vez de mostrar una lista corta.
+function fallaOTablaVacia<T>(tabla: string, error: unknown, leidas: number): T[] {
+  if (esTablaInexistente(error)) return []
+  logFetchError(tabla, error, leidas)
+  throw error
+}
+
 // ⚠ Supabase corta en 1000 filas SIN avisar. Cualquier lectura de una tabla
 // que pueda crecer tiene que ir paginada. Esto lo hace en una línea:
 //
@@ -202,20 +216,29 @@ export async function deletePlayers(ids: string[]): Promise<void> {
 }
 
 export async function assignManagerToPlayers(playerIds: string[], managerId: string): Promise<void> {
-  // Sets managerId as manager 1 (index 0), preserves manager 2 (index 1) if it exists
-  const { data, error } = await supabase
-    .from('players')
-    .select('id, managed_by')
-    .in('id', playerIds)
-  if (error) throw error
+  // Sets managerId as manager 1 (index 0), preserves manager 2 (index 1) if it exists.
+  // En lotes de 200: un .in() con cientos de ids se pasa del límite de la URL
+  // y el select devolvía 1000 filas como mucho sin avisar.
+  const LOTE = 200
+  for (let i = 0; i < playerIds.length; i += LOTE) {
+    const ids = playerIds.slice(i, i + LOTE)
+    const { data, error } = await supabase
+      .from('players')
+      .select('id, managed_by')
+      .in('id', ids)
+    if (error) throw error
 
-  const updates = (data ?? []).map((row: Record<string, unknown>) => {
-    const current: string[] = (row.managed_by as string[]) ?? []
-    const manager2 = current[1] ?? null
-    const updated = manager2 ? [managerId, manager2] : [managerId]
-    return supabase.from('players').update({ managed_by: updated }).eq('id', row.id)
-  })
-  await Promise.all(updates)
+    const results = await Promise.all((data ?? []).map((row: Record<string, unknown>) => {
+      const current: string[] = (row.managed_by as string[]) ?? []
+      const manager2 = current[1] ?? null
+      const updated = manager2 ? [managerId, manager2] : [managerId]
+      return supabase.from('players').update({ managed_by: updated }).eq('id', row.id)
+    }))
+    // Antes los errores de los updates se tragaban: la UI decía «asignado»
+    // aunque alguno hubiera fallado.
+    const failed = results.find(r => r.error)
+    if (failed?.error) throw failed.error
+  }
 }
 
 // ── TASKS ────────────────────────────────────────────────────
@@ -718,15 +741,19 @@ export async function createNegotiation(n: Omit<ClubNegotiation, 'id' | 'created
   return dbToNegotiation(data)
 }
 
-export async function updateNegotiation(n: ClubNegotiation): Promise<void> {
-  const { error } = await supabase.from('club_negotiations').update({
+// Devuelve la fila guardada para que el estado local refleje el updated_at
+// real (antes se quedaba con el antiguo hasta el siguiente refetch).
+export async function updateNegotiation(n: ClubNegotiation): Promise<ClubNegotiation> {
+  const { data, error } = await supabase.from('club_negotiations').update({
     need_position: n.needPosition ?? null,
     status: n.status,
     ais_manager: n.aisManager ?? null,
     notes: n.notes ?? null,
     updates: n.updates ?? [],
-  }).eq('id', n.id)
+    updated_at: new Date().toISOString(),
+  }).eq('id', n.id).select().single()
   if (error) throw error
+  return dbToNegotiation(data)
 }
 
 export async function deleteNegotiation(id: string): Promise<void> {
@@ -922,15 +949,17 @@ export async function fetchMatchPlayers(): Promise<ScoutingMatchPlayer[]> {
         .select('*')
         .order('created_at', { ascending: true })
         .order('id').range(from, from + pageSize - 1)
-      if (error) { logFetchError('scouting/partidos', error, all.length); return all }
+      if (error) return fallaOTablaVacia<ScoutingMatchPlayer>('scouting_match_players', error, all.length)
       const page = (data ?? []).map(dbToMatchPlayer)
       all.push(...page)
       if (page.length < pageSize) break
       from += pageSize
     }
     return all
-  } catch {
-    return []
+  } catch (e) {
+    // el fallo de página ya se ha registrado arriba; solo evitamos relanzar «tabla inexistente»
+    if (esTablaInexistente(e)) return []
+    throw e
   }
 }
 
@@ -983,15 +1012,17 @@ export async function fetchMatchScouts(): Promise<ScoutingMatchScout[]> {
         .select('*')
         .order('created_at', { ascending: true })
         .order('id').range(from, from + pageSize - 1)
-      if (error) { logFetchError('scouting/partidos', error, all.length); return all }
+      if (error) return fallaOTablaVacia<ScoutingMatchScout>('scouting_match_scouts', error, all.length)
       const page = (data ?? []).map(dbToMatchScout)
       all.push(...page)
       if (page.length < pageSize) break
       from += pageSize
     }
     return all
-  } catch {
-    return []
+  } catch (e) {
+    // el fallo de página ya se ha registrado arriba; solo evitamos relanzar «tabla inexistente»
+    if (esTablaInexistente(e)) return []
+    throw e
   }
 }
 
@@ -1042,11 +1073,14 @@ export async function mergeScoutingMatches(
     if (error) throw error
   }
 
-  // 2) postpartidos (la tabla puede no existir aún)
-  try {
-    await supabase.from('postpartidos')
+  // 2) postpartidos (la tabla puede no existir aún → 42P01, se ignora).
+  // Cualquier otro error se lanza: antes se perdían postpartidos en silencio
+  // al borrar los partidos víctima.
+  {
+    const { error } = await supabase.from('postpartidos')
       .update({ match_id: survivor.id }).in('match_id', victimIds)
-  } catch { /* sin tabla postpartidos: nada que mover */ }
+    if (error && !esTablaInexistente(error)) throw error
+  }
 
   // 3) jugadores vinculados, sin duplicar
   {
@@ -1115,15 +1149,17 @@ export async function fetchScoutingMatches(): Promise<ScoutingMatch[]> {
         .select('*')
         .order('date', { ascending: false })
         .order('id').range(from, from + PAGE - 1)
-      if (error) { logFetchError('tabla opcional (¿migración pendiente?)', error, all.length); return all }
+      if (error) return fallaOTablaVacia<ScoutingMatch>('scouting_matches', error, all.length)
       const rows = (data ?? []).map(dbToScoutingMatch)
       all.push(...rows)
       if (rows.length < PAGE) break   // last page
       from += PAGE
     }
     return all
-  } catch {
-    return []
+  } catch (e) {
+    // el fallo de página ya se ha registrado arriba; solo evitamos relanzar «tabla inexistente»
+    if (esTablaInexistente(e)) return []
+    throw e
   }
 }
 
@@ -1200,15 +1236,17 @@ export async function fetchFirmasEntries(): Promise<FirmasEntry[]> {
       const { data, error } = await supabase
         .from('captacion_firmas').select('*').order('sort_pos')
         .order('id').range(from, from + pageSize - 1)
-      if (error) { logFetchError('tabla opcional (¿migración pendiente?)', error, all.length); return all }
+      if (error) return fallaOTablaVacia<FirmasEntry>('captacion_firmas', error, all.length)
       const page = (data ?? []).map(dbToFirmasEntry)
       all.push(...page)
       if (page.length < pageSize) break
       from += pageSize
     }
     return all
-  } catch {
-    return []
+  } catch (e) {
+    // el fallo de página ya se ha registrado arriba; solo evitamos relanzar «tabla inexistente»
+    if (esTablaInexistente(e)) return []
+    throw e
   }
 }
 
@@ -1364,7 +1402,7 @@ export async function fetchBoulemaPlayers(): Promise<BoulemaPlayer[]> {
     while (true) {
       const { data, error } = await supabase.from('boulema_players').select('*').order('full_name')
         .order('id').range(from, from + pageSize - 1)
-      if (error) { logFetchError('boulema_players', error, all.length); return all }
+      if (error) return fallaOTablaVacia<BoulemaPlayer>('boulema_players', error, all.length)
       const page = (data ?? []).map(dbToBoulemaPlayer)
       all.push(...page)
       if (page.length < pageSize) break
@@ -1372,8 +1410,9 @@ export async function fetchBoulemaPlayers(): Promise<BoulemaPlayer[]> {
     }
     return all
   } catch (e) {
-    logFetchError('boulema_players', e, all.length)
-    return all
+    // el fallo de página ya se ha registrado arriba; solo evitamos relanzar «tabla inexistente»
+    if (esTablaInexistente(e)) return []
+    throw e
   }
 }
 
@@ -1633,8 +1672,10 @@ export async function fetchClubZonas(): Promise<ClubZona[]> {
   try {
     return await leerTodo<ClubZona>('zonas de clubes (¿migración pendiente?)', (d, h) =>
       supabase.from('scouting_club_zonas').select('club, nombre, zona').order('club').range(d, h))
-  } catch {
-    return []
+  } catch (e) {
+    // leerTodo ya lo ha registrado en consola
+    if (esTablaInexistente(e)) return []
+    throw e
   }
 }
 
@@ -1692,15 +1733,17 @@ export async function fetchEquipos(): Promise<Equipo[]> {
     while (true) {
       const { data, error } = await supabase.from('scouting_equipos').select('*')
         .order('nombre').range(from, from + PAGE - 1)
-      if (error) { logFetchError('catálogo de equipos (¿migración pendiente?)', error, all.length); return all }
+      if (error) return fallaOTablaVacia<Equipo>('scouting_equipos', error, all.length)
       const page = (data ?? []).map(r => dbToEquipo(r as Record<string, unknown>))
       all.push(...page)
       if (page.length < PAGE) break
       from += PAGE
     }
     return all
-  } catch {
-    return []
+  } catch (e) {
+    // el fallo de página ya se ha registrado arriba; solo evitamos relanzar «tabla inexistente»
+    if (esTablaInexistente(e)) return []
+    throw e
   }
 }
 
@@ -1748,7 +1791,10 @@ export async function renombrarEquipo(opts: {
   const { nombreViejo, nombreNuevo, club, playerIds, matchIdsLocal, matchIdsVisitante, quien } = opts
 
   // 1 · la fila del catálogo (nombre es la clave primaria: se copia y se borra)
-  const { data: viejo } = await supabase.from('scouting_equipos').select('*').eq('nombre', nombreViejo).maybeSingle()
+  // Si el select falla, `viejo` sería null y se perderían relevante/cubierto/
+  // notas al copiar: mejor parar aquí.
+  const { data: viejo, error: e0 } = await supabase.from('scouting_equipos').select('*').eq('nombre', nombreViejo).maybeSingle()
+  if (e0) throw e0
   const fila = {
     ...(viejo ?? {}),
     nombre: nombreNuevo,
@@ -1759,7 +1805,9 @@ export async function renombrarEquipo(opts: {
   const { error: e1 } = await supabase.from('scouting_equipos').upsert(fila, { onConflict: 'nombre' })
   if (e1) throw e1
   if (viejo && nombreViejo !== nombreNuevo) {
-    await supabase.from('scouting_equipos').delete().eq('nombre', nombreViejo)
+    // Sin comprobar el error quedaban dos filas (vieja y nueva) sin avisar.
+    const { error: e2 } = await supabase.from('scouting_equipos').delete().eq('nombre', nombreViejo)
+    if (e2) throw e2
   }
 
   // 2 · jugadores y partidos, de golpe (no uno a uno)

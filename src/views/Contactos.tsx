@@ -72,11 +72,33 @@ function saveJSON(key: string, v: unknown) {
   localStorage.setItem(key, JSON.stringify(v))
 }
 
-function generateId(c: Omit<Contact, 'id'>): string {
-  const str = `${c.name}|${c.team}|${c.region}|${c.role}`
-  let h = 0
-  for (let i = 0; i < str.length; i++) { h = ((h << 5) - h) + str.charCodeAt(i); h |= 0 }
-  return 'custom_' + Math.abs(h).toString(16).padStart(8, '0')
+// Id aleatorio para contactos nuevos. Antes se derivaba de nombre|equipo|…
+// y dos contactos iguales (o el mismo dado de alta dos veces) chocaban de id:
+// uno pisaba al otro y el borrado se llevaba a los dos.
+function generateId(): string {
+  return 'custom_' + crypto.randomUUID()
+}
+
+// Lo que sale del formulario. Un campo vaciado se guarda como `null`, no como
+// `undefined`: JSON.stringify elimina los undefined y al recargar volvía el
+// valor original del contacto estático.
+type ContactDraft = { [K in keyof Omit<Contact, 'id'>]?: Contact[K] | null } & { region: string }
+
+/** Quita los null (para contactos extra, que se guardan enteros). */
+function sinNulos(d: ContactDraft): Omit<Contact, 'id'> {
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(d)) if (v !== null && v !== undefined) out[k] = v
+  return out as unknown as Omit<Contact, 'id'>
+}
+
+/** Aplica una corrección sobre un contacto estático; null = campo borrado. */
+function aplicarOverride(c: Contact, o: ContactDraft): Contact {
+  const merged: Record<string, unknown> = { ...c }
+  for (const [k, v] of Object.entries(o)) {
+    if (v === null) delete merged[k]
+    else if (v !== undefined) merged[k] = v
+  }
+  return merged as unknown as Contact
 }
 
 const normalise = normClave
@@ -112,7 +134,7 @@ export function Contactos({ onBack }: { onBack: () => void }) {
 
   // ── Persistent data ──
   const [extraContacts, setExtraContacts] = useState<Contact[]>(() => loadJSON(LS_EXTRA, []))
-  const [overrides,     setOverrides]     = useState<Record<string, Partial<Contact>>>(() => loadJSON(LS_OVERRIDES, {}))
+  const [overrides,     setOverrides]     = useState<Record<string, ContactDraft>>(() => loadJSON(LS_OVERRIDES, {}))
   const [favorites,     setFavorites]     = useState<Set<string>>(() => loadSet(LS_FAVORITES))
   const [deleted,       setDeleted]       = useState<Set<string>>(() => loadSet(LS_DELETED))
 
@@ -149,7 +171,7 @@ export function Contactos({ onBack }: { onBack: () => void }) {
   const ALL_CONTACTS = useMemo(() => {
     const base = STATIC_CONTACTS
       .filter(c => !EXCLUDED_REGIONS.has(c.region ?? '') && !deleted.has(c.id))
-      .map(c => overrides[c.id] ? { ...c, ...overrides[c.id] } : c)
+      .map(c => overrides[c.id] ? aplicarOverride(c, overrides[c.id]) : c)
     const extra = extraContacts.filter(c => !deleted.has(c.id))
     return [...base, ...extra]
   }, [STATIC_CONTACTS, extraContacts, overrides, deleted])
@@ -256,12 +278,16 @@ export function Contactos({ onBack }: { onBack: () => void }) {
   }, [ALL_CONTACTS])
 
   // ── Auto-expand when region selected ──
+  // Solo al cambiar de región: si dependiera de teamsByRegion, cada alta o
+  // edición volvía a desplegar todos los equipos que el usuario había cerrado.
+  const teamsByRegionRef = useRef(teamsByRegion)
+  useEffect(() => { teamsByRegionRef.current = teamsByRegion }, [teamsByRegion])
   useEffect(() => {
     if (!selectedRegion) return
     const keys = new Set<string>()
-    for (const t of teamsByRegion.get(selectedRegion) ?? []) keys.add(`${selectedRegion}::${t}`)
+    for (const t of teamsByRegionRef.current.get(selectedRegion) ?? []) keys.add(`${selectedRegion}::${t}`)
     setExpandedTeams(keys)
-  }, [selectedRegion, teamsByRegion])
+  }, [selectedRegion])
 
   const allGroupedKeys = useMemo(() => {
     const keys = new Set<string>()
@@ -293,12 +319,17 @@ export function Contactos({ onBack }: { onBack: () => void }) {
 
   // ── Delete ──
   function confirmDelete(ids: string[]) {
-    const newDeleted = new Set([...deleted, ...ids])
-    setDeleted(newDeleted)
-    saveSet(LS_DELETED, newDeleted)
-    // If extra contact, also remove from extra
-    const extraIds = new Set(ids)
-    const newExtra = extraContacts.filter(c => !extraIds.has(c.id))
+    // Los contactos extra se quitan de su lista y punto: meterlos en
+    // LS_DELETED solo hacía crecer esa lista para siempre.
+    const extraIds = new Set(extraContacts.map(c => c.id))
+    const staticIds = ids.filter(id => !extraIds.has(id))
+    if (staticIds.length) {
+      const newDeleted = new Set([...deleted, ...staticIds])
+      setDeleted(newDeleted)
+      saveSet(LS_DELETED, newDeleted)
+    }
+    const borrar = new Set(ids)
+    const newExtra = extraContacts.filter(c => !borrar.has(c.id))
     if (newExtra.length !== extraContacts.length) {
       setExtraContacts(newExtra)
       saveJSON(LS_EXTRA, newExtra)
@@ -331,18 +362,18 @@ export function Contactos({ onBack }: { onBack: () => void }) {
   function clearSelection() { setSelected(new Set()) }
 
   // ── Add / Edit contact ──
-  function handleSave(data: Omit<Contact, 'id'>) {
+  function handleSave(data: ContactDraft) {
     if (!modal) return
     if (modal.mode === 'add') {
-      const id = generateId(data)
-      const nc: Contact = { ...data, id }
+      const id = generateId()
+      const nc: Contact = { ...sinNulos(data), id }
       const updated = [...extraContacts, nc]
       setExtraContacts(updated)
       saveJSON(LS_EXTRA, updated)
     } else if (modal.contact) {
       const { id } = modal.contact
       if (extraContacts.some(c => c.id === id)) {
-        const updated = extraContacts.map(c => c.id === id ? { ...data, id } : c)
+        const updated = extraContacts.map(c => c.id === id ? { ...sinNulos(data), id } : c)
         setExtraContacts(updated)
         saveJSON(LS_EXTRA, updated)
       } else {
@@ -608,9 +639,9 @@ export function Contactos({ onBack }: { onBack: () => void }) {
                     <div className="flex-1 h-px bg-slate-100" />
                   </div>
                   <div className="bg-white border border-slate-200 rounded-lg overflow-hidden divide-y divide-slate-50">
-                    {contacts.map((c, i) => (
+                    {contacts.map(c => (
                       <AlphaContactRow
-                        key={i}
+                        key={c.id}
                         contact={c}
                         isSelected={selected.has(c.id)}
                         isFavorite={favorites.has(c.id)}
@@ -715,9 +746,9 @@ export function Contactos({ onBack }: { onBack: () => void }) {
 
                               {isOpen && !hasOnlyPlaceholder && (
                                 <div className="border-t border-slate-100 divide-y divide-slate-50">
-                                  {realContacts.map((c, i) => (
+                                  {realContacts.map(c => (
                                     <ContactRow
-                                      key={i}
+                                      key={c.id}
                                       contact={c}
                                       isFavorite={favorites.has(c.id)}
                                       onToggleFavorite={() => toggleFavorite(c.id)}
@@ -960,7 +991,7 @@ function ContactFormModal({
   regions: string[]
   teamsByRegion: Map<string, Set<string>>
   roles: string[]
-  onSave: (data: Omit<Contact, 'id'>) => void
+  onSave: (data: ContactDraft) => void
   onClose: () => void
 }) {
   const [name,    setName]    = useState(contact?.name    ?? '')
@@ -996,15 +1027,16 @@ function ContactFormModal({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    // null = «campo borrado» (ver ContactDraft)
     onSave({
-      name:     name  || undefined,
-      role:     role  || undefined,
-      phone1:   phone1 || undefined,
-      phone2:   phone2 || undefined,
+      name:     name  || null,
+      role:     role  || null,
+      phone1:   phone1 || null,
+      phone2:   phone2 || null,
       region:   noClub ? 'Sin club' : (region || 'Sin clasificar'),
-      team:     noClub ? undefined : (team || undefined),
-      tier:     tier  || undefined,
-      _noClub:  noClub || undefined,
+      team:     noClub ? null : (team || null),
+      tier:     tier  || null,
+      _noClub:  noClub || null,
     })
   }
 

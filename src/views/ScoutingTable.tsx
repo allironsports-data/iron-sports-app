@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import type { ScoutingPlayer, ScoutingAssessment } from '../types'
 import * as db from '../lib/db'
 import { Save, X, Check } from 'lucide-react'
@@ -134,7 +134,9 @@ export function ScoutingTable({ players, onUpdatePlayer, showToast }: Props) {
   const totalPages = Math.ceil(players.length / PAGE_SIZE)
   const pagePlayers = players.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
 
-  const getPlayer = (id: string) => pendingChanges.get(id) ?? players.find(p => p.id === id)!
+  // Índice por id: evita un players.find por cada celda pintada
+  const playersById = useMemo(() => new Map(players.map(p => [p.id, p])), [players])
+  const getPlayer = (id: string) => pendingChanges.get(id) ?? playersById.get(id)!
 
   const startEdit = (playerId: string, field: string) => {
     const col = columns.find(c => c.key === field)!
@@ -190,7 +192,7 @@ export function ScoutingTable({ players, onUpdatePlayer, showToast }: Props) {
     setSaving(true)
     try {
       for (const p of changes) {
-        const original = players.find(x => x.id === p.id)
+        const original = playersById.get(p.id)
         // Si cambió el assessment, registrar cuándo (Conclusiones > Movimientos)
         const withTs: ScoutingPlayer = p.assessment !== original?.assessment
           ? { ...p, assessmentUpdatedAt: new Date().toISOString() }

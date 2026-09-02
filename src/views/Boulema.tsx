@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import {
   Search, X, Plus, LogOut, Trash2, Send,
   FileText, Pencil, Inbox, TrendingUp, Eye, Users,
@@ -10,6 +10,7 @@ import { ToastStack } from '../components/ToastStack'
 import { useToast } from '../hooks/useToast'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import { useIsDesktop } from '../hooks/useIsDesktop'
+import { useDebounce } from '../hooks/useDebounce'
 import * as db from '../lib/db'
 
 type ShowToast = (message: string, variant?: 'success' | 'error' | 'info') => void
@@ -710,10 +711,28 @@ export function Boulema({
   const [respondingPeticion, setRespondingPeticion] = useState<BoulemaPeticion | null>(null)
   const [confirmDeletePeticion, setConfirmDeletePeticion] = useState<string | null>(null)
   const [bouSearch, setBouSearch] = useState('')
+  const bouSearchDeb = useDebounce(bouSearch)
   const [bouPosFilter, setBouPosFilter] = useState('all')
   const [bouYearFilter, setBouYearFilter] = useState('all')
   const [bouOfferedFilter, setBouOfferedFilter] = useState('all')
   const [expandedNoteIds, setExpandedNoteIds] = useState<Set<string>>(new Set())
+
+  // Índices para la lista de peticiones: antes cada tarjeta hacía varios `find`/`filter`
+  // lineales sobre todos los informes y jugadores en cada render.
+  const reportById = useMemo(() => new Map(scoutingReports.map(r => [r.id, r])), [scoutingReports])
+  const playerByName = useMemo(
+    () => new Map(scoutingPlayers.map(sp => [sp.fullName.trim().toLowerCase(), sp])),
+    [scoutingPlayers]
+  )
+  const reportsByPlayer = useMemo(() => {
+    const m = new Map<string, ScoutingReport[]>()
+    for (const r of scoutingReports) {
+      const l = m.get(r.playerId)
+      if (l) l.push(r); else m.set(r.playerId, [r])
+    }
+    return m
+  }, [scoutingReports])
+
   function toggleNotes(id: string) {
     setExpandedNoteIds(prev => {
       const next = new Set(prev)
@@ -806,8 +825,8 @@ export function Boulema({
             if (bouPosFilter !== 'all' && p.position !== bouPosFilter) return false
             if (bouYearFilter !== 'all' && p.birthYear !== bouYearFilter) return false
             if (bouOfferedFilter !== 'all' && p.offeredBy !== bouOfferedFilter) return false
-            if (bouSearch.trim()) {
-              const q = bouSearch.toLowerCase()
+            if (bouSearchDeb.trim()) {
+              const q = bouSearchDeb.toLowerCase()
               if (
                 !p.playerName.toLowerCase().includes(q) &&
                 !(p.team?.toLowerCase().includes(q)) &&
@@ -928,15 +947,12 @@ export function Boulema({
                   const isConfirming = confirmDeletePeticion === p.id
                   // Reports explicitly linked via reportIds
                   const explicitLinkedReports = p.reportIds
-                    .map(id => scoutingReports.find(r => r.id === id))
+                    .map(id => reportById.get(id))
                     .filter((r): r is NonNullable<typeof r> => !!r)
                   // Auto-detect: find any report for the same player (by name) written by someone in requestedFrom
-                  const matchingScoutPlayer = scoutingPlayers.find(
-                    sp => sp.fullName.trim().toLowerCase() === p.playerName.trim().toLowerCase()
-                  )
+                  const matchingScoutPlayer = playerByName.get(p.playerName.trim().toLowerCase())
                   const autoDetectedReports = matchingScoutPlayer
-                    ? scoutingReports.filter(r =>
-                        r.playerId === matchingScoutPlayer.id &&
+                    ? (reportsByPlayer.get(matchingScoutPlayer.id) ?? []).filter(r =>
                         r.persona != null && p.requestedFrom.includes(r.persona) &&
                         !explicitLinkedReports.some(lr => lr.id === r.id)
                       )

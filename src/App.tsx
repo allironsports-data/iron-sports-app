@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, lazy } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, lazy } from 'react'
 import { useAuth } from './contexts/AuthContext'
 import type { Player, Task, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchScout, BoulemaPeticion, MemberStatus, Postpartido, FirmasEntry, BoulemaPlayer } from './types'
 import * as db from './lib/db'
@@ -68,12 +68,21 @@ function Spinner() {
 }
 
 export default function App() {
-  const { profileMissing, user, profile, loading, signIn, signOut } = useAuth()
+  const { profileMissing, profileError, refreshProfile, user, profile, loading, signIn, signOut } = useAuth()
 
   const [players, setPlayers] = useState<Player[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [profiles, setProfiles] = useState<Profile[]>([])
   const profilesRef = useRef<Profile[]>([])
+  // Refs con el estado actual para los handlers de realtime. Antes leían el
+  // estado con setX(prev => { ...avisos...; return prev }): un updater debe
+  // ser puro y con StrictMode React lo ejecuta dos veces → avisos duplicados.
+  const playersRef = useRef<Player[]>([])
+  const tasksRef = useRef<Task[]>([])
+  const clubsRef = useRef<Club[]>([])
+  const scoutingPlayersRef = useRef<ScoutingPlayer[]>([])
+  const scoutingMatchesRef = useRef<ScoutingMatch[]>([])
+  const firmasEntriesRef = useRef<FirmasEntry[]>([])
   const [dataLoading, setDataLoading] = useState(false)
   const [dataError, setDataError] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
@@ -136,6 +145,21 @@ export default function App() {
   const [clubZonas, setClubZonas] = useState<Record<string, Zona>>({})
   // Catálogo de equipos (pestaña Captación → Equipos)
   const [equipos, setEquipos] = useState<db.Equipo[]>([])
+
+  useEffect(() => { playersRef.current = players }, [players])
+  useEffect(() => { tasksRef.current = tasks }, [tasks])
+  useEffect(() => { clubsRef.current = clubs }, [clubs])
+  useEffect(() => { scoutingPlayersRef.current = scoutingPlayers }, [scoutingPlayers])
+  useEffect(() => { scoutingMatchesRef.current = scoutingMatches }, [scoutingMatches])
+  useEffect(() => { firmasEntriesRef.current = firmasEntries }, [firmasEntries])
+
+  // Tareas «solo admin»: quien no es admin no debe verlas en ningún sitio
+  // (ficha de jugador, ficha de miembro, búsqueda global). Dashboard ya
+  // filtra por su cuenta, así que ahí se le sigue pasando `tasks`.
+  const tasksVisibles = useMemo(
+    () => profile?.is_admin ? tasks : tasks.filter(t => !t.adminOnly),
+    [tasks, profile?.is_admin],
+  )
 
   // Guard anti-bucle de la sincronización Firmar ⇄ Tareas.
   // DEBE declararse aquí arriba: es un hook y no puede ir después de los
@@ -200,11 +224,26 @@ export default function App() {
     if (window.location.hash !== h) window.location.hash = h
   }, [mainSection, selectedPlayerId, selectedClubId, selectedProfileId, showContacts])
 
+  // Cuenta «solo Captación»: el router de hash no debe abrir jugador/club/
+  // miembro ni otras secciones aunque alguien pegue el enlace.
+  const captacionOnlyRef = useRef(false)
+  useEffect(() => {
+    captacionOnlyRef.current = !!profile?.captacion_only
+    if (profile?.captacion_only) {
+      setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(null)
+      setMainSection('captacion')
+    }
+  }, [profile?.captacion_only])
+
   useEffect(() => {
     const apply = () => {
       const h = window.location.hash
       if (!h || h === '#contactos') return
       const m = h.match(/^#\/(jugador|club|miembro)\/(.+)$/)
+      if (captacionOnlyRef.current) {
+        if (h !== '#/captacion') setMainSection('captacion')
+        return
+      }
       if (m) {
         if (m[1] === 'jugador') { setSelectedProfileId(null); setSelectedPlayerId(m[2]) }
         else if (m[1] === 'club') { setSelectedPlayerId(null); setSelectedProfileId(null); setSelectedClubId(m[2]); setMainSection('distribucion') }
@@ -351,13 +390,10 @@ export default function App() {
         const title = row.title as string
         // (el canal data-sync ya recarga las tareas: no duplicamos la lectura)
         // Check if player is managed by current user
-        setPlayers((prev) => {
-          const p = prev.find((pl) => pl.id === playerId)
-          if (p && p.managedBy.includes(profile.id)) {
-            addNotification(`Nueva tarea: "${title}" para ${p.name}`, 'task_new', playerId)
-          }
-          return prev
-        })
+        const p = playersRef.current.find((pl) => pl.id === playerId)
+        if (p && p.managedBy.includes(profile.id)) {
+          addNotification(`Nueva tarea: "${title}" para ${p.name}`, 'task_new', playerId)
+        }
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tasks' }, (payload: { new: Record<string, unknown> }) => {
         const row = payload.new as Record<string, unknown>
@@ -366,13 +402,10 @@ export default function App() {
         const status = row.status as string
         // (el canal data-sync ya recarga las tareas: no duplicamos la lectura)
         if (status === 'completada') {
-          setPlayers((prev) => {
-            const p = prev.find((pl) => pl.id === playerId)
-            if (p && p.managedBy.includes(profile.id)) {
-              addNotification(`Tarea completada: "${title}" de ${p.name}`, 'task_done', playerId)
-            }
-            return prev
-          })
+          const p = playersRef.current.find((pl) => pl.id === playerId)
+          if (p && p.managedBy.includes(profile.id)) {
+            addNotification(`Tarea completada: "${title}" de ${p.name}`, 'task_done', playerId)
+          }
         }
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'task_comments' }, (payload: { new: Record<string, unknown> }) => {
@@ -383,24 +416,21 @@ export default function App() {
         const taskId = row.task_id as string
         const content = row.content as string
         const preview = content.length > 40 ? content.slice(0, 40) + '…' : content
-        setTasks((prev) => {
-          const task = prev.find((t) => t.id === taskId)
-          if (!task) return prev
-          // Notify if I'm the assignee or a watcher
-          const amInvolved =
-            task.assigneeId === profile.id ||
-            (task.watchers ?? []).includes(profile.id)
-          if (amInvolved) {
-            const authorProfile = profilesRef.current.find((p) => p.id === authorId)
-            const who = authorProfile?.name.split(' ')[0] ?? 'Alguien'
-            addNotification(
-              `${who} comentó en "${task.title}": ${preview}`,
-              'task_new',
-              task.playerId !== 'general' ? task.playerId : undefined
-            )
-          }
-          return prev
-        })
+        const task = tasksRef.current.find((t) => t.id === taskId)
+        if (!task) return
+        // Notify if I'm the assignee or a watcher
+        const amInvolved =
+          task.assigneeId === profile.id ||
+          (task.watchers ?? []).includes(profile.id)
+        if (amInvolved) {
+          const authorProfile = profilesRef.current.find((p) => p.id === authorId)
+          const who = authorProfile?.name.split(' ')[0] ?? 'Alguien'
+          addNotification(
+            `${who} comentó en "${task.title}": ${preview}`,
+            'task_new',
+            task.playerId !== 'general' ? task.playerId : undefined
+          )
+        }
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'scouting_match_players' }, (payload: { new: Record<string, unknown> }) => {
         // Un scout ha añadido a un jugador al campograma: si está en el pipeline
@@ -408,20 +438,14 @@ export default function App() {
         const row = payload.new as Record<string, unknown>
         const playerId = row.player_id as string
         const matchId = row.match_id as string
-        setScoutingMatches((prevM) => {
-          setFirmasEntries((prevFe) => {
-            const e = prevFe.find((x) => x.scoutingPlayerId === playerId && x.status !== 'firmado' && x.managers.includes(profile.id))
-            if (e) {
-              const m = prevM.find((x) => x.id === matchId)
-              addNotification(
-                `Firmar · ${e.playerName}: le han visto en ${m ? `${m.homeTeam} vs ${m.awayTeam}` : 'un partido'} — buen momento para llamar`,
-                'task_new'
-              )
-            }
-            return prevFe
-          })
-          return prevM
-        })
+        const e = firmasEntriesRef.current.find((x) => x.scoutingPlayerId === playerId && x.status !== 'firmado' && x.managers.includes(profile.id))
+        if (e) {
+          const m = scoutingMatchesRef.current.find((x) => x.id === matchId)
+          addNotification(
+            `Firmar · ${e.playerName}: le han visto en ${m ? `${m.homeTeam} vs ${m.awayTeam}` : 'un partido'} — buen momento para llamar`,
+            'task_new'
+          )
+        }
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'scouting_matches' }, (payload: { new: Record<string, unknown> }) => {
         // Partido nuevo: avisar a los encargados de jugadores del pipeline cuyo equipo juega
@@ -434,24 +458,19 @@ export default function App() {
         // avisos de partidos que no eran. Ahora usa la misma que Captaci\u00f3n.
         const alike = teamsAlike
         // leer estado actual sin cerrar sobre valores viejos
-        setScoutingPlayers((prevSp) => {
-          setFirmasEntries((prevFe) => {
-            prevFe
-              .filter((e) => e.status !== 'firmado' && e.managers.includes(profile.id) && e.scoutingPlayerId)
-              .forEach((e) => {
-                const sp = prevSp.find((p) => p.id === e.scoutingPlayerId)
-                if (!sp?.team) return
-                if (alike(sp.team, home) || alike(sp.team, away)) {
-                  addNotification(
-                    `Firmar · ${e.playerName}: partido nuevo de su equipo — ${home} vs ${away}${date ? ` (${date})` : ''}`,
-                    'task_new'
-                  )
-                }
-              })
-            return prevFe
+        const prevSp = scoutingPlayersRef.current
+        firmasEntriesRef.current
+          .filter((e) => e.status !== 'firmado' && e.managers.includes(profile.id) && e.scoutingPlayerId)
+          .forEach((e) => {
+            const sp = prevSp.find((p) => p.id === e.scoutingPlayerId)
+            if (!sp?.team) return
+            if (alike(sp.team, home) || alike(sp.team, away)) {
+              addNotification(
+                `Firmar · ${e.playerName}: partido nuevo de su equipo — ${home} vs ${away}${date ? ` (${date})` : ''}`,
+                'task_new'
+              )
+            }
           })
-          return prevSp
-        })
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'captacion_firmas' }, (payload: { new: Record<string, unknown> }) => {
         // Aviso a los encargados taggeados de CUALQUIER cambio en la tarjeta:
@@ -468,17 +487,17 @@ export default function App() {
         const mineJustNow = recent && last?.authorId === profile.id
         const who = recent ? (last?.author ?? '').split(' ')[0] : ''
 
-        setFirmasEntries((prevFe) => {
-          const before = prevFe.find((e) => e.id === id)
+        {
+          const before = firmasEntriesRef.current.find((e) => e.id === id)
           const wasManager = !!before?.managers.includes(profile.id)
           const isManager = managers.includes(profile.id)
 
           // Me acaban de asignar la tarjeta → aviso aunque antes no fuera mío
           if (isManager && !wasManager && before) {
             addNotification(`Pipeline · ${playerName}: te han puesto como encargado`, 'task_new')
-            return prevFe
+            return
           }
-          if (!isManager || mineJustNow) return prevFe   // no es mía, o el cambio es mío
+          if (!isManager || mineJustNow) return   // no es mía, o el cambio es mío
 
           const changes: string[] = []
           if (before) {
@@ -506,8 +525,7 @@ export default function App() {
           if (changes.length) {
             addNotification(`Pipeline · ${playerName}: ${who ? `${who} — ` : ''}${changes.join(' · ')}`, 'task_new')
           }
-          return prevFe
-        })
+        }
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'club_negotiations' }, (payload: { new: Record<string, unknown> }) => {
         const row = payload.new as Record<string, unknown>
@@ -517,26 +535,19 @@ export default function App() {
         const playerId = row.player_id as string
         const clubId = row.club_id as string
         const clubManagerAvatar = (row.ais_manager as string) ?? undefined
-        // Refrescar negociaciones en la app
-        db.fetchNegotiations().then((ng) => setNegotiations(ng))
+        // (el canal data-sync ya recarga club_negotiations: no duplicamos la lectura)
         // ¿Soy responsable del jugador o del club?
-        setPlayers((prevPlayers) => {
-          const player = prevPlayers.find((pl) => pl.id === playerId)
-          const isPlayerManager = !!player && player.managedBy.includes(profile.id)
-          setClubs((prevClubs) => {
-            const club = prevClubs.find((c) => c.id === clubId)
-            const isClubManager =
-              (!!club && club.aisManager === profile.avatar) ||
-              clubManagerAvatar === profile.avatar
-            if (isPlayerManager || isClubManager) {
-              const pName = player?.name ?? 'Un jugador'
-              const cName = club?.name ?? 'un club'
-              addNotification(`Nueva propuesta pendiente: ${pName} → ${cName}`, 'negotiation', playerId)
-            }
-            return prevClubs
-          })
-          return prevPlayers
-        })
+        const player = playersRef.current.find((pl) => pl.id === playerId)
+        const isPlayerManager = !!player && player.managedBy.includes(profile.id)
+        const club = clubsRef.current.find((c) => c.id === clubId)
+        const isClubManager =
+          (!!club && club.aisManager === profile.avatar) ||
+          clubManagerAvatar === profile.avatar
+        if (isPlayerManager || isClubManager) {
+          const pName = player?.name ?? 'Un jugador'
+          const cName = club?.name ?? 'un club'
+          addNotification(`Nueva propuesta pendiente: ${pName} → ${cName}`, 'negotiation', playerId)
+        }
       })
       .subscribe()
 
@@ -632,6 +643,32 @@ export default function App() {
   if (loading) return <Spinner />
   if (!user) return <LoginScreen onLogin={signIn} />
   if (!profile) {
+    // El perfil no se pudo leer (red, RLS…): antes se quedaba en el spinner
+    // para siempre. Ofrecemos reintentar sin tener que salir y volver a entrar.
+    if (profileError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+          <div className="max-w-sm text-center bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+            <p className="text-sm font-semibold text-slate-800">No se ha podido cargar tu perfil</p>
+            <p className="text-xs text-slate-500 mt-2">{profileError}</p>
+            <div className="mt-4 flex justify-center gap-2">
+              <button
+                onClick={() => { void refreshProfile() }}
+                className="px-4 py-2 text-xs font-bold bg-primary text-white rounded-lg hover:bg-primary/90"
+              >
+                Reintentar
+              </button>
+              <button
+                onClick={signOut}
+                className="px-4 py-2 text-xs font-bold bg-slate-800 text-white rounded-lg hover:bg-slate-700"
+              >
+                Volver al login
+              </button>
+            </div>
+          </div>
+        </div>
+      )
+    }
     // Autenticado pero sin fila en profiles (o aún cargando): sin esto, la
     // cuenta "entra y vuelve a salirse" sin ninguna pista.
     return profileMissing ? (
@@ -857,8 +894,10 @@ export default function App() {
     return saved
   }
   const handleUpdateNegotiation = async (n: ClubNegotiation) => {
-    await db.updateNegotiation(n)
-    setNegotiations(prev => prev.map(x => x.id === n.id ? n : x))
+    // La fila devuelta trae el updated_at real; antes el estado local se
+    // quedaba con el viejo hasta el siguiente refetch.
+    const saved = await db.updateNegotiation(n)
+    setNegotiations(prev => prev.map(x => x.id === n.id ? saved : x))
   }
   const handleDeleteNegotiation = async (id: string) => {
     await db.deleteNegotiation(id)
@@ -1027,7 +1066,14 @@ export default function App() {
         const saved = await handleAddTask(firmasActionTaskDraft(f))
         firmasSyncGuard.current = false
         const updated = { ...f, nextActionTaskId: saved.id }
-        await db.updateFirmasEntry(updated)
+        try {
+          await db.updateFirmasEntry(updated)
+        } catch (err) {
+          // Si no se puede enlazar la tarea con la tarjeta, la borramos: si no,
+          // cada backfill creaba otra tarea huérfana para la misma acción.
+          await handleDeleteTask(saved.id).catch(console.error)
+          throw err
+        }
         setFirmasEntries(prev => prev.map(x => x.id === f.id ? updated : x))
         n++
       } catch (err) {
@@ -1143,7 +1189,7 @@ export default function App() {
           scoutingPlayers={scoutingPlayers}
           firmasEntries={firmasEntries}
           clubs={clubs}
-          tasks={tasks}
+          tasks={tasksVisibles}
           onClose={() => setSearchOpen(false)}
           onOpenPlayer={(id) => navigateToPlayer(id, false)}
           onOpenScoutingPlayer={(id) => { setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(null); setCaptacionOpenPlayerId(id); setMainSection('captacion') }}
@@ -1156,6 +1202,61 @@ export default function App() {
   )
 
   // ── routing ─────────────────────────────────────────────────
+
+  // Cuenta «solo Captación»: se resuelve ANTES de jugador/club/miembro/boulema
+  // para que ninguna de esas ramas pueda enseñarle nada por un id guardado en
+  // sessionStorage o en el hash. Sin extras que naveguen fuera (bottom nav,
+  // búsqueda global); solo el indicador de guardado.
+  const captacionNode = (
+    <Captacion
+      scoutingPlayers={scoutingPlayers}
+      scoutingReports={scoutingReports}
+      scoutingMatches={scoutingMatches}
+      profiles={profiles}
+      currentProfile={profile}
+      onBack={() => { if (!profile.captacion_only) setMainSection('tareas') }}
+      onGoToSection={(s) => { if (!profile.captacion_only) setMainSection(s) }}
+      onLogout={signOut}
+      onAdmin={profile.is_admin && !profile.captacion_only ? () => { setMainSection('tareas'); setShowAdmin(true) } : undefined}
+      onAddPlayer={handleAddScoutingPlayer}
+      onUpdatePlayer={handleUpdateScoutingPlayer}
+      onDeletePlayer={handleDeleteScoutingPlayer}
+      onAddReport={handleAddScoutingReport}
+      onUpdateReport={handleUpdateScoutingReport}
+      onDeleteReport={handleDeleteScoutingReport}
+      onAddMatch={handleAddScoutingMatch}
+      onUpdateMatch={handleUpdateScoutingMatch}
+      onDeleteMatch={handleDeleteScoutingMatch}
+      matchPlayers={matchPlayers}
+      onAddMatchPlayer={handleAddMatchPlayer}
+      onRemoveMatchPlayer={handleRemoveMatchPlayer}
+      matchScouts={matchScouts}
+      onAddMatchScout={handleAddMatchScout}
+      onRemoveMatchScout={handleRemoveMatchScout}
+      onSetMatchScoutStatus={handleSetMatchScoutStatus}
+      onSetMatchScoutMode={handleSetMatchScoutMode}
+      openPlayerId={captacionOpenPlayerId}
+      onOpenPlayerConsumed={() => setCaptacionOpenPlayerId(null)}
+      openFirmasEntryId={captacionOpenFirmasId}
+      onOpenFirmasEntryConsumed={() => setCaptacionOpenFirmasId(null)}
+      players={players}
+      onCreatePlayer={handleAddPlayer}
+      boulemaPeticiones={boulemaPeticiones}
+      firmasEntries={firmasEntries}
+      onSyncFirmasActionTasks={handleSyncFirmasActionTasks}
+      onCreateFirmasEntry={handleCreateFirmasEntry}
+      onUpdateFirmasEntry={handleUpdateFirmasEntry}
+      onDeleteFirmasEntry={handleDeleteFirmasEntry}
+      clubZonas={clubZonas}
+      onSetClubZona={handleSetClubZona}
+      equipos={equipos}
+      onSaveEquipo={handleSaveEquipo}
+      restricted={!!profile.captacion_only}
+    />
+  )
+  if (profile.captacion_only) {
+    return <>{captacionNode}<SavingIndicator /></>
+  }
 
   if (showContacts && profile.is_admin) {
     return (
@@ -1220,7 +1321,7 @@ export default function App() {
         <TeamMemberDetail
           profile={selectedProfileData}
           allProfiles={profiles}
-          tasks={tasks}
+          tasks={tasksVisibles}
           players={players}
           onBack={() => setSelectedProfileId(null)}
           onSelectPlayer={(id) => { setSelectedProfileId(null); navigateToPlayer(id, false) }}
@@ -1231,13 +1332,13 @@ export default function App() {
   }
 
   if (selectedPlayer) {
-    const playerTasks = tasks.filter((t) => t.playerId === selectedPlayer.id)
+    const playerTasks = tasksVisibles.filter((t) => t.playerId === selectedPlayer.id)
     return withExtras(
       <PlayerDetail
         player={selectedPlayer}
         players={players}
         tasks={playerTasks}
-        allTasks={tasks}
+        allTasks={tasksVisibles}
         profiles={profiles}
         currentProfile={profile}
         onBack={handlePlayerBack}
@@ -1315,60 +1416,7 @@ export default function App() {
     )
   }
 
-  if (mainSection === 'captacion' || profile.captacion_only) {
-    // Cuenta "solo Captación": no importa la sección guardada, siempre aterriza
-    // aquí y sin extras que naveguen fuera (bottom nav, búsqueda global).
-    const captacionNode = (
-      <Captacion
-        scoutingPlayers={scoutingPlayers}
-        scoutingReports={scoutingReports}
-        scoutingMatches={scoutingMatches}
-        profiles={profiles}
-        currentProfile={profile}
-        onBack={() => { if (!profile.captacion_only) setMainSection('tareas') }}
-        onGoToSection={(s) => { if (!profile.captacion_only) setMainSection(s) }}
-        onLogout={signOut}
-        onAdmin={profile.is_admin && !profile.captacion_only ? () => { setMainSection('tareas'); setShowAdmin(true) } : undefined}
-        onAddPlayer={handleAddScoutingPlayer}
-        onUpdatePlayer={handleUpdateScoutingPlayer}
-        onDeletePlayer={handleDeleteScoutingPlayer}
-        onAddReport={handleAddScoutingReport}
-        onUpdateReport={handleUpdateScoutingReport}
-        onDeleteReport={handleDeleteScoutingReport}
-        onAddMatch={handleAddScoutingMatch}
-        onUpdateMatch={handleUpdateScoutingMatch}
-        onDeleteMatch={handleDeleteScoutingMatch}
-        matchPlayers={matchPlayers}
-        onAddMatchPlayer={handleAddMatchPlayer}
-        onRemoveMatchPlayer={handleRemoveMatchPlayer}
-        matchScouts={matchScouts}
-        onAddMatchScout={handleAddMatchScout}
-        onRemoveMatchScout={handleRemoveMatchScout}
-        onSetMatchScoutStatus={handleSetMatchScoutStatus}
-        onSetMatchScoutMode={handleSetMatchScoutMode}
-        openPlayerId={captacionOpenPlayerId}
-        onOpenPlayerConsumed={() => setCaptacionOpenPlayerId(null)}
-        openFirmasEntryId={captacionOpenFirmasId}
-        onOpenFirmasEntryConsumed={() => setCaptacionOpenFirmasId(null)}
-        players={players}
-        onCreatePlayer={handleAddPlayer}
-        boulemaPeticiones={boulemaPeticiones}
-        firmasEntries={firmasEntries}
-        onSyncFirmasActionTasks={handleSyncFirmasActionTasks}
-        onCreateFirmasEntry={handleCreateFirmasEntry}
-        onUpdateFirmasEntry={handleUpdateFirmasEntry}
-        onDeleteFirmasEntry={handleDeleteFirmasEntry}
-        clubZonas={clubZonas}
-        onSetClubZona={handleSetClubZona}
-        equipos={equipos}
-        onSaveEquipo={handleSaveEquipo}
-        restricted={!!profile.captacion_only}
-      />
-    )
-    return profile.captacion_only
-      ? <>{captacionNode}<SavingIndicator /></>
-      : withExtras(captacionNode)
-  }
+  if (mainSection === 'captacion') return withExtras(captacionNode)
 
   if (mainSection === 'distribucion' || selectedClub) {
     const splitOpen = !!selectedClub

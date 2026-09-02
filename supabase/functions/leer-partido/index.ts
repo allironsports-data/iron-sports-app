@@ -44,6 +44,27 @@ interface Respuesta {
   aviso?: string
 }
 
+// Solo descargamos webs de resultados conocidas. Sin esta lista la función
+// sería un proxy abierto (SSRF): cualquiera con sesión podría hacerle pedir
+// URLs internas o arbitrarias desde el servidor de Supabase.
+const HOSTS_PERMITIDOS = [
+  'sofascore.com',
+  'flashscore.com',
+  'flashscore.es',
+  'besoccer.com',
+  'lapreferente.com',
+  'futbol-regional.es',
+]
+
+/** true si la URL es http(s) y su host es (o es subdominio de) uno permitido */
+function urlPermitida(raw: string): boolean {
+  let u: URL
+  try { u = new URL(raw) } catch { return false }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return false
+  const host = u.hostname.toLowerCase()
+  return HOSTS_PERMITIDOS.some((h) => host === h || host.endsWith('.' + h))
+}
+
 /** Saca el id de evento de una URL de Sofascore */
 function idSofascore(url: string): string | null {
   const m = url.match(/#id[:=](\d+)/) ?? url.match(/\/event\/(\d+)/) ?? url.match(/[?&]id=(\d+)/)
@@ -135,6 +156,11 @@ Deno.serve(async (req: Request) => {
     const { url } = await req.json()
     if (!url || typeof url !== 'string') {
       return new Response(JSON.stringify({ error: 'Falta el enlace del partido' }), {
+        status: 400, headers: { ...CORS, 'Content-Type': 'application/json' },
+      })
+    }
+    if (!urlPermitida(url)) {
+      return new Response(JSON.stringify({ error: 'Solo se admiten enlaces http(s) de: ' + HOSTS_PERMITIDOS.join(', ') }), {
         status: 400, headers: { ...CORS, 'Content-Type': 'application/json' },
       })
     }

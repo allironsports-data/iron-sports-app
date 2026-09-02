@@ -19,19 +19,26 @@ export function SavingIndicator() {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const wasSaving = useRef(false)
 
-  useEffect(() => onSavingChange(n => {
-    setInflight(n)
-    if (n > 0) {
-      wasSaving.current = true
+  useEffect(() => {
+    const off = onSavingChange(n => {
+      setInflight(n)
+      if (n > 0) {
+        wasSaving.current = true
+        if (timer.current) clearTimeout(timer.current)
+        setJustSaved(false)
+      } else if (wasSaving.current) {
+        wasSaving.current = false
+        setJustSaved(true)
+        if (timer.current) clearTimeout(timer.current)
+        timer.current = setTimeout(() => setJustSaved(false), 1500)
+      }
+    })
+    // Al desmontar también cancelamos el timer pendiente (setState huérfano).
+    return () => {
+      off()
       if (timer.current) clearTimeout(timer.current)
-      setJustSaved(false)
-    } else if (wasSaving.current) {
-      wasSaving.current = false
-      setJustSaved(true)
-      if (timer.current) clearTimeout(timer.current)
-      timer.current = setTimeout(() => setJustSaved(false), 1500)
     }
-  }), [])
+  }, [])
 
   if (inflight === 0 && !justSaved) return null
   return (
@@ -110,6 +117,29 @@ interface SearchProps {
   onGoTareas: () => void
 }
 
+// Fuera de GlobalSearch: definidos dentro se recreaban en cada render y
+// React desmontaba/montaba sus hijos al teclear.
+function Group({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="px-3 pt-2.5 pb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">{title}</div>
+      {children}
+    </div>
+  )
+}
+
+function Row({ onClick, onClose, main, sub }: { onClick: () => void; onClose: () => void; main: string; sub?: string }) {
+  return (
+    <button
+      onClick={() => { onClick(); onClose() }}
+      className="w-full flex items-baseline gap-2 px-3 py-1.5 text-left hover:bg-slate-50 active:bg-slate-100"
+    >
+      <span className="text-sm font-medium text-slate-800 truncate">{main}</span>
+      {sub && <span className="text-[11px] text-slate-400 truncate">{sub}</span>}
+    </button>
+  )
+}
+
 export function GlobalSearch({
   players, scoutingPlayers, firmasEntries, clubs, tasks,
   onClose, onOpenPlayer, onOpenScoutingPlayer, onOpenFirmasEntry, onOpenClub, onGoTareas,
@@ -139,22 +169,6 @@ export function GlobalSearch({
     ? results.players.length + results.scouting.length + results.firmas.length + results.clubs.length + results.tasks.length
     : 0
 
-  const Group = ({ title, children }: { title: string; children: React.ReactNode }) => (
-    <div>
-      <div className="px-3 pt-2.5 pb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">{title}</div>
-      {children}
-    </div>
-  )
-  const Row = ({ onClick, main, sub }: { onClick: () => void; main: string; sub?: string }) => (
-    <button
-      onClick={() => { onClick(); onClose() }}
-      className="w-full flex items-baseline gap-2 px-3 py-1.5 text-left hover:bg-slate-50 active:bg-slate-100"
-    >
-      <span className="text-sm font-medium text-slate-800 truncate">{main}</span>
-      {sub && <span className="text-[11px] text-slate-400 truncate">{sub}</span>}
-    </button>
-  )
-
   return (
     <div className="fixed inset-0 z-[80] bg-black/40 flex items-start justify-center pt-[10vh] px-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden" onClick={e => e.stopPropagation()}>
@@ -181,14 +195,14 @@ export function GlobalSearch({
               {results.players.length > 0 && (
                 <Group title="Jugadores (Mantenimiento)">
                   {results.players.map(p => (
-                    <Row key={p.id} onClick={() => onOpenPlayer(p.id)} main={p.name} sub={p.clubs[0]?.name} />
+                    <Row onClose={onClose} key={p.id} onClick={() => onOpenPlayer(p.id)} main={p.name} sub={p.clubs[0]?.name} />
                   ))}
                 </Group>
               )}
               {results.firmas.length > 0 && (
                 <Group title="Firmar (pipeline)">
                   {results.firmas.map(e => (
-                    <Row key={e.id} onClick={() => onOpenFirmasEntry(e.id)} main={e.playerName} sub={`${e.zone} · ${e.status}`} />
+                    <Row onClose={onClose} key={e.id} onClick={() => onOpenFirmasEntry(e.id)} main={e.playerName} sub={`${e.zone} · ${e.status}`} />
                   ))}
                 </Group>
               )}
@@ -196,6 +210,7 @@ export function GlobalSearch({
                 <Group title="Captación (scouting)">
                   {results.scouting.map(p => (
                     <Row
+                      onClose={onClose}
                       key={p.id}
                       onClick={() => onOpenScoutingPlayer(p.id)}
                       main={p.fullName}
@@ -207,14 +222,14 @@ export function GlobalSearch({
               {results.clubs.length > 0 && (
                 <Group title="Clubes (Distribución)">
                   {results.clubs.map(c => (
-                    <Row key={c.id} onClick={() => onOpenClub(c.id)} main={c.name} sub={c.league} />
+                    <Row onClose={onClose} key={c.id} onClick={() => onOpenClub(c.id)} main={c.name} sub={c.league} />
                   ))}
                 </Group>
               )}
               {results.tasks.length > 0 && (
                 <Group title="Tareas abiertas">
                   {results.tasks.map(t => (
-                    <Row key={t.id} onClick={onGoTareas} main={t.title} sub={t.dueDate ? `límite ${t.dueDate}` : undefined} />
+                    <Row onClose={onClose} key={t.id} onClick={onGoTareas} main={t.title} sub={t.dueDate ? `límite ${t.dueDate}` : undefined} />
                   ))}
                 </Group>
               )}

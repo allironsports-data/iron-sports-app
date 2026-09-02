@@ -11,6 +11,7 @@
 
 import type { ScoutingPlayer, ScoutingReport, ScoutingMatch } from '../types'
 import { PITCH_SLOTS as SLOTS, ORDEN_LINEAS, slotDeJugador, lineaDeSlot } from './campo'
+import { fechaLocal, hoyISO } from './fechas'
 
 export interface DatosInformeMensual {
   scoutingPlayers: ScoutingPlayer[]
@@ -81,13 +82,16 @@ function campograma(jugadores: ScoutingPlayer[]): string {
 export function generarInformeMensual(d: DatosInformeMensual): void {
   const dias = d.dias ?? 30
   const desdeMs = Date.now() - dias * 86400000
-  const desdeISO = new Date(desdeMs).toISOString()
-  const desdeDia = desdeISO.slice(0, 10)
+  // Días en hora local (toISOString daba el día UTC)
+  const desdeDia = fechaLocal(new Date(desdeMs))
   const hoy = new Date()
+  const hoyDia = hoyISO()
 
   const playersById = new Map(d.scoutingPlayers.map(p => [p.id, p]))
   const fechaR = (r: ScoutingReport) => r.fecha ?? r.createdAt ?? ''
-  const informesPeriodo = d.scoutingReports.filter(r => fechaR(r) >= desdeISO)
+  // Se compara solo el día: Boulema guarda la fecha como AAAA-MM-DD y Captación como ISO
+  // completo; comparar «2026-08-03» contra «2026-08-03T10:00:00Z» dejaba fuera informes del primer día.
+  const informesPeriodo = d.scoutingReports.filter(r => fechaR(r).slice(0, 10) >= desdeDia)
 
   // ── Quién entra en el informe ──────────────────────────────────────
   // SOLO los vistos en el periodo: si a alguien no se le ha visto este mes,
@@ -125,7 +129,8 @@ export function generarInformeMensual(d: DatosInformeMensual): void {
   for (const p of seleccion) {
     const suyas = informesPeriodo
       .filter(r => r.playerId === p.id && (r.texto ?? '').trim().length > 20)
-      .sort((a, b) => fechaR(b).localeCompare(fechaR(a)))
+      // Primero por día (formatos mezclados) y, a igual día, por el string completo
+      .sort((a, b) => fechaR(b).slice(0, 10).localeCompare(fechaR(a).slice(0, 10)) || fechaR(b).localeCompare(fechaR(a)))
       .map(r => {
         const m = r.matchId ? partidoDe.get(r.matchId) : undefined
         return {
@@ -148,7 +153,7 @@ export function generarInformeMensual(d: DatosInformeMensual): void {
     lista.sort((a, b) => anyo(a.birthdate).localeCompare(anyo(b.birthdate)) || a.fullName.localeCompare(b.fullName))
   }
 
-  const partidos = d.scoutingMatches.filter(m => m.date >= desdeDia && m.date <= hoy.toISOString().slice(0, 10))
+  const partidos = d.scoutingMatches.filter(m => m.date >= desdeDia && m.date <= hoyDia)
   const clubesVistos = new Set<string>()
   for (const m of partidos) { if (m.homeTeam) clubesVistos.add(m.homeTeam.trim()); if (m.awayTeam) clubesVistos.add(m.awayTeam.trim()) }
 

@@ -4,6 +4,7 @@ import type { Profile } from '../contexts/AuthContext'
 import type { Task, Player, ScoutingPlayer, ScoutingReport, ScoutingMatch, FirmasEntry } from '../types'
 import { CaptacionStats } from './CaptacionStats'
 import { updateProfile } from '../lib/db'
+import { hoyISO, esVencida, parseDia } from '../lib/fechas'
 import { supabase } from '../lib/supabase'
 import { ArrowLeft, LogOut, Shield, UserPlus, Check, X, Edit3, Copy, Trash2, KeyRound, AlertTriangle, BarChart3, Users, ChevronDown, ChevronRight, Clock, CheckCircle2, Circle, Eye } from 'lucide-react'
 
@@ -403,7 +404,8 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
 function TaskTrackingTab({ profiles, tasks, players }: { profiles: Profile[]; tasks: Task[]; players: Player[] }) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'overdue'>('all')
-  const today = new Date()
+  // Día como texto: new Date('AAAA-MM-DD') es UTC y marcaba vencida la tarea que vence hoy
+  const hoy = hoyISO()
 
   const toggleExpand = (id: string) => setExpandedIds(prev => {
     const next = new Set(prev)
@@ -427,7 +429,7 @@ function TaskTrackingTab({ profiles, tasks, players }: { profiles: Profile[]; ta
         <SummaryBox label="Total tareas" value={tasks.length} color="blue" />
         <SummaryBox label="Completadas" value={tasks.filter(t => t.status === 'completada').length} color="green" />
         <SummaryBox label="En progreso" value={tasks.filter(t => t.status === 'en_progreso').length} color="violet" />
-        <SummaryBox label="Vencidas" value={tasks.filter(t => t.status !== 'completada' && t.dueDate && new Date(t.dueDate) < today).length} color="red" />
+        <SummaryBox label="Vencidas" value={tasks.filter(t => t.status !== 'completada' && esVencida(t.dueDate, hoy)).length} color="red" />
       </div>
 
       {/* Controls */}
@@ -454,20 +456,20 @@ function TaskTrackingTab({ profiles, tasks, players }: { profiles: Profile[]; ta
           const completed = assigned.filter(t => t.status === 'completada')
           const inProgress = assigned.filter(t => t.status === 'en_progreso')
           const pending = assigned.filter(t => t.status !== 'completada')
-          const overdue = pending.filter(t => t.dueDate && new Date(t.dueDate) < today)
+          const overdue = pending.filter(t => esVencida(t.dueDate, hoy))
           const managedCount = players.filter(pl => pl.managedBy.includes(p.id)).length
           const isExpanded = expandedIds.has(p.id)
 
           // Apply filter to task list
           const visibleTasks = assigned.filter(t => {
             if (statusFilter === 'active') return t.status !== 'completada'
-            if (statusFilter === 'overdue') return t.status !== 'completada' && !!t.dueDate && new Date(t.dueDate) < today
+            if (statusFilter === 'overdue') return t.status !== 'completada' && esVencida(t.dueDate, hoy)
             return true
           }).sort((a, b) => {
             // Sort: overdue first, then in-progress, then pending, then done
             const score = (t: Task) => {
               if (t.status === 'completada') return 3
-              if (t.dueDate && new Date(t.dueDate) < today) return 0
+              if (esVencida(t.dueDate, hoy)) return 0
               if (t.status === 'en_progreso') return 1
               return 2
             }
@@ -520,7 +522,7 @@ function TaskTrackingTab({ profiles, tasks, players }: { profiles: Profile[]; ta
                     <div className="divide-y divide-slate-50">
                       {visibleTasks.map(t => {
                         const playerName = players.find(pl => pl.id === t.playerId)?.name ?? '—'
-                        const isOverdue = t.status !== 'completada' && !!t.dueDate && new Date(t.dueDate) < today
+                        const isOverdue = t.status !== 'completada' && esVencida(t.dueDate, hoy)
                         return (
                           <div key={t.id} className={`flex items-start gap-2.5 px-4 py-2.5 ${t.status === 'completada' ? 'opacity-50' : ''}`}>
                             {taskStatusIcon(t)}
@@ -531,7 +533,7 @@ function TaskTrackingTab({ profiles, tasks, players }: { profiles: Profile[]; ta
                                 {t.priority === 'alta' && <span className="text-red-500 font-semibold">Alta</span>}
                                 {t.dueDate && (
                                   <span className={isOverdue ? 'text-red-500 font-semibold' : ''}>
-                                    {isOverdue ? '⚠ ' : ''}{new Date(t.dueDate).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
+                                    {isOverdue ? '⚠ ' : ''}{parseDia(t.dueDate).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
                                   </span>
                                 )}
                               </div>

@@ -441,7 +441,9 @@ export function ClubDetail({
                             if (!entries.some(e => e.playerId === p.id)) return false
                             if (closedPlayerIds.has(p.id)) return false               // ya cerrado en algún club
                             const yr = p.birthDate ? parseInt(p.birthDate.slice(0, 4), 10) : NaN
-                            if (!isNaN(yr) && yr > 2009) return false                 // demasiado joven (>2009)
+                            // El tope era «2009» fijo: cada año se quedaba más viejo. Ahora: menores de 16.
+                            const minYear = new Date().getFullYear() - 16
+                            if (!isNaN(yr) && yr > minYear) return false              // demasiado joven
                             return true
                           })
                           if (matchingPlayers.length === 0) return null

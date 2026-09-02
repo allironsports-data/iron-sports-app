@@ -10,11 +10,18 @@
 //       Webhook B – Table: task_comments, Event: INSERT
 //     Both point to: https://<project>.supabase.co/functions/v1/notify-task
 //     Method: POST, include Authorization header: Bearer <ANON_KEY>
+//  4. Secreto compartido (obligatorio): la función rechaza con 403 cualquier
+//     petición sin la cabecera `x-webhook-secret` correcta. Hay que ponerlo
+//     en DOS sitios con el MISMO valor:
+//       · supabase secrets set WEBHOOK_SECRET=<valor-largo-aleatorio>
+//       · En cada Database Webhook → HTTP Headers → x-webhook-secret: <valor>
+//     Sin esto, cualquiera con la anon key podría disparar emails.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")!;
+const WEBHOOK_SECRET = Deno.env.get("WEBHOOK_SECRET");
 const SUPABASE_URL   = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_KEY   = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const FROM_EMAIL     = "All Iron Sports <notificaciones@allironsports.com>"; // ← cambia al dominio verificado en Resend
@@ -31,6 +38,12 @@ function esc(s: unknown): string {
 }
 
 serve(async (req) => {
+  // Si el secreto no está configurado también rechazamos: mejor no enviar
+  // nada que dejar la función abierta por descuido.
+  if (!WEBHOOK_SECRET || req.headers.get("x-webhook-secret") !== WEBHOOK_SECRET) {
+    return new Response("forbidden", { status: 403 });
+  }
+
   let payload: { type?: string; table?: string; record?: Record<string, unknown> };
   try {
     payload = await req.json();

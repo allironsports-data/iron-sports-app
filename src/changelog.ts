@@ -19,6 +19,40 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-09-02',
+    items: [
+      'Las tareas ya no salen «vencidas» el mismo día que vencen: en el tablero, en la ficha del jugador, en la de cada miembro y en el seguimiento de Admin. Antes, por un lío de zona horaria, una tarea que vencía hoy aparecía en rojo casi todo el día',
+      'Lo que vence en domingo cuenta como «esta semana» (antes se quedaba fuera)',
+      'La columna «Actividad 4 sem» ya no se desplaza un día tras el cambio de hora',
+      'Captación: al abrir otro jugador, el formulario de nuevo informe empieza en blanco. Antes se quedaba el texto y el partido del jugador anterior y se podía guardar el informe en la ficha equivocada',
+      'Captación: al editar el texto de un informe que venía de Boulema ya no se pierde su conclusión',
+      'Captación: el «Limpiar filtros» de Partidos también quita «ocultar futuros»',
+      'Estadísticas de scouts: los «debates pendientes» se calculan con la conclusión MÁS RECIENTE de cada scout, no con la más antigua',
+      'Distribución: al mover una negociación de estado se actualiza al momento el reloj de «parada» (antes seguía en rojo hasta recargar)',
+      'Distribución: la prioridad D ya se puede poner también al editar; el filtro de «demasiado joven» para las necesidades se calcula con el año actual en vez de estar fijo en 2009',
+      'Ficha del jugador: si un guardado falla ahora sale un aviso y no se cierra el modo edición (antes parecía guardado y no lo estaba). Se valida el nombre y la fecha de nacimiento al editar, y los ficheros de contrato y pasaporte deben ser PDF/imagen de hasta 10 MB',
+      'Panel de tarea: ya salen todos los tipos (Postpartido, Marketing, Comunicación) y al abrir otra tarea con ⌘K no se le pegaba el jugador de la anterior',
+      'Búsqueda global: un usuario que no es admin ya no encuentra tareas «solo admin»',
+      'Contactos: al vaciar un campo de un contacto se queda vacío tras recargar, y borrar y volver a crear un contacto propio ya no lo deja invisible',
+      'Si falla la carga de tu perfil al entrar, sale un botón «Reintentar» en vez de una rueda infinita',
+      'Boulema, Estadísticas de Captación y el panel de jugador de Captación van más ligeros',
+    ],
+    adminItems: [
+      'Nuevo lib/fechas.ts (fechaLocal, hoyISO, parseDia, sumarDias, lunesDe, esVencida, diasHasta) con tests. Regla: los días se comparan como texto AAAA-MM-DD y si hace falta un Date se ancla a las 12:00 locales. Sustituye ~25 usos de new Date("AAAA-MM-DD") y toISOString().slice(0,10) repartidos por Dashboard, PlayerDetail, TeamMemberDetail, AdminPanel, TaskDetailPanel, Captación, Distribución e informeMensual',
+      'TASK_LABELS en types.ts: única lista de tipos de tarea; los tres <select> la iteran',
+      'Cuenta «solo Captación»: el guard se evalúa ANTES de las ramas de jugador/miembro/boulema y el router de hash ignora esas rutas. Antes #/jugador/<id> abría la ficha completa',
+      'Tareas adminOnly filtradas en App (tasksVisibles) para PlayerDetail, TeamMemberDetail y GlobalSearch',
+      'Handlers de realtime: leen refs (playersRef, tasksRef…) en vez de hacer setX(prev => { avisos; return prev }). Con StrictMode esos updaters se ejecutaban dos veces → campana y notificación del sistema duplicadas',
+      'db.ts: updateNegotiation escribe updated_at y devuelve la fila; assignManagerToPlayers en lotes de 200 y comprueba errores; renombrarEquipo y mergeScoutingMatches comprueban errores; los 7 fetchers «opcionales» solo devuelven [] si la tabla no existe (42P01), cualquier otro fallo se propaga y sale el aviso rojo de carga incompleta',
+      'CSV: se neutralizan celdas que empiezan por = + - @ (inyección de fórmulas en Excel)',
+      'Edge functions: notify-task exige cabecera x-webhook-secret (⚠ hay que crear el secreto WEBHOOK_SECRET en la función y añadir la cabecera en el Database Webhook antes de desplegar, si no dejan de llegar los correos); leer-partido solo acepta URLs de sofascore/flashscore/besoccer/lapreferente/futbol-regional (era un proxy abierto)',
+      'AuthContext: getSession con catch/finally y profileError + refreshProfile',
+      'Eliminado código muerto: EditGeneralTaskModal (Dashboard), desplegables de encargado/contacto y selectedNeedPosition (Distribución). Componentes PanelExpandBtn, HealthCard, TaskCard, Group y Row sacados fuera del render (se remontaban en cada tecla)',
+      'Índices Map en Boulema (peticiones), CaptacionStats, ScoutStats, ScoutingTable y las tres vistas de jugadores del Dashboard (openTasksByPlayer)',
+      'Nuevo test de fechas y 2 tests de CSV: 49 tests en total',
+    ],
+  },
+  {
     date: '2026-08-21',
     items: [
       'Distribución vuelve a ir rápida. La había ralentizado yo al poner los desplegables de encargado y contacto en cada fila de la lista de clubes: escribir en el buscador costaba una décima de segundo por tecla solo en recalcular los nombres de esos desplegables, y eso con 1.500 clubes en pantalla',

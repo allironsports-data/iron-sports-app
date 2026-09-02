@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import type { Player, Task, PlayerActivity } from "../types";
 import type { Profile } from "../contexts/AuthContext";
 import { fetchActivitiesByAuthor } from "../lib/db";
+import { hoyISO, esVencida, parseDia } from "../lib/fechas";
 import { ListSkeleton } from "../components/Skeleton";
 import { EmptyState } from "../components/EmptyState";
 import { ToastStack } from "../components/ToastStack";
@@ -94,8 +95,9 @@ export function TeamMemberDetail({ profile, tasks, players, onBack, onSelectPlay
 
   // Abiertas AHORA (no dependen del período)
   const openTasks = memberTasks.filter(t => t.status !== 'completada');
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const overdueTasks = openTasks.filter(t => t.dueDate && t.dueDate < todayStr);
+  // hoyISO: toISOString daba el día UTC (entre las 00:00 y las 02:00 «hoy» era ayer)
+  const todayStr = hoyISO();
+  const overdueTasks = openTasks.filter(t => esVencida(t.dueDate, todayStr));
 
   // Completadas EN el período — por fecha de completado real (completed_at).
   // Fallback a createdAt para tareas antiguas sin backfill.
@@ -369,7 +371,7 @@ export function TeamMemberDetail({ profile, tasks, players, onBack, onSelectPlay
               <div className="divide-y divide-slate-50">
                 {sortedOpen.map(t => {
                   const player = players.find(p => p.id === t.playerId);
-                  const isOverdue = !!(t.dueDate && t.dueDate < todayStr);
+                  const isOverdue = esVencida(t.dueDate, todayStr);
                   const isWatcher = t.assigneeId !== profile.id;
                   const prioColor =
                     t.priority === 'alta' ? '#E24B4A' :
@@ -407,7 +409,7 @@ export function TeamMemberDetail({ profile, tasks, players, onBack, onSelectPlay
                       </div>
                       <span className={`text-[11px] flex-shrink-0 ${isOverdue ? 'text-red-500 font-semibold' : 'text-slate-400'}`}>
                         {t.dueDate
-                          ? `${new Date(t.dueDate + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}${isOverdue ? ' ⚠' : ''}`
+                          ? `${parseDia(t.dueDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}${isOverdue ? ' ⚠' : ''}`
                           : 'sin fecha'}
                       </span>
                       {/* Completar directamente */}

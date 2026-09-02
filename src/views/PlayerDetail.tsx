@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, memo } from "react";
 import logoImg from '../assets/logo.jpeg';
 import type {
   Player, Task,
@@ -18,7 +18,8 @@ import { ToastStack } from "../components/ToastStack";
 import { useToast } from "../hooks/useToast";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { useEscapeKey } from "../hooks/useEscapeKey";
-import { isValidUrl, normalizeUrl } from "../lib/validate";
+import { isValidUrl, normalizeUrl, isValidName, isValidBirthDate } from "../lib/validate";
+import { hoyISO, parseDia, esVencida } from "../lib/fechas";
 import {
   ArrowLeft, LogOut, ClipboardList, FileText,
   TrendingUp, User, Plus, X, Calendar, AlertCircle,
@@ -54,6 +55,21 @@ async function abrirDocumento(referencia: string, onError: (msg: string) => void
   }
 }
 
+/** Límite y tipos admitidos para ficheros subidos (contratos, pasaportes). */
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
+const TIPOS_DOCUMENTO = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+
+/** Devuelve el mensaje de error si el fichero no es válido, o null si lo es. */
+function validarFichero(file: File, tipos: string[]): string | null {
+  if (file.size > MAX_FILE_BYTES) return "El fichero supera el máximo de 10 MB";
+  if (!tipos.includes(file.type)) {
+    return tipos.length === 1 && tipos[0] === 'application/pdf'
+      ? "Solo se admiten ficheros PDF"
+      : "Formato no admitido: usa PDF, JPG, PNG o WebP";
+  }
+  return null;
+}
+
 interface Props {
   player: Player;
   players?: Player[];
@@ -63,9 +79,9 @@ interface Props {
   currentProfile: Profile;
   onBack: () => void;
   onAddTask: (task: Task) => void;
-  onUpdateTask: (task: Task) => void;
-  onDeleteTask: (taskId: string) => void;
-  onUpdatePlayer: (player: Player) => void;
+  onUpdateTask: (task: Task) => void | Promise<void>;
+  onDeleteTask: (taskId: string) => void | Promise<void>;
+  onUpdatePlayer: (player: Player) => void | Promise<void>;
   onLogout: () => void;
   onDeletePlayer?: (id: string) => void;
   onAdmin?: () => void;
@@ -357,7 +373,7 @@ export function PlayerDetail({
             {activeTab === "info" && (
               <div className="space-y-4">
                 <InfoTab player={player} onUpdate={onUpdatePlayer} />
-                <LinksSection player={player} onUpdate={onUpdatePlayer} />
+                <LinksSection player={player} onUpdate={onUpdatePlayer} onError={(m) => showToast(m, "error")} />
               </div>
             )}
             {activeTab === "actividad" && (
@@ -387,7 +403,15 @@ export function PlayerDetail({
           player={player}
           profiles={profiles}
           onClose={() => setShowEditPlayer(false)}
-          onSave={(updated) => { onUpdatePlayer(updated); setShowEditPlayer(false); }}
+          onSave={async (updated) => {
+            // Esperamos al guardado: si falla no cerramos el modal ni perdemos lo editado
+            try {
+              await onUpdatePlayer(updated);
+              setShowEditPlayer(false);
+            } catch {
+              showToast("No se pudo guardar", "error");
+            }
+          }}
         />
       )}
 
@@ -443,11 +467,112 @@ function ClubsDisplay({ clubs }: { clubs: Player["clubs"] }) {
   );
 }
 
+/* ========== TASK CARD (nivel de módulo: no se recrea en cada render de TasksTab) ========== */
+function taskStatusIcon(s: Task["status"]) {
+  if (s === "completada") return <CheckCircle2 className="w-4 h-4 text-emerald-500" />;
+  if (s === "en_progreso") return <Clock className="w-4 h-4 text-blue-500" />;
+  return <AlertCircle className="w-4 h-4 text-slate-300" />;
+}
+
+const TaskCard = memo(function TaskCard({
+  task, profiles, allTasks, currentProfile, hoy, selectedId, onSelect, onCycleStatus, onRequestDelete,
+}: {
+  task: Task; profiles: Profile[]; allTasks: Task[]; currentProfile: Profile;
+  /** AAAA-MM-DD de hoy, para decidir «vencida» */
+  hoy: string;
+  selectedId: string | null;
+  onSelect: (t: Task) => void;
+  onCycleStatus: (t: Task) => void;
+  onRequestDelete: (t: Task) => void;
+}) {
+  const assignee  = profiles.find((m) => m.id === task.assigneeId);
+  const dependency = task.dependsOnId ? allTasks.find((t) => t.id === task.dependsOnId) : null;
+  const isOverdue = task.status !== "completada" && esVencida(task.dueDate, hoy);
+  const isSelected = selectedId === task.id;
+  const canEdit   = currentProfile.is_admin || task.assigneeId === currentProfile.id;
+  const prioBorderColor =
+    task.priority === "alta"  ? "#E24B4A" :
+    task.priority === "media" ? "#EF9F27" : "#94a3b8";
+
+  return (
+    <div
+      onClick={() => onSelect(task)}
+      className={`bg-white border rounded-xl overflow-hidden cursor-pointer transition-all hover:shadow-sm ${
+        isSelected
+          ? "border-blue-400 ring-1 ring-blue-200"
+          : task.status === "completada"
+          ? "border-slate-100 opacity-60"
+          : isOverdue
+          ? "border-red-200"
+          : "border-slate-200 hover:border-slate-300"
+      }`}
+      style={{ borderLeftWidth: "3px", borderLeftColor: task.status === "completada" ? "#e2e8f0" : prioBorderColor }}
+    >
+      <div className="p-3">
+        <div className="flex items-start gap-3">
+          <button
+            onClick={(e) => { e.stopPropagation(); onCycleStatus(task); }}
+            className="mt-0.5 flex-shrink-0"
+          >
+            {taskStatusIcon(task.status)}
+          </button>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`text-sm font-medium ${task.status === "completada" ? "text-slate-400 line-through" : "text-slate-800"}`}>
+                {task.title}
+              </span>
+              {task.adminOnly && (
+                <span className="text-[9px] font-bold uppercase tracking-wide text-rose-500 border border-rose-200 bg-rose-50 rounded px-1 py-px">admin</span>
+              )}
+            </div>
+            {task.description && <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{task.description}</p>}
+            <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+              {assignee && (
+                <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+                  <span className="w-4 h-4 rounded-full bg-slate-100 text-[9px] font-semibold flex items-center justify-center">{assignee.avatar}</span>
+                  {assignee.name.split(" ")[0]}
+                </span>
+              )}
+              {(task.watchers ?? []).map((wId) => {
+                const w = profiles.find((m) => m.id === wId);
+                return w ? (
+                  <span key={wId} className="inline-flex items-center gap-1 text-xs text-slate-400">
+                    <span className="w-4 h-4 rounded-full bg-blue-50 text-[9px] font-semibold flex items-center justify-center text-blue-600">{w.avatar}</span>
+                    {w.name.split(" ")[0]}
+                  </span>
+                ) : null;
+              })}
+              {task.dueDate && (
+                <span className={`inline-flex items-center gap-1 text-xs ${isOverdue ? "text-red-500 font-medium" : "text-slate-400"}`}>
+                  <Calendar className="w-3 h-3" />
+                  {parseDia(task.dueDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
+                  {isOverdue && " ⚠"}
+                </span>
+              )}
+              {dependency && <span className="text-xs text-slate-400 truncate">Dep: {dependency.title}</span>}
+            </div>
+          </div>
+          {canEdit && (
+            <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+              <button onClick={() => onSelect(task)} aria-label="Ver detalles de la tarea" className="p-2 -m-1 sm:p-1 sm:m-0 text-slate-300 hover:text-blue-500 transition-colors" title="Ver detalles">
+                <Edit3 className="w-3.5 h-3.5" />
+              </button>
+              <button onClick={() => onRequestDelete(task)} aria-label="Eliminar tarea" title="Eliminar tarea" className="p-2 -m-1 sm:p-1 sm:m-0 text-slate-300 hover:text-red-400 transition-colors">
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+});
+
 /* ========== TASKS TAB ========== */
 function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask, onUpdateTask, onDeleteTask }: {
   tasks: Task[]; allTasks: Task[]; profiles: Profile[]; player: Player;
   currentProfile: Profile; onAddTask: (task: Task) => void;
-  onUpdateTask: (task: Task) => void; onDeleteTask: (taskId: string) => void;
+  onUpdateTask: (task: Task) => void | Promise<void>; onDeleteTask: (taskId: string) => void | Promise<void>;
 }) {
   const [showAdd, setShowAdd] = useState(false);
   const [detailTask, setDetailTask] = useState<Task | null>(null);
@@ -455,8 +580,10 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
   const { toasts, showToast, dismissToast } = useToast();
 
-  const now = new Date();
-  const overdueTasks   = tasks.filter((t) => t.status !== "completada" && t.dueDate && new Date(t.dueDate) < now);
+  // Comparación por día en texto: new Date('AAAA-MM-DD') es medianoche UTC y
+  // marcaba como vencidas las tareas que vencen hoy.
+  const hoy = hoyISO();
+  const overdueTasks   = tasks.filter((t) => t.status !== "completada" && esVencida(t.dueDate, hoy));
   const pendingCount   = tasks.filter((t) => t.status === "pendiente").length;
   const inProgressCount = tasks.filter((t) => t.status === "en_progreso").length;
   const completedCount = tasks.filter((t) => t.status === "completada").length;
@@ -468,8 +595,8 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
     [...list].sort((a, b) => {
       const prio = { alta: 0, media: 1, baja: 2 };
       // overdue first within active
-      const aOver = a.dueDate && new Date(a.dueDate) < now ? 0 : 1;
-      const bOver = b.dueDate && new Date(b.dueDate) < now ? 0 : 1;
+      const aOver = esVencida(a.dueDate, hoy) ? 0 : 1;
+      const bOver = esVencida(b.dueDate, hoy) ? 0 : 1;
       if (aOver !== bOver) return aOver - bOver;
       return prio[a.priority] - prio[b.priority];
     });
@@ -477,97 +604,20 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
   const inProgressFiltered = sortByPrio(activeTasks.filter((t) => t.status === "en_progreso"));
   const pendingFiltered    = sortByPrio(activeTasks.filter((t) => t.status === "pendiente"));
 
-  const statusIcon = (s: Task["status"]) => {
-    if (s === "completada") return <CheckCircle2 className="w-4 h-4 text-emerald-500" />;
-    if (s === "en_progreso") return <Clock className="w-4 h-4 text-blue-500" />;
-    return <AlertCircle className="w-4 h-4 text-slate-300" />;
+  const cycleStatus = async (t: Task) => {
+    try {
+      await onUpdateTask({ ...t, status: t.status === "completada" ? "pendiente" : t.status === "pendiente" ? "en_progreso" : "completada" });
+    } catch {
+      showToast("No se pudo guardar", "error");
+    }
   };
 
-  const cycleStatus = (t: Task) =>
-    onUpdateTask({ ...t, status: t.status === "completada" ? "pendiente" : t.status === "pendiente" ? "en_progreso" : "completada" });
-
-  const TaskCard = ({ task }: { task: Task }) => {
-    const assignee  = profiles.find((m) => m.id === task.assigneeId);
-    const dependency = task.dependsOnId ? allTasks.find((t) => t.id === task.dependsOnId) : null;
-    const isOverdue = task.status !== "completada" && !!task.dueDate && new Date(task.dueDate) < now;
-    const isSelected = detailTask?.id === task.id;
-    const canEdit   = currentProfile.is_admin || task.assigneeId === currentProfile.id;
-    const prioBorderColor =
-      task.priority === "alta"  ? "#E24B4A" :
-      task.priority === "media" ? "#EF9F27" : "#94a3b8";
-
-    return (
-      <div
-        onClick={() => setDetailTask(task)}
-        className={`bg-white border rounded-xl overflow-hidden cursor-pointer transition-all hover:shadow-sm ${
-          isSelected
-            ? "border-blue-400 ring-1 ring-blue-200"
-            : task.status === "completada"
-            ? "border-slate-100 opacity-60"
-            : isOverdue
-            ? "border-red-200"
-            : "border-slate-200 hover:border-slate-300"
-        }`}
-        style={{ borderLeftWidth: "3px", borderLeftColor: task.status === "completada" ? "#e2e8f0" : prioBorderColor }}
-      >
-        <div className="p-3">
-          <div className="flex items-start gap-3">
-            <button
-              onClick={(e) => { e.stopPropagation(); cycleStatus(task); }}
-              className="mt-0.5 flex-shrink-0"
-            >
-              {statusIcon(task.status)}
-            </button>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className={`text-sm font-medium ${task.status === "completada" ? "text-slate-400 line-through" : "text-slate-800"}`}>
-                  {task.title}
-                </span>
-                {task.adminOnly && (
-                  <span className="text-[9px] font-bold uppercase tracking-wide text-rose-500 border border-rose-200 bg-rose-50 rounded px-1 py-px">admin</span>
-                )}
-              </div>
-              {task.description && <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{task.description}</p>}
-              <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                {assignee && (
-                  <span className="inline-flex items-center gap-1 text-xs text-slate-500">
-                    <span className="w-4 h-4 rounded-full bg-slate-100 text-[9px] font-semibold flex items-center justify-center">{assignee.avatar}</span>
-                    {assignee.name.split(" ")[0]}
-                  </span>
-                )}
-                {(task.watchers ?? []).map((wId) => {
-                  const w = profiles.find((m) => m.id === wId);
-                  return w ? (
-                    <span key={wId} className="inline-flex items-center gap-1 text-xs text-slate-400">
-                      <span className="w-4 h-4 rounded-full bg-blue-50 text-[9px] font-semibold flex items-center justify-center text-blue-600">{w.avatar}</span>
-                      {w.name.split(" ")[0]}
-                    </span>
-                  ) : null;
-                })}
-                {task.dueDate && (
-                  <span className={`inline-flex items-center gap-1 text-xs ${isOverdue ? "text-red-500 font-medium" : "text-slate-400"}`}>
-                    <Calendar className="w-3 h-3" />
-                    {new Date(task.dueDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
-                    {isOverdue && " ⚠"}
-                  </span>
-                )}
-                {dependency && <span className="text-xs text-slate-400 truncate">Dep: {dependency.title}</span>}
-              </div>
-            </div>
-            {canEdit && (
-              <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                <button onClick={() => setDetailTask(task)} aria-label="Ver detalles de la tarea" className="p-2 -m-1 sm:p-1 sm:m-0 text-slate-300 hover:text-blue-500 transition-colors" title="Ver detalles">
-                  <Edit3 className="w-3.5 h-3.5" />
-                </button>
-                <button onClick={() => setTaskToDelete(task)} aria-label="Eliminar tarea" title="Eliminar tarea" className="p-2 -m-1 sm:p-1 sm:m-0 text-slate-300 hover:text-red-400 transition-colors">
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
+  const cardProps = {
+    profiles, allTasks, currentProfile, hoy,
+    selectedId: detailTask?.id ?? null,
+    onSelect: setDetailTask,
+    onCycleStatus: cycleStatus,
+    onRequestDelete: setTaskToDelete,
   };
 
   return (
@@ -601,8 +651,8 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
             <span className="text-[11px] font-mono text-slate-400">{pendingFiltered.length}</span>
           </div>
           <div className="space-y-2">
-            {sortByPrio(activeTasks.filter(t => t.status === "pendiente")).map(t => <TaskCard key={t.id} task={t} />)}
-            {activeTasks.filter(t => t.status === "pendiente").length === 0 && (
+            {pendingFiltered.map(t => <TaskCard key={t.id} task={t} {...cardProps} />)}
+            {pendingFiltered.length === 0 && (
               <div className="h-12 border-2 border-dashed border-slate-100 rounded-xl flex items-center justify-center">
                 <span className="text-xs text-slate-300">Sin tareas pendientes</span>
               </div>
@@ -625,8 +675,8 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
             <span className="text-[11px] font-mono text-blue-400">{inProgressFiltered.length}</span>
           </div>
           <div className="space-y-2">
-            {sortByPrio(activeTasks.filter(t => t.status === "en_progreso")).map(t => <TaskCard key={t.id} task={t} />)}
-            {activeTasks.filter(t => t.status === "en_progreso").length === 0 && (
+            {inProgressFiltered.map(t => <TaskCard key={t.id} task={t} {...cardProps} />)}
+            {inProgressFiltered.length === 0 && (
               <div className="h-12 border-2 border-dashed border-blue-50 rounded-xl flex items-center justify-center">
                 <span className="text-xs text-slate-300">Sin tareas en curso</span>
               </div>
@@ -655,7 +705,7 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
         </button>
         {showCompleted && (
           <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {completedTasks.map(t => <TaskCard key={t.id} task={t} />)}
+            {completedTasks.map(t => <TaskCard key={t.id} task={t} {...cardProps} />)}
           </div>
         )}
       </div>
@@ -677,8 +727,8 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
           currentProfile={currentProfile}
           onClose={() => setDetailTask(null)}
           onUpdate={(updated) => onUpdateTask(updated)}
-          onSaveAndClose={(updated) => { onUpdateTask(updated); setDetailTask(null); }}
-          onDelete={(taskId) => { onDeleteTask(taskId); setDetailTask(null); }}
+          onSaveAndClose={async (updated) => { await onUpdateTask(updated); setDetailTask(null); }}
+          onDelete={async (taskId) => { await onDeleteTask(taskId); setDetailTask(null); }}
         />
       )}
 
@@ -838,7 +888,7 @@ function AddTaskModal({ profiles, tasks, playerId, player, isAdmin, onClose, onA
 }
 
 /* ========== CONTRACT TAB ========== */
-function ContractTab({ player, onUpdate, isAdmin }: { player: Player; onUpdate: (p: Player) => void; isAdmin: boolean }) {
+function ContractTab({ player, onUpdate, isAdmin }: { player: Player; onUpdate: (p: Player) => void | Promise<void>; isAdmin: boolean }) {
   const [editingRepr, setEditingRepr] = useState(false);
   const [editingClub, setEditingClub] = useState(false);
   const [repr, setRepr] = useState(player.representationContract);
@@ -884,7 +934,11 @@ function ContractTab({ player, onUpdate, isAdmin }: { player: Player; onUpdate: 
             </div>
             <div className="flex gap-2 justify-end">
               <button onClick={() => setEditingRepr(false)} className="text-xs px-3 py-1.5 rounded border border-slate-200 text-slate-500">Cancelar</button>
-              <button onClick={() => { onUpdate({ ...player, representationContract: repr }); setEditingRepr(false); }}
+              <button onClick={async () => {
+                // Solo salimos del modo edición si el guardado ha ido bien
+                try { await onUpdate({ ...player, representationContract: repr }); setEditingRepr(false); }
+                catch { showToast("No se pudo guardar", "error"); }
+              }}
                 className="text-xs px-3 py-1.5 rounded text-white bg-primary hover:bg-primary/90">Guardar</button>
             </div>
           </div>
@@ -919,9 +973,12 @@ function ContractTab({ player, onUpdate, isAdmin }: { player: Player; onUpdate: 
               onChange={async (e) => {
                 const file = e.target.files?.[0];
                 if (!file) return;
+                // Validar antes de subir: evita gastar ancho de banda en algo que no aceptaremos
+                const errorFichero = validarFichero(file, ['application/pdf']);
+                if (errorFichero) { showToast(errorFichero, "error"); e.target.value = ""; return; }
                 try {
                   const url = await uploadContractPdf(player.id, file);
-                  onUpdate({
+                  await onUpdate({
                     ...player,
                     clubContract: {
                       ...player.clubContract,
@@ -930,7 +987,7 @@ function ContractTab({ player, onUpdate, isAdmin }: { player: Player; onUpdate: 
                     info: { ...player.info },
                   });
                 } catch (err) {
-                  showToast("Error al subir PDF: " + (err as Error).message, "error");
+                  showToast("No se pudo guardar: " + (err as Error).message, "error");
                 }
                 e.target.value = "";
               }}
@@ -967,7 +1024,10 @@ function ContractTab({ player, onUpdate, isAdmin }: { player: Player; onUpdate: 
             </div>
             <div className="flex gap-2 justify-end">
               <button onClick={() => setEditingClub(false)} className="text-xs px-3 py-1.5 rounded border border-slate-200 text-slate-500">Cancelar</button>
-              <button onClick={() => { onUpdate({ ...player, clubContract: club }); setEditingClub(false); }}
+              <button onClick={async () => {
+                try { await onUpdate({ ...player, clubContract: club }); setEditingClub(false); }
+                catch { showToast("No se pudo guardar", "error"); }
+              }}
                 className="text-xs px-3 py-1.5 rounded text-white bg-primary hover:bg-primary/90">Guardar</button>
             </div>
           </div>
@@ -1047,7 +1107,7 @@ function ContractTab({ player, onUpdate, isAdmin }: { player: Player; onUpdate: 
 
 /* ========== PERFORMANCE TAB ========== */
 function PerformanceTab({ player, profiles, onUpdate, postpartidos = [], scoutingMatches = [], allTasks = [] }: {
-  player: Player; profiles: Profile[]; onUpdate: (p: Player) => void;
+  player: Player; profiles: Profile[]; onUpdate: (p: Player) => void | Promise<void>;
   postpartidos?: Postpartido[]; scoutingMatches?: ScoutingMatch[]; allTasks?: Task[];
 }) {
   const [section, setSection] = useState<"informes" | "video" | "postpartidos">("informes");
@@ -1277,7 +1337,10 @@ function PerformanceTab({ player, profiles, onUpdate, postpartidos = [], scoutin
       )}
       {showAddVideo && (
         <AddVideoSessionModal onClose={() => setShowAddVideo(false)}
-          onSave={(v) => { onUpdate({ ...player, videoSessions: [v, ...(player.videoSessions ?? [])] }); setShowAddVideo(false); }} />
+          onSave={async (v) => {
+            try { await onUpdate({ ...player, videoSessions: [v, ...(player.videoSessions ?? [])] }); setShowAddVideo(false); }
+            catch { showToast("No se pudo guardar", "error"); }
+          }} />
       )}
 
       <ConfirmModal
@@ -1327,7 +1390,7 @@ function PerformanceTab({ player, profiles, onUpdate, postpartidos = [], scoutin
 function AddVideoSessionModal({ onClose, onSave }: {
   onClose: () => void; onSave: (v: VideoSession) => void;
 }) {
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [date, setDate] = useState(hoyISO());
   const [videoUrl, setVideoUrl] = useState("");
   const [description, setDescription] = useState("");
   const [duration, setDuration] = useState("");
@@ -1370,7 +1433,7 @@ function AddVideoSessionModal({ onClose, onSave }: {
 function AddPerformanceModal({ profiles, onClose, onAdd, initialNote }: {
   profiles: Profile[]; onClose: () => void; onAdd: (n: Omit<PerformanceNote, 'id'>) => Promise<void>; initialNote?: PerformanceNote;
 }) {
-  const [date, setDate] = useState(initialNote?.date ?? new Date().toISOString().split("T")[0]);
+  const [date, setDate] = useState(initialNote?.date ?? hoyISO());
   const [author, setAuthor] = useState(initialNote?.authorId ?? "");
   const [category, setCategory] = useState(initialNote?.category ?? "Partido");
   const [rating, setRating] = useState(initialNote?.rating ?? 7);
@@ -1447,7 +1510,7 @@ function AddPerformanceModal({ profiles, onClose, onAdd, initialNote }: {
 }
 
 /* ========== INFO TAB ========== */
-function InfoTab({ player, onUpdate }: { player: Player; onUpdate: (p: Player) => void }) {
+function InfoTab({ player, onUpdate }: { player: Player; onUpdate: (p: Player) => void | Promise<void> }) {
   const [editing, setEditing] = useState(false);
   const [info, setInfo] = useState(player.info);
   const [uploading, setUploading] = useState(false);
@@ -1457,17 +1520,22 @@ function InfoTab({ player, onUpdate }: { player: Player; onUpdate: (p: Player) =
   const handlePassportUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    // Validar antes de subir (10 MB máx., PDF o imagen)
+    const errorFichero = validarFichero(file, TIPOS_DOCUMENTO);
+    if (errorFichero) { showToast(errorFichero, "error"); e.target.value = ""; return; }
     setUploading(true);
     try {
       const { uploadPassport } = await import('../lib/db');
       const url = await uploadPassport(player.id, file);
       const updated = { ...player, info: { ...player.info, passportUrl: url } };
-      onUpdate(updated);
+      // Si falla el guardado del jugador, la URL subida se perdería en silencio
+      await onUpdate(updated);
     } catch (err) {
       console.error(err);
-      showToast("No se pudo subir el pasaporte", "error");
+      showToast("No se pudo guardar el pasaporte", "error");
     } finally {
       setUploading(false);
+      e.target.value = "";
     }
   };
 
@@ -1478,7 +1546,11 @@ function InfoTab({ player, onUpdate }: { player: Player; onUpdate: (p: Player) =
           <h3 className="text-sm font-semibold text-slate-800">Editar info / entorno</h3>
           <div className="flex gap-2">
             <button onClick={() => setEditing(false)} className="text-xs px-3 py-1.5 rounded border border-slate-200 text-slate-500">Cancelar</button>
-            <button onClick={() => { onUpdate({ ...player, info }); setEditing(false); }}
+            <button onClick={async () => {
+              // No salimos del modo edición si el guardado falla
+              try { await onUpdate({ ...player, info }); setEditing(false); }
+              catch { showToast("No se pudo guardar", "error"); }
+            }}
               className="text-xs px-3 py-1.5 rounded text-white bg-primary hover:bg-primary/90">Guardar</button>
           </div>
         </div>
@@ -1542,7 +1614,7 @@ function InfoTab({ player, onUpdate }: { player: Player; onUpdate: (p: Player) =
             {uploading ? 'Subiendo...' : 'Subir pasaporte (PDF/imagen)'}
           </button>
         )}
-        <input ref={passportRef} type="file" accept=".pdf,image/*" className="hidden" onChange={handlePassportUpload} />
+        <input ref={passportRef} type="file" accept=".pdf,image/jpeg,image/png,image/webp" className="hidden" onChange={handlePassportUpload} />
       </div>
 
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
@@ -1551,7 +1623,9 @@ function InfoTab({ player, onUpdate }: { player: Player; onUpdate: (p: Player) =
 }
 
 /* ========== LINKS SECTION (inside InfoTab) ========== */
-function LinksSection({ player, onUpdate }: { player: Player; onUpdate: (p: Player) => void }) {
+function LinksSection({ player, onUpdate, onError }: {
+  player: Player; onUpdate: (p: Player) => void | Promise<void>; onError: (msg: string) => void;
+}) {
   const [tmUrl, setTmUrl] = useState(player.transfermarktUrl ?? "");
   const [editingTm, setEditingTm] = useState(false);
   const [tmUrlError, setTmUrlError] = useState(false);
@@ -1560,30 +1634,43 @@ function LinksSection({ player, onUpdate }: { player: Player; onUpdate: (p: Play
   const [newUrlError, setNewUrlError] = useState(false);
   const [showAddLink, setShowAddLink] = useState(false);
 
-  const saveTransfermarkt = () => {
+  const saveTransfermarkt = async () => {
     const trimmed = tmUrl.trim();
     if (trimmed && !isValidUrl(trimmed)) {
       setTmUrlError(true);
       return;
     }
-    onUpdate({ ...player, transfermarktUrl: trimmed ? normalizeUrl(trimmed) : undefined });
-    setTmUrlError(false);
-    setEditingTm(false);
+    // Esperamos al guardado: si falla, seguimos en edición con el valor escrito
+    try {
+      await onUpdate({ ...player, transfermarktUrl: trimmed ? normalizeUrl(trimmed) : undefined });
+      setTmUrlError(false);
+      setEditingTm(false);
+    } catch {
+      onError("No se pudo guardar");
+    }
   };
 
-  const addLink = () => {
+  const addLink = async () => {
     if (!newLabel.trim() || !newUrl.trim()) return;
     if (!isValidUrl(newUrl)) {
       setNewUrlError(true);
       return;
     }
     const link: PlayerLink = { id: Date.now().toString(), label: newLabel.trim(), url: normalizeUrl(newUrl) };
-    onUpdate({ ...player, links: [...(player.links ?? []), link] });
-    setNewLabel(""); setNewUrl(""); setNewUrlError(false); setShowAddLink(false);
+    try {
+      await onUpdate({ ...player, links: [...(player.links ?? []), link] });
+      setNewLabel(""); setNewUrl(""); setNewUrlError(false); setShowAddLink(false);
+    } catch {
+      onError("No se pudo guardar");
+    }
   };
 
-  const removeLink = (id: string) => {
-    onUpdate({ ...player, links: (player.links ?? []).filter((l) => l.id !== id) });
+  const removeLink = async (id: string) => {
+    try {
+      await onUpdate({ ...player, links: (player.links ?? []).filter((l) => l.id !== id) });
+    } catch {
+      onError("No se pudo guardar");
+    }
   };
 
   return (
@@ -1749,7 +1836,7 @@ function ESel({ label, value, onChange, options }: { label: string; value: strin
 
 function EditPlayerModal({ player, profiles, onClose, onSave }: {
   player: Player; profiles: Profile[];
-  onClose: () => void; onSave: (p: Player) => void;
+  onClose: () => void; onSave: (p: Player) => void | Promise<void>;
 }) {
   const [name, setName] = useState(player.name);
   const [birthDate, setBirthDate] = useState(player.birthDate ?? "");
@@ -1773,10 +1860,19 @@ function EditPlayerModal({ player, profiles, onClose, onSave }: {
   const [club2, setClub2] = useState(player.clubs[1]?.name ?? "");
   const [isLoan, setIsLoan] = useState(player.clubs.some((c) => c.type === "cedido_en" || c.type === "propietario"));
   const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<{ name?: string; birthDate?: string }>({});
 
   useEscapeKey(onClose, !saving);
 
   const handleSave = async () => {
+    // Misma validación que AddPlayerModal (Dashboard): sin ella se podía
+    // guardar un nombre vacío o una fecha de nacimiento futura.
+    const nextErrors: { name?: string; birthDate?: string } = {};
+    if (!isValidName(name)) nextErrors.name = "Introduce un nombre válido (mínimo 2 caracteres).";
+    if (!isValidBirthDate(birthDate)) nextErrors.birthDate = "Fecha no válida: no puede ser futura ni de hace más de 60 años.";
+    setErrors(nextErrors);
+    if (nextErrors.name || nextErrors.birthDate) return;
+
     const clubs = [];
     if (isLoan && club1 && club2) {
       clubs.push({ name: club1, type: "propietario" as const });
@@ -1821,9 +1917,15 @@ function EditPlayerModal({ player, profiles, onClose, onSave }: {
           <button onClick={onClose} aria-label="Cerrar" className="p-2 -m-2 sm:p-1 sm:-m-1 text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
         </div>
         <div className="p-4 space-y-3">
-          <EF label="Nombre completo" value={name} onChange={setName} />
+          <div>
+            <EF label="Nombre completo" value={name} onChange={setName} />
+            {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
+          </div>
           <div className="grid grid-cols-2 gap-3">
-            <EF label="Fecha de nacimiento" value={birthDate} onChange={setBirthDate} type="date" />
+            <div>
+              <EF label="Fecha de nacimiento" value={birthDate} onChange={setBirthDate} type="date" />
+              {errors.birthDate && <p className="text-xs text-red-500 mt-1">{errors.birthDate}</p>}
+            </div>
             <EF label="Nacionalidad" value={nationality} onChange={setNationality} />
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -2064,14 +2166,14 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
   // Group by month
   const grouped: Record<string, TimelineEvent[]> = {};
   events.forEach(e => {
-    const key = new Date(e.date).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+    const key = parseDia(e.date).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
     if (!grouped[key]) grouped[key] = [];
     grouped[key].push(e);
   });
 
   function openNew() {
     setEditing(null);
-    setFDate(new Date().toISOString().slice(0, 10));
+    setFDate(hoyISO());
     setFType(ACTIVITY_TYPES[0]);
     setFCustomType('');
     setFNotes('');
@@ -2262,7 +2364,7 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
                             <p className="text-sm font-medium text-slate-700 leading-snug">{evt.title}</p>
                             <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
                               <span className="text-[11px] text-slate-400">
-                                {new Date(evt.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                                {parseDia(evt.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
                               </span>
                               {evt.type === 'activity' && evt.activityRef && (
                                 <>
@@ -2610,7 +2712,7 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
       <ConfirmModal
         open={!!deletePending}
         title="¿Eliminar evento?"
-        message={deletePending ? `Se eliminará «${deletePending.type}» del ${new Date(deletePending.date).toLocaleDateString('es-ES')}. Esta acción no se puede deshacer.` : undefined}
+        message={deletePending ? `Se eliminará «${deletePending.type}» del ${parseDia(deletePending.date).toLocaleDateString('es-ES')}. Esta acción no se puede deshacer.` : undefined}
         confirmLabel="Eliminar"
         variant="danger"
         onConfirm={confirmSingleDelete}
@@ -2655,7 +2757,7 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
   const recentEvents = buildMergedEvents(activities, tasks, player, profiles).slice(0, 8);
 
   function openNew() {
-    setFDate(new Date().toISOString().slice(0, 10));
+    setFDate(hoyISO());
     setFType(ACTIVITY_TYPES[0]);
     setFCustomType('');
     setFNotes('');
@@ -2737,9 +2839,11 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
 
       {/* ── Bloque de alertas ── */}
       {(() => {
-        const now = Date.now();
-        const overdueTasks  = pendingTasks.filter(t => t.dueDate && new Date(t.dueDate).getTime() < now);
-        const urgentTasks   = pendingTasks.filter(t => t.priority === 'alta' && !(t.dueDate && new Date(t.dueDate).getTime() < now));
+        // Comparación por día (texto): con new Date('AAAA-MM-DD') una tarea que
+        // vence hoy salía como vencida durante casi todo el día.
+        const hoy = hoyISO();
+        const overdueTasks  = pendingTasks.filter(t => esVencida(t.dueDate, hoy));
+        const urgentTasks   = pendingTasks.filter(t => t.priority === 'alta' && !esVencida(t.dueDate, hoy));
         const clubAlert     = clubDays !== null && clubDays <= 180;
         const reprAlert     = reprDays !== null && reprDays <= 540; // 18 meses
         const alerts: { key: string; icon: string; text: string; sub?: string; tab?: TabId; cls: string }[] = [];
@@ -2912,7 +3016,7 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
                     <div className="min-w-0 flex-1">
                       <p className="text-xs text-slate-700 leading-snug truncate">{evt.title}</p>
                       <p className="text-[11px] text-slate-400">
-                        {new Date(evt.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                        {parseDia(evt.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
                         {evt.extra && ` · ${evt.extra.slice(0, 40)}${evt.extra.length > 40 ? '…' : ''}`}
                       </p>
                     </div>

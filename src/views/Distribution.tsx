@@ -23,6 +23,7 @@ import type { LeagueTier, Confederation } from '../lib/clubTiers'
 import { PlayerClubList, NEG_STATUSES as SHARED_NEG_STATUSES, NEG_STATUS_CONFIG } from '../components/PlayerClubList'
 import { BulkAssignModal } from '../components/BulkAssignModal'
 import { norm } from '../lib/texto'
+import { parseDia, diasHasta } from '../lib/fechas'
 
 /** Spinner pequeño para botones de guardado */
 function BtnSpinner() {
@@ -52,9 +53,6 @@ const PRIORITY_CONFIG = {
 
 // ── helpers ───────────────────────────────────────────────────
 
-function genId() { return 'tmp_' + Math.random().toString(36).slice(2) }
-function now() { return new Date().toISOString() }
-
 /** Posición de dropdown fijo que nunca se sale de la pantalla.
  *  Si no cabe por abajo, sube el dropdown lo necesario; siempre con scroll interno. */
 function clampDropPos(top: number, itemCount: number): { top: number; maxHeight: number } {
@@ -65,10 +63,13 @@ function clampDropPos(top: number, itemCount: number): { top: number; maxHeight:
 }
 
 
+// Fechas de día (AAAA-MM-DD) → parseDia: new Date('2026-06-30') es medianoche
+// UTC y en algunas zonas se pintaba/contaba como el día anterior.
+
 /** Short month+year: "jun 2025". Empty string if no date. */
 function fmtMonth(dateStr?: string): string {
   if (!dateStr) return ''
-  const d = new Date(dateStr)
+  const d = parseDia(dateStr)
   if (isNaN(d.getTime())) return ''
   return d.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' })
 }
@@ -84,9 +85,9 @@ function fmtDateTime(dateStr?: string): string {
 /** Days from today to a date (negative = past) */
 function daysUntil(dateStr?: string): number | null {
   if (!dateStr) return null
-  const d = new Date(dateStr)
+  const d = parseDia(dateStr)
   if (isNaN(d.getTime())) return null
-  return Math.round((d.getTime() - Date.now()) / 86_400_000)
+  return diasHasta(dateStr)
 }
 
 /** Contract urgency badge: color class + label */
@@ -100,6 +101,53 @@ function contractBadge(endDate?: string): { label: string; cls: string } | null 
   return             { label,                 cls: 'bg-slate-100 text-slate-500 border-slate-200' }
 }
 
+
+
+// Componentes definidos a nivel de módulo: dentro del render se recreaban en
+// cada pasada y React desmontaba/montaba el DOM (pérdida de foco, parpadeos).
+
+/** Botón ampliar/reducir del panel lateral */
+function PanelExpandBtn({ expanded, onToggle }: { expanded: boolean; onToggle: () => void }) {
+  return (
+    <button
+      onClick={onToggle}
+      aria-label={expanded ? 'Reducir panel' : 'Ampliar panel'}
+      title={expanded ? 'Reducir' : 'Ampliar'}
+      className="hidden lg:inline-flex p-1.5 rounded hover:bg-slate-100 text-slate-400 flex-shrink-0"
+    >
+      {expanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+    </button>
+  )
+}
+
+type HealthId = 'sin' | 'dup' | 'pos' | 'old'
+
+/** Tarjeta de «Salud de datos» (pestaña Encargados, admin) */
+function HealthCard({ id, label, count, tone, onAction, actionLabel, open, onToggle }: {
+  id: HealthId; label: string; count: number; tone: string; onAction?: () => void; actionLabel?: string
+  open: HealthId | null; onToggle: (id: HealthId | null) => void
+}) {
+  return (
+    <div className={`rounded-xl border ${count > 0 ? tone : 'border-slate-200 bg-white'} overflow-hidden`}>
+      <button
+        onClick={() => onToggle(open === id ? null : id)}
+        className="w-full flex items-center gap-2 px-3 py-2.5 text-left"
+      >
+        <span className="text-lg font-bold tabular-nums">{count}</span>
+        <span className="text-sm font-medium text-slate-700 flex-1 min-w-0">{label}</span>
+        {onAction && count > 0 && (
+          <span
+            onClick={e => { e.stopPropagation(); onAction() }}
+            className="text-xs font-medium text-blue-600 hover:text-blue-700 flex-shrink-0"
+          >
+            {actionLabel}
+          </span>
+        )}
+        <ChevronDown className={`w-4 h-4 text-slate-400 flex-shrink-0 transition-transform ${open === id ? 'rotate-180' : ''}`} />
+      </button>
+    </div>
+  )
+}
 
 function Avatar({ name, photo, size = 'sm' }: { name: string; photo?: string; size?: 'xs' | 'sm' | 'md' }) {
   const cls = size === 'xs' ? 'w-6 h-6 text-[11px]' : size === 'sm' ? 'w-8 h-8 text-xs' : 'w-10 h-10 text-sm'
@@ -249,7 +297,9 @@ export function Distribution({
   const [storedF] = useState<Record<string, unknown>>(() => {
     try { return JSON.parse(sessionStorage.getItem(FILTERS_KEY) || '{}') } catch { return {} }
   })
-  const [search, setSearch] = useState<string>((storedF.search as string) ?? '')
+  // El texto buscado solo se restaura si volvemos a la pestaña Clubes (es su
+  // filtro): en Jugadores aparecía una búsqueda «fantasma» que vaciaba la lista.
+  const [search, setSearch] = useState<string>(tab === 'clubes' ? ((storedF.search as string) ?? '') : '')
 
   // toasts + confirmaciones
   const { toasts, showToast, dismissToast } = useToast()
@@ -310,7 +360,7 @@ export function Distribution({
 
   const abrirClub = (id: string) => {
     if (onSelectClub) { onSelectClub(id) }
-    else { setSelectedClubId(id); setSelectedEntryId(null); setSelectedNeedPosition(null) }
+    else { setSelectedClubId(id); setSelectedEntryId(null) }
   }
 
   function renderClubes(lista: Club[]) {
@@ -422,15 +472,6 @@ export function Distribution({
     )
   }
 
-  // Encargado de hablar con el club
-  const [openClubManagerId, setOpenClubManagerId]   = useState<string | null>(null)
-  const [clubManagerDropPos, setClubManagerDropPos] = useState<{ top: number; right: number } | null>(null)
-
-  // "Contactado" — un primer clic marca automáticamente a quien lo pulsa; si ya está
-  // contactado, el clic abre un menú para reasignar a otra persona o quitar la marca.
-  const [openClubContactedId, setOpenClubContactedId]   = useState<string | null>(null)
-  const [clubContactedDropPos, setClubContactedDropPos] = useState<{ top: number; right: number } | null>(null)
-
   // Bulk: asignar encargado a varios clubes a la vez (pestaña Clubes)
   const [clubBulkMode, setClubBulkMode] = useState(false)
   const [clubSelected, setClubSelected] = useState<Set<string>>(new Set())
@@ -446,8 +487,8 @@ export function Distribution({
   }
 
   // Tick "contactado" — el primer clic marca automáticamente a quien lo pulsa (quién y cuándo),
-  // independiente de negociaciones/solicitudes. Si ya está contactado, se abre un menú
-  // (openClubContactedId) para reasignar a otra persona o quitar la marca.
+  // independiente de negociaciones/solicitudes. Reasignar/quitar se hace desde el
+  // <select> de la tarjeta (reassignClubContacted).
 
   // Reasignar manualmente quién contactó (o quitar la marca)
   async function reassignClubContacted(club: Club, avatar: string | undefined) {
@@ -461,8 +502,6 @@ export function Distribution({
       }
     } catch {
       showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
-    } finally {
-      setOpenClubContactedId(null); setClubContactedDropPos(null)
     }
   }
 
@@ -470,12 +509,10 @@ export function Distribution({
   // Se cierra también con scroll AMPLIO (el dropdown es fixed y se desalinearía),
   // pero ignorando micro-scrolls para que no desaparezca antes de elegir.
   useEffect(() => {
-    if (!openManagerDropId && !openClubManagerId && !bulkClubManagerPos && !openClubContactedId && !openStatusDropId) return
+    if (!openManagerDropId && !bulkClubManagerPos && !openStatusDropId) return
     const close = () => {
       setOpenManagerDropId(null); setManagerDropPos(null)
-      setOpenClubManagerId(null); setClubManagerDropPos(null)
       setBulkClubManagerPos(null)
-      setOpenClubContactedId(null); setClubContactedDropPos(null)
       setOpenStatusDropId(null); setStatusDropPos(null)
     }
     // Espera al siguiente tick para no capturar el mismo clic que lo abrió
@@ -493,7 +530,7 @@ export function Distribution({
       document.removeEventListener('click', close)
       window.removeEventListener('scroll', onScroll, true)
     }
-  }, [openManagerDropId, openClubManagerId, bulkClubManagerPos, openClubContactedId, openStatusDropId])
+  }, [openManagerDropId, bulkClubManagerPos, openStatusDropId])
 
   // modals
   const [showAddPlayer, setShowAddPlayer] = useState(false)
@@ -503,8 +540,6 @@ export function Distribution({
   const [editingClub, setEditingClub] = useState<Club | null>(null)
   const [editingNeg, setEditingNeg] = useState<ClubNegotiation | null>(null)
   const [bulkAssignPlayerId, setBulkAssignPlayerId] = useState<string | null>(null)
-  // when opening club panel from a solicitud, track which need position to filter offered players
-  const [selectedNeedPosition, setSelectedNeedPosition] = useState<string | null>(null)
   // need-specific panel (solicitudes tab)
   const [selectedNeed, setSelectedNeed] = useState<{ clubId: string; needIndex: number } | null>(null)
   // pipeline filters
@@ -885,7 +920,7 @@ export function Distribution({
     const today = new Date()
     const ageOf = (bd?: string): number | null => {
       if (!bd) return null
-      const d = new Date(bd)
+      const d = parseDia(bd)
       if (isNaN(d.getTime())) return null
       let a = today.getFullYear() - d.getFullYear()
       const m = today.getMonth() - d.getMonth()
@@ -1007,17 +1042,6 @@ export function Distribution({
   const hasPanel = tab !== 'encargados' && (!!selectedEntry || !!selectedClub || !!selectedNeed)
   // Panel lateral ampliable (más ancho para editar cómodamente)
   const [panelExpanded, setPanelExpanded] = useState(false)
-  // Controles avanzados del panel de jugador (solo visibles al expandir)
-  const PanelExpandBtn = () => (
-    <button
-      onClick={() => setPanelExpanded(e => !e)}
-      aria-label={panelExpanded ? 'Reducir panel' : 'Ampliar panel'}
-      title={panelExpanded ? 'Reducir' : 'Ampliar'}
-      className="hidden lg:inline-flex p-1.5 rounded hover:bg-slate-100 text-slate-400 flex-shrink-0"
-    >
-      {panelExpanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-    </button>
-  )
 
   function switchTab(t: typeof tab) {
     setTab(t)
@@ -3091,29 +3115,6 @@ export function Distribution({
             }))
             oldNeeds.sort((a, b) => b.days - a.days)
 
-            const HealthCard = ({ id, label, count, tone, onAction, actionLabel }: {
-              id: 'sin' | 'dup' | 'pos' | 'old'; label: string; count: number; tone: string; onAction?: () => void; actionLabel?: string
-            }) => (
-              <div className={`rounded-xl border ${count > 0 ? tone : 'border-slate-200 bg-white'} overflow-hidden`}>
-                <button
-                  onClick={() => setHealthOpen(healthOpen === id ? null : id)}
-                  className="w-full flex items-center gap-2 px-3 py-2.5 text-left"
-                >
-                  <span className="text-lg font-bold tabular-nums">{count}</span>
-                  <span className="text-sm font-medium text-slate-700 flex-1 min-w-0">{label}</span>
-                  {onAction && count > 0 && (
-                    <span
-                      onClick={e => { e.stopPropagation(); onAction() }}
-                      className="text-xs font-medium text-blue-600 hover:text-blue-700 flex-shrink-0"
-                    >
-                      {actionLabel}
-                    </span>
-                  )}
-                  <ChevronDown className={`w-4 h-4 text-slate-400 flex-shrink-0 transition-transform ${healthOpen === id ? 'rotate-180' : ''}`} />
-                </button>
-              </div>
-            )
-
             return (
               <div className="max-w-5xl mx-auto space-y-6">
                 {/* Salud de datos (solo admin) */}
@@ -3121,11 +3122,11 @@ export function Distribution({
                   <div>
                     <h3 className="text-sm font-semibold text-slate-700 mb-2">Salud de datos</h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <HealthCard id="sin" label="Clubes sin encargado" count={clubsSinEnc.length} tone="border-amber-200 bg-amber-50"
+                      <HealthCard id="sin" open={healthOpen} onToggle={setHealthOpen} label="Clubes sin encargado" count={clubsSinEnc.length} tone="border-amber-200 bg-amber-50"
                         onAction={() => goToClubs('__sin__')} actionLabel="Repartir →" />
-                      <HealthCard id="dup" label="Clubes posiblemente duplicados" count={dupGroups.length} tone="border-orange-200 bg-orange-50" />
-                      <HealthCard id="pos" label="Necesidades con posición no estándar" count={badNeeds.length} tone="border-red-200 bg-red-50" />
-                      <HealthCard id="old" label={`Necesidades antiguas (>${OLD_DAYS}d)`} count={oldNeeds.length} tone="border-slate-200 bg-slate-50" />
+                      <HealthCard id="dup" open={healthOpen} onToggle={setHealthOpen} label="Clubes posiblemente duplicados" count={dupGroups.length} tone="border-orange-200 bg-orange-50" />
+                      <HealthCard id="pos" open={healthOpen} onToggle={setHealthOpen} label="Necesidades con posición no estándar" count={badNeeds.length} tone="border-red-200 bg-red-50" />
+                      <HealthCard id="old" open={healthOpen} onToggle={setHealthOpen} label={`Necesidades antiguas (>${OLD_DAYS}d)`} count={oldNeeds.length} tone="border-slate-200 bg-slate-50" />
                     </div>
 
                     {/* Detalle desplegable */}
@@ -3316,7 +3317,9 @@ export function Distribution({
             panelExpanded ? 'sm:w-[560px] lg:w-[55%] xl:w-[60%]' : 'sm:w-[380px]'
           }`}>
             {selectedEntry && (() => {
-              const player = players.find(p => p.id === selectedEntry.playerId)!
+              const player = playersById.get(selectedEntry.playerId)
+              // Puede no existir (jugador borrado con la entrada aún abierta): antes el `!` reventaba la vista.
+              if (!player) return null
               const playerNegs = negotiations.filter(n => n.playerId === selectedEntry.playerId)
               const cfg = PRIORITY_CONFIG[selectedEntry.priority]
               return (
@@ -3330,7 +3333,7 @@ export function Distribution({
                       <div className="font-semibold text-slate-800 text-sm">{player.name}</div>
                       <div className="text-xs text-slate-500">{player.positions[0]}</div>
                     </div>
-                    <PanelExpandBtn />
+                    <PanelExpandBtn expanded={panelExpanded} onToggle={() => setPanelExpanded(e => !e)} />
                     <button
                       onClick={() => onSelectPlayer?.(player.id)}
                       className="text-xs text-blue-600 hover:underline flex-shrink-0"
@@ -3426,18 +3429,20 @@ export function Distribution({
               // Negs linked to this specific need (by needPosition when set, fallback to position matching for old data)
               const offeredForNeed = offeredToClub.filter(neg => {
                 if (neg.needPosition) return neg.needPosition === need.position
-                const p = players.find(pl => pl.id === neg.playerId)
+                const p = playersById.get(neg.playerId)
                 return p && needMatchesPlayer(need.position, p.positions)
               })
               const offeredForNeedPlayerIds = new Set(offeredForNeed.map(n => n.playerId))
               // Jugadores con alguna negociación ya cerrada → no sugerir
               const closedPlayerIds = new Set(negotiations.filter(n => n.status === 'cerrado').map(n => n.playerId))
+              // El tope era «2009» fijo: cada año se quedaba más viejo. Ahora: menores de 16.
+              const minYear = new Date().getFullYear() - 16
               const suggestedPlayers = players.filter(p => {
                 if (offeredForNeedPlayerIds.has(p.id)) return false
-                if (!entries.some(e => e.playerId === p.id)) return false
+                if (!entriesByPlayer.has(p.id)) return false
                 if (closedPlayerIds.has(p.id)) return false                 // ya cerrado en algún club
                 const yr = p.birthDate ? parseInt(p.birthDate.slice(0, 4), 10) : NaN
-                if (!isNaN(yr) && yr > 2009) return false                   // demasiado joven (>2009)
+                if (!isNaN(yr) && yr > minYear) return false                // demasiado joven
                 return needMatchesPlayer(need.position, p.positions)
               })
               return (
@@ -3496,10 +3501,10 @@ export function Distribution({
                       </div>
                       <div className="space-y-1.5">
                         {offeredForNeed.map(neg => {
-                          const p = players.find(pl => pl.id === neg.playerId)
+                          const p = playersById.get(neg.playerId)
                           if (!p) return null
                           const scfg = STATUS_CONFIG[neg.status]
-                          const entry = entries.find(e => e.playerId === p.id)
+                          const entry = entriesByPlayer.get(p.id)
                           const pcfg = entry ? PRIORITY_CONFIG[entry.priority] : null
                           return (
                             <div key={neg.id} className="bg-slate-50 rounded-lg p-2.5 flex items-center gap-2">
@@ -3533,7 +3538,7 @@ export function Distribution({
                         </span>
                         <div className="space-y-1.5">
                           {suggestedPlayers.map(p => {
-                            const entry = entries.find(e => e.playerId === p.id)
+                            const entry = entriesByPlayer.get(p.id)
                             const pcfg = entry ? PRIORITY_CONFIG[entry.priority] : null
                             return (
                               <div key={p.id} className="bg-white border border-slate-200 rounded-lg p-2.5 flex items-center gap-2 hover:border-slate-300 transition-colors">
@@ -3583,14 +3588,7 @@ export function Distribution({
 
             {selectedClub && (() => {
               const clubNegsPanel = negsByClub.get(selectedClub.id) ?? SIN_NEGOCIACIONES
-              // when opened from a solicitud, filter by needPosition or fall back to position matching for old data
-              const displayedNegs = selectedNeedPosition
-                ? clubNegsPanel.filter(neg => {
-                    if (neg.needPosition) return neg.needPosition === selectedNeedPosition
-                    const p = players.find(pl => pl.id === neg.playerId)
-                    return p && needMatchesPlayer(selectedNeedPosition, p.positions)
-                  })
-                : clubNegsPanel
+              const displayedNegs = clubNegsPanel
               return (
                 <div className="h-full flex flex-col">
                   <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 flex-shrink-0">
@@ -3678,16 +3676,8 @@ export function Distribution({
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                          Ofrecidos ({displayedNegs.length}{selectedNeedPosition && displayedNegs.length !== clubNegsPanel.length ? `/${clubNegsPanel.length}` : ''})
+                          Ofrecidos ({displayedNegs.length})
                         </span>
-                        {selectedNeedPosition && (
-                          <button
-                            onClick={() => setSelectedNeedPosition(null)}
-                            className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100"
-                          >
-                            {selectedNeedPosition} <X className="w-2.5 h-2.5" />
-                          </button>
-                        )}
                       </div>
                       <button
                         onClick={() => setShowAddNeg({ clubId: selectedClub.id })}
@@ -3698,8 +3688,8 @@ export function Distribution({
                     </div>
                     <div className="space-y-2">
                       {displayedNegs.map(neg => {
-                        const player = players.find(p => p.id === neg.playerId)
-                        const entry = entries.find(e => e.playerId === neg.playerId)
+                        const player = playersById.get(neg.playerId)
+                        const entry = entriesByPlayer.get(neg.playerId)
                         if (!player) return null
                         const scfg = STATUS_CONFIG[neg.status]
                         const pcfg = entry ? PRIORITY_CONFIG[entry.priority] : null
@@ -3736,9 +3726,7 @@ export function Distribution({
                       })}
                       {displayedNegs.length === 0 && (
                         <div className="text-center py-6 text-slate-400 text-xs">
-                          {selectedNeedPosition && clubNegsPanel.length > 0
-                            ? `Sin jugadores de posición "${selectedNeedPosition}" ofrecidos`
-                            : 'Sin jugadores ofrecidos aún'}
+                          Sin jugadores ofrecidos aún
                         </div>
                       )}
                     </div>
@@ -3776,14 +3764,16 @@ export function Distribution({
           season={season}
           onClose={() => setShowAddPlayer(false)}
           onCreatePlayer={onCreatePlayer}
+          onToast={showToast}
           onSave={async (data) => {
             try {
               const saved = await onCreateEntry(data)
               setSelectedEntryId(saved.id)
               setShowAddPlayer(false)
               showToast('Jugador añadido a distribución')
-            } catch {
+            } catch (err) {
               showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+              throw err // el modal decide qué hacer (p. ej. avisar de que el jugador ya existe)
             }
           }}
         />
@@ -3871,7 +3861,12 @@ export function Distribution({
         />
       )}
 
-      {editingNeg && (
+      {editingNeg && (() => {
+        // La negociación puede cambiar por fuera (realtime, otra pestaña) mientras
+        // el modal está abierto: al guardar partimos siempre de la versión fresca
+        // para no pisar notas/estado ajenos con la copia vieja de editingNeg.
+        const freshNeg = negotiations.find(n => n.id === editingNeg.id) ?? editingNeg
+        return (
         <EditNegotiationModal
           neg={editingNeg}
           clubs={clubs}
@@ -3881,7 +3876,7 @@ export function Distribution({
           onClose={() => setEditingNeg(null)}
           onSave={async (data) => {
             try {
-              await onUpdateNegotiation({ ...editingNeg, ...data })
+              await onUpdateNegotiation({ ...freshNeg, ...data })
               setEditingNeg(null)
               showToast('Cambios guardados')
             } catch {
@@ -3890,7 +3885,7 @@ export function Distribution({
           }}
           onSaveUpdate={async (update) => {
             try {
-              const updated = { ...editingNeg, updates: [...(editingNeg.updates ?? []), update] }
+              const updated = { ...freshNeg, updates: [...(freshNeg.updates ?? []), update] }
               await onUpdateNegotiation(updated)
               setEditingNeg(updated)
               showToast('Nota guardada')
@@ -3900,7 +3895,7 @@ export function Distribution({
           }}
           onDelete={async () => {
             try {
-              await onDeleteNegotiation(editingNeg.id)
+              await onDeleteNegotiation(freshNeg.id)
               setEditingNeg(null)
               showToast('Negociación eliminada')
             } catch {
@@ -3908,7 +3903,8 @@ export function Distribution({
             }
           }}
         />
-      )}
+        )
+      })()}
 
       {showAddNeed && (
         <AddNeedModal
@@ -4043,66 +4039,6 @@ export function Distribution({
         )
       })()}
 
-      {/* Encargado del club — dropdown fijo (escapa del overflow de las tarjetas) */}
-      {openClubManagerId && clubManagerDropPos && (() => {
-        const club = clubs.find(c => c.id === openClubManagerId)
-        if (!club) return null
-        const closeDrop = () => { setOpenClubManagerId(null); setClubManagerDropPos(null) }
-        const pos = clampDropPos(clubManagerDropPos.top, profiles.length + (club.aisManager ? 1 : 0) + 1)
-        return (
-          <div
-            className="fixed z-[200] bg-white border border-slate-200 rounded-xl shadow-xl py-1 min-w-[180px] max-w-[calc(100vw-2rem)] overflow-y-auto"
-            style={{ top: pos.top, right: clubManagerDropPos.right, maxHeight: pos.maxHeight }}
-            onClick={e => e.stopPropagation()}
-          >
-            <p className="px-3 pt-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-              Encargado de {club.name}
-            </p>
-            {profiles.map(p => (
-              <button
-                key={p.id}
-                onClick={async () => {
-                  try {
-                    await onUpdateClub({ ...club, aisManager: p.avatar })
-                    showToast(`${p.name.split(' ')[0]} asignado a ${club.name}`)
-                  } catch {
-                    showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
-                  }
-                  closeDrop()
-                }}
-                className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-slate-50 transition-colors ${
-                  club.aisManager === p.avatar ? 'font-semibold text-blue-700' : 'text-slate-700'
-                }`}
-              >
-                <span className="w-5 h-5 rounded-full bg-slate-100 text-[9px] font-bold flex items-center justify-center flex-shrink-0">
-                  {p.avatar}
-                </span>
-                {p.name.split(' ')[0]}
-              </button>
-            ))}
-            {club.aisManager && (
-              <>
-                <div className="border-t border-slate-100 my-1" />
-                <button
-                  onClick={async () => {
-                    try {
-                      await onUpdateClub({ ...club, aisManager: undefined })
-                      showToast('Encargado quitado')
-                    } catch {
-                      showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
-                    }
-                    closeDrop()
-                  }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-500 hover:bg-red-50 transition-colors"
-                >
-                  Quitar encargado
-                </button>
-              </>
-            )}
-          </div>
-        )
-      })()}
-
       {/* Asignar encargado en bulk — a todos los clubes seleccionados en pestaña Clubes */}
       {bulkClubManagerPos && (() => {
         const closeDrop = () => setBulkClubManagerPos(null)
@@ -4157,48 +4093,6 @@ export function Distribution({
         )
       })()}
 
-      {/* Reasignar/quitar "contactado" — el primer clic ya marcó automáticamente a quien lo pulsó; esto es solo para corregirlo */}
-      {openClubContactedId && clubContactedDropPos && (() => {
-        const club = clubs.find(c => c.id === openClubContactedId)
-        if (!club) return null
-        const pos = clampDropPos(clubContactedDropPos.top, profiles.length + 2)
-        return (
-          <div
-            className="fixed z-[200] bg-white border border-slate-200 rounded-xl shadow-xl py-1 min-w-[200px] max-w-[calc(100vw-2rem)] overflow-y-auto"
-            style={{ top: pos.top, right: clubContactedDropPos.right, maxHeight: pos.maxHeight }}
-            onClick={e => e.stopPropagation()}
-          >
-            <p className="px-3 pt-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-              Contactado por {profiles.find(p => p.avatar === club.contactedBy)?.name.split(' ')[0] ?? club.contactedBy}
-            </p>
-            <p className="px-3 pb-1.5 text-[11px] text-slate-400">{fmtDateTime(club.contactedAt)}</p>
-            <div className="border-t border-slate-100 my-1" />
-            <p className="px-3 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Reasignar a</p>
-            {profiles.map(p => (
-              <button
-                key={p.id}
-                onClick={() => reassignClubContacted(club, p.avatar)}
-                className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-slate-50 transition-colors ${
-                  club.contactedBy === p.avatar ? 'font-semibold text-green-700' : 'text-slate-700'
-                }`}
-              >
-                <span className="w-5 h-5 rounded-full bg-slate-100 text-[9px] font-bold flex items-center justify-center flex-shrink-0">
-                  {p.avatar}
-                </span>
-                {p.name.split(' ')[0]}
-              </button>
-            ))}
-            <div className="border-t border-slate-100 my-1" />
-            <button
-              onClick={() => reassignClubContacted(club, undefined)}
-              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-500 hover:bg-red-50 transition-colors"
-            >
-              Quitar contacto
-            </button>
-          </div>
-        )
-      })()}
-
       {/* ── Confirmaciones ── */}
       <ConfirmModal
         open={!!confirmDeleteEntryId}
@@ -4244,13 +4138,15 @@ export function Distribution({
   )
 }
 
-function AddPlayerModal({ players, existingPlayerIds, season, onClose, onSave, onCreatePlayer }: {
+function AddPlayerModal({ players, existingPlayerIds, season, onClose, onSave, onCreatePlayer, onToast }: {
   players: Player[]
   existingPlayerIds: string[]
   season: string
   onClose: () => void
+  /** Puede rechazar: el padre ya enseña su toast, el modal solo decide qué hacer después */
   onSave: (data: Omit<DistributionEntry, 'id' | 'createdAt'>) => Promise<void>
   onCreatePlayer?: (p: Player) => Promise<Player>
+  onToast: (msg: string, variant?: 'success' | 'error' | 'info') => void
 }) {
   const [mode, setMode] = useState<'existing' | 'intermediar'>('existing')
 
@@ -4292,7 +4188,8 @@ function AddPlayerModal({ players, existingPlayerIds, season, onClose, onSave, o
         notes: notes || undefined,
         active: true,
       })
-    } finally { setSaving(false) }
+    } catch { /* el padre ya ha avisado */ }
+    finally { setSaving(false) }
   }
 
   async function handleCreateIntermediar() {
@@ -4330,16 +4227,29 @@ function AddPlayerModal({ players, existingPlayerIds, season, onClose, onSave, o
         performance: [],
         info: { family: '', personality: '', phone: '' },
       }
-      const saved = await onCreatePlayer(newPlayer)
-      await onSave({
-        playerId: saved.id,
-        season,
-        priority,
-        condition: condition || undefined,
-        transferFee: transferFee || undefined,
-        notes: notes || undefined,
-        active: true,
-      })
+      // Dos pasos sin transacción: si falla el primero no hay nada creado; si
+      // falla el segundo el jugador YA existe y repetir crearía un duplicado.
+      let saved: Player
+      try {
+        saved = await onCreatePlayer(newPlayer)
+      } catch (err) {
+        console.error(err)
+        onToast('No se pudo crear el jugador. Inténtalo de nuevo.', 'error')
+        return
+      }
+      try {
+        await onSave({
+          playerId: saved.id,
+          season,
+          priority,
+          condition: condition || undefined,
+          transferFee: transferFee || undefined,
+          notes: notes || undefined,
+          active: true,
+        })
+      } catch {
+        onToast(`${saved.name} ya se ha creado como jugador, pero no se pudo añadir a distribución. Añádelo desde «Existente».`, 'error')
+      }
     } finally { setSaving(false) }
   }
 
@@ -4464,7 +4374,7 @@ function AddPlayerModal({ players, existingPlayerIds, season, onClose, onSave, o
             <div className="w-32">
               <input value={newBirthYear} onChange={e => { setNewBirthYear(e.target.value); if (yearError) setYearError('') }}
                 placeholder="Año nacimiento"
-                type="number" min="1985" max="2010"
+                type="number" min="1985" max={new Date().getFullYear() - 16}
                 className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 ${yearError ? 'border-red-300' : 'border-slate-200'}`}
               />
               {yearError && <p className="text-xs text-red-600 mt-1">{yearError}</p>}
@@ -4896,7 +4806,7 @@ function EditEntryModal({ entry, onClose, onSave }: {
         <div>
           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1.5">Prioridad</label>
           <div className="flex gap-2">
-            {(['A', 'B', 'C'] as const).map(p => {
+            {(['A', 'B', 'C', 'D'] as const).map(p => {
               const cfg = PRIORITY_CONFIG[p]
               return (
                 <button key={p} onClick={() => setPriority(p)} className={`flex-1 py-2 rounded-lg text-sm font-bold border-2 transition-all ${priority === p ? `${cfg.bg} ${cfg.text} border-current` : 'bg-white text-slate-400 border-slate-200'}`}>{p}</button>
@@ -5431,6 +5341,3 @@ function AddNeedModal({ clubs, onClose, onSave }: {
   )
 }
 
-// suppress unused import warnings
-void genId
-void now
