@@ -21,6 +21,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-09-03',
     items: [
+      'Captación → nueva pestaña «Planificación»: la hoja de fin de semana (Día · Hora · Partido · Jugador · Persona · Vía) que se hacía en Excel, ahora nativa. Semana de planificación de martes a lunes (por defecto) o solo fin de semana, con ← →, y botón flotante 🗓️ en todas las pantallas, jugadores nuestros en negrita (o «Captación»), edición directa en la tabla (quién lo ve, vía campo/tv por scout, hora y notas), partidos vistos tachados, «＋ Añadir partido», Imprimir/PDF y descarga a Excel',
       'Tabla de jugadores (Admin): botón de papelera en cada fila para eliminar, con confirmación. Aquí salen TODOS los jugadores, también los «solo Distribución» que no aparecen en Mantenimiento (llevan una etiqueta que lo indica)',
       'Nueva vista «Mi día» (☀️ en la barra inferior y en el menú): tus partidos de hoy, acciones del pipeline Firmar vencidas, tareas del día y postpartidos, en una sola lista con botones grandes de «Visto» y «Hecho»',
       'Captación: al crear un jugador o un partido, la app avisa si ya existe uno parecido («¿Es alguno de estos?») con un botón para abrirlo en vez de duplicarlo',
@@ -36,6 +37,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Listas de equipos, gestores, posiciones y ligas ordenadas con acentos correctos (Álava antes que Zaragoza)',
     ],
     adminItems: [
+      'Planificación: lib/planificacion.ts (lógica pura + HTML de impresión, tests/planificacion.test.ts), views/captacion/PlanificacionTab.tsx, cableado en Captacion.tsx; MatchFormPanel admite fechaInicial; csv.ts/BotonCsv aceptan nombre sin sello de fecha',
       'Admin → Historial (auditoría por tabla/fila, trigger audit_row en 7 tablas) y Admin → Errores (client_errors: ErrorBoundary + window.onerror + unhandledrejection, con throttle). SQL: migration_audit_log.sql, migration_client_errors.sql',
       'Contactos: migration_contactos_supabase.sql (tablas contactos + contactos_favoritos, RLS con cuenta_activa/captacion_only_fuera/freno_borrado, realtime). Importación desde Contactos → «Importar ahora» (solo admin, desde el navegador con los datos buenos)',
       'Conflictos: migration_updated_at_triggers.sql (updated_at + trigger set_updated_at en players, clubs, club_negotiations, captacion_firmas, scouting_players). db.ts actualizarConControl lanza ConflictError; App guardarConControl abre ConflictModal. Hasta ejecutar el SQL, players/clubs guardan sin control (42703) y avisan en consola',

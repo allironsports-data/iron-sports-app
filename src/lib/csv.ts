@@ -26,16 +26,17 @@ export function filaCsv(valores: unknown[]): string {
  * @param nombre  nombre del archivo, sin extensión («jugadores-captacion»)
  * @param cabeceras  títulos de las columnas
  * @param filas  una lista por fila, en el mismo orden que las cabeceras
+ * @param conSello  false → el nombre va tal cual, sin la fecha de hoy detrás
  */
-export function exportarCsv(nombre: string, cabeceras: string[], filas: unknown[][]): void {
+export function exportarCsv(nombre: string, cabeceras: string[], filas: unknown[][], conSello = true): void {
   const texto = [cabeceras, ...filas].map(filaCsv).join('\r\n')
   const hoy = new Date()
-  const sello = `${hoy.getFullYear()}${String(hoy.getMonth() + 1).padStart(2, '0')}${String(hoy.getDate()).padStart(2, '0')}`
+  const sello = conSello ? `-${hoy.getFullYear()}${String(hoy.getMonth() + 1).padStart(2, '0')}${String(hoy.getDate()).padStart(2, '0')}` : ''
   const blob = new Blob(['﻿' + texto], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `${nombre}-${sello}.csv`
+  a.download = `${nombre}${sello}.csv`
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)

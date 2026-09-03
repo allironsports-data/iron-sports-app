@@ -135,6 +135,8 @@ export default function App() {
   // Navegación externa a una ficha de Captación (p. ej. desde Boulema)
   const [captacionOpenPlayerId, setCaptacionOpenPlayerId] = useState<string | null>(null)
   const [captacionOpenFirmasId, setCaptacionOpenFirmasId] = useState<string | null>(null)
+  // Abrir una pestaña concreta de Captación (botón flotante «Planificación»)
+  const [captacionOpenTab, setCaptacionOpenTab] = useState<'planificacion' | null>(null)
   // Abrir un partido concreto en Captación (desde «Mi día»)
   const [captacionOpenMatchId, setCaptacionOpenMatchId] = useState<string | null>(null)
   // Abrir una tarea concreta en el tablero (desde «Mi día»)
@@ -1298,10 +1300,30 @@ export default function App() {
     />
   )
 
+  // Botón flotante «Planificación» (la hoja del fin de semana), visible en
+  // todas las pantallas, también en móvil (encima de la barra inferior).
+  const irAPlanificacion = () => {
+    setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(null)
+    setShowTable(false); setShowAdmin(false); setShowContacts(false); setShowOverview(false)
+    setCaptacionOpenTab('planificacion')
+    setMainSection('captacion')
+  }
+  const planificacionFab = (
+    <button
+      onClick={irAPlanificacion}
+      title="Planificación del fin de semana"
+      aria-label="Planificación"
+      className="fixed bottom-[5.5rem] sm:bottom-4 right-3 sm:right-4 z-40 inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-slate-900 text-white text-xs font-semibold shadow-lg hover:bg-slate-700 print:hidden"
+    >
+      🗓️ <span className="hidden sm:inline">Planificación</span>
+    </button>
+  )
+
   // Extras globales: se añaden a todas las pantallas principales
   const withExtras = (node: ReactNode) => (
     <>
       {node}
+      {planificacionFab}
       <SavingIndicator />
       {conflictNode}
       {phase2Loading && (
@@ -1388,6 +1410,8 @@ export default function App() {
       openFirmasEntryId={captacionOpenFirmasId}
       onOpenFirmasEntryConsumed={() => setCaptacionOpenFirmasId(null)}
       openMatchId={captacionOpenMatchId}
+      openTab={captacionOpenTab}
+      onOpenTabConsumed={() => setCaptacionOpenTab(null)}
       onOpenMatchConsumed={() => setCaptacionOpenMatchId(null)}
       players={players}
       onCreatePlayer={handleAddPlayer}
@@ -1459,6 +1483,14 @@ export default function App() {
           aria-label="Mi día"
         >
           ☀️ Mi día
+        </button>
+        <button
+          onClick={() => setCaptacionOpenTab('planificacion')}
+          title="Planificación del fin de semana"
+          aria-label="Planificación"
+          className="fixed bottom-16 right-4 z-40 inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-slate-900 text-white text-xs font-semibold shadow-lg hover:bg-slate-700"
+        >
+          🗓️ Planificación
         </button>
         <SavingIndicator />{conflictNode}
       </>

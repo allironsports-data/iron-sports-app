@@ -1,3 +1,4 @@
+import type { CaptacionTab } from './helpers'
 import type { Player, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchScout, BoulemaPeticion, FirmasEntry } from '../../types'
 import type { Profile } from '../../contexts/AuthContext'
 import type { Equipo as EquipoCatalogo } from '../../lib/db'
@@ -42,6 +43,9 @@ export interface Props {
   /** Abrir la ficha de un partido (navegación desde «Mi día») */
   openMatchId?: string | null
   onOpenMatchConsumed?: () => void
+  /** Abrir una pestaña concreta desde fuera (botón flotante «Planificación») */
+  openTab?: CaptacionTab | null
+  onOpenTabConsumed?: () => void
   /** Cuenta "solo Captación": oculta el resto de secciones y deja solo Jugadores, Partidos e Informes */
   restricted?: boolean
   /** Catálogo de equipos (pestaña Equipos) */

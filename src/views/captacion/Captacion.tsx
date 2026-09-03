@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react'
 import {
-  LogOut, FileText, Calendar, TrendingUp, Eye, ClipboardList, Users, Inbox, Target, Sun, PenLine, Shield,
+  LogOut, FileText, Calendar, CalendarDays, TrendingUp, Eye, ClipboardList, Users, Inbox, Target, Sun, PenLine, Shield,
 } from 'lucide-react'
 import logoImg from '../../assets/logo.jpeg'
 import type { ScoutingPlayer, ScoutingReport, ScoutingAssessment, ScoutingMatch, FirmasEntry } from '../../types'
@@ -22,6 +22,7 @@ import { JugadoresTab, PAGE_SIZE, type JugadoresView } from './JugadoresTab'
 import { InformesTab } from './InformesTab'
 import { PartidosTab, MATCH_PAGE_SIZE, type MatchesView, type MatchModeFilter, type MatchStatusFilter } from './PartidosTab'
 import { PretemporadaTab, type PreSortKey, type PreAssessFilter } from './PretemporadaTab'
+import { PlanificacionTab } from './PlanificacionTab'
 import { PlayerPanel } from './PlayerPanel'
 import { EquiposTab, ZonasPanel } from './EquiposTab'
 import { useFilasEquipos, inicioTemporada } from './filasEquipos'
@@ -69,6 +70,8 @@ export function Captacion({
   onOpenFirmasEntryConsumed,
   openMatchId,
   onOpenMatchConsumed,
+  openTab,
+  onOpenTabConsumed,
   restricted,
   equipos,
   onSaveEquipo,
@@ -90,7 +93,7 @@ export function Captacion({
 
   // ── section tab ── (must be before header-height effect)
   const [captTab, setCaptTab] = useState<CaptacionTab>('jugadores')
-  const RESTRICTED_TABS: CaptacionTab[] = ['jugadores', 'partidos', 'informes']
+  const RESTRICTED_TABS: CaptacionTab[] = ['jugadores', 'partidos', 'planificacion', 'informes']
   useEffect(() => {
     if (restricted && !RESTRICTED_TABS.includes(captTab)) setCaptTab('jugadores')
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -120,6 +123,15 @@ export function Captacion({
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openMatchId])
+
+  // Navegación externa: abrir una pestaña (botón flotante «Planificación»)
+  useEffect(() => {
+    if (openTab) {
+      setCaptTab(openTab)
+      onOpenTabConsumed?.()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openTab])
 
   // Salto interno a una tarjeta de Firmar (desde la ficha de un jugador)
   const [firmasJumpId, setFirmasJumpId] = useState<string | null>(null)
@@ -1147,6 +1159,12 @@ export function Captacion({
     }
   }, [onUpdateMatch, showToast])
 
+  /** Guardar un partido ya existente (hora, notas, modo… desde la hoja de Planificación) */
+  const guardarPartido = useCallback(async (m: ScoutingMatch) => {
+    await db.updateScoutingMatch(m)
+    onUpdateMatch(m)
+  }, [onUpdateMatch])
+
   // ── Varios scouts por partido ──
   // assigned_to sigue guardando al responsable principal (Dashboard, avisos).
   async function handleAddScoutToMatch(m: ScoutingMatch, scout: string) {
@@ -1345,6 +1363,7 @@ export function Captacion({
             { id: 'equipos' as CaptacionTab, label: 'Equipos', labelMobile: 'Equipos', icon: <Shield className="w-3.5 h-3.5" /> },
             { id: 'informes' as CaptacionTab, label: 'Informes recientes', labelMobile: 'Informes', icon: <FileText className="w-3.5 h-3.5" /> },
             { id: 'partidos' as CaptacionTab, label: 'Partidos', labelMobile: 'Partidos', icon: <ClipboardList className="w-3.5 h-3.5" /> },
+            { id: 'planificacion' as CaptacionTab, label: 'Planificación', labelMobile: 'Planif.', icon: <CalendarDays className="w-3.5 h-3.5" /> },
             { id: 'pretemporada' as CaptacionTab, label: 'Pretemporada', labelMobile: 'Pretemp.', icon: <Sun className="w-3.5 h-3.5" /> },
           ]).filter(t => !restricted || RESTRICTED_TABS.includes(t.id)).map(t => (
             <button
@@ -1528,6 +1547,30 @@ export function Captacion({
           isAdmin={isAdmin}
           matchPage={matchPage} setMatchPage={setMatchPage} matchTotalPages={matchTotalPages}
           renderFichaPartido={renderFichaPartido}
+        />
+      )}
+
+      {/* ── PLANIFICACIÓN TAB (la hoja de fin de semana) ───────── */}
+      {captTab === 'planificacion' && (
+        <PlanificacionTab
+          scoutingMatches={scoutingMatches}
+          matchScouts={matchScouts}
+          matchPlayers={matchPlayers}
+          scoutingPlayers={scoutingPlayers}
+          players={players}
+          profiles={profiles}
+          showAddMatch={showAddMatch} setShowAddMatch={setShowAddMatch}
+          editingMatch={editingMatch} setEditingMatch={setEditingMatch}
+          handleSaveMatch={handleSaveMatch}
+          openAddMatch={openAddMatch}
+          showToast={showToast}
+          guardarPartido={guardarPartido}
+          onAddScout={handleAddScoutToMatch}
+          onRemoveScout={handleRemoveScoutFromMatch}
+          onSetScoutMode={handleScoutMode}
+          setDetailMatchId={setDetailMatchId}
+          renderFichaPartido={renderFichaPartido}
+          isDesktop={isDesktop}
         />
       )}
 

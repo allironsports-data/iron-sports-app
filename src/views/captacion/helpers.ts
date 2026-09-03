@@ -9,7 +9,7 @@ export type ShowToast = (message: string, variant?: 'success' | 'error' | 'info'
 
 // ── Constants ────────────────────────────────────────────────
 
-export type CaptacionTab = 'jugadores' | 'firmar' | 'conclusiones' | 'contratos' | 'equipos' | 'informes' | 'partidos' | 'pretemporada'
+export type CaptacionTab = 'jugadores' | 'firmar' | 'conclusiones' | 'contratos' | 'equipos' | 'informes' | 'partidos' | 'planificacion' | 'pretemporada'
 
 export const ASSESSMENT_CONFIG: Record<ScoutingAssessment, { label: string; bg: string; text: string; border: string }> = {
   Llamar:     { label: 'Llamar',     bg: 'bg-amber-100',   text: 'text-amber-700',   border: 'border-amber-200' },

@@ -7,11 +7,13 @@ import { FormRow, Spinner } from '../comun'
 import { type ShowToast, COMPETITION_OPTIONS, fmtDate } from '../helpers'
 // ── MatchFormPanel — isolated so keystrokes don't re-render the whole list ──
 export type MatchFormState = { date: string; time: string; homeTeam: string; awayTeam: string; competition: string; assignedTo: string; viewMode: 'video' | 'campo'; notes: string }
-function emptyMatchForm(): MatchFormState {
-  return { date: '', time: '', homeTeam: '', awayTeam: '', competition: '', assignedTo: '', viewMode: 'video', notes: '' }
+function emptyMatchForm(fecha = ''): MatchFormState {
+  return { date: fecha, time: '', homeTeam: '', awayTeam: '', competition: '', assignedTo: '', viewMode: 'video', notes: '' }
 }
-export function MatchFormPanel({ initial, profiles, onSave, onCancel, showToast, partidos = [], onOpenExisting }: {
+export function MatchFormPanel({ initial, fechaInicial, profiles, onSave, onCancel, showToast, partidos = [], onOpenExisting }: {
   initial?: ScoutingMatch
+  /** Fecha preseleccionada al crear (p. ej. el viernes de la planificación) */
+  fechaInicial?: string
   profiles: Profile[]
   onSave: (f: MatchFormState) => Promise<void>
   onCancel: () => void
@@ -22,7 +24,7 @@ export function MatchFormPanel({ initial, profiles, onSave, onCancel, showToast,
 }) {
   const [form, setForm] = useState<MatchFormState>(initial
     ? { date: initial.date, time: initial.time ?? '', homeTeam: initial.homeTeam, awayTeam: initial.awayTeam, competition: initial.competition ?? '', assignedTo: initial.assignedTo ?? '', viewMode: initial.viewMode ?? 'video', notes: initial.notes ?? '' }
-    : emptyMatchForm()
+    : emptyMatchForm(fechaInicial)
   )
   const [saving, setSaving] = useState(false)
   const set = (k: keyof MatchFormState, v: string) => setForm(f => ({ ...f, [k]: v }))
