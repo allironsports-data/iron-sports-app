@@ -32,6 +32,7 @@ import { PlayerClubList } from "../components/PlayerClubList";
 import { NEG_STATUSES as NEG_STATUSES_D, NEG_STATUS_CONFIG as STATUS_CONFIG_D } from "../components/playerClubList";
 import { BulkAssignModal } from "../components/BulkAssignModal";
 import { POSITIONS, positionLabel } from "../lib/positions";
+import { generarInformeJugador } from "../lib/informeJugador";
 
 const PRIMARY = "hsl(220,72%,26%)";
 
@@ -219,6 +220,14 @@ export function PlayerDetail({
             </span>
           )}
           <button
+            onClick={() => generarInformeJugador(player)}
+            aria-label="Exportar informe"
+            title="Ficha deportiva, contrato e informes en PDF"
+            className="p-2 text-slate-400 hover:text-slate-600 border border-slate-200 rounded-lg"
+          >
+            <Download className="w-3.5 h-3.5" />
+          </button>
+          <button
             onClick={() => setShowEditPlayer(true)}
             aria-label="Editar jugador"
             className="p-2 text-slate-400 hover:text-slate-600 border border-slate-200 rounded-lg"
@@ -314,6 +323,14 @@ export function PlayerDetail({
                     </button>
                   )}
                 </div>
+                <button
+                  onClick={() => generarInformeJugador(player)}
+                  title="Ficha deportiva, contrato e informes en PDF, listo para compartir"
+                  className="flex items-center justify-center gap-1.5 mt-1.5 w-full px-2 py-1.5 rounded-lg text-xs font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Exportar informe
+                </button>
               </div>
 
               {/* Nav groups */}
