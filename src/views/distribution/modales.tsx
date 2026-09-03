@@ -344,7 +344,8 @@ export function NeedFormInline({ initial, onSave, onCancel }: {
 
 export function AddClubModal({ onClose, onSave, leagueOptions, profiles, currentProfileAvatar }: {
   onClose: () => void
-  onSave: (data: Omit<Club, 'id' | 'createdAt'>) => Promise<void>
+  // El componente que abre este modal es quien sabe en qué temporada se está: añade `season` antes de guardar
+  onSave: (data: Omit<Club, 'id' | 'createdAt' | 'season'>) => Promise<void>
   leagueOptions: { league: string; country: string }[]
   profiles: Profile[]
   currentProfileAvatar?: string

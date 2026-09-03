@@ -35,7 +35,11 @@ import {
 
 // ── constants ─────────────────────────────────────────────────
 
-const CURRENT_SEASON = '2025-26'
+// La primera es la temporada activa (nuevas altas de jugador y de club van
+// aquí); el resto son temporadas archivadas — se siguen pudiendo consultar
+// tal cual quedaron, pero no reciben altas nuevas.
+const SEASONS = ['2026-27', '2025-26']
+const ARCHIVED_SEASONS = new Set(SEASONS.slice(1))
 
 type TabId = 'jugadores' | 'clubes' | 'solicitudes' | 'oportunidades' | 'pipeline' | 'encargados'
 
@@ -75,7 +79,7 @@ export interface Props {
 // ── main component ────────────────────────────────────────────
 
 export function Distribution({
-  players, clubs, entries, negotiations: negotiationsAll, currentProfile, profiles,
+  players, clubs: clubsAll, entries, negotiations: negotiationsAll, currentProfile, profiles,
   onBack, onGoToCaptacion, onGoToBoulema, onLogout, onAdmin, onSelectPlayer, onSelectClub,
   onCreateClub, onUpdateClub, onDeleteClub,
   onCreateEntry, onUpdateEntry, onDeleteEntry,
@@ -89,6 +93,22 @@ export function Distribution({
   // (siguen en la BBDD y en la ficha del jugador); la negociación «cerrado»
   // sí se conserva como historial.
   const negotiations = useMemo(() => hideDeadNegotiations(negotiationsAll), [negotiationsAll])
+
+  // ── Temporada ─────────────────────────────────────────────
+  // 2025-26 se archiva (se sigue pudiendo consultar, pero ya no es la
+  // temporada activa): las nuevas altas van a 2026-27. Clubes y fichas de
+  // jugador están ligados a una temporada; cambiar de temporada aquí filtra
+  // ambos, no solo la lista de jugadores.
+  const [season, setSeason] = useState<string>(SEASONS[0])
+  const clubs = useMemo(() => clubsAll.filter(c => c.season === season), [clubsAll, season])
+  // Si te traen aquí a un club concreto (p. ej. desde la ficha de un
+  // jugador) que resulta ser de otra temporada, cambia sola de temporada en
+  // vez de enseñar «no encontrado».
+  useEffect(() => {
+    if (!activeClubId) return
+    const club = clubsAll.find(c => c.id === activeClubId)
+    if (club && club.season !== season) setSeason(club.season)
+  }, [activeClubId, clubsAll, season])
 
   const [tab, setTab] = useState<TabId>(
     () => {
@@ -243,7 +263,6 @@ export function Distribution({
     return m
   }, [negotiations])
 
-  const season = CURRENT_SEASON
   const { seasonEntries, playersById, clubsById, negsByPlayer, negsByClub, entriesByPlayer } =
     useDistributionIndexes({ players, clubs, entries, negotiations, season })
 
@@ -542,7 +561,21 @@ export function Distribution({
             <span className="hidden sm:block font-black text-sm tracking-tight text-slate-900 uppercase">All Iron Sports</span>
           </div>
           <div className="flex items-center gap-1.5 sm:gap-2">
-            <span className="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded-md">{CURRENT_SEASON}</span>
+            <div className={`relative flex items-center rounded-md ${ARCHIVED_SEASONS.has(season) ? 'bg-amber-50' : 'bg-slate-100'}`}>
+              <select
+                value={season}
+                onChange={e => setSeason(e.target.value)}
+                title={ARCHIVED_SEASONS.has(season) ? 'Temporada archivada: consultable, pero ya no es la temporada activa' : 'Temporada activa'}
+                className={`appearance-none bg-transparent pl-2 pr-5 py-1 text-xs font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/30 ${
+                  ARCHIVED_SEASONS.has(season) ? 'text-amber-700' : 'text-slate-500'
+                }`}
+              >
+                {SEASONS.map(s => (
+                  <option key={s} value={s}>{s}{ARCHIVED_SEASONS.has(s) ? ' · archivada' : ''}</option>
+                ))}
+              </select>
+              <ChevronDown className="w-3 h-3 absolute right-1.5 pointer-events-none text-slate-400" />
+            </div>
             {currentProfile.is_admin && onAdmin && (
               <button onClick={onAdmin} className="p-1 sm:p-1.5 text-slate-400 hover:text-slate-600 transition-colors text-xs hidden sm:block">Admin</button>
             )}
@@ -874,7 +907,7 @@ export function Distribution({
           onClose={() => setShowAddClub(false)}
           onSave={async (data) => {
             try {
-              const saved = await onCreateClub(data)
+              const saved = await onCreateClub({ ...data, season })
               setSelectedClubId(saved.id)
               setShowAddClub(false)
               showToast('Club creado correctamente')

@@ -633,6 +633,9 @@ function dbToClub(row: Record<string, unknown>): Club {
   return {
     id: row.id as string,
     name: row.name as string,
+    // Clubes de antes de que existieran varias temporadas: se consideran de
+    // la primera temporada archivada (2025-26), no de la activa.
+    season: (row.season as string) ?? '2025-26',
     league: (row.league as string) ?? undefined,
     country: (row.country as string) ?? 'Spain',
     contactPerson: (row.contact_person as string) ?? undefined,
@@ -668,6 +671,7 @@ export async function fetchClubs(): Promise<Club[]> {
 export async function createClub(c: Omit<Club, 'id' | 'createdAt'>): Promise<Club> {
   const { data, error } = await supabase.from('clubs').insert({
     name: c.name,
+    season: c.season,
     league: c.league ?? null,
     country: c.country,
     contact_person: c.contactPerson ?? null,

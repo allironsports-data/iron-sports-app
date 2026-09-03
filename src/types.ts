@@ -214,6 +214,8 @@ export interface ClubNeed {
 export interface Club {
   id: string
   name: string
+  /** Temporada de Distribución a la que pertenece esta ficha (p. ej. "2026-27") */
+  season: string
   league?: string
   country: string
   contactPerson?: string
