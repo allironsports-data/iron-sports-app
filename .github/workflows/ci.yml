@@ -1,4 +1,9 @@
-# CI: tipos, tests y build en cada push y pull request.
+# CI: tipos, tests, lint y build en cada push y pull request.
+#
+# El proyecto se instala con pnpm (pnpm-lock.yaml es el lock real; el
+# package-lock.json es de abril y ya no cuadra con package.json, por eso
+# `npm ci` fallaba en 11 segundos). --frozen-lockfile falla si alguien cambia
+# package.json sin actualizar el lock: es lo que queremos.
 name: CI
 
 on:
@@ -11,26 +16,32 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - name: Tipos (tsc -b)
-        run: npx tsc -b
+        run: pnpm exec tsc -b
       - name: Tests (vitest)
-        run: npx vitest run
+        run: pnpm exec vitest run
       - name: Build (vite)
-        run: npx vite build
+        run: pnpm exec vite build
 
   lint:
     name: ESLint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npx eslint . --max-warnings=0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec eslint . --max-warnings=0
