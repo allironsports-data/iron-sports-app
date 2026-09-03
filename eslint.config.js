@@ -6,7 +6,8 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  // _to_delete y supabase/functions (Deno) no forman parte del build de Vite.
+  globalIgnores(['dist', '_to_delete', 'supabase/functions', 'src-fix']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
