@@ -1,4 +1,5 @@
 import React from 'react'
+import { registrarError } from '../lib/dbErrors'
 
 // ── Red de seguridad de la app ───────────────────────────────────────
 // Si un fallo al pintar deja la pantalla en blanco (un dato inesperado,
@@ -24,6 +25,8 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error('[app] Error al pintar la interfaz:', error, info.componentStack)
+    // Queda apuntado en client_errors para verlo en Admin → Errores
+    registrarError(error, { origen: 'ErrorBoundary', zona: this.props.zona ?? null, componentStack: (info.componentStack ?? '').slice(0, 2000) })
   }
 
   render() {

@@ -195,6 +195,8 @@ export interface Player {
   info: PlayerInfo;
   transfermarktUrl?: string;   // URL del perfil en Transfermarkt
   links: PlayerLink[];         // enlaces adicionales (vídeos, redes, etc.)
+  /** Control de conflictos: el updated_at leído; se manda al guardar (ver db.ts). Opcional hasta migrar. */
+  updatedAt?: string;
 }
 
 // ── DISTRIBUTION ────────────────────────────────────────────
@@ -224,6 +226,8 @@ export interface Club {
   contacted?: boolean
   contactedBy?: string      // avatar de quien lo marcó
   contactedAt?: string      // ISO timestamp
+  /** Control de conflictos: el updated_at leído; se manda al guardar (ver db.ts). Opcional hasta migrar. */
+  updatedAt?: string
 }
 
 export interface DistributionEntry {

@@ -1,0 +1,36 @@
+# CI: tipos, tests y build en cada push y pull request.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    name: Tipos · tests · build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Tipos (tsc -b)
+        run: npx tsc -b
+      - name: Tests (vitest)
+        run: npx vitest run
+      - name: Build (vite)
+        run: npx vite build
+
+  lint:
+    name: ESLint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx eslint . --max-warnings=0

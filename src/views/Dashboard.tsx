@@ -3,8 +3,7 @@ import { TaskDetailPanel } from "../components/TaskDetailPanel";
 import { BUILD_ID, CHANGELOG } from "../changelog";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { EmptyState } from "../components/EmptyState";
-import { ToastStack } from "../components/ToastStack";
-import { useToast } from "../hooks/useToast";
+import { useToastContext } from "../hooks/useToastContext";
 import { useEscapeKey } from "../hooks/useEscapeKey";
 import { useDebounce } from "../hooks/useDebounce";
 import { isValidName, isValidBirthDate } from "../lib/validate";
@@ -44,14 +43,18 @@ import {
   ExternalLink,
   RotateCcw,
   Check,
-  Inbox } from "lucide-react";
+  Inbox,
+  Sun } from "lucide-react";
 import { POSITIONS, POSITION_CODES, positionLabel } from "../lib/positions";
 
 const PRIMARY = "hsl(220,72%,26%)";
 
 interface Props {
   view?: 'tareas' | 'jugadores';   // which section to show
-  onViewChange?: (v: 'tareas' | 'jugadores' | 'distribucion' | 'captacion' | 'boulema') => void;
+  onViewChange?: (v: 'tareas' | 'jugadores' | 'distribucion' | 'captacion' | 'boulema' | 'mi-dia') => void;
+  /** Abrir una tarea concreta al entrar (p. ej. desde «Mi día»); se consume una vez abierta */
+  openTaskId?: string | null;
+  onOpenTaskConsumed?: () => void;
   /** Pipeline de firmas — para el aviso de próximas acciones de hoy */
   firmasEntries?: FirmasEntry[];
   onOpenFirmar?: (entryId: string) => void;
@@ -114,6 +117,8 @@ const ACTIVITY_TYPES_DASH = [
 export function Dashboard({
   view = 'tareas',
   onViewChange,
+  openTaskId,
+  onOpenTaskConsumed,
   firmasEntries,
   onOpenFirmar,
   updateAvailable,
@@ -145,7 +150,7 @@ export function Dashboard({
   onDeletePostpartido,
   onAddScoutingMatch,
 }: Props) {
-  const { toasts, showToast, dismissToast } = useToast();
+  const { showToast } = useToastContext();
   // Internal tabs: 'equipo'/'postpartidos' se gestionan localmente; 'tareas'/'jugadores' vienen del prop `view`
   const [internalTab, setInternalTab] = useState<'equipo' | 'postpartidos' | null>(null);
   const activeTab = internalTab ?? view;   // 'tareas' | 'jugadores' | 'equipo' | 'postpartidos'
@@ -365,6 +370,14 @@ export function Dashboard({
   const [taskSortCol, setTaskSortCol] = useState<'title' | 'player' | 'priority' | 'dueDate' | 'status'>('dueDate');
   const [taskSortDir, setTaskSortDir] = useState<'asc' | 'desc'>('asc');
   const [detailTask, setDetailTask] = useState<Task | null>(null);
+  // Apertura externa de una tarea (desde «Mi día»)
+  useEffect(() => {
+    if (!openTaskId) return;
+    const t = tasks.find(x => x.id === openTaskId);
+    if (t) { setInternalTab(null); setDetailTask(t); }
+    onOpenTaskConsumed?.();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openTaskId, tasks]);
 
   // Bulk select state
   const [selectMode, setSelectMode] = useState(false);
@@ -768,6 +781,13 @@ export function Dashboard({
                 <Inbox className="w-3.5 h-3.5" />
                 Boulema
               </button>
+              <button
+                onClick={() => { setInternalTab(null); onViewChange('mi-dia'); }}
+                className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors ml-auto"
+              >
+                <Sun className="w-3.5 h-3.5" />
+                Mi día
+              </button>
             </div>
 
             {/* Level 2: Mantenimiento sub-tabs */}
@@ -1058,12 +1078,20 @@ export function Dashboard({
                   </div>
                 ))}
                 {onViewChange && (
-                  <button
-                    onClick={() => onViewChange("captacion")}
-                    className="w-full text-center text-xs font-medium text-blue-700 hover:bg-blue-100/50 py-2 transition-colors"
-                  >
-                    Ver en Captación →
-                  </button>
+                  <div className="flex divide-x divide-blue-100">
+                    <button
+                      onClick={() => onViewChange("mi-dia")}
+                      className="flex-1 text-center text-xs font-medium text-blue-700 hover:bg-blue-100/50 py-2 transition-colors"
+                    >
+                      Ver mi día →
+                    </button>
+                    <button
+                      onClick={() => onViewChange("captacion")}
+                      className="flex-1 text-center text-xs font-medium text-blue-700 hover:bg-blue-100/50 py-2 transition-colors"
+                    >
+                      Ver en Captación →
+                    </button>
+                  </div>
                 )}
               </div>
             )}
@@ -2898,7 +2926,6 @@ export function Dashboard({
 
       {/* ── Editor "Mi estado" ── */}
 
-      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
@@ -3153,6 +3180,14 @@ function CompactTaskList({ tasks, completedTasks, players, profiles, onCycleStat
 /* ── TaskTableView: sortable table view ── */
 type TaskSortCol = 'title' | 'player' | 'priority' | 'dueDate' | 'status';
 
+// Flecha de orden de la tabla de tareas (a nivel de módulo: no se recrea en cada render)
+function SortIndicator({ col, sortCol, sortDir }: { col: TaskSortCol; sortCol: TaskSortCol; sortDir: 'asc' | 'desc' }) {
+  if (col !== sortCol) return <ChevronDown className="w-3 h-3 opacity-25 inline-block ml-0.5" />;
+  return sortDir === 'asc'
+    ? <ChevronDown className="w-3 h-3 text-blue-500 inline-block ml-0.5" />
+    : <ChevronDown className="w-3 h-3 text-blue-500 inline-block ml-0.5 rotate-180" />;
+}
+
 function TaskTableView({ tasks, players, profiles, onOpenDetail, onCycleStatus, detailTaskId, sortCol, sortDir, onSort }: {
   tasks: Task[];
   players: Player[];
@@ -3188,13 +3223,6 @@ function TaskTableView({ tasks, players, profiles, onOpenDetail, onCycleStatus, 
     return sortDir === 'asc' ? cmp : -cmp;
   });
 
-  const SortIndicator = ({ col }: { col: TaskSortCol }) => {
-    if (col !== sortCol) return <ChevronDown className="w-3 h-3 opacity-25 inline-block ml-0.5" />;
-    return sortDir === 'asc'
-      ? <ChevronDown className="w-3 h-3 text-blue-500 inline-block ml-0.5" />
-      : <ChevronDown className="w-3 h-3 text-blue-500 inline-block ml-0.5 rotate-180" />;
-  };
-
   const thCls = "px-3 py-2 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wide cursor-pointer hover:text-slate-700 select-none whitespace-nowrap";
 
   const prioBadge = (p: Task['priority']) =>
@@ -3216,12 +3244,12 @@ function TaskTableView({ tasks, players, profiles, onOpenDetail, onCycleStatus, 
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50/80">
             {onCycleStatus && <th style={{ width: '32px' }} />}
-            <th className={thCls} style={{ width: '34%' }} onClick={() => onSort('title')}>Tarea<SortIndicator col="title" /></th>
-            <th className={thCls} style={{ width: '16%' }} onClick={() => onSort('player')}>Jugador<SortIndicator col="player" /></th>
+            <th className={thCls} style={{ width: '34%' }} onClick={() => onSort('title')}>Tarea<SortIndicator col="title" sortCol={sortCol} sortDir={sortDir} /></th>
+            <th className={thCls} style={{ width: '16%' }} onClick={() => onSort('player')}>Jugador<SortIndicator col="player" sortCol={sortCol} sortDir={sortDir} /></th>
             <th className={thCls} style={{ width: '13%' }}>Responsable</th>
-            <th className={thCls} style={{ width: '10%' }} onClick={() => onSort('priority')}>Prioridad<SortIndicator col="priority" /></th>
-            <th className={thCls} style={{ width: '11%' }} onClick={() => onSort('dueDate')}>Fecha<SortIndicator col="dueDate" /></th>
-            <th className={thCls} style={{ width: '16%' }} onClick={() => onSort('status')}>Estado<SortIndicator col="status" /></th>
+            <th className={thCls} style={{ width: '10%' }} onClick={() => onSort('priority')}>Prioridad<SortIndicator col="priority" sortCol={sortCol} sortDir={sortDir} /></th>
+            <th className={thCls} style={{ width: '11%' }} onClick={() => onSort('dueDate')}>Fecha<SortIndicator col="dueDate" sortCol={sortCol} sortDir={sortDir} /></th>
+            <th className={thCls} style={{ width: '16%' }} onClick={() => onSort('status')}>Estado<SortIndicator col="status" sortCol={sortCol} sortDir={sortDir} /></th>
           </tr>
         </thead>
         <tbody>

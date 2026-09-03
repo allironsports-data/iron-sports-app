@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import logoImg from '../assets/logo.jpeg'
 import type { Profile } from '../contexts/AuthContext'
 import type { Task, Player, ScoutingPlayer, ScoutingReport, ScoutingMatch, FirmasEntry } from '../types'
@@ -6,7 +6,11 @@ import { CaptacionStats } from './CaptacionStats'
 import { updateProfile } from '../lib/db'
 import { hoyISO, esVencida, parseDia } from '../lib/fechas'
 import { supabase } from '../lib/supabase'
-import { ArrowLeft, LogOut, Shield, UserPlus, Check, X, Edit3, Copy, Trash2, KeyRound, AlertTriangle, BarChart3, Users, ChevronDown, ChevronRight, Clock, CheckCircle2, Circle, Eye } from 'lucide-react'
+import { AUDIT_TABLAS } from '../lib/dbAudit'
+import { HistorialCambios } from '../components/HistorialCambios'
+import { fechaRelativa } from '../lib/formato'
+import { fetchClientErrors, vaciarErroresAntiguos, type ClientError } from '../lib/dbErrors'
+import { ArrowLeft, LogOut, Shield, UserPlus, Check, X, Edit3, Copy, Trash2, KeyRound, AlertTriangle, BarChart3, Users, ChevronDown, ChevronRight, Clock, CheckCircle2, Circle, Eye, History, Bug, Search } from 'lucide-react'
 
 
 function generatePassword() {
@@ -28,7 +32,7 @@ interface Props {
   onOpenTable?: () => void
 }
 
-type AdminTab = 'equipo' | 'tareas' | 'captacion'
+type AdminTab = 'equipo' | 'tareas' | 'captacion' | 'historial' | 'errores'
 
 export function AdminPanel({ profiles, tasks, players, scoutingPlayers, scoutingReports, scoutingMatches, firmasEntries, onBack, onRefresh, onLogout, onOpenTable }: Props) {
   const [tab, setTab] = useState<AdminTab>('equipo')
@@ -37,6 +41,8 @@ export function AdminPanel({ profiles, tasks, players, scoutingPlayers, scouting
     { id: 'equipo', label: 'Equipo', icon: <Users className="w-4 h-4" /> },
     { id: 'tareas', label: 'Seguimiento', icon: <BarChart3 className="w-4 h-4" /> },
     { id: 'captacion', label: 'Stats Captación', icon: <Eye className="w-4 h-4" /> },
+    { id: 'historial', label: 'Historial', icon: <History className="w-4 h-4" /> },
+    { id: 'errores', label: 'Errores', icon: <Bug className="w-4 h-4" /> },
   ]
 
   return (
@@ -55,10 +61,10 @@ export function AdminPanel({ profiles, tasks, players, scoutingPlayers, scouting
             <LogOut className="w-4 h-4" />
           </button>
         </div>
-        <div className="max-w-5xl mx-auto px-4 flex gap-1">
+        <div className="max-w-5xl mx-auto px-4 flex gap-1 overflow-x-auto">
           {tabs.map((t) => (
             <button key={t.id} onClick={() => setTab(t.id)}
-              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
                 tab === t.id ? 'border-primary text-slate-800' : 'border-transparent text-slate-400 hover:text-slate-600'
               }`}>
               {t.icon}{t.label}
@@ -79,6 +85,8 @@ export function AdminPanel({ profiles, tasks, players, scoutingPlayers, scouting
             profiles={profiles}
           />
         )}
+        {tab === 'historial' && <HistorialTab profiles={profiles} />}
+        {tab === 'errores' && <ErroresTab profiles={profiles} />}
       </main>
     </div>
   )
@@ -91,6 +99,7 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
   const [inviteAvatar, setInviteAvatar] = useState('')
   const [tempPassword, setTempPassword] = useState(() => generatePassword())
   const [inviteStatus, setInviteStatus] = useState<'idle' | 'sending' | 'ok' | 'error'>('idle')
+  const [inviteError, setInviteError] = useState('')
   const [createdInfo, setCreatedInfo] = useState<{ email: string; password: string } | null>(null)
   const [copied, setCopied] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -106,12 +115,20 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
     setInviteStatus('sending')
     try {
       const avatar = inviteAvatar || inviteName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 3)
-      const { error } = await supabase.auth.signUp({
-        email: inviteEmail,
-        password: tempPassword,
-        options: { data: { name: inviteName, avatar } },
+      // Edge Function con service role: así el admin no pierde su sesión
+      // (signUp con «Confirm email» desactivado lo dejaba logueado como el nuevo)
+      const { data, error } = await supabase.functions.invoke<{ id?: string; error?: string }>('crear-usuario', {
+        body: { email: inviteEmail, password: tempPassword, name: inviteName, avatar },
       })
-      if (error) throw error
+      if (error) {
+        // El cuerpo de error de la función viene dentro de context
+        const ctx = (error as { context?: Response }).context
+        let detalle = ''
+        try { detalle = ctx ? ((await ctx.json()) as { error?: string }).error ?? '' : '' } catch { /* sin cuerpo */ }
+        throw new Error(detalle || 'No se ha podido llamar a la función crear-usuario. ¿Está desplegada?')
+      }
+      if (data?.error) throw new Error(data.error)
+      if (!data?.id) throw new Error('La función no ha devuelto el id del usuario')
       setCreatedInfo({ email: inviteEmail, password: tempPassword })
       setInviteStatus('ok')
       setInviteEmail('')
@@ -121,8 +138,9 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
       await onRefresh()
     } catch (err: unknown) {
       console.error(err)
+      setInviteError(err instanceof Error ? err.message : 'Error al crear el usuario')
       setInviteStatus('error')
-      setTimeout(() => setInviteStatus('idle'), 4000)
+      setTimeout(() => setInviteStatus('idle'), 6000)
     }
   }
 
@@ -260,7 +278,7 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
                 {inviteStatus === 'sending' ? 'Creando...' : 'Crear usuario'}
               </button>
               {inviteStatus === 'error' && (
-                <span className="text-xs text-red-500">Error al crear el usuario. Comprueba que el email no esté ya registrado.</span>
+                <span className="text-xs text-red-500">{inviteError || 'Error al crear el usuario.'}</span>
               )}
             </div>
           </form>
@@ -396,6 +414,125 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+/* ========== HISTORIAL TAB ========== */
+function HistorialTab({ profiles }: { profiles: Profile[] }) {
+  const [tabla, setTabla] = useState('')
+  const [filaInput, setFilaInput] = useState('')
+  const [filaId, setFilaId] = useState('')
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white border border-slate-200 rounded-lg p-4">
+        <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2"><History className="w-4 h-4" /> Historial de cambios</h2>
+        <p className="text-xs text-slate-400 mt-0.5">Quién cambió qué en jugadores, clubes, negociaciones, firmas, scouting y tareas. Lo apunta la base de datos, no la app.</p>
+        <form onSubmit={e => { e.preventDefault(); setFilaId(filaInput.trim()) }} className="mt-3 flex items-center gap-2 flex-wrap">
+          <select value={tabla} onChange={e => setTabla(e.target.value)}
+            className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+            <option value="">Todas las tablas</option>
+            {AUDIT_TABLAS.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+          </select>
+          <div className="flex items-center gap-1 flex-1 min-w-[200px]">
+            <input value={filaInput} onChange={e => setFilaInput(e.target.value)} placeholder="Buscar por id de fila (uuid)"
+              className="flex-1 text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+            <button type="submit" className="p-1.5 rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50" title="Buscar"><Search className="w-3.5 h-3.5" /></button>
+            {filaId && <button type="button" onClick={() => { setFilaId(''); setFilaInput('') }} className="text-xs text-slate-400 hover:text-slate-600 underline">Quitar</button>}
+          </div>
+        </form>
+      </div>
+      <div className="bg-white border border-slate-200 rounded-lg px-4 py-2">
+        <HistorialCambios tabla={tabla || undefined} filaId={filaId || undefined} profiles={profiles} />
+      </div>
+    </div>
+  )
+}
+
+/* ========== ERRORES TAB ========== */
+function ErroresTab({ profiles }: { profiles: Profile[] }) {
+  const [items, setItems] = useState<ClientError[]>([])
+  const [cargando, setCargando] = useState(false)
+  const [fin, setFin] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [abierto, setAbierto] = useState<number | null>(null)
+  const [vaciando, setVaciando] = useState(false)
+  const LIMIT = 100
+
+  const cargar = useCallback(async (before?: string) => {
+    setCargando(true)
+    setError(null)
+    try {
+      const page = await fetchClientErrors({ limit: LIMIT, before })
+      setItems(prev => (before ? [...prev, ...page] : page))
+      setFin(page.length < LIMIT)
+    } catch (e) {
+      const code = (e as { code?: string } | null)?.code
+      setError(code === '42P01' ? 'El registro de errores aún no está activado (falta ejecutar migration_client_errors.sql).' : 'No se han podido cargar los errores.')
+    } finally {
+      setCargando(false)
+    }
+  }, [])
+
+  useEffect(() => { void cargar() }, [cargar])
+
+  const vaciar = async () => {
+    if (!confirm('¿Borrar los errores de hace más de 30 días?')) return
+    setVaciando(true)
+    try { await vaciarErroresAntiguos(30); await cargar() } catch { setError('No se han podido borrar.') } finally { setVaciando(false) }
+  }
+
+  const nombre = (uid: string | null) => {
+    if (!uid) return '—'
+    return profiles.find(p => p.id === uid)?.name ?? uid.slice(0, 8)
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white border border-slate-200 rounded-lg p-4 flex items-center justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2"><Bug className="w-4 h-4" /> Errores del cliente</h2>
+          <p className="text-xs text-slate-400 mt-0.5">Fallos que han saltado en el navegador de alguien del equipo (pantalla rota, promesas sin capturar). Máx. 5 por minuto y usuario.</p>
+        </div>
+        <button onClick={vaciar} disabled={vaciando}
+          className="text-xs px-3 py-1.5 rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 inline-flex items-center gap-1">
+          <Trash2 className="w-3.5 h-3.5" /> {vaciando ? 'Borrando…' : 'Vaciar antiguos (>30 días)'}
+        </button>
+      </div>
+      {error && <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">{error}</p>}
+      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+        {items.length === 0 && !cargando && !error && <p className="text-xs text-slate-400 text-center py-8">Sin errores registrados. 🎉</p>}
+        <div className="divide-y divide-slate-100">
+          {items.map(e => (
+            <div key={e.id} className="px-4 py-2.5 text-xs">
+              <button onClick={() => setAbierto(abierto === e.id ? null : e.id)} className="w-full text-left">
+                <div className="flex items-center gap-2 flex-wrap text-slate-500">
+                  <span className="text-slate-400 w-20 flex-shrink-0" title={new Date(e.at).toLocaleString('es-ES')}>{fechaRelativa(e.at)}</span>
+                  <span className="font-medium text-slate-700">{nombre(e.userId)}</span>
+                  {e.buildId && <span className="font-mono text-[10.5px] bg-slate-100 rounded px-1">{e.buildId}</span>}
+                  {e.ruta && <span className="font-mono text-[10.5px] text-slate-400 truncate max-w-[200px]">{e.ruta}</span>}
+                  {abierto === e.id ? <ChevronDown className="w-3.5 h-3.5 ml-auto" /> : <ChevronRight className="w-3.5 h-3.5 ml-auto" />}
+                </div>
+                <div className="mt-0.5 text-slate-800 break-words">{e.mensaje}</div>
+              </button>
+              {abierto === e.id && (
+                <div className="mt-2 space-y-1.5">
+                  {e.contexto && <pre className="text-[10.5px] text-slate-500 bg-slate-50 rounded p-2 overflow-x-auto whitespace-pre-wrap break-words">{JSON.stringify(e.contexto, null, 1)}</pre>}
+                  <pre className="text-[10.5px] text-slate-500 bg-slate-50 rounded p-2 overflow-x-auto whitespace-pre-wrap break-words">{e.stack ?? '(sin stack)'}</pre>
+                  {e.userAgent && <p className="text-[10.5px] text-slate-400 break-words">{e.userAgent}</p>}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        {cargando && <p className="text-xs text-slate-400 px-4 py-2">Cargando…</p>}
+        {!fin && !cargando && items.length > 0 && (
+          <div className="px-4 py-2 border-t border-slate-100">
+            <button onClick={() => void cargar(items[items.length - 1].at)} className="text-xs px-3 py-1.5 border border-slate-200 rounded-md text-slate-600 hover:bg-slate-50">Cargar más</button>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

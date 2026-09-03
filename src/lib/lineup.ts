@@ -1,6 +1,25 @@
 import { normClave as norm } from './texto'
+import { equipoMatchKind } from './equipos'
 
 import type { ScoutingPlayer } from '../types'
+
+// ── ¿Cambia de equipo? ───────────────────────────────────────────────
+// Una alineación pegada dice dónde juega HOY el chaval. Comparado con lo
+// que tiene la ficha puede ser:
+//   'ninguno'   → mismo club y misma categoría: no hay nada que corregir
+//   'categoria' → mismo club, otra categoría (Juv B → Juv A): antes esto
+//                 no se detectaba porque teamMatchKind ignora «A/B/Juv»
+//   'club'      → club distinto (o sin equipo en la ficha)
+export type CambioEquipo = 'ninguno' | 'categoria' | 'club'
+
+export function cambioDeEquipo(equipoFicha: string | undefined, equipoReal: string): CambioEquipo {
+  const k = equipoMatchKind(equipoFicha, equipoReal)
+  // 'parcial' («Atlético» ↔ «Atlético Madrid») se deja pasar como hasta
+  // ahora: es dudoso y no queremos proponer correcciones a ciegas
+  if (k === 'equipo' || k === 'parcial') return 'ninguno'
+  if (k === 'club') return 'categoria'
+  return 'club'
+}
 
 // ── Alineaciones pegadas ─────────────────────────────────────────────
 // Copias la alineación de Sofascore, Flashscore, BeSoccer o de donde sea,
@@ -24,7 +43,7 @@ function limpiarLinea(raw: string): string | null {
   s = s.replace(/^\d{1,2}\s*[.)\-–]?\s*/, '')      // dorsal delante
   s = s.replace(/\(([^)]*)\)/g, ' ')                // (45'), (c)…
   s = s.replace(/\d{1,3}\s*['´’‘]/g, ' ')           // minutos: 45' 90'
-  s = s.replace(/[⚽🟨🟥🅨🅡↑↓⇅→←]/g, ' ')            // goles, tarjetas, cambios
+  s = s.replace(/[⚽🟨🟥🅨🅡↑↓⇅→←]/gu, ' ')            // goles, tarjetas, cambios
   s = s.replace(/\b\d+[.,]\d+\b/g, ' ')             // notas: 7.4
   s = s.replace(/\b\d+\b/g, ' ')                    // números sueltos
   s = s.replace(/\s{2,}/g, ' ').trim()

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { teamsAlike, teamMatchKind, normTeamTokens } from '../src/lib/equipos'
+import { teamsAlike, teamMatchKind, normTeamTokens, categoriaDe, equipoMatchKind, mismoEquipo } from '../src/lib/equipos'
 
 describe('comparar equipos', () => {
   it('el fallo que soltaba avisos falsos: Real Madrid ≠ Real Sociedad', () => {
@@ -28,5 +28,16 @@ describe('comparar equipos', () => {
 
   it('las palabras de relleno no cuentan', () => {
     expect(normTeamTokens('C.F. Villarreal Juvenil A')).toEqual(['villarreal'])
+  })
+
+  it('mismo club pero distinta categoría NO es el mismo equipo', () => {
+    expect(categoriaDe('Villarreal Juvenil A')).toBe('juv a')
+    expect(categoriaDe('Getafe B')).toBe('b')
+    expect(categoriaDe('C.D. Castellón')).toBe('')
+    expect(equipoMatchKind('Villarreal Juv A', 'Villarreal Juvenil A')).toBe('equipo')
+    expect(equipoMatchKind('Villarreal Juv B', 'Villarreal Juv A')).toBe('club')
+    expect(equipoMatchKind('Villarreal', 'Villarreal B')).toBe('club')
+    expect(mismoEquipo('Real Madrid Juv B', 'Real Madrid Juvenil B')).toBe(true)
+    expect(mismoEquipo('Real Madrid', 'Real Sociedad')).toBe(false)
   })
 })

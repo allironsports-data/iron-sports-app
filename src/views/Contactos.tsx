@@ -2,9 +2,20 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import {
   Search, ChevronRight, ChevronDown, Phone, X, ArrowLeft,
   Users, Star, Plus, Pencil, Check, Trash2,
-  List, LayoutList, AlertCircle, UserX,
+  List, LayoutList, AlertCircle, UserX, Database, CloudUpload,
 } from 'lucide-react'
-import { cargarContactos, type Contact } from '../data/contactos'
+import {
+  cargarContactos, aplicarOverride, sinNulos, rowToContact, contactToRow,
+  type Contact, type ContactDraft,
+} from '../data/contactos'
+import {
+  fetchContactos, upsertContacto, marcarBorrado, fetchFavoritos, toggleFavorito,
+  guardarFavoritos, importarBase, esTablaInexistente,
+} from '../lib/dbContactos'
+import { useAuth } from '../hooks/useAuth'
+import { useToast } from '../hooks/useToast'
+import { ToastStack } from '../components/ToastStack'
+import { supabase } from '../lib/supabase'
 import { normClave } from '../lib/texto'
 
 // ── Confederation grouping ────────────────────────────────────────────────────
@@ -79,27 +90,8 @@ function generateId(): string {
   return 'custom_' + crypto.randomUUID()
 }
 
-// Lo que sale del formulario. Un campo vaciado se guarda como `null`, no como
-// `undefined`: JSON.stringify elimina los undefined y al recargar volvía el
-// valor original del contacto estático.
-type ContactDraft = { [K in keyof Omit<Contact, 'id'>]?: Contact[K] | null } & { region: string }
-
-/** Quita los null (para contactos extra, que se guardan enteros). */
-function sinNulos(d: ContactDraft): Omit<Contact, 'id'> {
-  const out: Record<string, unknown> = {}
-  for (const [k, v] of Object.entries(d)) if (v !== null && v !== undefined) out[k] = v
-  return out as unknown as Omit<Contact, 'id'>
-}
-
-/** Aplica una corrección sobre un contacto estático; null = campo borrado. */
-function aplicarOverride(c: Contact, o: ContactDraft): Contact {
-  const merged: Record<string, unknown> = { ...c }
-  for (const [k, v] of Object.entries(o)) {
-    if (v === null) delete merged[k]
-    else if (v !== undefined) merged[k] = v
-  }
-  return merged as unknown as Contact
-}
+// ContactDraft / sinNulos / aplicarOverride viven en src/data/contactos.ts
+// (son puros y los comparte la importación a Supabase).
 
 const normalise = normClave
 
@@ -130,13 +122,30 @@ type ViewMode = 'regions' | 'alpha'
 interface ModalState { mode: 'add' | 'edit'; contact?: Contact }
 interface DeleteState { ids: string[]; single?: boolean }
 
-export function Contactos({ onBack }: { onBack: () => void }) {
+/**
+ * `isAdmin`: opcional. Si App no lo pasa, se toma de profile.is_admin del
+ * AuthContext (hoy App solo muestra Contactos a admins, así que da igual).
+ * Solo controla quién ve el botón «Importar ahora».
+ */
+export function Contactos({ onBack, isAdmin }: { onBack: () => void; isAdmin?: boolean }) {
+  const { user, profile } = useAuth()
+  const esAdmin = isAdmin ?? !!profile?.is_admin
+  const userId = user?.id ?? null
+  const { toasts, showToast, dismissToast } = useToast()
 
-  // ── Persistent data ──
+  // ── Persistent data (modo localStorage: mientras la tabla no exista) ──
   const [extraContacts, setExtraContacts] = useState<Contact[]>(() => loadJSON(LS_EXTRA, []))
   const [overrides,     setOverrides]     = useState<Record<string, ContactDraft>>(() => loadJSON(LS_OVERRIDES, {}))
   const [favorites,     setFavorites]     = useState<Set<string>>(() => loadSet(LS_FAVORITES))
   const [deleted,       setDeleted]       = useState<Set<string>>(() => loadSet(LS_DELETED))
+
+  // ── Modo Supabase ──
+  // dbContacts === null → la tabla no existe o está vacía: se sigue con
+  // localStorage como siempre. Con filas → todo va a la base de datos.
+  const [dbContacts, setDbContacts] = useState<Contact[] | null>(null)
+  const migrado = dbContacts !== null
+  const [importando, setImportando] = useState<string | null>(null)   // texto de progreso
+  const [errorDb, setErrorDb] = useState(false)   // fallo raro (red, RLS…) al leer la tabla
 
   // ── UI state ──
   const [viewMode,       setViewMode]       = useState<ViewMode>('regions')
@@ -151,30 +160,106 @@ export function Contactos({ onBack }: { onBack: () => void }) {
   const [deleteState,    setDeleteState]    = useState<DeleteState | null>(null)
   const [selected,       setSelected]       = useState<Set<string>>(new Set())
 
-  // Los 3.065 contactos se descargan al abrir la pestaña (public/contactos.json),
-  // no van compilados dentro de la app.
+  // Los 3.065 contactos de base (public/contactos.json). Solo se descargan
+  // si la agenda aún no está en Supabase (o para importarla).
   const [STATIC_CONTACTS, setStaticContacts] = useState<Contact[]>([])
   const [cargando, setCargando] = useState(true)
   const [errorCarga, setErrorCarga] = useState(false)
+
+  // Lee la tabla. Devuelve true si hay filas (modo Supabase).
+  // Las filas deleted se quedan fuera aquí; la tabla se trae entera.
+  const cargarDb = useCallback(async (): Promise<boolean> => {
+    try {
+      const filas = await fetchContactos()
+      setErrorDb(false)
+      if (filas.length === 0) { setDbContacts(null); return false }
+      setDbContacts(filas.filter(f => !f.deleted).map(rowToContact))
+      return true
+    } catch (err) {
+      if (!esTablaInexistente(err)) { console.error('[contactos] supabase', err); setErrorDb(true) }
+      setDbContacts(null)
+      return false
+    }
+  }, [])
+
+  const cargarLocal = useCallback(async () => {
+    try {
+      setStaticContacts(await cargarContactos())
+      setErrorCarga(false)
+    } catch (err) {
+      console.error('[contactos]', err)
+      setErrorCarga(true)
+    }
+  }, [])
+
   useEffect(() => {
     let cancelado = false
-    cargarContactos()
-      .then(cs => { if (!cancelado) { setStaticContacts(cs); setCargando(false) } })
-      .catch(err => {
-        console.error('[contactos]', err)
-        if (!cancelado) { setErrorCarga(true); setCargando(false) }
-      })
+    ;(async () => {
+      const enDb = await cargarDb()
+      if (cancelado) return
+      if (!enDb) await cargarLocal()
+      if (!cancelado) setCargando(false)
+    })()
     return () => { cancelado = true }
-  }, [])
+  }, [cargarDb, cargarLocal])
+
+  // Favoritos por usuario (solo en modo Supabase)
+  useEffect(() => {
+    if (!migrado || !userId) return
+    let cancelado = false
+    fetchFavoritos(userId)
+      .then(f => { if (!cancelado) setFavorites(f) })
+      .catch(err => { console.error('[contactos] favoritos', err); showToast('No se han podido cargar tus favoritos', 'error') })
+    return () => { cancelado = true }
+  }, [migrado, userId, showToast])
+
+  // Realtime: cualquier cambio en la tabla → refetch con debounce 800 ms
+  useEffect(() => {
+    if (!migrado) return
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const channel = supabase.channel('contactos')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'contactos' }, () => {
+        clearTimeout(timer)
+        timer = setTimeout(() => { void cargarDb() }, 800)
+      })
+      .subscribe()
+    return () => {
+      clearTimeout(timer)
+      supabase.removeChannel(channel)
+    }
+  }, [migrado, cargarDb])
+
+  // ── Importación inicial (solo admin, una vez) ──
+  async function importarAhora() {
+    if (importando) return
+    setImportando('Preparando…')
+    try {
+      const base = STATIC_CONTACTS.length ? STATIC_CONTACTS : await cargarContactos()
+      const n = await importarBase(base, overrides, extraContacts, deleted,
+        (subidas, total) => setImportando(`Subiendo ${subidas.toLocaleString()} / ${total.toLocaleString()}…`))
+      if (userId && favorites.size) {
+        setImportando('Guardando favoritos…')
+        await guardarFavoritos(userId, favorites)
+      }
+      await cargarDb()
+      showToast(`${n.toLocaleString()} contactos importados`, 'success')
+    } catch (err) {
+      console.error('[contactos] importar', err)
+      showToast('No se ha podido importar: ' + ((err as { message?: string })?.message ?? 'error'), 'error')
+    } finally {
+      setImportando(null)
+    }
+  }
 
   // ── Merged contact list ──
   const ALL_CONTACTS = useMemo(() => {
+    if (dbContacts) return dbContacts.filter(c => !EXCLUDED_REGIONS.has(c.region ?? ''))
     const base = STATIC_CONTACTS
       .filter(c => !EXCLUDED_REGIONS.has(c.region ?? '') && !deleted.has(c.id))
       .map(c => overrides[c.id] ? aplicarOverride(c, overrides[c.id]) : c)
     const extra = extraContacts.filter(c => !deleted.has(c.id))
     return [...base, ...extra]
-  }, [STATIC_CONTACTS, extraContacts, overrides, deleted])
+  }, [dbContacts, STATIC_CONTACTS, extraContacts, overrides, deleted])
 
   // Real contacts (with a person) vs. empty club placeholders
   const REAL_CONTACTS = useMemo(() =>
@@ -201,7 +286,7 @@ export function Contactos({ onBack }: { onBack: () => void }) {
   }, [ALL_REGIONS])
 
   const ALL_ROLES = useMemo(() =>
-    [...new Set(REAL_CONTACTS.map(c => c.role).filter((r): r is string => !!r))].sort()
+    [...new Set(REAL_CONTACTS.map(c => c.role).filter((r): r is string => !!r))].sort((a, b) => a.localeCompare(b, 'es'))
   , [REAL_CONTACTS])
 
   const teamsByRegion = useMemo(() => {
@@ -228,7 +313,7 @@ export function Contactos({ onBack }: { onBack: () => void }) {
 
   // ── Region view filtered contacts ──
   const regionFiltered = useMemo<Contact[]>(() => {
-    let cs = applyFilters(ALL_CONTACTS)
+    const cs = applyFilters(ALL_CONTACTS)
     if (showFavorites) return cs.filter(c => favorites.has(c.id))
     if (!isSearching && !selectedRegion) return cs
     return cs.filter(c => {
@@ -302,23 +387,50 @@ export function Contactos({ onBack }: { onBack: () => void }) {
   function toggleTeam(key: string) {
     setExpandedTeams(prev => {
       const next = new Set(prev)
-      next.has(key) ? next.delete(key) : next.add(key)
+      if (next.has(key)) next.delete(key); else next.add(key)
       return next
     })
   }
 
   // ── Favorites ──
   const toggleFavorite = useCallback((id: string) => {
+    if (migrado && userId) {
+      // Optimista: se pinta ya y, si la base falla, se deshace.
+      const era = favorites.has(id)
+      setFavorites(prev => { const n = new Set(prev); if (era) n.delete(id); else n.add(id); return n })
+      toggleFavorito(userId, id, era).catch(err => {
+        console.error('[contactos] favorito', err)
+        setFavorites(prev => { const n = new Set(prev); if (era) n.add(id); else n.delete(id); return n })
+        showToast('No se ha podido guardar el favorito', 'error')
+      })
+      return
+    }
     setFavorites(prev => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) next.delete(id); else next.add(id)
       saveSet(LS_FAVORITES, next)
       return next
     })
-  }, [])
+  }, [migrado, userId, favorites, showToast])
 
   // ── Delete ──
   function confirmDelete(ids: string[]) {
+    setDeleteState(null)
+    setSelected(prev => { const next = new Set(prev); ids.forEach(id => next.delete(id)); return next })
+    if (migrado) {
+      // Borrado lógico en Supabase, optimista con rollback
+      const antes = dbContacts
+      const borrar = new Set(ids)
+      setDbContacts(prev => (prev ?? []).filter(c => !borrar.has(c.id)))
+      marcarBorrado(ids)
+        .then(() => showToast(ids.length === 1 ? 'Contacto eliminado' : `${ids.length} contactos eliminados`, 'success'))
+        .catch(err => {
+          console.error('[contactos] borrar', err)
+          setDbContacts(antes)
+          showToast('No se ha podido eliminar', 'error')
+        })
+      return
+    }
     // Los contactos extra se quitan de su lista y punto: meterlos en
     // LS_DELETED solo hacía crecer esa lista para siempre.
     const extraIds = new Set(extraContacts.map(c => c.id))
@@ -339,20 +451,13 @@ export function Contactos({ onBack }: { onBack: () => void }) {
     ids.forEach(id => delete newOverrides[id])
     setOverrides(newOverrides)
     saveJSON(LS_OVERRIDES, newOverrides)
-    // Clear selection
-    setSelected(prev => {
-      const next = new Set(prev)
-      ids.forEach(id => next.delete(id))
-      return next
-    })
-    setDeleteState(null)
   }
 
   // ── Multi-select (alpha view) ──
   function toggleSelect(id: string) {
     setSelected(prev => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) next.delete(id); else next.add(id)
       return next
     })
   }
@@ -364,6 +469,28 @@ export function Contactos({ onBack }: { onBack: () => void }) {
   // ── Add / Edit contact ──
   function handleSave(data: ContactDraft) {
     if (!modal) return
+    setModal(null)
+    if (migrado) {
+      // null del formulario = columna a null (contactToRow lo traduce)
+      const esAlta = modal.mode === 'add' || !modal.contact
+      const nc: Contact = esAlta
+        ? { ...sinNulos(data), id: generateId() }
+        : aplicarOverride(modal.contact!, data)
+      const origen = esAlta || modal.contact!.id.startsWith('custom_') ? 'manual' : 'base'
+      const antes = dbContacts
+      setDbContacts(prev => {
+        const lista = prev ?? []
+        return esAlta ? [...lista, nc] : lista.map(c => c.id === nc.id ? nc : c)
+      })
+      upsertContacto(contactToRow(nc, origen))
+        .then(() => showToast(esAlta ? 'Contacto añadido' : 'Contacto guardado', 'success'))
+        .catch(err => {
+          console.error('[contactos] guardar', err)
+          setDbContacts(antes)
+          showToast('No se ha podido guardar', 'error')
+        })
+      return
+    }
     if (modal.mode === 'add') {
       const id = generateId()
       const nc: Contact = { ...sinNulos(data), id }
@@ -382,7 +509,6 @@ export function Contactos({ onBack }: { onBack: () => void }) {
         saveJSON(LS_OVERRIDES, upd)
       }
     }
-    setModal(null)
   }
 
   function selectRegion(region: string) {
@@ -417,14 +543,16 @@ export function Contactos({ onBack }: { onBack: () => void }) {
           </button>
           <span className="text-sm font-semibold text-slate-800">Contactos</span>
           <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 text-[11px] font-semibold uppercase tracking-wide">Admin</span>
-          {/* Aviso honesto: esta sección todavía no vive en la base de datos,
-              así que lo que edites aquí no lo ve nadie más ni te sigue al móvil */}
-          <span
-            className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 text-[10.5px] font-semibold"
-            title="Los contactos que añadas o edites se guardan solo en este navegador: no se comparten con el equipo ni aparecen en tu móvil, y se pierden si borras los datos del navegador."
-          >
-            ⚠ Solo en este dispositivo
-          </span>
+          {/* Aviso honesto: mientras la agenda no esté en la base de datos,
+              lo que edites aquí no lo ve nadie más ni te sigue al móvil */}
+          {!migrado && !cargando && (
+            <span
+              className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 text-[10.5px] font-semibold"
+              title="Los contactos que añadas o edites se guardan solo en este navegador: no se comparten con el equipo ni aparecen en tu móvil, y se pierden si borras los datos del navegador."
+            >
+              ⚠ Solo en este dispositivo
+            </span>
+          )}
 
           <div className="flex-1" />
 
@@ -503,6 +631,36 @@ export function Contactos({ onBack }: { onBack: () => void }) {
           </div>
         </div>
       )}
+      {/* Sin migrar: aviso + botón de importación (solo admin) */}
+      {!migrado && !cargando && (
+        <div className="max-w-6xl mx-auto w-full px-4 pt-3">
+          <div className="flex flex-wrap items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
+            <Database className="w-4 h-4 flex-shrink-0" />
+            <span>
+              Contactos aún no está en la base de datos.
+              {errorDb
+                ? ' No se ha podido consultar la tabla (revisa la migración o la conexión); mientras tanto se usa la copia de este navegador.'
+                : esAdmin
+                  ? ' Al importar se suben los contactos de base más las correcciones, altas y borrados guardados en este navegador.'
+                  : ' Pide a un administrador que la importe.'}
+            </span>
+            {esAdmin && !errorDb && (
+              <button
+                onClick={importarAhora}
+                disabled={!!importando || !!errorCarga}
+                className="ml-auto flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-60 transition-colors"
+              >
+                {importando
+                  ? <><span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" /> {importando}</>
+                  : <><CloudUpload className="w-3.5 h-3.5" /> Importar ahora</>}
+              </button>
+            )}
+            {errorDb && (
+              <button onClick={() => { void cargarDb() }} className="ml-auto underline font-medium text-xs">reintentar</button>
+            )}
+          </div>
+        </div>
+      )}
       {errorCarga && (
         <div className="max-w-6xl mx-auto w-full px-4 pt-3">
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-rose-50 border border-rose-200 text-sm text-rose-700">
@@ -548,7 +706,7 @@ export function Contactos({ onBack }: { onBack: () => void }) {
                     <button
                       onClick={() => setExpandedConfs(prev => {
                         const next = new Set(prev)
-                        next.has(code) ? next.delete(code) : next.add(code)
+                        if (next.has(code)) next.delete(code); else next.add(code)
                         return next
                       })}
                       className="w-full flex items-center justify-between px-3 py-1.5 bg-slate-50 border-y border-slate-100 hover:bg-slate-100 transition-colors"
@@ -819,6 +977,8 @@ export function Contactos({ onBack }: { onBack: () => void }) {
           onCancel={() => setDeleteState(null)}
         />
       )}
+
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   )
 }
@@ -1007,7 +1167,7 @@ function ContactFormModal({
   const teamRef = useRef<HTMLDivElement>(null)
 
   const teamsForRegion = useMemo(() =>
-    region ? [...(teamsByRegion.get(region) ?? [])].sort() : []
+    region ? [...(teamsByRegion.get(region) ?? [])].sort((a, b) => a.localeCompare(b, 'es')) : []
   , [region, teamsByRegion])
 
   const teamSuggestions = useMemo(() =>

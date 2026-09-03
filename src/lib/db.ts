@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { dedupePorId } from './coleccion'
 import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchScout, BoulemaPeticion, ClubLog, PlayerMeeting, PlayerActivity, MemberStatus, Postpartido, FirmasEntry, BoulemaPlayer } from '../types'
 
 // ── helpers ──────────────────────────────────────────────────
@@ -24,6 +25,8 @@ function dbToPlayer(row: Record<string, unknown>): Player {
     transfermarktUrl: (row.transfermarkt_url as string) ?? undefined,
     links: (row.links as PlayerLink[]) ?? [],
     hiddenFromManagement: (row.hidden_from_management as boolean) ?? false,
+    // undefined si la migración de updated_at no se ha ejecutado aún
+    updatedAt: (row.updated_at as string) ?? undefined,
     performance: [],
     info: (() => {
       const raw = (row.info as Record<string, unknown>) ?? {}
@@ -153,6 +156,12 @@ function fallaOTablaVacia<T>(tabla: string, error: unknown, leidas: number): T[]
 // filas empatadas: al pedir la página 2 puede repetir filas de la 1 y, lo
 // que es peor, SALTARSE otras. Desaparecen sin error y sin avisar. Con
 // sort_pos = 0 en toda la tabla esto no es teoría, pasa.
+//
+// ⚠⚠⚠ Y aun con orden estable: si alguien INSERTA o BORRA una fila entre la
+// página 1 y la 12 (pasa a cada rato: cada evento realtime relanza la lectura
+// en todos los navegadores), el offset se desplaza y una fila se repite o se
+// salta. La repetida se quita al final (`dedupePorId`); la saltada la traerá
+// el siguiente refetch. La solución de fondo sería paginar por cursor.
 const PAGINA = 1000
 export async function leerTodo<T>(
   tabla: string,
@@ -167,11 +176,81 @@ export async function leerTodo<T>(
     if (error) { logFetchError(tabla, error, todo.length); throw error }
     const pagina = data ?? []
     todo.push(...pagina)
-    if (pagina.length < PAGINA) return todo
+    if (pagina.length < PAGINA) return dedupePorId(todo as { id?: unknown }[]) as T[]
     desde += PAGINA
   }
   logFetchError(tabla, new Error('demasiadas páginas'), todo.length)
-  return todo
+  return dedupePorId(todo as { id?: unknown }[]) as T[]
+}
+
+// ── Conflictos al editar (dos personas sobre la misma ficha) ─────────
+//
+// Al guardar jugador/club/negociación mandamos el `updated_at` que teníamos
+// al leer la fila y el UPDATE lleva `.eq('updated_at', visto)`: si otro lo
+// ha cambiado entre medias, no coincide, no se actualiza nada y se lanza
+// ConflictError con la fila que hay ahora en la base de datos. App.tsx la
+// enseña y deja elegir: recargar (perder lo mío) o sobrescribir (reintentar
+// con el updated_at nuevo).
+// (campos declarados en el cuerpo: `erasableSyntaxOnly` no permite `public` en el constructor)
+export class ConflictError extends Error {
+  tabla: string
+  /** la fila que hay ahora en la base de datos, ya mapeada (Player/Club/ClubNegotiation) */
+  actual: unknown
+  constructor(tabla: string, actual: unknown) {
+    super('Otro usuario ha modificado esta ficha')
+    this.name = 'ConflictError'
+    this.tabla = tabla
+    this.actual = actual
+  }
+}
+
+/** 42703 = «column does not exist»: la migración de updated_at no se ha ejecutado aún. */
+function esColumnaInexistente(error: unknown): boolean {
+  return (error as { code?: string } | null)?.code === '42703'
+}
+
+const avisadoSinUpdatedAt = new Set<string>()
+
+/**
+ * UPDATE con control de versión por `updated_at`. Escribe siempre
+ * `updated_at = ahora` y devuelve la fila guardada (mapeada).
+ *
+ * - `updatedAtVisto` vacío/undefined (datos antiguos, cargados antes de la
+ *   migración): no se aplica el filtro; el guardado gana sin comprobar.
+ * - Si la tabla todavía no tiene la columna (42703), se reintenta el update
+ *   «a la antigua» para no dejar la app sin guardar hasta migrar.
+ * - Si el UPDATE no toca ninguna fila: se lee la fila actual. Si existe →
+ *   ConflictError; si no existe → error de «ya no existe».
+ */
+async function actualizarConControl<T>(
+  tabla: string,
+  id: string,
+  fila: Record<string, unknown>,
+  updatedAtVisto: string | undefined,
+  mapear: (row: Record<string, unknown>) => T,
+): Promise<T> {
+  const payload = { ...fila, updated_at: new Date().toISOString() }
+  let q = supabase.from(tabla).update(payload).eq('id', id)
+  if (updatedAtVisto) q = q.eq('updated_at', updatedAtVisto)
+  const { data, error } = await q.select().maybeSingle()
+
+  if (error && esColumnaInexistente(error)) {
+    if (!avisadoSinUpdatedAt.has(tabla)) {
+      avisadoSinUpdatedAt.add(tabla)
+      console.warn(`[db] ${tabla} no tiene columna updated_at: guardando sin control de conflictos (ejecuta migration_updated_at_triggers.sql)`)
+    }
+    const r = await supabase.from(tabla).update(fila).eq('id', id).select().single()
+    if (r.error) throw r.error
+    return mapear(r.data as Record<string, unknown>)
+  }
+  if (error) throw error
+  if (data) return mapear(data as Record<string, unknown>)
+
+  // Ninguna fila actualizada: o la ha cambiado otro, o la han borrado.
+  const { data: actual, error: e2 } = await supabase.from(tabla).select('*').eq('id', id).maybeSingle()
+  if (e2) throw e2
+  if (!actual) throw new Error('La ficha ya no existe (la ha borrado otro usuario)')
+  throw new ConflictError(tabla, mapear(actual as Record<string, unknown>))
 }
 
 // ── PLAYERS ──────────────────────────────────────────────────
@@ -191,7 +270,7 @@ export async function fetchPlayers(): Promise<Player[]> {
     if (page.length < pageSize) break
     from += pageSize
   }
-  return all
+  return dedupePorId(all)
 }
 
 export async function createPlayer(p: Player): Promise<Player> {
@@ -200,9 +279,9 @@ export async function createPlayer(p: Player): Promise<Player> {
   return dbToPlayer(data)
 }
 
-export async function updatePlayer(p: Player): Promise<void> {
-  const { error } = await supabase.from('players').update(playerToDb(p)).eq('id', p.id)
-  if (error) throw error
+/** Devuelve la fila guardada (con el updated_at nuevo). Lanza ConflictError si otro la cambió antes. */
+export async function updatePlayer(p: Player): Promise<Player> {
+  return actualizarConControl('players', p.id, playerToDb(p), p.updatedAt, dbToPlayer)
 }
 
 export async function deletePlayer(id: string): Promise<void> {
@@ -280,7 +359,7 @@ export async function fetchTasks(playerId?: string): Promise<Task[]> {
     if (page.length < pageSize) break
     from += pageSize
   }
-  return all
+  return dedupePorId(all)
 }
 
 export async function createTask(t: Task): Promise<Task> {
@@ -565,6 +644,7 @@ function dbToClub(row: Record<string, unknown>): Club {
     contacted: (row.contacted as boolean) ?? false,
     contactedBy: (row.contacted_by as string) ?? undefined,
     contactedAt: (row.contacted_at as string) ?? undefined,
+    updatedAt: (row.updated_at as string) ?? undefined,
   }
 }
 
@@ -582,7 +662,7 @@ export async function fetchClubs(): Promise<Club[]> {
     if (page.length < pageSize) break
     from += pageSize
   }
-  return all
+  return dedupePorId(all)
 }
 
 export async function createClub(c: Omit<Club, 'id' | 'createdAt'>): Promise<Club> {
@@ -600,8 +680,9 @@ export async function createClub(c: Omit<Club, 'id' | 'createdAt'>): Promise<Clu
   return dbToClub(data)
 }
 
-export async function updateClub(c: Club): Promise<void> {
-  const { error } = await supabase.from('clubs').update({
+/** Devuelve la fila guardada (con el updated_at nuevo). Lanza ConflictError si otro la cambió antes. */
+export async function updateClub(c: Club): Promise<Club> {
+  return actualizarConControl('clubs', c.id, {
     name: c.name,
     league: c.league ?? null,
     country: c.country,
@@ -613,8 +694,7 @@ export async function updateClub(c: Club): Promise<void> {
     contacted: c.contacted ?? false,
     contacted_by: c.contactedBy ?? null,
     contacted_at: c.contactedAt ?? null,
-  }).eq('id', c.id)
-  if (error) throw error
+  }, c.updatedAt, dbToClub)
 }
 
 export async function deleteClub(id: string): Promise<void> {
@@ -655,7 +735,7 @@ export async function fetchDistributionEntries(season?: string): Promise<Distrib
     if (page.length < pageSize) break
     from += pageSize
   }
-  return all
+  return dedupePorId(all)
 }
 
 export async function createDistributionEntry(e: Omit<DistributionEntry, 'id' | 'createdAt'>): Promise<DistributionEntry> {
@@ -725,7 +805,7 @@ export async function fetchNegotiations(playerId?: string, clubId?: string): Pro
     if (page.length < pageSize) break
     from += pageSize
   }
-  return all
+  return dedupePorId(all)
 }
 
 export async function createNegotiation(n: Omit<ClubNegotiation, 'id' | 'createdAt' | 'updatedAt'>): Promise<ClubNegotiation> {
@@ -743,17 +823,15 @@ export async function createNegotiation(n: Omit<ClubNegotiation, 'id' | 'created
 
 // Devuelve la fila guardada para que el estado local refleje el updated_at
 // real (antes se quedaba con el antiguo hasta el siguiente refetch).
+// Lanza ConflictError si otro usuario la ha cambiado desde que se leyó.
 export async function updateNegotiation(n: ClubNegotiation): Promise<ClubNegotiation> {
-  const { data, error } = await supabase.from('club_negotiations').update({
+  return actualizarConControl('club_negotiations', n.id, {
     need_position: n.needPosition ?? null,
     status: n.status,
     ais_manager: n.aisManager ?? null,
     notes: n.notes ?? null,
     updates: n.updates ?? [],
-    updated_at: new Date().toISOString(),
-  }).eq('id', n.id).select().single()
-  if (error) throw error
-  return dbToNegotiation(data)
+  }, n.updatedAt, dbToNegotiation)
 }
 
 export async function deleteNegotiation(id: string): Promise<void> {
@@ -818,7 +896,7 @@ export async function fetchScoutingPlayers(): Promise<ScoutingPlayer[]> {
     if (page.length < pageSize) break
     from += pageSize
   }
-  return all
+  return dedupePorId(all)
 }
 
 export async function fetchScoutingReports(playerId?: string): Promise<ScoutingReport[]> {
@@ -837,7 +915,7 @@ export async function fetchScoutingReports(playerId?: string): Promise<ScoutingR
     if (page.length < pageSize) break
     from += pageSize
   }
-  return all
+  return dedupePorId(all)
 }
 
 export async function createScoutingPlayer(p: Omit<ScoutingPlayer, 'id' | 'createdAt'>): Promise<ScoutingPlayer> {
@@ -955,7 +1033,7 @@ export async function fetchMatchPlayers(): Promise<ScoutingMatchPlayer[]> {
       if (page.length < pageSize) break
       from += pageSize
     }
-    return all
+    return dedupePorId(all)
   } catch (e) {
     // el fallo de página ya se ha registrado arriba; solo evitamos relanzar «tabla inexistente»
     if (esTablaInexistente(e)) return []
@@ -1018,7 +1096,7 @@ export async function fetchMatchScouts(): Promise<ScoutingMatchScout[]> {
       if (page.length < pageSize) break
       from += pageSize
     }
-    return all
+    return dedupePorId(all)
   } catch (e) {
     // el fallo de página ya se ha registrado arriba; solo evitamos relanzar «tabla inexistente»
     if (esTablaInexistente(e)) return []
@@ -1155,7 +1233,7 @@ export async function fetchScoutingMatches(): Promise<ScoutingMatch[]> {
       if (rows.length < PAGE) break   // last page
       from += PAGE
     }
-    return all
+    return dedupePorId(all)
   } catch (e) {
     // el fallo de página ya se ha registrado arriba; solo evitamos relanzar «tabla inexistente»
     if (esTablaInexistente(e)) return []
@@ -1242,7 +1320,7 @@ export async function fetchFirmasEntries(): Promise<FirmasEntry[]> {
       if (page.length < pageSize) break
       from += pageSize
     }
-    return all
+    return dedupePorId(all)
   } catch (e) {
     // el fallo de página ya se ha registrado arriba; solo evitamos relanzar «tabla inexistente»
     if (esTablaInexistente(e)) return []
@@ -1408,7 +1486,7 @@ export async function fetchBoulemaPlayers(): Promise<BoulemaPlayer[]> {
       if (page.length < pageSize) break
       from += pageSize
     }
-    return all
+    return dedupePorId(all)
   } catch (e) {
     // el fallo de página ya se ha registrado arriba; solo evitamos relanzar «tabla inexistente»
     if (esTablaInexistente(e)) return []
@@ -1739,7 +1817,8 @@ export async function fetchEquipos(): Promise<Equipo[]> {
       if (page.length < PAGE) break
       from += PAGE
     }
-    return all
+    // la clave aquí es `nombre`, no `id`: deduplicamos por índice para no tocar las filas
+    return dedupePorId(all.map((e, i) => ({ id: e.nombre, i }))).map(({ i }) => all[i])
   } catch (e) {
     // el fallo de página ya se ha registrado arriba; solo evitamos relanzar «tabla inexistente»
     if (esTablaInexistente(e)) return []

@@ -5,8 +5,7 @@ import { fetchActivitiesByAuthor } from "../lib/db";
 import { hoyISO, esVencida, parseDia } from "../lib/fechas";
 import { ListSkeleton } from "../components/Skeleton";
 import { EmptyState } from "../components/EmptyState";
-import { ToastStack } from "../components/ToastStack";
-import { useToast } from "../hooks/useToast";
+import { useToastContext } from "../hooks/useToastContext";
 import {
   ArrowLeft, CheckCircle2, Clock, Activity,
   Calendar, AlertCircle, Users, ChevronDown, ChevronUp, ListTodo,
@@ -56,7 +55,7 @@ interface Props {
 }
 
 export function TeamMemberDetail({ profile, tasks, players, onBack, onSelectPlayer, onUpdateTask }: Props) {
-  const { toasts, showToast, dismissToast } = useToast();
+  const { showToast } = useToastContext();
   const [activities, setActivities] = useState<PlayerActivity[]>([]);
   const [loading, setLoading]       = useState(true);
   const [period, setPeriod]         = useState<Period>('30d');
@@ -554,7 +553,6 @@ export function TeamMemberDetail({ profile, tasks, players, onBack, onSelectPlay
         )}
       </div>
 
-      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }

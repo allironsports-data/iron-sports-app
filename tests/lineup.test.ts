@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parsearAlineacion, emparejar } from '../src/lib/lineup'
+import { parsearAlineacion, emparejar, cambioDeEquipo } from '../src/lib/lineup'
 import { teamsAlike } from '../src/lib/equipos'
 import type { ScoutingPlayer } from '../src/types'
 
@@ -67,5 +67,25 @@ describe('emparejar con la base de datos', () => {
   it('los acentos no impiden encontrarlo', () => {
     const r = emparejar('Iker Fernandez', [jug('1', 'Iker Fernández', 'Valencia Juv A')], undefined, teamsAlike)
     expect(r.player?.id).toBe('1')
+  })
+})
+
+describe('cambio de equipo al pegar una alineación', () => {
+  it('mismo club y misma categoría: nada que corregir', () => {
+    expect(cambioDeEquipo('Villarreal Juv A', 'Villarreal Juvenil A')).toBe('ninguno')
+  })
+
+  it('mismo club pero otra categoría (Juv B → Juv A): antes no se detectaba', () => {
+    expect(cambioDeEquipo('Villarreal Juv B', 'Villarreal Juv A')).toBe('categoria')
+    expect(cambioDeEquipo('Getafe B', 'Getafe')).toBe('categoria')
+  })
+
+  it('club distinto, o sin equipo en la ficha', () => {
+    expect(cambioDeEquipo('Levante Juv A', 'Villarreal Juv A')).toBe('club')
+    expect(cambioDeEquipo(undefined, 'Villarreal Juv A')).toBe('club')
+  })
+
+  it('una coincidencia dudosa no propone corrección', () => {
+    expect(cambioDeEquipo('Atlético', 'Atlético Madrid')).toBe('ninguno')
   })
 })

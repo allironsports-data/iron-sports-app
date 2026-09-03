@@ -14,8 +14,8 @@ import { uploadContractPdf, urlDocumento, fetchNotes, createNote, updateNote, de
 } from "../lib/db";
 import { TaskDetailPanel } from "../components/TaskDetailPanel";
 import { ManagerSelect } from '../components/ManagerSelect';
-import { ToastStack } from "../components/ToastStack";
-import { useToast } from "../hooks/useToast";
+import { useToastContext } from "../hooks/useToastContext";
+import { HistorialCambios } from "../components/HistorialCambios";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { useEscapeKey } from "../hooks/useEscapeKey";
 import { isValidUrl, normalizeUrl, isValidName, isValidBirthDate } from "../lib/validate";
@@ -26,9 +26,10 @@ import {
   Clock, CheckCircle2, Trash2, Edit3, ChevronRight, Users,
   Paperclip, Download, ExternalLink, Link2,
   Video, BarChart2, BookOpen, Pencil, ChevronDown,
-  Activity,
+  Activity, History,
 } from "lucide-react";
-import { PlayerClubList, NEG_STATUSES as NEG_STATUSES_D, NEG_STATUS_CONFIG as STATUS_CONFIG_D } from "../components/PlayerClubList";
+import { PlayerClubList } from "../components/PlayerClubList";
+import { NEG_STATUSES as NEG_STATUSES_D, NEG_STATUS_CONFIG as STATUS_CONFIG_D } from "../components/playerClubList";
 import { BulkAssignModal } from "../components/BulkAssignModal";
 import { POSITIONS, positionLabel } from "../lib/positions";
 
@@ -122,7 +123,7 @@ export function PlayerDetail({
   };
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEditPlayer, setShowEditPlayer] = useState(false);
-  const { toasts, showToast, dismissToast } = useToast();
+  const { showToast } = useToastContext();
 
   const pendingCount   = tasks.filter((t) => t.status !== "completada").length;
   const rendimCount    = ((player.videoSessions?.length ?? 0) + postpartidos.length) || undefined;
@@ -158,8 +159,9 @@ export function PlayerDetail({
 
   // Contract urgency for sidebar badge
   const clubEndDate  = player.clubContract?.endDate;
+  const [ahora] = useState(() => Date.now());   // fijo por montaje: no en render
   const clubDaysLeft = clubEndDate
-    ? Math.ceil((new Date(clubEndDate).getTime() - Date.now()) / 86400000)
+    ? Math.ceil((new Date(clubEndDate).getTime() - ahora) / 86400000)
     : null;
   const contractBadgeCls =
     clubDaysLeft !== null && clubDaysLeft <= 90  ? "bg-red-50 text-red-600 border-red-200" :
@@ -374,6 +376,15 @@ export function PlayerDetail({
               <div className="space-y-4">
                 <InfoTab player={player} onUpdate={onUpdatePlayer} />
                 <LinksSection player={player} onUpdate={onUpdatePlayer} onError={(m) => showToast(m, "error")} />
+                {/* Historial de cambios (audit_log), plegado por defecto */}
+                <details className="bg-white rounded-lg border border-slate-200 px-4 py-3">
+                  <summary className="cursor-pointer text-sm font-semibold text-slate-700 flex items-center gap-2">
+                    <History className="w-4 h-4 text-slate-400" /> Historial de cambios
+                  </summary>
+                  <div className="mt-2">
+                    <HistorialCambios tabla="players" filaId={player.id} profiles={profiles} compacto />
+                  </div>
+                </details>
               </div>
             )}
             {activeTab === "actividad" && (
@@ -435,7 +446,6 @@ export function PlayerDetail({
         />
       )}
 
-      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
@@ -578,7 +588,7 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
   const [detailTask, setDetailTask] = useState<Task | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
-  const { toasts, showToast, dismissToast } = useToast();
+  const { showToast } = useToastContext();
 
   // Comparación por día en texto: new Date('AAAA-MM-DD') es medianoche UTC y
   // marcaba como vencidas las tareas que vencen hoy.
@@ -752,7 +762,6 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
         onCancel={() => setTaskToDelete(null)}
       />
 
-      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
@@ -789,7 +798,7 @@ function AddTaskModal({ profiles, tasks, playerId, player, isAdmin, onClose, onA
           onAdd({ id: "t" + Date.now(), playerId, title, description: desc, assigneeId: assignee,
             watchers,
             dependsOnId: depends || undefined, status: "pendiente", priority, dueDate: dueDate || undefined,
-            createdAt: new Date().toISOString().split("T")[0], comments: [], adminOnly });
+            createdAt: new Date().toISOString(), comments: [], adminOnly });
         }} className="p-4 space-y-3 pb-8">
           <TF label="Título" value={title} onChange={setTitle} required />
           <div>
@@ -821,7 +830,7 @@ function AddTaskModal({ profiles, tasks, playerId, player, isAdmin, onClose, onA
             <TF label="Fecha límite (opcional)" value={dueDate} onChange={setDueDate} type="date" />
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Prioridad</label>
-              <select value={priority} onChange={(e) => setPriority(e.target.value as any)}
+              <select value={priority} onChange={(e) => setPriority(e.target.value as "alta" | "media" | "baja")}
                 className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
                 <option value="alta">Alta</option>
                 <option value="media">Media</option>
@@ -894,11 +903,12 @@ function ContractTab({ player, onUpdate, isAdmin }: { player: Player; onUpdate: 
   const [repr, setRepr] = useState(player.representationContract);
   const [club, setClub] = useState(player.clubContract);
   const fileRef = useRef<HTMLInputElement>(null);
-  const { toasts, showToast, dismissToast } = useToast();
+  const { showToast } = useToastContext();
 
-  const reprDaysLeft = Math.ceil((new Date(player.representationContract.end).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  const [ahora] = useState(() => Date.now());   // fijo por montaje: no en render
+  const reprDaysLeft = Math.ceil((new Date(player.representationContract.end).getTime() - ahora) / (1000 * 60 * 60 * 24));
   const clubDaysLeft = player.clubContract.endDate
-    ? Math.ceil((new Date(player.clubContract.endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    ? Math.ceil((new Date(player.clubContract.endDate).getTime() - ahora) / (1000 * 60 * 60 * 24))
     : null;
 
   return (
@@ -1100,7 +1110,6 @@ function ContractTab({ player, onUpdate, isAdmin }: { player: Player; onUpdate: 
         </div>
       )}
 
-      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
@@ -1115,16 +1124,17 @@ function PerformanceTab({ player, profiles, onUpdate, postpartidos = [], scoutin
   const [showAddVideo, setShowAddVideo] = useState(false);
   const [editingNote, setEditingNote] = useState<PerformanceNote | null>(null);
   const [dbNotes, setDbNotes] = useState<PerformanceNote[]>(player.performance);
-  const [notesLoading, setNotesLoading] = useState(true);
+  // Id del jugador cuyas notas ya se han cargado: «cargando» se deriva, sin setState en el efecto
+  const [notesLoadedFor, setNotesLoadedFor] = useState<string | null>(null);
+  const notesLoading = notesLoadedFor !== player.id;
   const [noteToDelete, setNoteToDelete] = useState<PerformanceNote | null>(null);
   const [videoToDelete, setVideoToDelete] = useState<VideoSession | null>(null);
-  const { toasts, showToast, dismissToast } = useToast();
+  const { showToast } = useToastContext();
 
   useEffect(() => {
-    setNotesLoading(true);
     fetchNotes(player.id)
-      .then(loaded => { setDbNotes(loaded); setNotesLoading(false); })
-      .catch(() => setNotesLoading(false));
+      .then(loaded => { setDbNotes(loaded); setNotesLoadedFor(player.id); })
+      .catch(() => setNotesLoadedFor(player.id));
   }, [player.id]);
 
   const videos = [...(player.videoSessions ?? [])].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -1382,7 +1392,6 @@ function PerformanceTab({ player, profiles, onUpdate, postpartidos = [], scoutin
         onCancel={() => setVideoToDelete(null)}
       />
 
-      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
@@ -1515,7 +1524,7 @@ function InfoTab({ player, onUpdate }: { player: Player; onUpdate: (p: Player) =
   const [info, setInfo] = useState(player.info);
   const [uploading, setUploading] = useState(false);
   const passportRef = useRef<HTMLInputElement>(null);
-  const { toasts, showToast, dismissToast } = useToast();
+  const { showToast } = useToastContext();
 
   const handlePassportUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1617,7 +1626,6 @@ function InfoTab({ player, onUpdate }: { player: Player; onUpdate: (p: Player) =
         <input ref={passportRef} type="file" accept=".pdf,image/jpeg,image/png,image/webp" className="hidden" onChange={handlePassportUpload} />
       </div>
 
-      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
@@ -2128,7 +2136,7 @@ function buildMergedEvents(
 function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: {
   player: Player; players?: Player[]; tasks: Task[]; profiles: Profile[]; currentProfile: Profile;
 }) {
-  const { toasts, showToast, dismissToast } = useToast();
+  const { showToast } = useToastContext();
   const [activities, setActivities] = useState<PlayerActivity[]>([]);
   const [loading, setLoading]       = useState(true);
   const [showForm, setShowForm]     = useState(false);
@@ -2719,7 +2727,6 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
         onCancel={() => setDeletePending(null)}
       />
 
-      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
@@ -2740,7 +2747,7 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
   const [fCustomType, setFCustomType] = useState('');
   const [fNotes, setFNotes]           = useState('');
   const [saving, setSaving]           = useState(false);
-  const { toasts, showToast, dismissToast } = useToast();
+  const { showToast } = useToastContext();
 
   useEscapeKey(() => setShowForm(false), showForm && !saving);
 
@@ -3187,7 +3194,6 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
         />
       )}
 
-      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
@@ -3228,7 +3234,7 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, p
   const [negAis, setNegAis] = useState(currentProfile.avatar)
   const [negNotes, setNegNotes] = useState('')
   const [savingNeg, setSavingNeg] = useState(false)
-  const { toasts, showToast, dismissToast } = useToast()
+  const { showToast } = useToastContext()
   const [showBulkAssign, setShowBulkAssign] = useState(false)
 
   async function saveEntry() {
@@ -3370,7 +3376,6 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, p
         />
       )}
 
-      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   )
 }

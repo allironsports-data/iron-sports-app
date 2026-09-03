@@ -1,7 +1,8 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { supabase } from '../lib/supabase'
 import type { User } from '@supabase/supabase-js'
+import { AuthContext } from './authContext'
 
 export interface Profile {
   id: string
@@ -12,22 +13,6 @@ export interface Profile {
   captacion_only?: boolean       // cuenta restringida: solo ve Captación (Jugadores, Partidos, Informes)
   activo?: boolean               // cuenta aprobada por un admin. Sin esto, la base de datos no le entrega nada
 }
-
-interface AuthState {
-  user: User | null
-  profile: Profile | null
-  loading: boolean
-  /** true si el usuario está autenticado pero NO existe su fila en profiles */
-  profileMissing: boolean
-  /** Mensaje de error si la carga del perfil falló (red, RLS…); null si fue bien */
-  profileError: string | null
-  /** Vuelve a pedir el perfil del usuario actual (para el botón «Reintentar») */
-  refreshProfile: () => Promise<void>
-  signIn: (email: string, password: string) => Promise<string | null>
-  signOut: () => Promise<void>
-}
-
-const AuthContext = createContext<AuthState | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
@@ -119,10 +104,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       {children}
     </AuthContext.Provider>
   )
-}
-
-export function useAuth() {
-  const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('useAuth must be used inside AuthProvider')
-  return ctx
 }

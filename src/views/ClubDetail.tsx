@@ -2,20 +2,22 @@ import { useState, useMemo, useEffect } from 'react'
 import {
   ArrowLeft, Building2, Star, Plus, X, Pencil,
   ChevronRight, Trash2, Check, LogOut, AlertCircle, Phone, Users,
-  Maximize2, Minimize2,
+  Maximize2, Minimize2, History,
 } from 'lucide-react'
 import type { Club, ClubNegotiation, DistributionEntry, Player, ClubNeed } from '../types'
 import type { Profile } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { EmptyState } from '../components/EmptyState'
-import { ToastStack } from '../components/ToastStack'
-import { useToast } from '../hooks/useToast'
+import { useToastContext } from '../hooks/useToastContext'
+import { HistorialCambios } from '../components/HistorialCambios'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import { isValidName } from '../lib/validate'
 import { ManagerSelect } from '../components/ManagerSelect'
 import { POSITIONS, positionLabel, needMatchesPlayer } from '../lib/positions'
-import { NEG_STATUSES as SHARED_NEG_STATUSES, NEG_STATUS_CONFIG, NegDetail } from '../components/PlayerClubList'
+import { NegDetail } from '../components/PlayerClubList'
+import { NEG_STATUSES as SHARED_NEG_STATUSES, NEG_STATUS_CONFIG } from '../components/playerClubList'
+import { suggestPlayersForNeed } from '../lib/distribution'
 
 /** Spinner pequeño para botones de guardado */
 function BtnSpinner() {
@@ -136,7 +138,7 @@ export function ClubDetail({
   const [addPlayerPositionHint, setAddPlayerPositionHint] = useState<string | undefined>(undefined)
 
   // toasts + feedback de guardado
-  const { toasts, showToast, dismissToast } = useToast()
+  const { showToast } = useToastContext()
   const [updatingNegId, setUpdatingNegId] = useState<string | null>(null)
   const [confirmDeleteNeedIdx, setConfirmDeleteNeedIdx] = useState<number | null>(null)
 
@@ -434,17 +436,10 @@ export function ClubDetail({
 
                         {/* Matching players */}
                         {(() => {
-                          const closedPlayerIds = new Set(negotiations.filter(n => n.status === 'cerrado').map(n => n.playerId))
-                          const matchingPlayers = players.filter(p => {
-                            const posMatch = needMatchesPlayer(need.position, p.positions)
-                            if (!posMatch) return false
-                            if (!entries.some(e => e.playerId === p.id)) return false
-                            if (closedPlayerIds.has(p.id)) return false               // ya cerrado en algún club
-                            const yr = p.birthDate ? parseInt(p.birthDate.slice(0, 4), 10) : NaN
-                            // El tope era «2009» fijo: cada año se quedaba más viejo. Ahora: menores de 16.
-                            const minYear = new Date().getFullYear() - 16
-                            if (!isNaN(yr) && yr > minYear) return false              // demasiado joven
-                            return true
+                          // Misma regla que el panel de necesidad de Distribución (lib/distribution.ts)
+                          const matchingPlayers = suggestPlayersForNeed({
+                            need, players, negotiations,
+                            distributionPlayerIds: new Set(entries.map(e => e.playerId)),
                           })
                           if (matchingPlayers.length === 0) return null
                           return (
@@ -619,6 +614,16 @@ export function ClubDetail({
               )}
             </div>
 
+            {/* Historial de cambios (audit_log), plegado por defecto */}
+            <details className="bg-white rounded-xl border border-slate-200 px-4 py-3">
+              <summary className="cursor-pointer text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                <History className="w-3.5 h-3.5 text-slate-400" /> Historial de cambios
+              </summary>
+              <div className="mt-2">
+                <HistorialCambios tabla="clubs" filaId={club.id} profiles={profiles} compacto />
+              </div>
+            </details>
+
             {/* Danger zone */}
             {currentProfile.is_admin && (
               <div className="bg-white rounded-xl border border-red-100 p-4">
@@ -743,7 +748,6 @@ export function ClubDetail({
         onCancel={() => setConfirmDeleteNeedIdx(null)}
       />
 
-      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   )
 }
@@ -1012,7 +1016,7 @@ function InfoEditForm({ club, profiles, onSave, onCancel }: {
     supabase.from('clubs').select('league').not('league', 'is', null).then(({ data }) => {
       if (!data) return
       const dbLeagues = data.map((r: { league: string }) => r.league).filter(Boolean) as string[]
-      const merged = Array.from(new Set([...KNOWN_LEAGUES, ...dbLeagues])).sort()
+      const merged = Array.from(new Set([...KNOWN_LEAGUES, ...dbLeagues])).sort((a, b) => a.localeCompare(b, 'es'))
       setAllLeagues(merged)
     })
   }, [])

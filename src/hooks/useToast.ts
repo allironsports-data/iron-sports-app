@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useContext } from "react";
+import { ToastContext } from "../contexts/toastContext";
 
 export type ToastVariant = "success" | "error" | "info";
 
@@ -14,7 +15,16 @@ export interface Toast {
   action?: ToastAction;
 }
 
-export function useToast() {
+const noop = () => {};
+
+/**
+ * Toasts de una vista. Si hay un <ToastProvider> por encima, devuelve el
+ * showToast global y una lista vacía: los <ToastStack> locales no pintan
+ * nada y no se duplican con el global. `ignoreContext` lo usa el propio
+ * provider para tener su estado real.
+ */
+export function useToast(opts?: { ignoreContext?: boolean }) {
+  const ctx = useContext(ToastContext);
   const [toasts, setToasts] = useState<Toast[]>([]);
   // Timers vivos, para cancelarlos al desmontar y no hacer setState
   // sobre un componente que ya no existe.
@@ -39,5 +49,8 @@ export function useToast() {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
+  if (ctx && !opts?.ignoreContext) {
+    return { toasts: [] as Toast[], showToast: ctx.showToast, dismissToast: noop as (id: string) => void };
+  }
   return { toasts, showToast, dismissToast };
 }

@@ -1,11 +1,14 @@
 import { useState, useEffect, useCallback, useMemo, useRef, lazy } from 'react'
-import { useAuth } from './contexts/AuthContext'
+import { useAuth } from './hooks/useAuth'
 import type { Player, Task, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchScout, BoulemaPeticion, MemberStatus, Postpartido, FirmasEntry, BoulemaPlayer } from './types'
 import * as db from './lib/db'
 import { supabase } from './lib/supabase'
 import type { Profile } from './contexts/AuthContext'
 import { LoginScreen } from './views/LoginScreen'
-import { SavingIndicator, BottomNav, GlobalSearch, SystemNotifPrompt, fireSystemNotification } from './components/GlobalExtras'
+import { SavingIndicator, BottomNav, GlobalSearch, SystemNotifPrompt } from './components/GlobalExtras'
+import { fireSystemNotification, type MainSection } from './components/globalExtras'
+import { ConflictModal } from './components/ConflictModal'
+import type { ConflictInfo } from './components/conflict'
 import { BUILD_ID } from './changelog'
 import { esZona, type Zona } from './lib/zonas'
 import { teamsAlike } from './lib/equipos'
@@ -25,6 +28,7 @@ const Captacion        = lazy(() => import('./views/Captacion').then(m => ({ def
 const Contactos        = lazy(() => import('./views/Contactos').then(m => ({ default: m.Contactos })))
 const TeamMemberDetail = lazy(() => import('./views/TeamMemberDetail').then(m => ({ default: m.TeamMemberDetail })))
 const Boulema          = lazy(() => import('./views/Boulema').then(m => ({ default: m.Boulema })))
+const MiDia            = lazy(() => import('./views/MiDia').then(m => ({ default: m.MiDia })))
 
 export interface AppNotification {
   id: string
@@ -96,9 +100,9 @@ export default function App() {
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(
     () => sessionStorage.getItem('nav_profileId')
   )
-  // four main sections
-  const [mainSection, setMainSection] = useState<'tareas' | 'jugadores' | 'distribucion' | 'captacion' | 'boulema'>(
-    () => (sessionStorage.getItem('nav_section') as 'tareas' | 'jugadores' | 'distribucion' | 'captacion' | 'boulema') ?? 'tareas'
+  // secciones principales (+ «Mi día»)
+  const [mainSection, setMainSection] = useState<MainSection>(
+    () => (sessionStorage.getItem('nav_section') as MainSection) ?? 'tareas'
   )
   // where to return after closing PlayerDetail
   const [playerReturnToClub, setPlayerReturnToClub] = useState(false)
@@ -131,6 +135,10 @@ export default function App() {
   // Navegación externa a una ficha de Captación (p. ej. desde Boulema)
   const [captacionOpenPlayerId, setCaptacionOpenPlayerId] = useState<string | null>(null)
   const [captacionOpenFirmasId, setCaptacionOpenFirmasId] = useState<string | null>(null)
+  // Abrir un partido concreto en Captación (desde «Mi día»)
+  const [captacionOpenMatchId, setCaptacionOpenMatchId] = useState<string | null>(null)
+  // Abrir una tarea concreta en el tablero (desde «Mi día»)
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null)
 
   // Captación state
   const [scoutingPlayers, setScoutingPlayers] = useState<ScoutingPlayer[]>([])
@@ -165,6 +173,22 @@ export default function App() {
   // DEBE declararse aquí arriba: es un hook y no puede ir después de los
   // returns tempranos (loading/login) — romperlo deja la app en blanco.
   const firmasSyncGuard = useRef(false)
+
+  // Conflicto de edición pendiente de decisión (ver guardarConControl más
+  // abajo). `recargar` aplica lo suyo; `reintentar` sobrescribe.
+  const [conflict, setConflict] = useState<(ConflictInfo & { recargar: () => void }) | null>(null)
+  // Si llegan dos conflictos seguidos (raro), el segundo espera a que se
+  // resuelva el primero en vez de pisarle el modal.
+  const conflictChainRef = useRef<Promise<void>>(Promise.resolve())
+
+  // Cola de parches por tarjeta de Firmar: dos parches al mismo id se
+  // ejecutan uno detrás de otro (si no, el segundo update pisa al primero).
+  const patchQueue = useRef(new Map<string, Promise<void>>())
+
+  // Contador por tabla para refetchTable: si mientras llegaba una lectura
+  // se ha pedido otra más nueva de la misma tabla, la vieja se descarta
+  // (llegaban fuera de orden y dejaban el estado con datos antiguos).
+  const seqRef = useRef<Record<string, number>>({})
 
   // ── Detector de versión nueva de la app ───────────────────
   // Compara el BUILD_ID compilado con /version.json (que cambia en cada
@@ -209,7 +233,7 @@ export default function App() {
 
   // ── Título del documento según dónde estés ────────────────
   useEffect(() => {
-    const names: Record<string, string> = { tareas: 'Mantenimiento', jugadores: 'Jugadores', distribucion: 'Distribución', captacion: 'Captación', boulema: 'Boulema' }
+    const names: Record<string, string> = { tareas: 'Mantenimiento', jugadores: 'Jugadores', distribucion: 'Distribución', captacion: 'Captación', boulema: 'Boulema', 'mi-dia': 'Mi día' }
     const player = selectedPlayerId ? players.find(p => p.id === selectedPlayerId) : undefined
     document.title = player ? `${player.name} · AIS` : `${names[mainSection] ?? 'AIS'} · All Iron Sports`
   }, [mainSection, selectedPlayerId, players])
@@ -241,7 +265,9 @@ export default function App() {
       if (!h || h === '#contactos') return
       const m = h.match(/^#\/(jugador|club|miembro)\/(.+)$/)
       if (captacionOnlyRef.current) {
-        if (h !== '#/captacion') setMainSection('captacion')
+        // solo Captación y Mi día
+        if (h === '#/mi-dia') setMainSection('mi-dia')
+        else if (h !== '#/captacion') setMainSection('captacion')
         return
       }
       if (m) {
@@ -251,7 +277,7 @@ export default function App() {
         return
       }
       const s = h.replace('#/', '')
-      if (['tareas', 'jugadores', 'distribucion', 'captacion', 'boulema'].includes(s)) {
+      if (['tareas', 'jugadores', 'distribucion', 'captacion', 'boulema', 'mi-dia'].includes(s)) {
         setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(null)
         setMainSection(s as typeof mainSection)
       }
@@ -259,7 +285,6 @@ export default function App() {
     window.addEventListener('hashchange', apply)
     apply() // enlace compartido al cargar
     return () => window.removeEventListener('hashchange', apply)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // ── Persist nav state to sessionStorage ───────────────────
@@ -557,28 +582,36 @@ export default function App() {
   // Vuelve a pedir UNA tabla. Lo usan dos cosas: el realtime (cuando llega el
   // aviso de un cambio) y el resync al volver a la pestaña (cuando el aviso
   // nunca llegó porque el navegador estaba desconectado).
+  // Cada petición lleva un número de serie; al resolver, si ya hay una más
+  // nueva para esa tabla, la respuesta se tira (también cubre al resync,
+  // que pasa por aquí).
   const refetchTable = useCallback((table: string): void => {
+    const seq = (seqRef.current[table] ?? 0) + 1
+    seqRef.current[table] = seq
     const ignora = () => {}
+    // Aplica el resultado solo si sigue siendo la petición más reciente
+    const si = <T,>(p: Promise<T>, aplicar: (d: T) => void) =>
+      p.then((d) => { if (seqRef.current[table] === seq) aplicar(d) }).catch(ignora)
     switch (table) {
-      case 'club_negotiations':     db.fetchNegotiations().then((d) => setNegotiations(d as ClubNegotiation[])).catch(ignora); break
-      case 'distribution_entries':  db.fetchDistributionEntries().then((d) => setDistEntries(d as DistributionEntry[])).catch(ignora); break
-      case 'clubs':                 db.fetchClubs().then((d) => setClubs(d as Club[])).catch(ignora); break
-      case 'players':               db.fetchPlayers().then((d) => setPlayers(d)).catch(ignora); break
-      case 'tasks':                 db.fetchTasks().then((d) => setTasks(d)).catch(ignora); break
-      case 'member_status':         db.fetchMemberStatuses().then((d) => setMemberStatuses(d)).catch(ignora); break
-      case 'postpartidos':          db.fetchPostpartidos().then((d) => setPostpartidos(d)).catch(ignora); break
-      case 'captacion_firmas':      db.fetchFirmasEntries().then((d) => setFirmasEntries(d)).catch(ignora); break
+      case 'club_negotiations':     si(db.fetchNegotiations(), (d) => setNegotiations(d as ClubNegotiation[])); break
+      case 'distribution_entries':  si(db.fetchDistributionEntries(), (d) => setDistEntries(d as DistributionEntry[])); break
+      case 'clubs':                 si(db.fetchClubs(), (d) => setClubs(d as Club[])); break
+      case 'players':               si(db.fetchPlayers(), (d) => setPlayers(d)); break
+      case 'tasks':                 si(db.fetchTasks(), (d) => setTasks(d)); break
+      case 'member_status':         si(db.fetchMemberStatuses(), (d) => setMemberStatuses(d)); break
+      case 'postpartidos':          si(db.fetchPostpartidos(), (d) => setPostpartidos(d)); break
+      case 'captacion_firmas':      si(db.fetchFirmasEntries(), (d) => setFirmasEntries(d)); break
       // Captación · partidos: un partido lo comparten varios scouts, así que los
       // jugadores vinculados y los informes cambian mientras tienes la ficha abierta.
-      case 'scouting_matches':      db.fetchScoutingMatches().then((d) => setScoutingMatches(d as ScoutingMatch[])).catch(ignora); break
-      case 'scouting_match_players':db.fetchMatchPlayers().then((d) => setMatchPlayers(d as ScoutingMatchPlayer[])).catch(ignora); break
-      case 'scouting_match_scouts': db.fetchMatchScouts().then((d) => setMatchScouts(d as ScoutingMatchScout[])).catch(ignora); break
-      case 'scouting_reports':      db.fetchScoutingReports().then((d) => setScoutingReports(d as ScoutingReport[])).catch(ignora); break
+      case 'scouting_matches':      si(db.fetchScoutingMatches(), (d) => setScoutingMatches(d as ScoutingMatch[])); break
+      case 'scouting_match_players':si(db.fetchMatchPlayers(), (d) => setMatchPlayers(d as ScoutingMatchPlayer[])); break
+      case 'scouting_match_scouts': si(db.fetchMatchScouts(), (d) => setMatchScouts(d as ScoutingMatchScout[])); break
+      case 'scouting_reports':      si(db.fetchScoutingReports(), (d) => setScoutingReports(d as ScoutingReport[])); break
       // Los propios jugadores de Captación también los tocan varios a la vez:
       // valoración, fin de contrato, campograma de mercado…
-      case 'scouting_players':      db.fetchScoutingPlayers().then((d) => setScoutingPlayers(d as ScoutingPlayer[])).catch(ignora); break
-      case 'scouting_club_zonas':   db.fetchClubZonas().then((d) => setClubZonas(zonasAMapa(d))).catch(ignora); break
-      case 'scouting_equipos':      db.fetchEquipos().then((d) => setEquipos(d)).catch(ignora); break
+      case 'scouting_players':      si(db.fetchScoutingPlayers(), (d) => setScoutingPlayers(d as ScoutingPlayer[])); break
+      case 'scouting_club_zonas':   si(db.fetchClubZonas(), (d) => setClubZonas(zonasAMapa(d))); break
+      case 'scouting_equipos':      si(db.fetchEquipos(), (d) => setEquipos(d)); break
     }
   }, [])
 
@@ -737,10 +770,70 @@ export default function App() {
     return saved
   }
 
-  const handleUpdatePlayer = async (updated: Player) => {
-    await db.updatePlayer(updated)
-    setPlayers((prev) => prev.map((p) => (p.id === updated.id ? updated : p)))
+  // ── Guardado con control de conflictos (jugador, club, negociación) ──
+  //
+  // Flujo: db.updateX manda el updated_at que teníamos al leer. Si otro
+  // usuario ha guardado entre medias, db lanza ConflictError con su fila.
+  // Entonces el handler NO lanza todavía: abre el modal (ConflictModal,
+  // montado en todas las vistas) y devuelve una promesa que se queda
+  // esperando la decisión:
+  //   · «Recargar»     → se aplica lo suyo al estado y la promesa se RECHAZA
+  //                      con Error('conflicto'): la vista (PlayerDetail…)
+  //                      lo enseña como «No se pudo guardar» y no cierra la
+  //                      edición, que es lo correcto porque lo mío no se guardó.
+  //   · «Sobrescribir» → se reintenta con updatedAt = el de lo suyo; si va
+  //                      bien se aplica la fila guardada y la promesa se
+  //                      RESUELVE (la vista muestra «guardado»). Si vuelve a
+  //                      chocar, el modal sigue abierto con la fila más nueva.
+  // Las vistas no cambian: siguen llamando a onUpdatePlayer/Club/Negotiation.
+  const guardarConControl = <T extends { id: string; updatedAt?: string }>(
+    tabla: string,
+    guardar: (x: T) => Promise<T>,
+    aplicar: (saved: T) => void,
+  ) => async (x: T): Promise<void> => {
+    try {
+      aplicar(await guardar(x))
+      return
+    } catch (err) {
+      if (!(err instanceof db.ConflictError)) throw err
+      let suyo = err.actual as T
+      // Espera a que se resuelva un conflicto anterior antes de abrir este
+      const anterior = conflictChainRef.current
+      const mio = new Promise<void>((resolve, reject) => {
+        anterior.finally(() => {
+          const cerrar = () => setConflict(null)
+          setConflict({
+            tabla,
+            mio: x as unknown as Record<string, unknown>,
+            suyo: suyo as unknown as Record<string, unknown>,
+            recargar: () => { aplicar(suyo); cerrar(); reject(new Error('conflicto')) },
+            reintentar: async () => {
+              try {
+                const saved = await guardar({ ...x, updatedAt: suyo.updatedAt })
+                aplicar(saved); cerrar(); resolve()
+              } catch (e2) {
+                if (e2 instanceof db.ConflictError) {
+                  // Ha vuelto a cambiar: se enseña la fila más nueva y se puede reintentar
+                  suyo = e2.actual as T
+                  setConflict(prev => prev ? { ...prev, suyo: suyo as unknown as Record<string, unknown> } : prev)
+                }
+                throw e2
+              }
+            },
+          })
+        })
+      })
+      conflictChainRef.current = mio.then(() => {}, () => {})
+      await mio
+    }
   }
+
+  const handleUpdatePlayer = guardarConControl<Player>(
+    'players',
+    (p) => db.updatePlayer(p),
+    // se usa la fila devuelta: trae el updated_at nuevo para el siguiente guardado
+    (saved) => setPlayers((prev) => prev.map((p) => (p.id === saved.id ? saved : p))),
+  )
 
   const handleDeletePlayer = async (id: string) => {
     await db.deletePlayer(id)
@@ -864,10 +957,11 @@ export default function App() {
     setClubs(prev => [...prev, saved].sort((a, b) => a.name.localeCompare(b.name)))
     return saved
   }
-  const handleUpdateClub = async (c: Club) => {
-    await db.updateClub(c)
-    setClubs(prev => prev.map(x => x.id === c.id ? c : x))
-  }
+  const handleUpdateClub = guardarConControl<Club>(
+    'clubs',
+    (c) => db.updateClub(c),
+    (saved) => setClubs(prev => prev.map(x => x.id === saved.id ? saved : x)),
+  )
   const handleDeleteClub = async (id: string) => {
     await db.deleteClub(id)
     setClubs(prev => prev.filter(x => x.id !== id))
@@ -893,12 +987,13 @@ export default function App() {
     setNegotiations(prev => [saved, ...prev])
     return saved
   }
-  const handleUpdateNegotiation = async (n: ClubNegotiation) => {
-    // La fila devuelta trae el updated_at real; antes el estado local se
-    // quedaba con el viejo hasta el siguiente refetch.
-    const saved = await db.updateNegotiation(n)
-    setNegotiations(prev => prev.map(x => x.id === n.id ? saved : x))
-  }
+  // La fila devuelta trae el updated_at real; antes el estado local se
+  // quedaba con el viejo hasta el siguiente refetch.
+  const handleUpdateNegotiation = guardarConControl<ClubNegotiation>(
+    'club_negotiations',
+    (n) => db.updateNegotiation(n),
+    (saved) => setNegotiations(prev => prev.map(x => x.id === saved.id ? saved : x)),
+  )
   const handleDeleteNegotiation = async (id: string) => {
     await db.deleteNegotiation(id)
     setNegotiations(prev => prev.filter(x => x.id !== id))
@@ -1096,6 +1191,49 @@ export default function App() {
     await db.updateFirmasEntry(final)
     setFirmasEntries(prevList => prevList.map(x => x.id === final.id ? final : x))
   }
+  /**
+   * Parche parcial de una tarjeta de Firmar. A diferencia de
+   * handleUpdateFirmasEntry (formulario de edición completa, manda la tarjeta
+   * entera), aquí solo se aplican `changes` sobre lo que HAY AHORA: escribir
+   * en «Notas» y pulsar «Enviar apunte» en el mismo gesto ya no hace que el
+   * segundo guardado borre las notas del primero. Optimista: la UI cambia
+   * al momento y se revierte si falla. Los parches al mismo id van en cola.
+   */
+  const handlePatchFirmasEntry = async (
+    id: string,
+    changes: Partial<FirmasEntry> | ((e: FirmasEntry) => FirmasEntry),
+  ): Promise<void> => {
+    const aplicarCambio = (e: FirmasEntry): FirmasEntry => ({
+      ...(typeof changes === 'function' ? changes(e) : { ...e, ...changes }),
+      updatedAt: new Date().toISOString(),
+    })
+    const trabajo = async () => {
+      const before = firmasEntriesRef.current.find(x => x.id === id)
+      if (!before) throw new Error('La tarjeta ya no existe')
+      const merged = aplicarCambio(before)
+      // Optimista, y sobre `prev` (no sobre la copia leída) para no perder
+      // nada que haya cambiado entre medias.
+      setFirmasEntries(prev => prev.map(x => x.id === id ? aplicarCambio(x) : x))
+      try {
+        const final = await syncFirmasActionTask(before, merged)
+        await db.updateFirmasEntry(final)
+        // si ha creado/quitado tarea, el id de tarea también va al estado
+        if (final !== merged) setFirmasEntries(prev => prev.map(x => x.id === id ? { ...x, nextActionTaskId: final.nextActionTaskId } : x))
+      } catch (err) {
+        setFirmasEntries(prev => prev.map(x => x.id === id ? before : x))
+        throw err
+      }
+    }
+    // Serialización por id: cada parche espera al anterior (falle o no).
+    const previo = patchQueue.current.get(id) ?? Promise.resolve()
+    const mio = previo.catch(() => {}).then(trabajo)
+    patchQueue.current.set(id, mio)
+    try {
+      await mio
+    } finally {
+      if (patchQueue.current.get(id) === mio) patchQueue.current.delete(id)
+    }
+  }
   const handleDeleteFirmasEntry = async (id: string) => {
     await db.deleteFirmasEntry(id)
     setFirmasEntries(prev => prev.filter(x => x.id !== id))
@@ -1151,11 +1289,21 @@ export default function App() {
     setMainSection('distribucion')
   }
 
+  // Modal de conflicto de edición: tiene que salir en cualquier vista
+  const conflictNode = (
+    <ConflictModal
+      conflict={conflict}
+      onRecargar={() => conflict?.recargar()}
+      onSobrescribir={() => conflict?.reintentar() ?? Promise.resolve()}
+    />
+  )
+
   // Extras globales: se añaden a todas las pantallas principales
   const withExtras = (node: ReactNode) => (
     <>
       {node}
       <SavingIndicator />
+      {conflictNode}
       {phase2Loading && (
         <div className="fixed bottom-16 sm:bottom-3 left-1/2 -translate-x-1/2 z-[45] pointer-events-none">
           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800/90 text-white text-[11px] font-medium shadow-lg">
@@ -1239,6 +1387,8 @@ export default function App() {
       onOpenPlayerConsumed={() => setCaptacionOpenPlayerId(null)}
       openFirmasEntryId={captacionOpenFirmasId}
       onOpenFirmasEntryConsumed={() => setCaptacionOpenFirmasId(null)}
+      openMatchId={captacionOpenMatchId}
+      onOpenMatchConsumed={() => setCaptacionOpenMatchId(null)}
       players={players}
       onCreatePlayer={handleAddPlayer}
       boulemaPeticiones={boulemaPeticiones}
@@ -1246,6 +1396,7 @@ export default function App() {
       onSyncFirmasActionTasks={handleSyncFirmasActionTasks}
       onCreateFirmasEntry={handleCreateFirmasEntry}
       onUpdateFirmasEntry={handleUpdateFirmasEntry}
+      onPatchFirmasEntry={handlePatchFirmasEntry}
       onDeleteFirmasEntry={handleDeleteFirmasEntry}
       clubZonas={clubZonas}
       onSetClubZona={handleSetClubZona}
@@ -1254,8 +1405,64 @@ export default function App() {
       restricted={!!profile.captacion_only}
     />
   )
+  // «Mi día»: agenda personal de hoy. También para la cuenta solo-Captación.
+  const miDiaNode = (
+    <MiDia
+      profile={profile}
+      profiles={profiles}
+      isAdmin={!!profile.is_admin}
+      tasks={tasksVisibles}
+      scoutingMatches={scoutingMatches}
+      matchScouts={matchScouts}
+      firmasEntries={firmasEntries}
+      postpartidos={postpartidos}
+      players={players}
+      scoutingPlayers={scoutingPlayers}
+      onBack={() => setMainSection(profile.captacion_only ? 'captacion' : 'tareas')}
+      onOpenTask={(id) => { setOpenTaskId(id); setMainSection('tareas') }}
+      onOpenMatch={(id) => { setCaptacionOpenMatchId(id); setMainSection('captacion') }}
+      onOpenFirmasEntry={(id) => { setCaptacionOpenFirmasId(id); setMainSection('captacion') }}
+      onOpenPlayer={(id) => navigateToPlayer(id, false)}
+      onCompleteTask={async (id) => {
+        const t = tasks.find(x => x.id === id)
+        if (t) await handleUpdateTask({ ...t, status: 'completada' })
+      }}
+      onSetMatchSeen={async (id) => {
+        const m = scoutingMatches.find(x => x.id === id)
+        if (!m) return
+        const mios = matchScouts.some(s => s.matchId === id && s.scout === profile.avatar)
+        if (mios) {
+          await handleSetMatchScoutStatus(id, profile.avatar, 'visto')
+        } else {
+          // sin filas de scouts: el estado vive en el propio partido
+          const visto = { ...m, status: 'visto' as const }
+          await db.updateScoutingMatch(visto)
+          handleUpdateScoutingMatch(visto)
+        }
+      }}
+      // limpia nextAction* y, vía syncFirmasActionTask, completa la tarea vinculada
+      onCompleteFirmasAction={(id) => handlePatchFirmasEntry(id, {
+        nextAction: undefined, nextActionDate: undefined, nextActionAssignee: undefined, nextActionKind: undefined,
+      })}
+    />
+  )
+
   if (profile.captacion_only) {
-    return <>{captacionNode}<SavingIndicator /></>
+    if (mainSection === 'mi-dia') return <>{miDiaNode}<SavingIndicator />{conflictNode}</>
+    // Sin bottom nav: acceso a «Mi día» con un botón flotante
+    return (
+      <>
+        {captacionNode}
+        <button
+          onClick={() => setMainSection('mi-dia')}
+          className="fixed bottom-4 right-4 z-40 inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-amber-500 text-white text-xs font-semibold shadow-lg hover:bg-amber-600"
+          aria-label="Mi día"
+        >
+          ☀️ Mi día
+        </button>
+        <SavingIndicator />{conflictNode}
+      </>
+    )
   }
 
   if (showContacts && profile.is_admin) {
@@ -1418,6 +1625,8 @@ export default function App() {
 
   if (mainSection === 'captacion') return withExtras(captacionNode)
 
+  if (mainSection === 'mi-dia') return withExtras(miDiaNode)
+
   if (mainSection === 'distribucion' || selectedClub) {
     const splitOpen = !!selectedClub
     return withExtras(
@@ -1506,6 +1715,8 @@ export default function App() {
       onAddScoutingMatch={handleAddScoutingMatch}
       firmasEntries={firmasEntries}
       onOpenFirmar={(id) => { setCaptacionOpenFirmasId(id); setMainSection('captacion') }}
+      openTaskId={openTaskId}
+      onOpenTaskConsumed={() => setOpenTaskId(null)}
       updateAvailable={updateAvailable}
     />
   )

@@ -120,7 +120,7 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
 
     // Vídeo vs campo
     let video = 0, campo = 0
-    scoutingMatches.forEach(m => { m.viewMode === 'campo' ? campo++ : video++ })
+    scoutingMatches.forEach(m => { if (m.viewMode === 'campo') campo++; else video++ })
 
     // Vistos vs pendientes
     const visto = scoutingMatches.filter(m => m.status === 'visto').length
@@ -195,7 +195,7 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
     })
     const zoneRanked = Object.entries(byZone).sort((a, b) => (b[1].activos + b[1].firmados) - (a[1].activos + a[1].firmados))
     const managerRanked = Object.entries(byManager)
-      .map(([id, n]) => [profiles.find(p => p.id === id)?.name ?? '—', n] as [string, number])
+      .map(([id, n]) => [profiles.find(p => p.id === id)?.name ?? '—', n, id] as [string, number, string])
       .sort((a, b) => b[1] - a[1])
     const total = firmasEntries.length
     const firmados = byStatus.firmado
@@ -610,8 +610,8 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
                 <Users className="w-3.5 h-3.5 text-slate-400" /> Jugadores por encargado
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
-                {firmasStats.managerRanked.map(([name, count]) => (
-                  <StatBar key={name} label={name} value={count} max={firmasStats.managerRanked[0]?.[1] ?? 1} color="bg-blue-500" />
+                {firmasStats.managerRanked.map(([name, count, id]) => (
+                  <StatBar key={id} label={name} value={count} max={firmasStats.managerRanked[0]?.[1] ?? 1} color="bg-blue-500" />
                 ))}
               </div>
             </div>

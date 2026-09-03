@@ -19,6 +19,36 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-09-03',
+    items: [
+      'Nueva vista «Mi día» (☀️ en la barra inferior y en el menú): tus partidos de hoy, acciones del pipeline Firmar vencidas, tareas del día y postpartidos, en una sola lista con botones grandes de «Visto» y «Hecho»',
+      'Captación: al crear un jugador o un partido, la app avisa si ya existe uno parecido («¿Es alguno de estos?») con un botón para abrirlo en vez de duplicarlo',
+      'Captación: los informes se guardan como borrador mientras escribes y, si no hay cobertura al pulsar Guardar, se quedan en una cola que se envía sola cuando vuelve la señal (chip «📡 pendientes de enviar» en la cabecera)',
+      'Firmar: escribir en Notas y enviar un apunte en el mismo gesto ya no borra las notas; cada cambio parchea solo su campo. Las notas se guardan solas mientras escribes',
+      'Firmar y alineaciones: se distingue «cambió de club» de «cambió de equipo dentro del club» (Juv B → Juv A); Pegar alineación y Actualizar plantilla proponen corregir la categoría',
+      'Si dos personas editan a la vez un jugador, un club o una negociación, la segunda ve un aviso con los campos que difieren y elige recargar o sobrescribir, en vez de pisar sin saberlo',
+      'Contactos pasa a la base de datos: las correcciones, altas, bajas y favoritos se comparten entre todo el equipo (hasta que el admin pulse «Importar ahora» sigue funcionando como antes en cada navegador)',
+      'Ficha de jugador y de club: sección «Historial de cambios» (quién cambió qué y cuándo)',
+      'Estadísticas → Modelo «Llamar»: entrena en segundo plano sin bloquear la pantalla y recuerda el resultado; botón «Reentrenar»',
+      'Correo diario a las 8:00 con tus partidos, acciones vencidas y tareas del día (cuando el admin lo active)',
+      'Captación → Partidos: el buscador también encuentra partidos por jugador vinculado',
+      'Listas de equipos, gestores, posiciones y ligas ordenadas con acentos correctos (Álava antes que Zaragoza)',
+    ],
+    adminItems: [
+      'Admin → Historial (auditoría por tabla/fila, trigger audit_row en 7 tablas) y Admin → Errores (client_errors: ErrorBoundary + window.onerror + unhandledrejection, con throttle). SQL: migration_audit_log.sql, migration_client_errors.sql',
+      'Contactos: migration_contactos_supabase.sql (tablas contactos + contactos_favoritos, RLS con cuenta_activa/captacion_only_fuera/freno_borrado, realtime). Importación desde Contactos → «Importar ahora» (solo admin, desde el navegador con los datos buenos)',
+      'Conflictos: migration_updated_at_triggers.sql (updated_at + trigger set_updated_at en players, clubs, club_negotiations, captacion_firmas, scouting_players). db.ts actualizarConControl lanza ConflictError; App guardarConControl abre ConflictModal. Hasta ejecutar el SQL, players/clubs guardan sin control (42703) y avisan en consola',
+      'Crear usuario desde Admin ahora usa la Edge Function crear-usuario (auth.admin.createUser con service role): antes signUp con la sesión del admin podía dejarle logueado como el usuario nuevo. Desplegar: supabase functions deploy crear-usuario',
+      'Correo diario: Edge Function resumen-diario + migration_cron_resumen_diario.sql (pg_cron + pg_net + app_config). Secretos CRON_SECRET y APP_URL. Ver README',
+      'Lecturas paginadas: dedupe por id en leerTodo y en los 13 bucles a mano (la paginación por offset repetía/saltaba filas si alguien insertaba entre páginas); refetchTable descarta respuestas fuera de orden (seqRef)',
+      'Refactor: Captacion.tsx (9.300 líneas) → src/views/captacion/* (26 ficheros, máx 1.700); Distribution.tsx (5.400) → src/views/distribution/* + lib/distribution.ts (lógica pura con tests). Ningún cambio de comportamiento salvo el orden de los filtros del pipeline en escritorio',
+      'ToastProvider único (contexts/ToastContext.tsx): PlayerDetail montaba 8 ToastStack. useToast() cae al contexto si existe',
+      'lib/equipos.ts: equipoMatchKind/mismoEquipo/categoriaDe (club + categoría); lib/duplicados.ts; lib/colaInformes.ts; lib/miDia.ts; lib/modeloLlamar.ts (+ worker); lib/coleccion.ts; lib/formato.ts',
+      'ESLint a CERO (eran 50). Nuevo .github/workflows/ci.yml: tsc + vitest + eslint --max-warnings=0 + build en cada push',
+      '135 tests (eran 49)',
+    ],
+  },
+  {
     date: '2026-09-02',
     items: [
       'Las tareas ya no salen «vencidas» el mismo día que vencen: en el tablero, en la ficha del jugador, en la de cada miembro y en el seguimiento de Admin. Antes, por un lío de zona horaria, una tarea que vencía hoy aparecía en rojo casi todo el día',

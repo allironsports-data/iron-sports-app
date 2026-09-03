@@ -19,5 +19,14 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      'react-refresh/only-export-components': ['error', { allowConstantExport: true }],
+    },
+  },
+  {
+    // main.tsx es el punto de entrada: monta la app y no exporta nada,
+    // así que fast refresh no aplica.
+    files: ['src/main.tsx'],
+    rules: { 'react-refresh/only-export-components': 'off' },
   },
 ])

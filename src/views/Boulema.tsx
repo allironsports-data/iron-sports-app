@@ -736,7 +736,7 @@ export function Boulema({
   function toggleNotes(id: string) {
     setExpandedNoteIds(prev => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) next.delete(id); else next.add(id)
       return next
     })
   }
@@ -814,9 +814,9 @@ export function Boulema({
       {bouTab === 'peticiones' && (() => {
 
         // Derived filter values
-        const bouAllYears = [...new Set(boulemaPeticiones.map(p => p.birthYear).filter(Boolean) as string[])].sort()
-        const bouAllPositions = [...new Set(boulemaPeticiones.map(p => p.position).filter(Boolean) as string[])].sort()
-        const bouAllOfferedBy = [...new Set(boulemaPeticiones.map(p => p.offeredBy).filter(Boolean) as string[])].sort()
+        const bouAllYears = [...new Set(boulemaPeticiones.map(p => p.birthYear).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, 'es'))
+        const bouAllPositions = [...new Set(boulemaPeticiones.map(p => p.position).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, 'es'))
+        const bouAllOfferedBy = [...new Set(boulemaPeticiones.map(p => p.offeredBy).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, 'es'))
 
         const filteredPeticiones = boulemaPeticiones
           .slice()

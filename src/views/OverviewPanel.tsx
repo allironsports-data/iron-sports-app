@@ -240,7 +240,7 @@ function PlantillaTab({ players, profiles }: { players: Player[]; profiles: Prof
 
 /* ========== CONTRATOS TAB ========== */
 function ContratosTab({ players }: { players: Player[] }) {
-  const now = Date.now();
+  const [now] = useState(() => Date.now());   // fijo por montaje: no en render
   const DAY = 1000 * 60 * 60 * 24;
 
   // Representation contract stats

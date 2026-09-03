@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { Search, X, Home, TrendingUp, Eye, Inbox, Bell } from 'lucide-react'
+import { Search, X, Home, TrendingUp, Eye, Inbox, Bell, Sun } from 'lucide-react'
 import type { Player, ScoutingPlayer, FirmasEntry, Club, Task } from '../types'
 import { onSavingChange } from '../lib/supabase'
 import { norm } from '../lib/texto'
+import type { MainSection } from './globalExtras'
 
 // ═════════════════════════════════════════════════════════════
 // Extras globales de la app: indicador de guardado, barra de
@@ -60,7 +61,6 @@ export function SavingIndicator() {
 }
 
 // ── Barra de navegación inferior (solo móvil) ────────────────
-export type MainSection = 'tareas' | 'jugadores' | 'distribucion' | 'captacion' | 'boulema'
 
 export function BottomNav({ current, onGo, onSearch }: {
   current: MainSection
@@ -68,6 +68,7 @@ export function BottomNav({ current, onGo, onSearch }: {
   onSearch: () => void
 }) {
   const items: { id: MainSection; label: string; icon: React.ReactNode; match: MainSection[] }[] = [
+    { id: 'mi-dia', label: 'Mi día', icon: <Sun className="w-5 h-5" />, match: ['mi-dia'] },
     { id: 'tareas', label: 'Manten.', icon: <Home className="w-5 h-5" />, match: ['tareas', 'jugadores'] },
     { id: 'distribucion', label: 'Distrib.', icon: <TrendingUp className="w-5 h-5" />, match: ['distribucion'] },
     { id: 'captacion', label: 'Captación', icon: <Eye className="w-5 h-5" />, match: ['captacion'] },
@@ -273,22 +274,4 @@ export function SystemNotifPrompt() {
       </button>
     </div>
   )
-}
-
-/** Lanza una notificación del sistema (si hay permiso y la pestaña no está visible) */
-export function fireSystemNotification(message: string) {
-  try {
-    if (typeof Notification === 'undefined') return
-    if (Notification.permission !== 'granted') return
-    if (document.visibilityState === 'visible') return
-    const opts: NotificationOptions = { body: message, icon: '/icon-192.png', badge: '/icon-192.png' }
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistration().then(reg => {
-        if (reg) void reg.showNotification('All Iron Sports', opts)
-        else new Notification('All Iron Sports', opts)
-      }).catch(() => { try { new Notification('All Iron Sports', opts) } catch { /* móvil sin soporte */ } })
-    } else {
-      new Notification('All Iron Sports', opts)
-    }
-  } catch { /* Notification no soportado (p. ej. iOS sin PWA instalada) */ }
 }
