@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, lazy } from 'react'
 import { useAuth } from './hooks/useAuth'
-import type { Player, Task, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchScout, BoulemaPeticion, MemberStatus, Postpartido, FirmasEntry, BoulemaPlayer } from './types'
+import type { Player, Task, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchOurPlayer, ScoutingMatchScout, BoulemaPeticion, MemberStatus, Postpartido, FirmasEntry, BoulemaPlayer } from './types'
 import * as db from './lib/db'
 import { supabase } from './lib/supabase'
 import type { Profile } from './contexts/AuthContext'
@@ -59,7 +59,7 @@ const fmtShortDate = (iso: string) =>
 const SYNC_TABLES = [
   'club_negotiations', 'distribution_entries', 'clubs', 'players', 'tasks',
   'member_status', 'postpartidos', 'captacion_firmas',
-  'scouting_matches', 'scouting_match_players', 'scouting_match_scouts',
+  'scouting_matches', 'scouting_match_players', 'scouting_match_our_players', 'scouting_match_scouts',
   'scouting_reports', 'scouting_players', 'scouting_club_zonas', 'scouting_equipos',
 ] as const
 
@@ -147,6 +147,8 @@ export default function App() {
   const [scoutingReports, setScoutingReports] = useState<ScoutingReport[]>([])
   const [scoutingMatches, setScoutingMatches] = useState<ScoutingMatch[]>([])
   const [matchPlayers, setMatchPlayers] = useState<ScoutingMatchPlayer[]>([])
+  // Jugadores nuestros asignados a mano a un partido (Planificación)
+  const [matchOurPlayers, setMatchOurPlayers] = useState<ScoutingMatchOurPlayer[]>([])
   const [matchScouts, setMatchScouts] = useState<ScoutingMatchScout[]>([])
   const [boulemaPeticiones, setBoulemaPeticiones] = useState<BoulemaPeticion[]>([])
   const [firmasEntries, setFirmasEntries] = useState<FirmasEntry[]>([])
@@ -363,6 +365,7 @@ export default function App() {
         opc('Informes', db.fetchScoutingReports(), []),
         opc('Partidos', db.fetchScoutingMatches(), []),
         opc('Alineaciones', db.fetchMatchPlayers(), []),
+        opc('Nuestros en partido', db.fetchMatchOurPlayers(), [] as ScoutingMatchOurPlayer[]),
         opc('Scouts de partido', db.fetchMatchScouts(), [] as ScoutingMatchScout[]),
         opc('Peticiones Boulema', db.fetchBoulemaPeticiones(), [] as BoulemaPeticion[]),
         opc('Estado del equipo', db.fetchMemberStatuses(), [] as MemberStatus[]),
@@ -371,7 +374,7 @@ export default function App() {
         opc('Jugadores Boulema', db.fetchBoulemaPlayers(), [] as BoulemaPlayer[]),
         opc('Zonas', db.fetchClubZonas(), [] as db.ClubZona[]),
         opc('Catálogo de equipos', db.fetchEquipos(), [] as db.Equipo[]),
-      ]).then(([cl, de, ng, sp, sr, sm, mp, msc, bp, ms, pp, fe, bpl, cz, eq]) => {
+      ]).then(([cl, de, ng, sp, sr, sm, mp, mop, msc, bp, ms, pp, fe, bpl, cz, eq]) => {
         if (cancelled) return
         setClubs(cl as Club[])
         setDistEntries(de as DistributionEntry[])
@@ -380,6 +383,7 @@ export default function App() {
         setScoutingReports(sr as ScoutingReport[])
         setScoutingMatches(sm as ScoutingMatch[])
         setMatchPlayers(mp as ScoutingMatchPlayer[])
+        setMatchOurPlayers(mop as ScoutingMatchOurPlayer[])
         setMatchScouts(msc as ScoutingMatchScout[])
         setBoulemaPeticiones(bp as BoulemaPeticion[])
         setMemberStatuses(ms as MemberStatus[])
@@ -607,6 +611,7 @@ export default function App() {
       // jugadores vinculados y los informes cambian mientras tienes la ficha abierta.
       case 'scouting_matches':      si(db.fetchScoutingMatches(), (d) => setScoutingMatches(d as ScoutingMatch[])); break
       case 'scouting_match_players':si(db.fetchMatchPlayers(), (d) => setMatchPlayers(d as ScoutingMatchPlayer[])); break
+      case 'scouting_match_our_players': si(db.fetchMatchOurPlayers(), (d) => setMatchOurPlayers(d)); break
       case 'scouting_match_scouts': si(db.fetchMatchScouts(), (d) => setMatchScouts(d as ScoutingMatchScout[])); break
       case 'scouting_reports':      si(db.fetchScoutingReports(), (d) => setScoutingReports(d as ScoutingReport[])); break
       // Los propios jugadores de Captación también los tocan varios a la vez:
@@ -1058,6 +1063,7 @@ export default function App() {
   const handleDeleteScoutingMatch = (id: string) => {
     setScoutingMatches(prev => prev.filter(x => x.id !== id))
     setMatchPlayers(prev => prev.filter(mp => mp.matchId !== id))
+    setMatchOurPlayers(prev => prev.filter(mp => mp.matchId !== id))
     setMatchScouts(prev => prev.filter(ms => ms.matchId !== id))
   }
   const handleAddMatchPlayer = async (matchId: string, playerId: string) => {
@@ -1067,6 +1073,28 @@ export default function App() {
   const handleRemoveMatchPlayer = async (matchId: string, playerId: string) => {
     await db.removeMatchPlayer(matchId, playerId)
     setMatchPlayers(prev => prev.filter(x => !(x.matchId === matchId && x.playerId === playerId)))
+  }
+  // ── Jugadores nuestros asignados a mano a un partido (Planificación) ──
+  // Optimistas: la celda cambia al instante y se deshace si la BBDD falla.
+  const handleAddMatchOurPlayer = async (matchId: string, playerId: string) => {
+    const tmp: ScoutingMatchOurPlayer = { id: `tmp-${matchId}-${playerId}`, matchId, playerId, createdAt: new Date().toISOString() }
+    setMatchOurPlayers(prev => prev.some(x => x.matchId === matchId && x.playerId === playerId) ? prev : [...prev, tmp])
+    try {
+      const row = await db.addMatchOurPlayer(matchId, playerId)
+      setMatchOurPlayers(prev => prev.map(x => x.id === tmp.id ? row : x))
+    } catch (e) {
+      setMatchOurPlayers(prev => prev.filter(x => x.id !== tmp.id))
+      throw e
+    }
+  }
+  const handleRemoveMatchOurPlayer = async (matchId: string, playerId: string) => {
+    const quitadas = matchOurPlayers.filter(x => x.matchId === matchId && x.playerId === playerId)
+    setMatchOurPlayers(prev => prev.filter(x => !(x.matchId === matchId && x.playerId === playerId)))
+    try { await db.removeMatchOurPlayer(matchId, playerId) }
+    catch (e) {
+      setMatchOurPlayers(prev => [...prev, ...quitadas.filter(q => !prev.some(x => x.id === q.id))])
+      throw e
+    }
   }
   // ── Varios scouts por partido (scouting_match_scouts) ──
   const handleAddMatchScout = async (matchId: string, scout: string, viewMode?: 'campo' | 'video') => {
@@ -1400,6 +1428,9 @@ export default function App() {
       matchPlayers={matchPlayers}
       onAddMatchPlayer={handleAddMatchPlayer}
       onRemoveMatchPlayer={handleRemoveMatchPlayer}
+      matchOurPlayers={matchOurPlayers}
+      onAddMatchOurPlayer={handleAddMatchOurPlayer}
+      onRemoveMatchOurPlayer={handleRemoveMatchOurPlayer}
       matchScouts={matchScouts}
       onAddMatchScout={handleAddMatchScout}
       onRemoveMatchScout={handleRemoveMatchScout}

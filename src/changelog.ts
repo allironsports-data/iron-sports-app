@@ -21,6 +21,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-09-03',
     items: [
+      'Planificación: la celda «Jugador» ya se puede tocar. «Jugador» = los nuestros que asignéis a mano a ese partido (clic en la celda para añadir o quitar, con ✕); si no hay ninguno, «Captación». Van en negrita también al imprimir y en Excel',
       'Captación → nueva pestaña «Planificación»: la hoja de fin de semana (Día · Hora · Partido · Jugador · Persona · Vía) que se hacía en Excel, ahora nativa. Semana de planificación de martes a lunes (por defecto) o solo fin de semana, con ← →, y botón flotante 🗓️ en todas las pantallas, jugadores nuestros en negrita (o «Captación»), edición directa en la tabla (quién lo ve, vía campo/tv por scout, hora y notas), partidos vistos tachados, «＋ Añadir partido», Imprimir/PDF y descarga a Excel',
       'Tabla de jugadores (Admin): botón de papelera en cada fila para eliminar, con confirmación. Aquí salen TODOS los jugadores, también los «solo Distribución» que no aparecen en Mantenimiento (llevan una etiqueta que lo indica)',
       'Nueva vista «Mi día» (☀️ en la barra inferior y en el menú): tus partidos de hoy, acciones del pipeline Firmar vencidas, tareas del día y postpartidos, en una sola lista con botones grandes de «Visto» y «Hecho»',
@@ -37,6 +38,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Listas de equipos, gestores, posiciones y ligas ordenadas con acentos correctos (Álava antes que Zaragoza)',
     ],
     adminItems: [
+      'Planificación · nuestros a mano: tabla scouting_match_our_players (migration_match_nuestros.sql, incluida como PARTE 6 en migraciones_tanda2_todo.sql), realtime y RLS con candados cuenta_activa/captacion_only_fuera; sin la migración la celda sigue mostrando solo los deducidos por club',
       'Planificación: lib/planificacion.ts (lógica pura + HTML de impresión, tests/planificacion.test.ts), views/captacion/PlanificacionTab.tsx, cableado en Captacion.tsx; MatchFormPanel admite fechaInicial; csv.ts/BotonCsv aceptan nombre sin sello de fecha',
       'Admin → Historial (auditoría por tabla/fila, trigger audit_row en 7 tablas) y Admin → Errores (client_errors: ErrorBoundary + window.onerror + unhandledrejection, con throttle). SQL: migration_audit_log.sql, migration_client_errors.sql',
       'Contactos: migration_contactos_supabase.sql (tablas contactos + contactos_favoritos, RLS con cuenta_activa/captacion_only_fuera/freno_borrado, realtime). Importación desde Contactos → «Importar ahora» (solo admin, desde el navegador con los datos buenos)',

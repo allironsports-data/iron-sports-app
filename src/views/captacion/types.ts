@@ -1,5 +1,5 @@
 import type { CaptacionTab } from './helpers'
-import type { Player, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchScout, BoulemaPeticion, FirmasEntry } from '../../types'
+import type { Player, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchOurPlayer, ScoutingMatchScout, BoulemaPeticion, FirmasEntry } from '../../types'
 import type { Profile } from '../../contexts/AuthContext'
 import type { Equipo as EquipoCatalogo } from '../../lib/db'
 import type { Zona } from '../../lib/zonas'
@@ -28,6 +28,10 @@ export interface Props {
   matchPlayers: ScoutingMatchPlayer[]
   onAddMatchPlayer: (matchId: string, playerId: string) => Promise<void>
   onRemoveMatchPlayer: (matchId: string, playerId: string) => Promise<void>
+  /** Jugadores NUESTROS (players) asignados a mano a un partido (Planificación) */
+  matchOurPlayers: ScoutingMatchOurPlayer[]
+  onAddMatchOurPlayer: (matchId: string, playerId: string) => Promise<void>
+  onRemoveMatchOurPlayer: (matchId: string, playerId: string) => Promise<void>
   /** Varios scouts por partido (tabla scouting_match_scouts) */
   matchScouts: ScoutingMatchScout[]
   onAddMatchScout: (matchId: string, scout: string, viewMode?: 'campo' | 'video') => Promise<void>

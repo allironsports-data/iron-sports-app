@@ -21,7 +21,7 @@ export function MatchDetailModal({
   onAddScout, onRemoveScout, onSetScoutStatus, onSetScoutMode,
   onAddMatchPlayer, onRemoveMatchPlayer, onAddReport, onLinkReportToMatch, onCreateAndLinkPlayer, onOpenEquipo,
   onFixPlayerTeam, onOpenPlayer, onOpenMatch, showToast,
-  variant = 'modal',
+  variant = 'modal', nuestros,
 }: {
   match: ScoutingMatch
   scouts: MatchScoutInfo[]
@@ -57,6 +57,8 @@ export function MatchDetailModal({
   showToast?: ShowToast
   /** 'modal' = ventana flotante (móvil) · 'panel' = columna fija a la derecha */
   variant?: 'modal' | 'panel'
+  /** Nombres de jugadores NUESTROS que juegan este partido (por club o asignados en Planificación) */
+  nuestros?: string[]
 }) {
   const [playerSearch, setPlayerSearch] = useState('')
   const [suggYearFilter, setSuggYearFilter] = useState<string | null>(null)
@@ -392,6 +394,11 @@ export function MatchDetailModal({
                 </div>
               ))}
             </div>
+          )}
+
+          {/* ── Jugadores nuestros (Mantenimiento) ── */}
+          {nuestros && nuestros.length > 0 && (
+            <p className="text-xs text-slate-600"><span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Nuestros</span>: <span className="font-bold">{nuestros.join(', ')}</span></p>
           )}
 
           {/* ── Notas del partido ── */}

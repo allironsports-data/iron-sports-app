@@ -311,6 +311,14 @@ export interface ScoutingMatchPlayer {
   createdAt: string
 }
 
+/** Jugador NUESTRO (tabla players) asignado a mano a un partido de Captación (Planificación) */
+export interface ScoutingMatchOurPlayer {
+  id: string
+  matchId: string
+  playerId: string
+  createdAt: string
+}
+
 /** Scout asignado a un partido. Un partido puede tener varios. */
 export interface ScoutingMatchScout {
   id: string

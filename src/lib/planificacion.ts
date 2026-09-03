@@ -1,10 +1,9 @@
 // ── Planificación de fin de semana (la hoja de Excel, pero nativa) ─────
 // Lógica pura: qué partidos entran en el rango, qué jugadores nuestros
-// juegan cada uno, quién lo ve y por dónde. Sin React ni navegador, para
+// tienen asignados a mano, quién lo ve y por dónde. Sin React ni navegador, para
 // poder probarla (tests/planificacion.test.ts).
 
-import type { Player, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchScout, ScoutingPlayer } from '../types'
-import { teamMatchKind } from './equipos'
+import type { Player, ScoutingMatch, ScoutingMatchOurPlayer, ScoutingMatchScout } from '../types'
 import { fechaLocal, lunesDe, parseDia, sumarDias } from './fechas'
 
 export type Via = 'tv' | 'campo'
@@ -24,8 +23,8 @@ export interface FilaPlanificacion {
   diaLabel: string         // «Viernes», «Sábado»…
   hora: string             // «HH:MM» o ''
   partido: string          // «Home - Away»
+  /** Jugadores nuestros asignados a mano al partido (scouting_match_our_players), sin ocultos ni duplicados, por nombre */
   nuestros: Player[]
-  captacion: ScoutingPlayer[]
   /** Nombres de los nuestros separados por coma, o «Captación» si el partido es solo de scouting */
   jugadorTexto: string
   personas: string[]
@@ -87,37 +86,37 @@ export function tituloRango(r: Rango): string {
   return `${a.getDate()} ${ma} - ${b.getDate()} ${mb}`
 }
 
-/** ¿Juega alguno de los clubes del jugador en este partido? (mismo club, cualquier categoría) */
-function juegaEn(p: Player, m: ScoutingMatch): boolean {
-  return p.clubs.some(c => teamMatchKind(c.name, m.homeTeam) === 'exacto' || teamMatchKind(c.name, m.awayTeam) === 'exacto')
-}
-
-export function construirPlanificacion({ desde, hasta, scoutingMatches, matchScouts, matchPlayers, scoutingPlayers, players }: {
+export function construirPlanificacion({ desde, hasta, scoutingMatches, matchScouts, matchOurPlayers = [], players }: {
   desde: string
   hasta: string
   scoutingMatches: ScoutingMatch[]
   matchScouts: ScoutingMatchScout[]
-  matchPlayers: ScoutingMatchPlayer[]
-  scoutingPlayers: ScoutingPlayer[]
+  /** Nuestros asignados a mano (tabla scouting_match_our_players) */
+  matchOurPlayers?: ScoutingMatchOurPlayer[]
   players: Player[]
 }): FilaPlanificacion[] {
   const scoutsPorPartido: Record<string, ScoutingMatchScout[]> = {}
   for (const s of matchScouts) (scoutsPorPartido[s.matchId] ??= []).push(s)
   for (const l of Object.values(scoutsPorPartido)) l.sort((a, b) => a.createdAt.localeCompare(b.createdAt))
 
-  const jugadoresPorPartido: Record<string, string[]> = {}
-  for (const mp of matchPlayers) (jugadoresPorPartido[mp.matchId] ??= []).push(mp.playerId)
-  const scoutingById = new Map(scoutingPlayers.map(p => [p.id, p]))
+  const manualesPorPartido: Record<string, string[]> = {}
+  for (const mp of matchOurPlayers) (manualesPorPartido[mp.matchId] ??= []).push(mp.playerId)
 
-  const visibles = players.filter(p => !p.hiddenFromManagement)
+  const visibleById = new Map(players.filter(p => !p.hiddenFromManagement).map(p => [p.id, p]))
 
   const filas = scoutingMatches
     .filter(m => m.date >= desde && m.date <= hasta)
     .map((m): FilaPlanificacion => {
-      const nuestros = visibles.filter(p => juegaEn(p, m)).sort((a, b) => a.name.localeCompare(b.name, 'es'))
-      const captacion = (jugadoresPorPartido[m.id] ?? [])
-        .map(id => scoutingById.get(id))
-        .filter((p): p is ScoutingPlayer => !!p)
+      // Solo los asignados a mano; fuera ocultos, borrados y repetidos
+      const vistos = new Set<string>()
+      const nuestros: Player[] = []
+      for (const id of manualesPorPartido[m.id] ?? []) {
+        const p = visibleById.get(id)
+        if (!p || vistos.has(id)) continue
+        vistos.add(id)
+        nuestros.push(p)
+      }
+      nuestros.sort((a, b) => a.name.localeCompare(b.name, 'es'))
 
       const reales = scoutsPorPartido[m.id] ?? []
       const scouts: ScoutPlanificacion[] = reales.length > 0
@@ -137,7 +136,6 @@ export function construirPlanificacion({ desde, hasta, scoutingMatches, matchSco
         hora: m.time ?? '',
         partido: `${m.homeTeam} - ${m.awayTeam}`,
         nuestros,
-        captacion,
         jugadorTexto: nuestros.length > 0 ? nuestros.map(p => p.name).join(', ') : 'Captación',
         personas: scouts.map(s => s.scout),
         scouts,

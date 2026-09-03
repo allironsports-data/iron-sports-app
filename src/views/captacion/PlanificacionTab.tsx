@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Plus, ChevronLeft, ChevronRight } from 'lucide-react'
-import type { Player, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchScout, ScoutingPlayer } from '../../types'
+import { Plus, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import type { Player, ScoutingMatch, ScoutingMatchOurPlayer, ScoutingMatchScout } from '../../types'
 import type { Profile } from '../../contexts/AuthContext'
 import { BotonCsv } from '../../components/BotonCsv'
 import {
@@ -8,6 +8,7 @@ import {
   construirPlanificacion, rangoFinDeSemana, rangoSemana, tituloRango, planificacionACsv, htmlPlanificacion, modoDeVia,
 } from '../../lib/planificacion'
 import type { ShowToast } from './helpers'
+import { norm } from '../../lib/texto'
 import { MatchFormPanel, type MatchFormState } from './partidos/MatchFormPanel'
 
 // ── Pestaña PLANIFICACIÓN · la hoja de fin de semana (Día · Hora · Partido ·
@@ -29,14 +30,14 @@ const COLOR_DIA: Record<string, { celda: string; fila: string }> = {
 const SELECT_MINI = 'text-[11px] border border-slate-200 rounded px-1 py-0.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30'
 
 export function PlanificacionTab({
-  scoutingMatches, matchScouts, matchPlayers, scoutingPlayers, players, profiles,
+  scoutingMatches, matchScouts, matchOurPlayers, players, profiles,
   showAddMatch, setShowAddMatch, editingMatch, setEditingMatch, handleSaveMatch, openAddMatch, showToast,
   guardarPartido, onAddScout, onRemoveScout, onSetScoutMode, setDetailMatchId, renderFichaPartido, isDesktop,
+  onAddMatchOurPlayer, onRemoveMatchOurPlayer,
 }: {
   scoutingMatches: ScoutingMatch[]
   matchScouts: ScoutingMatchScout[]
-  matchPlayers: ScoutingMatchPlayer[]
-  scoutingPlayers: ScoutingPlayer[]
+  matchOurPlayers: ScoutingMatchOurPlayer[]
   players: Player[]
   profiles: Profile[]
   showAddMatch: boolean
@@ -54,6 +55,9 @@ export function PlanificacionTab({
   setDetailMatchId: React.Dispatch<React.SetStateAction<string | null>>
   renderFichaPartido: (variant: 'modal' | 'panel') => React.ReactNode
   isDesktop: boolean
+  /** Celda «Jugador»: nuestros asignados a mano (scouting_match_our_players) */
+  onAddMatchOurPlayer: (matchId: string, playerId: string) => Promise<void>
+  onRemoveMatchOurPlayer: (matchId: string, playerId: string) => Promise<void>
 }) {
   const [modo, setModo] = useState<Modo>('semana')
   const [offset, setOffset] = useState(0)
@@ -65,8 +69,8 @@ export function PlanificacionTab({
   const titulo = `${modo === 'finde' ? 'Fin de semana' : 'Semana'} ${tituloRango(rango)}`
 
   const filas = useMemo(
-    () => construirPlanificacion({ desde: rango.desde, hasta: rango.hasta, scoutingMatches, matchScouts, matchPlayers, scoutingPlayers, players }),
-    [rango, scoutingMatches, matchScouts, matchPlayers, scoutingPlayers, players],
+    () => construirPlanificacion({ desde: rango.desde, hasta: rango.hasta, scoutingMatches, matchScouts, matchOurPlayers, players }),
+    [rango, scoutingMatches, matchScouts, matchOurPlayers, players],
   )
 
   function imprimir() {
@@ -157,13 +161,14 @@ export function PlanificacionTab({
                         {f.partido}
                       </button>
                     </td>
-                    <td className={`px-2 py-1.5 text-center ${tach}`}>
-                      {f.nuestros.length > 0
-                        ? <span className="font-bold">{f.jugadorTexto}</span>
-                        : <span className="font-bold text-slate-600">Captación</span>}
-                      {f.captacion.length > 0 && (
-                        <div className="text-[10.5px] text-slate-400 font-normal" title="Jugadores de Captación vinculados">{f.captacion.map(p => p.fullName).join(', ')}</div>
-                      )}
+                    <td className={`px-1 py-1 text-center ${tach}`}>
+                      <JugadorCell
+                        fila={f}
+                        players={players}
+                        onAddNuestro={id => onAddMatchOurPlayer(f.matchId, id)}
+                        onRemoveNuestro={id => onRemoveMatchOurPlayer(f.matchId, id)}
+                        showToast={showToast}
+                      />
                     </td>
                     <td className={`px-1 py-1 text-center ${tach}`}>
                       <PersonaCell fila={f} profiles={profiles} onAdd={s => onAddScout(f.match, s)} onRemove={s => onRemoveScout(f.match, s)} />
@@ -183,7 +188,7 @@ export function PlanificacionTab({
           </table>
         </div>
         <p className="text-[10.5px] text-slate-400">
-          Negrita = jugadores nuestros que juegan ese partido (por club). Tachado = partido ya visto. Clic en Persona para elegir quién lo ve; la vía se cambia por scout.
+          Negrita = jugadores nuestros asignados a ese partido (clic en Jugador para añadir o quitar). «Captación» = partido solo de scouting. Tachado = partido ya visto. Clic en Persona para elegir quién lo ve; la vía se cambia por scout.
         </p>
       </div>
 
@@ -222,13 +227,8 @@ function NotasCell({ fila, onSave }: { fila: FilaPlanificacion; onSave: (n: stri
   )
 }
 
-/** Popover con los avatares de los perfiles: multi-selección de scouts */
-function PersonaCell({ fila, profiles, onAdd, onRemove }: {
-  fila: FilaPlanificacion
-  profiles: Profile[]
-  onAdd: (scout: string) => Promise<void>
-  onRemove: (scout: string) => Promise<void>
-}) {
+/** Estado de un popover que se cierra al hacer clic fuera o con Escape */
+function usePopover() {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -239,6 +239,94 @@ function PersonaCell({ fila, profiles, onAdd, onRemove }: {
     window.addEventListener('keydown', onKey)
     return () => { document.removeEventListener('mousedown', onDown); window.removeEventListener('keydown', onKey) }
   }, [open])
+  return { open, setOpen, ref }
+}
+
+const MAX_RESULTADOS = 8
+
+/**
+ * Celda «Jugador»: los nuestros (players de Mantenimiento) asignados a mano
+ * a este partido, con ✕ para quitar y buscador para añadir. Sin asignados,
+ * «Captación».
+ */
+function JugadorCell({ fila, players, onAddNuestro, onRemoveNuestro, showToast }: {
+  fila: FilaPlanificacion
+  players: Player[]
+  onAddNuestro: (playerId: string) => Promise<void>
+  onRemoveNuestro: (playerId: string) => Promise<void>
+  showToast: ShowToast
+}) {
+  const { open, setOpen, ref } = usePopover()
+  const [q, setQ] = useState('')
+  const [ocupado, setOcupado] = useState(false)
+
+  const nuestrosIds = useMemo(() => new Set(fila.nuestros.map(p => p.id)), [fila.nuestros])
+
+  const resultados = useMemo(() => {
+    const n = norm(q)
+    if (!n) return []
+    return players
+      .filter(p => !p.hiddenFromManagement && !nuestrosIds.has(p.id) && norm(p.name).includes(n))
+      .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+      .slice(0, MAX_RESULTADOS)
+  }, [q, players, nuestrosIds])
+
+  async function accion(fn: () => Promise<void>, error: string) {
+    if (ocupado) return
+    setOcupado(true)
+    try { await fn() } catch { showToast(error, 'error') } finally { setOcupado(false) }
+  }
+
+  return (
+    <div ref={ref} className="relative inline-block max-w-full">
+      <button
+        onClick={() => setOpen(o => !o)}
+        title="Jugadores nuestros en este partido"
+        className={`px-2 py-0.5 rounded border max-w-full ${open ? 'border-primary bg-white' : 'border-transparent hover:border-slate-300 hover:bg-white'}`}
+      >
+        {fila.nuestros.length > 0
+          ? <span className="font-bold">{fila.jugadorTexto}</span>
+          : <span className="font-bold text-slate-600">Captación</span>}
+      </button>
+      {open && (
+        <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 z-30 bg-white border border-slate-200 rounded-lg shadow-lg p-2 w-[260px] text-left no-underline text-slate-700 font-normal">
+          <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Jugadores nuestros en este partido</div>
+          <ul className="space-y-0.5 mb-1">
+            {fila.nuestros.map(p => (
+              <li key={p.id} className="flex items-center gap-1 text-[11px]">
+                <span className="font-bold truncate flex-1">{p.name}</span>
+                <button onClick={() => void accion(() => onRemoveNuestro(p.id), 'No se pudo quitar al jugador')} disabled={ocupado} title="Quitar del partido" className="p-0.5 rounded text-slate-400 hover:text-red-500 hover:bg-red-50"><X className="w-3 h-3" /></button>
+              </li>
+            ))}
+            {fila.nuestros.length === 0 && <li className="text-[11px] text-slate-400 italic">Ninguno</li>}
+          </ul>
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Añadir jugador nuestro…" className="w-full text-[11px] px-1.5 py-1 rounded border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30" autoFocus />
+          {resultados.length > 0 && (
+            <ul className="mt-1 border border-slate-100 rounded max-h-40 overflow-y-auto">
+              {resultados.map(p => (
+                <li key={p.id}>
+                  <button onClick={() => void accion(async () => { await onAddNuestro(p.id); setQ('') }, 'No se pudo asignar al jugador')} disabled={ocupado} className="w-full text-left px-1.5 py-1 text-[11px] hover:bg-slate-50">
+                    {p.name}{p.clubs[0]?.name && <span className="text-slate-400"> · {p.clubs[0].name}</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {q.trim() !== '' && resultados.length === 0 && <div className="mt-1 text-[10.5px] text-slate-400">Sin resultados en Mantenimiento</div>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Popover con los avatares de los perfiles: multi-selección de scouts */
+function PersonaCell({ fila, profiles, onAdd, onRemove }: {
+  fila: FilaPlanificacion
+  profiles: Profile[]
+  onAdd: (scout: string) => Promise<void>
+  onRemove: (scout: string) => Promise<void>
+}) {
+  const { open, setOpen, ref } = usePopover()
   const elegidos = new Set(fila.personas)
   return (
     <div ref={ref} className="relative inline-block">

@@ -23,6 +23,7 @@ import { InformesTab } from './InformesTab'
 import { PartidosTab, MATCH_PAGE_SIZE, type MatchesView, type MatchModeFilter, type MatchStatusFilter } from './PartidosTab'
 import { PretemporadaTab, type PreSortKey, type PreAssessFilter } from './PretemporadaTab'
 import { PlanificacionTab } from './PlanificacionTab'
+import { construirPlanificacion } from '../../lib/planificacion'
 import { PlayerPanel } from './PlayerPanel'
 import { EquiposTab, ZonasPanel } from './EquiposTab'
 import { useFilasEquipos, inicioTemporada } from './filasEquipos'
@@ -59,6 +60,9 @@ export function Captacion({
   matchPlayers,
   onAddMatchPlayer,
   onRemoveMatchPlayer,
+  matchOurPlayers,
+  onAddMatchOurPlayer,
+  onRemoveMatchOurPlayer,
   matchScouts,
   onAddMatchScout,
   onRemoveMatchScout,
@@ -973,9 +977,14 @@ export function Captacion({
   function renderFichaPartido(variant: 'modal' | 'panel') {
     const dm = detailMatchId ? scoutingMatches.find(m => m.id === detailMatchId) : null
     if (!dm) return null
+    // Nuestros asignados a mano a este partido (misma lógica que la hoja de Planificación)
+    const nuestros = construirPlanificacion({
+      desde: dm.date, hasta: dm.date, scoutingMatches: [dm], matchScouts: [], matchOurPlayers, players,
+    })[0]?.nuestros.map(p => p.name) ?? []
     return (
       <MatchDetailModal
         match={dm}
+        nuestros={nuestros}
         scouts={scoutsByMatch[dm.id] ?? []}
         profiles={profiles}
         currentProfile={currentProfile}
@@ -1555,10 +1564,11 @@ export function Captacion({
         <PlanificacionTab
           scoutingMatches={scoutingMatches}
           matchScouts={matchScouts}
-          matchPlayers={matchPlayers}
-          scoutingPlayers={scoutingPlayers}
+          matchOurPlayers={matchOurPlayers}
           players={players}
           profiles={profiles}
+          onAddMatchOurPlayer={onAddMatchOurPlayer}
+          onRemoveMatchOurPlayer={onRemoveMatchOurPlayer}
           showAddMatch={showAddMatch} setShowAddMatch={setShowAddMatch}
           editingMatch={editingMatch} setEditingMatch={setEditingMatch}
           handleSaveMatch={handleSaveMatch}

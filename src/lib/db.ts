@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 import { dedupePorId } from './coleccion'
-import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchScout, BoulemaPeticion, ClubLog, PlayerMeeting, PlayerActivity, MemberStatus, Postpartido, FirmasEntry, BoulemaPlayer } from '../types'
+import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchOurPlayer, ScoutingMatchScout, BoulemaPeticion, ClubLog, PlayerMeeting, PlayerActivity, MemberStatus, Postpartido, FirmasEntry, BoulemaPlayer } from '../types'
 
 // ── helpers ──────────────────────────────────────────────────
 
@@ -1061,6 +1061,52 @@ export async function addMatchPlayer(matchId: string, playerId: string): Promise
 
 export async function removeMatchPlayer(matchId: string, playerId: string): Promise<void> {
   const { error } = await supabase.from('scouting_match_players')
+    .delete().eq('match_id', matchId).eq('player_id', playerId)
+  if (error) throw error
+}
+
+// ── scouting_match_our_players (jugadores NUESTROS asignados a mano a un partido) ──
+
+function dbToMatchOurPlayer(row: Record<string, unknown>): ScoutingMatchOurPlayer {
+  return {
+    id: row.id as string,
+    matchId: row.match_id as string,
+    playerId: row.player_id as string,
+    createdAt: row.created_at as string,
+  }
+}
+
+/** Devuelve [] si la tabla aún no existe (migration_match_nuestros.sql sin ejecutar). */
+export async function fetchMatchOurPlayers(): Promise<ScoutingMatchOurPlayer[]> {
+  try {
+    const filas = await leerTodo<Record<string, unknown>>('scouting_match_our_players', (d, h) =>
+      supabase.from('scouting_match_our_players').select('*').order('created_at').order('id').range(d, h))
+    return filas.map(dbToMatchOurPlayer)
+  } catch (e) {
+    // leerTodo ya lo ha registrado; solo «tabla inexistente» (42P01) devuelve []
+    if (esTablaInexistente(e)) return []
+    throw e
+  }
+}
+
+export async function addMatchOurPlayer(matchId: string, playerId: string): Promise<ScoutingMatchOurPlayer> {
+  // INSERT normal (la tabla no tiene policy de update, así que nada de upsert);
+  // 23505 = ya estaba asignado por otro → se lee la fila existente.
+  const { data, error } = await supabase.from('scouting_match_our_players')
+    .insert({ match_id: matchId, player_id: playerId })
+    .select().maybeSingle()
+  if (!error && data) return dbToMatchOurPlayer(data)
+  if (error && error.code !== '23505') throw error
+
+  const { data: existing, error: readError } = await supabase.from('scouting_match_our_players')
+    .select('*').eq('match_id', matchId).eq('player_id', playerId).maybeSingle()
+  if (readError) throw readError
+  if (!existing) throw error ?? new Error('No se pudo asignar el jugador al partido')
+  return dbToMatchOurPlayer(existing)
+}
+
+export async function removeMatchOurPlayer(matchId: string, playerId: string): Promise<void> {
+  const { error } = await supabase.from('scouting_match_our_players')
     .delete().eq('match_id', matchId).eq('player_id', playerId)
   if (error) throw error
 }

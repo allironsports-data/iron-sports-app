@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   construirPlanificacion, rangoFinDeSemana, rangoSemana, tituloRango, planificacionACsv, htmlPlanificacion,
 } from '../src/lib/planificacion'
-import type { Player, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchScout, ScoutingPlayer } from '../src/types'
+import type { Player, ScoutingMatch, ScoutingMatchScout } from '../src/types'
 
 function player(over: Partial<Player> & Pick<Player, 'id' | 'name'>): Player {
   return {
@@ -22,7 +22,7 @@ function scout(matchId: string, s: string, over: Partial<ScoutingMatchScout> = {
   return { id: `${matchId}-${s}`, matchId, scout: s, status: 'pendiente', createdAt: `2026-09-01T00:00:0${s.length}`, ...over }
 }
 
-const base = { scoutingPlayers: [] as ScoutingPlayer[], matchPlayers: [] as ScoutingMatchPlayer[], matchScouts: [] as ScoutingMatchScout[], players: [] as Player[] }
+const base = { matchScouts: [] as ScoutingMatchScout[], players: [] as Player[] }
 
 describe('rangos', () => {
   it('lunes-jueves → el viernes que viene; viernes-domingo → el fin de semana en curso', () => {
@@ -63,35 +63,40 @@ describe('construirPlanificacion', () => {
     expect(filas[0].partido).toBe('E - F')
   })
 
-  it('jugadores nuestros por club (cualquier categoría), sin los ocultos; si no hay, «Captación»', () => {
+  it('«Jugador» = solo los nuestros asignados a mano (sin ocultos, borrados ni repetidos); si no hay, «Captación»', () => {
     const players = [
-      player({ id: 'p1', name: 'Fode Minite', clubs: [{ name: 'Villarreal Juvenil A', type: 'principal' }] }),
-      player({ id: 'p2', name: 'Carlos Maciá', clubs: [{ name: 'Villarreal CF', type: 'principal' }] }),
-      player({ id: 'p3', name: 'Oculto', clubs: [{ name: 'Murcia', type: 'principal' }], hiddenFromManagement: true }),
-      player({ id: 'p4', name: 'Otro', clubs: [{ name: 'Real Sociedad', type: 'cedido_en' }] }),
+      player({ id: 'p1', name: 'Fode Minite', clubs: [{ name: 'Villarreal CF', type: 'principal' }] }),
+      player({ id: 'p2', name: 'Andrés Cedido', clubs: [{ name: 'Real Sociedad', type: 'principal' }] }),
+      player({ id: 'p3', name: 'Oculto', clubs: [], hiddenFromManagement: true }),
     ]
     const filas = construirPlanificacion({
       ...base, players, desde: '2026-09-05', hasta: '2026-09-05',
       scoutingMatches: [
         match({ id: 'm1', homeTeam: 'Villarreal Juv A', awayTeam: 'Murcia Juv A' }),
         match({ id: 'm2', homeTeam: 'Castilla', awayTeam: 'Torremolinos' }),
+        match({ id: 'm3', homeTeam: 'Villarreal CF', awayTeam: 'Real Sociedad' }),   // juegan sus clubes, pero nadie asignado
+      ],
+      matchOurPlayers: [
+        { id: 'o1', matchId: 'm1', playerId: 'p2', createdAt: '' },
+        { id: 'o2', matchId: 'm1', playerId: 'p1', createdAt: '' },
+        { id: 'o2b', matchId: 'm1', playerId: 'p1', createdAt: '' },  // repetido → una vez
+        { id: 'o3', matchId: 'm1', playerId: 'p3', createdAt: '' },   // oculto → fuera
+        { id: 'o4', matchId: 'm1', playerId: 'borrado', createdAt: '' },
+        { id: 'o5', matchId: 'm2', playerId: 'p2', createdAt: '' },
       ],
     })
-    const m1 = filas.find(f => f.matchId === 'm1')!, m2 = filas.find(f => f.matchId === 'm2')!
-    expect(m1.nuestros.map(p => p.name)).toEqual(['Carlos Maciá', 'Fode Minite'])
-    expect(m1.jugadorTexto).toBe('Carlos Maciá, Fode Minite')
-    expect(m2.nuestros).toEqual([])
-    expect(m2.jugadorTexto).toBe('Captación')
-  })
-
-  it('jugadores de captación vinculados por matchPlayers', () => {
-    const filas = construirPlanificacion({
-      ...base, desde: '2026-09-05', hasta: '2026-09-05',
-      scoutingMatches: [match({ id: 'm1', homeTeam: 'A', awayTeam: 'B' })],
-      scoutingPlayers: [{ id: 's1', fullName: 'Chaval', createdAt: '' }],
-      matchPlayers: [{ id: 'mp', matchId: 'm1', playerId: 's1', createdAt: '' }, { id: 'mp2', matchId: 'm1', playerId: 'borrado', createdAt: '' }],
-    })
-    expect(filas[0].captacion.map(p => p.fullName)).toEqual(['Chaval'])
+    const m1 = filas.find(f => f.matchId === 'm1')!, m2 = filas.find(f => f.matchId === 'm2')!, m3 = filas.find(f => f.matchId === 'm3')!
+    expect(m1.nuestros.map(p => p.name)).toEqual(['Andrés Cedido', 'Fode Minite'])
+    expect(m1.jugadorTexto).toBe('Andrés Cedido, Fode Minite')
+    expect(m2.nuestros.map(p => p.id)).toEqual(['p2'])
+    expect(m2.jugadorTexto).toBe('Andrés Cedido')
+    // Sin deducción por club: solo cuentan los asignados a mano
+    expect(m3.nuestros).toEqual([])
+    expect(m3.jugadorTexto).toBe('Captación')
+    // En CSV e impresión van en negrita
+    expect(planificacionACsv([m2])[0][3]).toBe('Andrés Cedido')
+    expect(htmlPlanificacion([m2], 't')).toContain('<td class="c b">Andrés Cedido</td>')
+    expect(htmlPlanificacion([m3], 't')).toContain('<td class="c">Captación</td>')
   })
 
   it('personas y vía desde los scouts del partido; «tv / campo» si cada uno lo ve distinto', () => {
