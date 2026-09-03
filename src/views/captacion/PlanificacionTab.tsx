@@ -157,9 +157,12 @@ export function PlanificacionTab({
                     <td className={`px-2 py-1.5 text-center font-medium whitespace-nowrap ${color.celda}`}>{f.diaLabel}</td>
                     <td className="px-1 py-1 text-center"><HoraCell key={f.hora} fila={f} onSave={t => guardar(f.match, { time: t || undefined })} /></td>
                     <td className={`px-2 py-1.5 text-center ${tach}`}>
-                      <button onClick={() => setDetailMatchId(f.matchId)} className="hover:underline hover:text-primary" title={f.match.competition ?? 'Abrir la ficha del partido'}>
-                        {f.partido}
-                      </button>
+                      <PartidoCell
+                        key={f.partido}
+                        fila={f}
+                        onSave={(home, away) => guardar(f.match, { homeTeam: home, awayTeam: away })}
+                        onOpenFicha={() => setDetailMatchId(f.matchId)}
+                      />
                     </td>
                     <td className={`px-1 py-1 text-center ${tach}`}>
                       <JugadorCell
@@ -188,7 +191,7 @@ export function PlanificacionTab({
           </table>
         </div>
         <p className="text-[10.5px] text-slate-400">
-          Negrita = jugadores nuestros asignados a ese partido (clic en Jugador para añadir o quitar). «Captación» = partido solo de scouting. Tachado = partido ya visto. Clic en Persona para elegir quién lo ve; la vía se cambia por scout.
+          Negrita = jugadores nuestros asignados a ese partido (clic en Jugador para añadir o quitar). «Captación» = partido solo de scouting. Tachado = partido ya visto. Clic en el partido para corregir los equipos sin abrir la ficha. Clic en Persona para elegir quién lo ve (perfil o nombre suelto) y quitar a cualquiera con la ✕; la vía se cambia por scout.
         </p>
       </div>
 
@@ -319,7 +322,71 @@ function JugadorCell({ fila, players, onAddNuestro, onRemoveNuestro, showToast }
   )
 }
 
-/** Popover con los avatares de los perfiles: multi-selección de scouts */
+/**
+ * Celda «Partido»: edición ágil del local/visitante desde la propia tabla,
+ * sin pasar por la ficha completa. El texto sigue abriendo la ficha con un
+ * enlace aparte dentro del popover, por si hace falta tocar otra cosa
+ * (competición, notas…).
+ */
+function PartidoCell({ fila, onSave, onOpenFicha }: {
+  fila: FilaPlanificacion
+  onSave: (home: string, away: string) => void
+  onOpenFicha: () => void
+}) {
+  const { open, setOpen, ref } = usePopover()
+  // `key` en el uso de este componente (más abajo) reinicia home/away cuando cambian en BBDD
+  const [home, setHome] = useState(fila.match.homeTeam)
+  const [away, setAway] = useState(fila.match.awayTeam)
+
+  function guardarYcerrar() {
+    const h = home.trim(), a = away.trim()
+    if (h && a && (h !== fila.match.homeTeam || a !== fila.match.awayTeam)) onSave(h, a)
+    else { setHome(fila.match.homeTeam); setAway(fila.match.awayTeam) }
+    setOpen(false)
+  }
+
+  return (
+    <div ref={ref} className="relative inline-block max-w-full">
+      <button
+        onClick={() => setOpen(o => !o)}
+        title="Editar los equipos"
+        className="px-1 py-0.5 rounded border border-transparent hover:border-slate-300 hover:bg-white truncate max-w-full"
+      >
+        {fila.partido}
+      </button>
+      {open && (
+        <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 z-30 bg-white border border-slate-200 rounded-lg shadow-lg p-2 w-[220px] text-left no-underline font-normal">
+          <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Equipos</div>
+          <input
+            value={home}
+            onChange={e => setHome(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') guardarYcerrar(); if (e.key === 'Escape') setOpen(false) }}
+            placeholder="Local"
+            autoFocus
+            className="w-full mb-1 text-[11px] px-1.5 py-1 rounded border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+          />
+          <input
+            value={away}
+            onChange={e => setAway(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') guardarYcerrar(); if (e.key === 'Escape') setOpen(false) }}
+            placeholder="Visitante"
+            className="w-full mb-1.5 text-[11px] px-1.5 py-1 rounded border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+          />
+          <div className="flex items-center justify-between gap-1">
+            <button onClick={guardarYcerrar} className="text-[11px] font-semibold px-2 py-1 rounded bg-primary text-white hover:bg-primary/90">Guardar</button>
+            <button onClick={() => { setOpen(false); onOpenFicha() }} className="text-[10.5px] text-slate-400 hover:text-primary hover:underline">Ficha completa →</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Quién ve el partido: cualquier texto vale (perfiles del sistema o nombres
+ * sueltos como en la hoja de Excel — "Toldra", "Aurelio"…), y cualquiera de
+ * los ya asignados se puede quitar con la ✕, sea o no un perfil conocido.
+ */
 function PersonaCell({ fila, profiles, onAdd, onRemove }: {
   fila: FilaPlanificacion
   profiles: Profile[]
@@ -327,7 +394,25 @@ function PersonaCell({ fila, profiles, onAdd, onRemove }: {
   onRemove: (scout: string) => Promise<void>
 }) {
   const { open, setOpen, ref } = usePopover()
-  const elegidos = new Set(fila.personas)
+  const [nuevo, setNuevo] = useState('')
+  const [ocupado, setOcupado] = useState(false)
+  const elegidos = fila.personas
+  const elegidosSet = new Set(elegidos)
+  const disponibles = profiles.filter(p => !elegidosSet.has(p.avatar))
+
+  async function accion(fn: () => Promise<void>) {
+    if (ocupado) return
+    setOcupado(true)
+    try { await fn() } finally { setOcupado(false) }
+  }
+
+  function añadirLibre() {
+    const v = nuevo.trim()
+    if (!v) return
+    void accion(() => onAdd(v))
+    setNuevo('')
+  }
+
   return (
     <div ref={ref} className="relative inline-block">
       <button
@@ -338,18 +423,44 @@ function PersonaCell({ fila, profiles, onAdd, onRemove }: {
         {fila.personas.join(' / ') || <span className="text-slate-300 font-sans font-normal">—</span>}
       </button>
       {open && (
-        <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 z-30 bg-white border border-slate-200 rounded-lg shadow-lg p-1.5 min-w-[170px] text-left">
-          {profiles.map(p => {
-            const on = elegidos.has(p.avatar)
-            return (
-              <label key={p.id} className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-slate-50 cursor-pointer text-[11px] text-slate-700 no-underline">
-                <input type="checkbox" checked={on} onChange={() => void (on ? onRemove(p.avatar) : onAdd(p.avatar))} className="accent-primary" />
-                <span className="font-mono font-bold w-8">{p.avatar}</span>
-                <span className="truncate">{p.name}</span>
-              </label>
-            )
-          })}
-          {profiles.length === 0 && <div className="px-2 py-1 text-slate-400">Sin perfiles</div>}
+        <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 z-30 bg-white border border-slate-200 rounded-lg shadow-lg p-1.5 min-w-[190px] text-left">
+          <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1 px-1">Asignados</div>
+          <ul className="space-y-0.5 mb-1.5">
+            {elegidos.length === 0 && <li className="px-1 py-0.5 text-[11px] text-slate-400 italic">Nadie asignado</li>}
+            {elegidos.map(s => (
+              <li key={s} className="flex items-center gap-1 px-1 py-0.5 rounded hover:bg-slate-50 text-[11px] text-slate-700">
+                <span className="font-mono font-bold flex-1 truncate">{s}</span>
+                <button onClick={() => void accion(() => onRemove(s))} disabled={ocupado} title="Quitar" className="p-0.5 rounded text-slate-400 hover:text-red-500 hover:bg-red-50"><X className="w-3 h-3" /></button>
+              </li>
+            ))}
+          </ul>
+          {disponibles.length > 0 && (
+            <>
+              <div className="border-t border-slate-100 my-1" />
+              <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1 px-1">Añadir</div>
+              <ul className="space-y-0.5 mb-1.5">
+                {disponibles.map(p => (
+                  <li key={p.id}>
+                    <button onClick={() => void accion(() => onAdd(p.avatar))} disabled={ocupado} className="w-full flex items-center gap-2 px-1 py-0.5 rounded hover:bg-slate-50 text-[11px] text-slate-700 text-left">
+                      <span className="font-mono font-bold w-8">{p.avatar}</span>
+                      <span className="truncate">{p.name}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          <div className="border-t border-slate-100 my-1" />
+          <div className="flex gap-1">
+            <input
+              value={nuevo}
+              onChange={e => setNuevo(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') añadirLibre() }}
+              placeholder="Otro nombre…"
+              className="flex-1 min-w-0 text-[11px] px-1.5 py-1 rounded border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+            />
+            <button onClick={añadirLibre} disabled={ocupado || !nuevo.trim()} className="text-[11px] font-semibold px-2 py-1 rounded bg-primary text-white hover:bg-primary/90 disabled:opacity-40">+</button>
+          </div>
         </div>
       )}
     </div>
