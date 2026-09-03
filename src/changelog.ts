@@ -21,6 +21,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-09-03',
     items: [
+      'Tabla de jugadores (Admin): botón de papelera en cada fila para eliminar, con confirmación. Aquí salen TODOS los jugadores, también los «solo Distribución» que no aparecen en Mantenimiento (llevan una etiqueta que lo indica)',
       'Nueva vista «Mi día» (☀️ en la barra inferior y en el menú): tus partidos de hoy, acciones del pipeline Firmar vencidas, tareas del día y postpartidos, en una sola lista con botones grandes de «Visto» y «Hecho»',
       'Captación: al crear un jugador o un partido, la app avisa si ya existe uno parecido («¿Es alguno de estos?») con un botón para abrirlo en vez de duplicarlo',
       'Captación: los informes se guardan como borrador mientras escribes y, si no hay cobertura al pulsar Guardar, se quedan en una cola que se envía sola cuando vuelve la señal (chip «📡 pendientes de enviar» en la cabecera)',

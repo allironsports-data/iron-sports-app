@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import type { Player } from "../types";
 import type { Profile } from "../contexts/AuthContext";
-import { ArrowLeft, LogOut, Save, X, Check, Search, Shield } from "lucide-react";
+import { ArrowLeft, LogOut, Save, X, Check, Search, Shield, Trash2 } from "lucide-react";
+import { ConfirmModal } from "../components/ConfirmModal";
 import logoImg from '../assets/logo.jpeg';
 import { useDebounce } from "../hooks/useDebounce";
 import { useToast } from "../hooks/useToast";
@@ -15,6 +16,9 @@ interface Props {
   onBack: () => void;
   onLogout: () => void;
   onAdmin?: () => void;
+  /** Borrado desde la tabla (solo admin). Aquí se ven TODOS los jugadores,
+   *  incluidos los «solo Distribución» que no salen en Mantenimiento. */
+  onDeletePlayer?: (id: string) => void | Promise<void>;
 }
 
 // Which cell is being edited
@@ -33,7 +37,7 @@ type ColumnDef = {
   options?: string[];
 };
 
-export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onLogout, onAdmin }: Props) {
+export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onLogout, onAdmin, onDeletePlayer }: Props) {
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 300);
   const [editing, setEditing] = useState<EditingCell | null>(null);
@@ -43,6 +47,24 @@ export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onLogo
   const [savedFeedback, setSavedFeedback] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | HTMLSelectElement>(null);
   const { toasts, showToast, dismissToast } = useToast();
+  const [toDelete, setToDelete] = useState<Player | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const confirmDelete = async () => {
+    if (!toDelete || !onDeletePlayer) return;
+    setDeleting(true);
+    try {
+      await onDeletePlayer(toDelete.id);
+      setPendingChanges(prev => { const m = new Map(prev); m.delete(toDelete.id); return m; });
+      showToast(`${toDelete.name} eliminado`);
+      setToDelete(null);
+    } catch (e) {
+      console.error(e);
+      showToast("No se pudo eliminar el jugador", "error");
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const columns: ColumnDef[] = [
     {
@@ -327,6 +349,7 @@ export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onLogo
                       {col.label}
                     </th>
                   ))}
+                  {onDeletePlayer && <th className="px-3 py-2.5 w-10" aria-label="Eliminar" />}
                 </tr>
               </thead>
               <tbody>
@@ -400,6 +423,23 @@ export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onLogo
                           </td>
                         );
                       })}
+                      {onDeletePlayer && (
+                        <td className="px-2 py-1 whitespace-nowrap text-right">
+                          {player.hiddenFromManagement && (
+                            <span className="mr-1 px-1.5 py-0.5 rounded bg-slate-100 text-[10px] text-slate-500" title="No aparece en Mantenimiento: es un jugador solo de Distribución (intermediar)">
+                              solo Distribución
+                            </span>
+                          )}
+                          <button
+                            onClick={() => setToDelete(player)}
+                            aria-label={`Eliminar a ${player.name}`}
+                            title="Eliminar jugador"
+                            className="p-1.5 rounded text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -413,6 +453,16 @@ export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onLogo
       </main>
 
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
+
+      <ConfirmModal
+        open={!!toDelete}
+        title={`¿Eliminar a ${toDelete?.name ?? ""}?`}
+        message="Se borran también sus tareas, negociaciones y entradas de Distribución. Esta acción no se puede deshacer."
+        confirmLabel={deleting ? "Eliminando…" : "Eliminar"}
+        variant="danger"
+        onConfirm={confirmDelete}
+        onCancel={() => { if (!deleting) setToDelete(null); }}
+      />
     </div>
   );
 }

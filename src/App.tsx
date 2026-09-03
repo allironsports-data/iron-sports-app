@@ -1485,6 +1485,7 @@ export default function App() {
         onBack={() => setShowTable(false)}
         onLogout={signOut}
         onAdmin={() => { setShowTable(false); setShowAdmin(true); }}
+        onDeletePlayer={handleDeletePlayer}
       />
     )
   }
