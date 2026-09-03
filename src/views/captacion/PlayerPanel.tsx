@@ -1,5 +1,6 @@
 import React from 'react'
-import { X, Plus, Trash2, FileText, Maximize2, Minimize2, Pencil, ClipboardList } from 'lucide-react'
+import { X, Plus, Trash2, FileText, Maximize2, Minimize2, Pencil, ClipboardList, Download } from 'lucide-react'
+import { generarInformeScouting } from '../../lib/informeScouting'
 import type { ScoutingPlayer, ScoutingReport, ScoutingAssessment, ScoutingMatch, ScoutingMatchPlayer, FirmasEntry } from '../../types'
 import type { Profile } from '../../contexts/AuthContext'
 import type { Equipo as EquipoCatalogo } from '../../lib/db'
@@ -576,6 +577,14 @@ export function PlayerPanel({
                     className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50"
                   >
                     Editar jugador
+                  </button>
+                  <button
+                    onClick={() => generarInformeScouting(panelPlayer, panelReports, scoutingMatches)}
+                    title="Ficha y observaciones en PDF, listo para compartir"
+                    aria-label="Exportar informe"
+                    className="p-2.5 sm:p-1.5 rounded-lg text-slate-500 hover:bg-slate-50 border border-slate-200"
+                  >
+                    <Download className="w-3.5 h-3.5" />
                   </button>
                   {isAdmin && (
                     confirmDeletePlayer ? (

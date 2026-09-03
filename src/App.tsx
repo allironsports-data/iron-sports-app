@@ -12,6 +12,8 @@ import type { ConflictInfo } from './components/conflict'
 import { BUILD_ID } from './changelog'
 import { esZona, type Zona } from './lib/zonas'
 import { teamsAlike } from './lib/equipos'
+import { hoyISO } from './lib/fechas'
+import { useToastContext } from './hooks/useToastContext'
 import type { ReactNode } from 'react'
 import type { Club, DistributionEntry, ClubNegotiation } from './types'
 
@@ -73,6 +75,7 @@ function Spinner() {
 
 export default function App() {
   const { profileMissing, profileError, refreshProfile, user, profile, loading, signIn, signOut } = useAuth()
+  const { showToast } = useToastContext()
 
   const [players, setPlayers] = useState<Player[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
@@ -115,6 +118,16 @@ export default function App() {
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [searchOpen, setSearchOpen] = useState(false)
   const [phase2Loading, setPhase2Loading] = useState(false)
+  // El aviso «Sincronizando datos…» solo se enseña si la fase 2 tarda más de
+  // medio segundo: en una carga rápida no llega ni a parpadear, y en una
+  // lenta sigue avisando (cada tabla ya aplica su estado en cuanto llega,
+  // ver el efecto de carga inicial más abajo).
+  const [mostrarSincronizando, setMostrarSincronizando] = useState(false)
+  useEffect(() => {
+    if (!phase2Loading) { setMostrarSincronizando(false); return }
+    const t = setTimeout(() => setMostrarSincronizando(true), 500)
+    return () => clearTimeout(t)
+  }, [phase2Loading])
   // Qué tablas han fallado al cargar. Antes fallaban en silencio y la app
   // enseñaba listas vacías: parecía «no hay datos» cuando era «no he podido
   // preguntar». Ahora sale un aviso rojo con el nombre de lo que falta.
@@ -350,55 +363,44 @@ export default function App() {
       // siguen cargando y apuntamos cuál ha sido para avisar en pantalla.
       // (Antes, un fallo en cualquiera de las 7 primeras tiraba la fase
       //  entera y las otras 8 devolvían [] sin decir nada.)
+      //
+      // Cada lectura aplica SU estado en cuanto llega, en vez de esperar a
+      // que las 16 terminen: antes, si una tabla grande iba lenta (p. ej.
+      // Informes), Distribución y Captación se quedaban vacías el mismo
+      // tiempo que ella aunque sus propios datos ya estuvieran listos. El
+      // aviso «Sincronizando datos…» solo desaparece cuando termina la
+      // última, y con un pequeño retraso para no parpadear en cargas rápidas.
       const fallos: string[] = []
-      const opc = <T,>(nombre: string, p: Promise<T>, vacio: T): Promise<T> =>
-        p.catch((err: unknown) => {
-          console.error(`[carga] ${nombre}:`, err)
-          fallos.push(nombre)
-          return vacio
-        })
-      Promise.all([
-        opc('Clubes', db.fetchClubs(), []),
-        opc('Distribución', db.fetchDistributionEntries(), []),
-        opc('Negociaciones', db.fetchNegotiations(), []),
-        opc('Jugadores de captación', db.fetchScoutingPlayers(), []),
-        opc('Informes', db.fetchScoutingReports(), []),
-        opc('Partidos', db.fetchScoutingMatches(), []),
-        opc('Alineaciones', db.fetchMatchPlayers(), []),
-        opc('Nuestros en partido', db.fetchMatchOurPlayers(), [] as ScoutingMatchOurPlayer[]),
-        opc('Scouts de partido', db.fetchMatchScouts(), [] as ScoutingMatchScout[]),
-        opc('Peticiones Boulema', db.fetchBoulemaPeticiones(), [] as BoulemaPeticion[]),
-        opc('Estado del equipo', db.fetchMemberStatuses(), [] as MemberStatus[]),
-        opc('Postpartidos', db.fetchPostpartidos(), [] as Postpartido[]),
-        opc('Pipeline de firmas', db.fetchFirmasEntries(), [] as FirmasEntry[]),
-        opc('Jugadores Boulema', db.fetchBoulemaPlayers(), [] as BoulemaPlayer[]),
-        opc('Zonas', db.fetchClubZonas(), [] as db.ClubZona[]),
-        opc('Catálogo de equipos', db.fetchEquipos(), [] as db.Equipo[]),
-      ]).then(([cl, de, ng, sp, sr, sm, mp, mop, msc, bp, ms, pp, fe, bpl, cz, eq]) => {
-        if (cancelled) return
-        setClubs(cl as Club[])
-        setDistEntries(de as DistributionEntry[])
-        setNegotiations(ng as ClubNegotiation[])
-        setScoutingPlayers(sp as ScoutingPlayer[])
-        setScoutingReports(sr as ScoutingReport[])
-        setScoutingMatches(sm as ScoutingMatch[])
-        setMatchPlayers(mp as ScoutingMatchPlayer[])
-        setMatchOurPlayers(mop as ScoutingMatchOurPlayer[])
-        setMatchScouts(msc as ScoutingMatchScout[])
-        setBoulemaPeticiones(bp as BoulemaPeticion[])
-        setMemberStatuses(ms as MemberStatus[])
-        setPostpartidos(pp as Postpartido[])
-        setFirmasEntries(fe as FirmasEntry[])
-        setBoulemaPlayers(bpl as BoulemaPlayer[])
-        setClubZonas(zonasAMapa(cz as db.ClubZona[]))
-        setEquipos(eq as db.Equipo[])
-        setCargasFallidas(fallos)
-        setPhase2Loading(false)
-      }).catch((err: unknown) => {
-        // No bloquea la app: Distribución/Captación mostrarán listas vacías
-        console.error('Error cargando datos secundarios:', err)
-        setPhase2Loading(false)
-      })
+      let restantes = 16
+      const terminaUna = () => {
+        restantes--
+        if (restantes === 0 && !cancelled) { setCargasFallidas(fallos); setPhase2Loading(false) }
+      }
+      function opc<T>(nombre: string, p: Promise<T>, vacio: T, aplicar: (v: T) => void) {
+        p.then(v => { if (!cancelled) aplicar(v) })
+          .catch((err: unknown) => {
+            console.error(`[carga] ${nombre}:`, err)
+            fallos.push(nombre)
+            if (!cancelled) aplicar(vacio)
+          })
+          .finally(terminaUna)
+      }
+      opc('Clubes', db.fetchClubs(), [], v => setClubs(v as Club[]))
+      opc('Distribución', db.fetchDistributionEntries(), [], v => setDistEntries(v as DistributionEntry[]))
+      opc('Negociaciones', db.fetchNegotiations(), [], v => setNegotiations(v as ClubNegotiation[]))
+      opc('Jugadores de captación', db.fetchScoutingPlayers(), [], v => setScoutingPlayers(v as ScoutingPlayer[]))
+      opc('Informes', db.fetchScoutingReports(), [], v => setScoutingReports(v as ScoutingReport[]))
+      opc('Partidos', db.fetchScoutingMatches(), [], v => setScoutingMatches(v as ScoutingMatch[]))
+      opc('Alineaciones', db.fetchMatchPlayers(), [], v => setMatchPlayers(v as ScoutingMatchPlayer[]))
+      opc('Nuestros en partido', db.fetchMatchOurPlayers(), [] as ScoutingMatchOurPlayer[], v => setMatchOurPlayers(v))
+      opc('Scouts de partido', db.fetchMatchScouts(), [] as ScoutingMatchScout[], v => setMatchScouts(v))
+      opc('Peticiones Boulema', db.fetchBoulemaPeticiones(), [] as BoulemaPeticion[], v => setBoulemaPeticiones(v))
+      opc('Estado del equipo', db.fetchMemberStatuses(), [] as MemberStatus[], v => setMemberStatuses(v))
+      opc('Postpartidos', db.fetchPostpartidos(), [] as Postpartido[], v => setPostpartidos(v))
+      opc('Pipeline de firmas', db.fetchFirmasEntries(), [] as FirmasEntry[], v => setFirmasEntries(v))
+      opc('Jugadores Boulema', db.fetchBoulemaPlayers(), [] as BoulemaPlayer[], v => setBoulemaPlayers(v))
+      opc('Zonas', db.fetchClubZonas(), [] as db.ClubZona[], v => setClubZonas(zonasAMapa(v)))
+      opc('Catálogo de equipos', db.fetchEquipos(), [] as db.Equipo[], v => setEquipos(v))
     }).catch((err: unknown) => {
       if (cancelled) return
       console.error('Error cargando datos iniciales:', err)
@@ -996,11 +998,34 @@ export default function App() {
   }
   // La fila devuelta trae el updated_at real; antes el estado local se
   // quedaba con el viejo hasta el siguiente refetch.
-  const handleUpdateNegotiation = guardarConControl<ClubNegotiation>(
+  const guardarNegociacion = guardarConControl<ClubNegotiation>(
     'club_negotiations',
     (n) => db.updateNegotiation(n),
     (saved) => setNegotiations(prev => prev.map(x => x.id === saved.id ? saved : x)),
   )
+  // Cuando una negociación pasa a "cerrado" (traspaso hecho), se anota solo
+  // un evento «Transferencia» en la ficha de Mantenimiento del jugador — no
+  // toca club, contrato ni nada más, así que avisamos para repasarlo a mano.
+  const handleUpdateNegotiation = async (n: ClubNegotiation) => {
+    const antes = negotiations.find(x => x.id === n.id)
+    await guardarNegociacion(n)
+    if (antes && antes.status !== 'cerrado' && n.status === 'cerrado') {
+      const club = clubs.find(c => c.id === n.clubId)
+      try {
+        await db.createPlayerActivity(n.playerId, {
+          date: hoyISO(),
+          type: 'Transferencia',
+          notes: club ? `Negociación cerrada con ${club.name} (Distribución)` : 'Negociación cerrada (Distribución)',
+          authorId: profile?.id,
+        })
+      } catch { /* no bloquea el cierre de la negociación si falla el registro del evento */ }
+      const jugador = players.find(p => p.id === n.playerId)
+      showToast(
+        `Transferencia registrada en la ficha de ${jugador?.name ?? 'el jugador'}${club ? ` (${club.name})` : ''}. Actualiza a mano su club y contrato.`,
+        'success',
+      )
+    }
+  }
   const handleDeleteNegotiation = async (id: string) => {
     await db.deleteNegotiation(id)
     setNegotiations(prev => prev.filter(x => x.id !== id))
@@ -1354,7 +1379,7 @@ export default function App() {
       {planificacionFab}
       <SavingIndicator />
       {conflictNode}
-      {phase2Loading && (
+      {mostrarSincronizando && (
         <div className="fixed bottom-16 sm:bottom-3 left-1/2 -translate-x-1/2 z-[45] pointer-events-none">
           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800/90 text-white text-[11px] font-medium shadow-lg">
             <span className="w-2.5 h-2.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
