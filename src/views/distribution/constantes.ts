@@ -7,6 +7,14 @@ import { NEG_STATUSES as SHARED_NEG_STATUSES, NEG_STATUS_CONFIG } from '../../co
 // ── constants ─────────────────────────────────────────────────
 
 export const CONDITIONS = ['Libre', 'Traspaso', 'Cesión', 'Cesión/Traspaso', 'Traspaso (porcentaje)', 'Cesión con opción']
+
+// Temporadas de Distribución. La primera es la activa (nuevas altas de
+// jugador y de club van aquí); el resto son temporadas archivadas — se
+// siguen pudiendo consultar tal cual quedaron, pero no reciben altas nuevas.
+// Compartido entre la vista Distribución y la pestaña Distribución de la
+// ficha del jugador (ambas necesitan filtrar clubes/negociaciones por temporada).
+export const SEASONS = ['2026-27', '2025-26']
+export const ARCHIVED_SEASONS = new Set(SEASONS.slice(1))
 // Estados de negociación: config compartida (ver PlayerClubList)
 export const NEG_STATUSES = SHARED_NEG_STATUSES
 export const STATUS_CONFIG = NEG_STATUS_CONFIG

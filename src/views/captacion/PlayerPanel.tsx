@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { X, Plus, Trash2, FileText, Maximize2, Minimize2, Pencil, ClipboardList, Download } from 'lucide-react'
 import { generarInformeScouting } from '../../lib/informeScouting'
 import type { ScoutingPlayer, ScoutingReport, ScoutingAssessment, ScoutingMatch, ScoutingMatchPlayer, FirmasEntry } from '../../types'
@@ -126,6 +126,20 @@ export function PlayerPanel({
   matchPlayers: ScoutingMatchPlayer[]
   onRemoveMatchPlayer: (matchId: string, playerId: string) => Promise<void>
 }) {
+  const [exportandoInforme, setExportandoInforme] = useState(false)
+
+  async function handleExportarInforme() {
+    if (!panelPlayer || exportandoInforme) return
+    setExportandoInforme(true)
+    try {
+      await generarInformeScouting(panelPlayer, panelReports, scoutingMatches)
+    } catch {
+      showToast('No se ha podido generar el informe', 'error')
+    } finally {
+      setExportandoInforme(false)
+    }
+  }
+
   return (
     <>
       {!fullscreen && !isDesktop && (
@@ -579,12 +593,15 @@ export function PlayerPanel({
                     Editar jugador
                   </button>
                   <button
-                    onClick={() => generarInformeScouting(panelPlayer, panelReports, scoutingMatches)}
-                    title="Ficha y observaciones en PDF, listo para compartir"
+                    onClick={handleExportarInforme}
+                    disabled={exportandoInforme}
+                    title="Ficha y observaciones en PDF, listo para compartir (incluye un resumen generado por IA)"
                     aria-label="Exportar informe"
-                    className="p-2.5 sm:p-1.5 rounded-lg text-slate-500 hover:bg-slate-50 border border-slate-200"
+                    className="p-2.5 sm:p-1.5 rounded-lg text-slate-500 hover:bg-slate-50 border border-slate-200 disabled:opacity-60"
                   >
-                    <Download className="w-3.5 h-3.5" />
+                    {exportandoInforme
+                      ? <span className="block w-3.5 h-3.5 border-2 border-slate-300 border-t-slate-500 rounded-full animate-spin" />
+                      : <Download className="w-3.5 h-3.5" />}
                   </button>
                   {isAdmin && (
                     confirmDeletePlayer ? (

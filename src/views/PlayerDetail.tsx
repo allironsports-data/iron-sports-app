@@ -33,6 +33,7 @@ import { NEG_STATUSES as NEG_STATUSES_D, NEG_STATUS_CONFIG as STATUS_CONFIG_D } 
 import { BulkAssignModal } from "../components/BulkAssignModal";
 import { POSITIONS, positionLabel } from "../lib/positions";
 import { generarInformeJugador } from "../lib/informeJugador";
+import { SEASONS, ARCHIVED_SEASONS } from "./distribution/constantes";
 
 const PRIMARY = "hsl(220,72%,26%)";
 
@@ -3097,9 +3098,11 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
             <p className="text-xs text-slate-400 mb-3 pb-3 border-b border-slate-100">Sin ficha de distribución activa</p>
           )}
 
-          {/* Negotiations list — los "cerrado" quedan como historial y no se muestran aquí por defecto */}
+          {/* Negotiations list — solo temporada activa; los "cerrado" quedan como
+              historial y no se muestran aquí por defecto */}
           {(() => {
-            const visibleNegs = playerNegotiations.filter(n => n.status !== 'cerrado');
+            const activeSeasonClubIds = new Set(clubs.filter(c => c.season === SEASONS[0]).map(c => c.id));
+            const visibleNegs = playerNegotiations.filter(n => n.status !== 'cerrado' && activeSeasonClubIds.has(n.clubId));
             if (visibleNegs.length === 0) {
               return <p className="text-xs text-slate-400">Sin negociaciones{playerNegotiations.length > 0 ? ' activas' : ''}</p>;
             }
@@ -3254,6 +3257,14 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, p
   const { showToast } = useToastContext()
   const [showBulkAssign, setShowBulkAssign] = useState(false)
 
+  // ── Temporada ─────────────────────────────────────────────
+  // Los clubes que llegan aquí son de todas las temporadas de Distribución;
+  // se filtran a la temporada elegida para no mezclar situaciones de 25/26
+  // y 26/27 en la misma lista (ver Distribución para el mismo patrón).
+  const [season, setSeason] = useState<string>(SEASONS[0])
+  const seasonClubs = clubs.filter(c => c.season === season)
+  const seasonNegotiations = negotiations.filter(n => seasonClubs.some(c => c.id === n.clubId))
+
   async function saveEntry() {
     if (!entry) return
     setSavingEntry(true)
@@ -3333,12 +3344,31 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, p
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 p-4">
+        {/* Selector de temporada de Distribución */}
+        <div className="flex items-center justify-end mb-3">
+          <div className={`relative flex items-center rounded-md ${ARCHIVED_SEASONS.has(season) ? 'bg-amber-50' : 'bg-slate-100'}`}>
+            <select
+              value={season}
+              onChange={e => setSeason(e.target.value)}
+              title={ARCHIVED_SEASONS.has(season) ? 'Temporada archivada: consultable, pero ya no es la temporada activa' : 'Temporada activa'}
+              className={`appearance-none bg-transparent pl-2 pr-5 py-1 text-xs font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/30 ${
+                ARCHIVED_SEASONS.has(season) ? 'text-amber-700' : 'text-slate-500'
+              }`}
+            >
+              {SEASONS.map(s => (
+                <option key={s} value={s}>{s}{ARCHIVED_SEASONS.has(s) ? ' · archivada' : ''}</option>
+              ))}
+            </select>
+            <ChevronDown className="w-3 h-3 absolute right-1.5 pointer-events-none text-slate-400" />
+          </div>
+        </div>
+
         {/* Add negotiation form */}
         {showAddNeg && (
           <div className="bg-slate-50 rounded-lg p-3 mb-3 space-y-2">
             <select value={negClubId} onChange={e => setNegClubId(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
               <option value="">Seleccionar club…</option>
-              {clubs.map(c => <option key={c.id} value={c.id}>{c.name}{c.league ? ` (${c.league})` : ''}</option>)}
+              {seasonClubs.map(c => <option key={c.id} value={c.id}>{c.name}{c.league ? ` (${c.league})` : ''}</option>)}
             </select>
             <div className="flex flex-wrap gap-1.5">
               {NEG_STATUSES_D.map(s => {
@@ -3359,8 +3389,8 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, p
         )}
 
         <PlayerClubList
-          negotiations={negotiations}
-          clubs={clubs}
+          negotiations={seasonNegotiations}
+          clubs={seasonClubs}
           profiles={profiles}
           currentProfile={currentProfile}
           onUpdateNegotiation={onUpdateNegotiation}
@@ -3376,13 +3406,13 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, p
       {/* Asignar ligas completas */}
       {showBulkAssign && onCreateNegotiation && (
         <BulkAssignModal
-          clubs={clubs}
-          existingNegotiations={negotiations}
+          clubs={seasonClubs}
+          existingNegotiations={seasonNegotiations}
           onClose={() => setShowBulkAssign(false)}
           onSave={async (clubIds) => {
             try {
               await Promise.all(
-                clubIds.map(clubId => onCreateNegotiation({ playerId: player.id, clubId, status: 'pendiente', aisManager: clubs.find(c => c.id === clubId)?.aisManager || currentProfile.avatar }))
+                clubIds.map(clubId => onCreateNegotiation({ playerId: player.id, clubId, status: 'pendiente', aisManager: seasonClubs.find(c => c.id === clubId)?.aisManager || currentProfile.avatar }))
               )
               setShowBulkAssign(false)
               showToast(`${clubIds.length} club${clubIds.length !== 1 ? 's' : ''} asignado${clubIds.length !== 1 ? 's' : ''}`)

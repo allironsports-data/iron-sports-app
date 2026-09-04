@@ -14,7 +14,7 @@ import { getClubTier, getClubConfederation } from '../../lib/clubTiers'
 import type { LeagueTier, Confederation } from '../../lib/clubTiers'
 import { BulkAssignModal } from '../../components/BulkAssignModal'
 import { computeOpportunities, hideDeadNegotiations } from '../../lib/distribution'
-import { NEG_STATUSES, STATUS_CONFIG, SIN_NEGOCIACIONES, clampDropPos } from './constantes'
+import { NEG_STATUSES, STATUS_CONFIG, SIN_NEGOCIACIONES, clampDropPos, SEASONS, ARCHIVED_SEASONS } from './constantes'
 import { useIsMobile } from './useIsMobile'
 import type { DropPos, Priority } from './constantes'
 import { useDistributionIndexes } from './useDistributionIndexes'
@@ -34,12 +34,8 @@ import {
 } from './modales'
 
 // ── constants ─────────────────────────────────────────────────
-
-// La primera es la temporada activa (nuevas altas de jugador y de club van
-// aquí); el resto son temporadas archivadas — se siguen pudiendo consultar
-// tal cual quedaron, pero no reciben altas nuevas.
-const SEASONS = ['2026-27', '2025-26']
-const ARCHIVED_SEASONS = new Set(SEASONS.slice(1))
+// SEASONS / ARCHIVED_SEASONS viven en ./constantes (compartidas con la
+// pestaña Distribución de la ficha del jugador).
 
 type TabId = 'jugadores' | 'clubes' | 'solicitudes' | 'oportunidades' | 'pipeline' | 'encargados'
 

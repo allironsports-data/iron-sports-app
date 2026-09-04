@@ -11,6 +11,7 @@
 
 import type { ScoutingPlayer, ScoutingReport, ScoutingMatch } from '../types'
 import { fechaLocal } from './fechas'
+import { supabase } from './supabase'
 
 const esc = (s: unknown): string => String(s ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -30,10 +31,12 @@ function edad(bd?: string): number | null {
   return new Date().getFullYear() - y
 }
 
-/** Genera y abre (nueva pestaña) el informe del jugador de Captación, listo para imprimir/PDF */
-export function generarInformeScouting(player: ScoutingPlayer, reports: ScoutingReport[], matches: ScoutingMatch[]): void {
+/** Une el título, la fecha y el texto de cada observación en un documento;
+ *  lo que ve el LLM al generar el resumen es exactamente lo mismo que
+ *  luego lista el informe — nada de assessment ni autoría. */
+function observacionesDe(reports: ScoutingReport[], matches: ScoutingMatch[]) {
   const partidoDe = new Map(matches.map(m => [m.id, m]))
-  const observaciones = reports
+  return reports
     .filter(r => (r.texto ?? '').trim().length > 0 || r.titulo)
     .sort((a, b) => (b.fecha ?? b.createdAt ?? '').localeCompare(a.fecha ?? a.createdAt ?? ''))
     .map(r => {
@@ -45,6 +48,33 @@ export function generarInformeScouting(player: ScoutingPlayer, reports: Scouting
         texto: (r.texto ?? '').trim(),
       }
     })
+}
+
+/** Pide a la Edge Function «resumen-scouting» un párrafo que sintetice todas
+ *  las observaciones. Nunca lanza: si falla (sin red, función no desplegada,
+ *  clave del LLM sin configurar…) devuelve null y el informe se genera sin
+ *  esa sección, en vez de bloquear la descarga. */
+async function pedirResumenIA(player: ScoutingPlayer, reports: ScoutingReport[], matches: ScoutingMatch[]): Promise<string | null> {
+  const informes = observacionesDe(reports, matches)
+  if (informes.length === 0) return null
+  try {
+    const { data, error } = await supabase.functions.invoke<{ resumen?: string; error?: string }>('resumen-scouting', {
+      body: {
+        jugador: { nombre: player.fullName, posicion: player.position1, equipo: player.team },
+        informes: informes.map(o => ({ titulo: o.titulo, texto: o.texto, fecha: o.fecha, partido: o.partido })),
+      },
+    })
+    if (error || !data?.resumen) return null
+    return data.resumen
+  } catch {
+    return null
+  }
+}
+
+/** Construye el HTML del informe (documento puro, sin efectos secundarios).
+ *  `resumen` es el párrafo generado por IA, si se ha podido obtener. */
+function construirHtmlInformeScouting(player: ScoutingPlayer, reports: ScoutingReport[], matches: ScoutingMatch[], resumen?: string | null): string {
+  const observaciones = observacionesDe(reports, matches)
 
   const a = edad(player.birthdate)
   const meta = [
@@ -88,6 +118,7 @@ export function generarInformeScouting(player: ScoutingPlayer, reports: Scouting
   .desc { margin: 2px 0 0; font-size: 8.8pt; color: #4c5560; white-space: pre-line; }
 
   .vacio { font-size: 8.8pt; color: #9aa3ae; font-style: italic; }
+  .resumen { font-size: 9.2pt; color: #2d333b; line-height: 1.6; margin: 0; }
 
   .pie {
     margin-top: 20px; padding-top: 7px; border-top: 0.5pt solid #e6eaee;
@@ -113,6 +144,11 @@ export function generarInformeScouting(player: ScoutingPlayer, reports: Scouting
   ${player.clubContract ? `<div class="fila-dato"><span class="k">Contrato con el club</span><span class="v">${esc(player.clubContract)}</span></div>` : ''}
 </section>
 
+${resumen ? `<section>
+  <h2>Resumen</h2>
+  <p class="resumen">${esc(resumen)}</p>
+</section>` : ''}
+
 <section>
   <h2>Observaciones <span style="float:right;font-weight:400;color:#9aa3ae">${observaciones.length}</span></h2>
   ${observaciones.length === 0
@@ -130,11 +166,39 @@ export function generarInformeScouting(player: ScoutingPlayer, reports: Scouting
 <script>window.onload = function () { window.print() }</script>
 </body></html>`
 
+  return html
+}
+
+const HTML_GENERANDO = `<!doctype html><html lang="es"><head><meta charset="utf-8">
+<title>Generando informe…</title>
+<style>body{font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;color:#6f7883;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-size:13px}</style>
+</head><body>Generando informe con el resumen de IA…</body></html>`
+
+/** Genera y abre (nueva pestaña) el informe del jugador de Captación, listo
+ *  para imprimir/PDF. Antes de escribir el documento final, pide a la IA un
+ *  resumen de todas las observaciones (ver resumen-scouting, la Edge
+ *  Function que hace esa llamada) — si tarda, no responde o falla, el
+ *  informe se genera igualmente, solo que sin esa sección.
+ *
+ *  La ventana se abre YA, de forma síncrona, en el mismo gesto de clic (si
+ *  se abriese después de esperar a la IA, el navegador la bloquearía como
+ *  popup no solicitado); mientras tanto muestra un aviso de «generando…» y
+ *  se rellena con el documento final en cuanto está listo. */
+export async function generarInformeScouting(player: ScoutingPlayer, reports: ScoutingReport[], matches: ScoutingMatch[]): Promise<void> {
   const w = window.open('', '_blank')
   if (!w) {
     alert('El navegador ha bloqueado la ventana del informe. Permite las ventanas emergentes de esta página y vuelve a intentarlo.')
     return
   }
+  w.document.write(HTML_GENERANDO)
+  w.document.close()
+
+  const resumen = await pedirResumenIA(player, reports, matches)
+
+  // La persona pudo cerrar la pestaña mientras esperábamos a la IA.
+  if (w.closed) return
+  const html = construirHtmlInformeScouting(player, reports, matches, resumen)
+  w.document.open()
   w.document.write(html)
   w.document.close()
 }
