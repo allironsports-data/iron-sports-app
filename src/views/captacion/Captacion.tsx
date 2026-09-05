@@ -448,22 +448,28 @@ export function Captacion({
   }, [matchPlayers])
 
   // ── filtered matches ──
+  // Orden: por día (más reciente primero, ya viene así de la BBDD) y, dentro
+  // del mismo día, por hora — también de más reciente a más antigua. Antes
+  // el segundo criterio no existía y dentro de un mismo día el orden salía
+  // más o menos aleatorio (el de inserción en la base de datos).
   const filteredMatches = useMemo(() => {
     const q = matchSearchDeb.toLowerCase().trim()
-    return scoutingMatches.filter(m => {
-      if (matchPersonaFilter !== 'all' && !(scoutsByMatch[m.id] ?? []).some(s => s.scout === matchPersonaFilter)) return false
-      if (matchCompFilter !== 'all' && m.competition !== matchCompFilter) return false
-      if (matchModeFilter !== 'all' && (m.viewMode ?? 'video') !== matchModeFilter) return false
-      if (matchStatusFilter !== 'all' && (m.status ?? 'pendiente') !== matchStatusFilter) return false
-      if (hideFutureMatches && isAfterToday(m.date)) return false
-      if (q) {
-        const hay = `${m.homeTeam} ${m.awayTeam} ${m.competition ?? ''} ${m.notes ?? ''}`.toLowerCase()
-        // también por nombre de los jugadores vinculados al partido
-        const conJugador = (matchPlayersByMatchId[m.id] ?? []).some(id => playersById.get(id)?.fullName.toLowerCase().includes(q))
-        if (!hay.includes(q) && !conJugador) return false
-      }
-      return true
-    })
+    return scoutingMatches
+      .filter(m => {
+        if (matchPersonaFilter !== 'all' && !(scoutsByMatch[m.id] ?? []).some(s => s.scout === matchPersonaFilter)) return false
+        if (matchCompFilter !== 'all' && m.competition !== matchCompFilter) return false
+        if (matchModeFilter !== 'all' && (m.viewMode ?? 'video') !== matchModeFilter) return false
+        if (matchStatusFilter !== 'all' && (m.status ?? 'pendiente') !== matchStatusFilter) return false
+        if (hideFutureMatches && isAfterToday(m.date)) return false
+        if (q) {
+          const hay = `${m.homeTeam} ${m.awayTeam} ${m.competition ?? ''} ${m.notes ?? ''}`.toLowerCase()
+          // también por nombre de los jugadores vinculados al partido
+          const conJugador = (matchPlayersByMatchId[m.id] ?? []).some(id => playersById.get(id)?.fullName.toLowerCase().includes(q))
+          if (!hay.includes(q) && !conJugador) return false
+        }
+        return true
+      })
+      .sort((a, b) => b.date.localeCompare(a.date) || (b.time ?? '').localeCompare(a.time ?? ''))
   }, [scoutingMatches, scoutsByMatch, matchPlayersByMatchId, playersById, matchSearchDeb, matchPersonaFilter, matchCompFilter, matchModeFilter, matchStatusFilter, hideFutureMatches])
 
   // Agenda semanal: antes, por cada uno de los 7 días se recorrían y ordenaban
