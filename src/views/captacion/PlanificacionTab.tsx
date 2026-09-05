@@ -30,7 +30,7 @@ const COLOR_DIA: Record<string, { celda: string; fila: string }> = {
 const SELECT_MINI = 'text-[11px] border border-slate-200 rounded px-1 py-0.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30'
 
 export function PlanificacionTab({
-  scoutingMatches, matchScouts, matchOurPlayers, players, profiles,
+  scoutingMatches, matchScouts, matchOurPlayers, players, profiles, currentProfile,
   showAddMatch, setShowAddMatch, editingMatch, setEditingMatch, handleSaveMatch, openAddMatch, showToast,
   guardarPartido, onAddScout, onRemoveScout, onSetScoutMode, setDetailMatchId, renderFichaPartido, isDesktop,
   onAddMatchOurPlayer, onRemoveMatchOurPlayer,
@@ -40,6 +40,7 @@ export function PlanificacionTab({
   matchOurPlayers: ScoutingMatchOurPlayer[]
   players: Player[]
   profiles: Profile[]
+  currentProfile: Profile
   showAddMatch: boolean
   setShowAddMatch: React.Dispatch<React.SetStateAction<boolean>>
   editingMatch: ScoutingMatch | null
@@ -61,6 +62,7 @@ export function PlanificacionTab({
 }) {
   const [modo, setModo] = useState<Modo>('semana')
   const [offset, setOffset] = useState(0)
+  const [soloMios, setSoloMios] = useState(false)
 
   const rango = useMemo(
     () => modo === 'finde' ? rangoFinDeSemana(new Date(), offset) : rangoSemana(new Date(), offset),
@@ -68,9 +70,15 @@ export function PlanificacionTab({
   )
   const titulo = `${modo === 'finde' ? 'Fin de semana' : 'Semana'} ${tituloRango(rango)}`
 
-  const filas = useMemo(
+  const todasLasFilas = useMemo(
     () => construirPlanificacion({ desde: rango.desde, hasta: rango.hasta, scoutingMatches, matchScouts, matchOurPlayers, players }),
     [rango, scoutingMatches, matchScouts, matchOurPlayers, players],
+  )
+  // «Solo mis partidos»: los que tengan asignado el avatar de quien ha
+  // iniciado sesión (perfil del sistema o nombre suelto que coincida).
+  const filas = useMemo(
+    () => soloMios ? todasLasFilas.filter(f => f.personas.includes(currentProfile.avatar)) : todasLasFilas,
+    [todasLasFilas, soloMios, currentProfile.avatar],
   )
 
   function imprimir() {
@@ -107,6 +115,15 @@ export function PlanificacionTab({
               </button>
             ))}
           </div>
+          <button
+            onClick={() => setSoloMios(v => !v)}
+            title="Muestra solo los partidos donde apareces como Persona asignada"
+            className={`flex-shrink-0 px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+              soloMios ? 'bg-primary text-white border-primary' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            Solo mis partidos
+          </button>
           <div className="flex-1" />
           <button onClick={imprimir} title="Abre la hoja lista para imprimir o guardar como PDF" className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-1.5 text-[11px] font-semibold border border-slate-200 text-slate-500 rounded-lg bg-white hover:border-primary hover:text-primary">
             🖨️ Imprimir / PDF
@@ -146,7 +163,11 @@ export function PlanificacionTab({
             </thead>
             <tbody>
               {filas.length === 0 && (
-                <tr><td colSpan={7} className="px-3 py-8 text-center text-slate-400">Sin partidos entre el {rango.desde.slice(8)} y el {rango.hasta.slice(8)}. Añade uno con «＋ Añadir partido».</td></tr>
+                <tr><td colSpan={7} className="px-3 py-8 text-center text-slate-400">
+                  {soloMios
+                    ? <>Ningún partido asignado a ti entre el {rango.desde.slice(8)} y el {rango.hasta.slice(8)}. <button onClick={() => setSoloMios(false)} className="text-primary hover:underline">Ver todos</button></>
+                    : <>Sin partidos entre el {rango.desde.slice(8)} y el {rango.hasta.slice(8)}. Añade uno con «＋ Añadir partido».</>}
+                </td></tr>
               )}
               {filas.map(f => {
                 const color = COLOR_DIA[f.diaLabel] ?? { celda: 'bg-slate-100', fila: '' }

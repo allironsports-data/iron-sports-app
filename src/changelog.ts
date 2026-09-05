@@ -19,6 +19,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-09-05',
+    items: [
+      'Home de Mantenimiento: quitado el aviso «X partidos para ver hoy» — solo miraba el campo antiguo de un scout por partido y por eso se le veían solo los de Ibai, aunque hubiera más gente asignada',
+      'Captación → Planificación: nuevo botón «Solo mis partidos» junto al selector de semana, para ver solo los partidos donde apareces en «Persona» (también se respeta al imprimir o exportar a Excel)',
+    ],
+  },
+  {
     date: '2026-09-03',
     items: [
       'Planificación: la celda «Jugador» ya se puede tocar. «Jugador» = los nuestros que asignéis a mano a ese partido (clic en la celda para añadir o quitar, con ✕); si no hay ninguno, «Captación». Van en negrita también al imprimir y en Excel',

@@ -1573,6 +1573,7 @@ export function Captacion({
           matchOurPlayers={matchOurPlayers}
           players={players}
           profiles={profiles}
+          currentProfile={currentProfile}
           onAddMatchOurPlayer={onAddMatchOurPlayer}
           onRemoveMatchOurPlayer={onRemoveMatchOurPlayer}
           showAddMatch={showAddMatch} setShowAddMatch={setShowAddMatch}
