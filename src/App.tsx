@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, lazy } from 'react'
 import { CalendarDays, Sun } from 'lucide-react'
 import { useAuth } from './hooks/useAuth'
-import type { Player, Task, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchOurPlayer, ScoutingMatchScout, BoulemaPeticion, MemberStatus, Postpartido, FirmasEntry, BoulemaPlayer } from './types'
+import type { Player, Task, ScoutingPlayer, ScoutingReport, ScoutingInfo, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchOurPlayer, ScoutingMatchScout, BoulemaPeticion, MemberStatus, Postpartido, FirmasEntry, BoulemaPlayer } from './types'
 import * as db from './lib/db'
 import { supabase } from './lib/supabase'
 import type { Profile } from './contexts/AuthContext'
@@ -63,7 +63,7 @@ const SYNC_TABLES = [
   'club_negotiations', 'distribution_entries', 'clubs', 'players', 'tasks',
   'member_status', 'postpartidos', 'captacion_firmas',
   'scouting_matches', 'scouting_match_players', 'scouting_match_our_players', 'scouting_match_scouts',
-  'scouting_reports', 'scouting_players', 'scouting_club_zonas', 'scouting_equipos',
+  'scouting_reports', 'scouting_infos', 'scouting_players', 'scouting_club_zonas', 'scouting_equipos',
 ] as const
 
 function Spinner() {
@@ -159,6 +159,8 @@ export default function App() {
   // Captación state
   const [scoutingPlayers, setScoutingPlayers] = useState<ScoutingPlayer[]>([])
   const [scoutingReports, setScoutingReports] = useState<ScoutingReport[]>([])
+  // Informes que no son de partido: personalidad, contractual y mercado
+  const [scoutingInfos, setScoutingInfos] = useState<ScoutingInfo[]>([])
   const [scoutingMatches, setScoutingMatches] = useState<ScoutingMatch[]>([])
   const [matchPlayers, setMatchPlayers] = useState<ScoutingMatchPlayer[]>([])
   // Jugadores nuestros asignados a mano a un partido (Planificación)
@@ -372,7 +374,7 @@ export default function App() {
       // aviso «Sincronizando datos…» solo desaparece cuando termina la
       // última, y con un pequeño retraso para no parpadear en cargas rápidas.
       const fallos: string[] = []
-      let restantes = 16
+      let restantes = 17
       // Tiempo de cada tabla (ms), para ver en consola cuál es la lenta.
       const tiempos: Record<string, number> = {}
       const inicioFase2 = performance.now()
@@ -400,6 +402,7 @@ export default function App() {
       opc('Negociaciones', db.fetchNegotiations(), [], v => setNegotiations(v as ClubNegotiation[]))
       opc('Jugadores de captación', db.fetchScoutingPlayers(), [], v => setScoutingPlayers(v as ScoutingPlayer[]))
       opc('Informes', db.fetchScoutingReports(), [], v => setScoutingReports(v as ScoutingReport[]))
+      opc('Informes de entorno', db.fetchScoutingInfos(), [] as ScoutingInfo[], v => setScoutingInfos(v))
       opc('Partidos', db.fetchScoutingMatches(), [], v => setScoutingMatches(v as ScoutingMatch[]))
       opc('Alineaciones', db.fetchMatchPlayers(), [], v => setMatchPlayers(v as ScoutingMatchPlayer[]))
       opc('Nuestros en partido', db.fetchMatchOurPlayers(), [] as ScoutingMatchOurPlayer[], v => setMatchOurPlayers(v))
@@ -626,6 +629,7 @@ export default function App() {
       case 'scouting_match_our_players': si(db.fetchMatchOurPlayers(), (d) => setMatchOurPlayers(d)); break
       case 'scouting_match_scouts': si(db.fetchMatchScouts(), (d) => setMatchScouts(d as ScoutingMatchScout[])); break
       case 'scouting_reports':      si(db.fetchScoutingReports(), (d) => setScoutingReports(d as ScoutingReport[])); break
+      case 'scouting_infos':        si(db.fetchScoutingInfos(), (d) => setScoutingInfos(d as ScoutingInfo[])); break
       // Los propios jugadores de Captación también los tocan varios a la vez:
       // valoración, fin de contrato, campograma de mercado…
       case 'scouting_players':      si(db.fetchScoutingPlayers(), (d) => setScoutingPlayers(d as ScoutingPlayer[])); break
@@ -1089,6 +1093,15 @@ export default function App() {
   const handleDeleteScoutingReport = (id: string) => {
     setScoutingReports(prev => prev.filter(r => r.id !== id))
   }
+  const handleAddScoutingInfo = (i: ScoutingInfo) => {
+    setScoutingInfos(prev => [i, ...prev])
+  }
+  const handleUpdateScoutingInfo = (i: ScoutingInfo) => {
+    setScoutingInfos(prev => prev.map(x => x.id === i.id ? i : x))
+  }
+  const handleDeleteScoutingInfo = (id: string) => {
+    setScoutingInfos(prev => prev.filter(i => i.id !== id))
+  }
   const handleAddScoutingMatch = (m: ScoutingMatch) => {
     setScoutingMatches(prev => [m, ...prev])
   }
@@ -1457,6 +1470,10 @@ export default function App() {
       onAddReport={handleAddScoutingReport}
       onUpdateReport={handleUpdateScoutingReport}
       onDeleteReport={handleDeleteScoutingReport}
+      scoutingInfos={scoutingInfos}
+      onAddScoutingInfo={handleAddScoutingInfo}
+      onUpdateScoutingInfo={handleUpdateScoutingInfo}
+      onDeleteScoutingInfo={handleDeleteScoutingInfo}
       onAddMatch={handleAddScoutingMatch}
       onUpdateMatch={handleUpdateScoutingMatch}
       onDeleteMatch={handleDeleteScoutingMatch}

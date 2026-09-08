@@ -1,15 +1,17 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { X, Plus, Trash2, FileText, Maximize2, Minimize2, Pencil, ClipboardList, Download } from 'lucide-react'
 import { generarInformeScouting } from '../../lib/informeScouting'
-import type { ScoutingPlayer, ScoutingReport, ScoutingAssessment, ScoutingMatch, ScoutingMatchPlayer, FirmasEntry } from '../../types'
+import type { ScoutingPlayer, ScoutingReport, ScoutingInfo, ScoutingInfoTipo, ScoutingAssessment, ScoutingMatch, ScoutingMatchPlayer, FirmasEntry } from '../../types'
 import type { Profile } from '../../contexts/AuthContext'
 import type { Equipo as EquipoCatalogo } from '../../lib/db'
 import { isValidName } from '../../lib/validate'
 import { ZONA_CORTA, SIN_ZONA, normEquipo, type Zona } from '../../lib/zonas'
 import type { buscarJugadoresParecidos } from '../../lib/duplicados'
 import { AssessmentChip, FormRow, InfoItem, Spinner, ReportCard } from './comun'
-import { type ShowToast, type CaptacionTab, type ConclusionOption, ASSESSMENT_CONFIG, ALL_ASSESSMENTS, POSITIONS_SCOUTING, CONCLUSION_OPTIONS, MONTHS_ES, REPORT_TEMPLATE, birthYearFromBirthdate, fmtDate } from './helpers'
+import { type ShowToast, type CaptacionTab, type ConclusionOption, ASSESSMENT_CONFIG, ALL_ASSESSMENTS, POSITIONS_SCOUTING, CONCLUSION_OPTIONS, MONTHS_ES, REPORT_TEMPLATE, birthYearFromBirthdate, fmtDate, normConclusion } from './helpers'
 import { AddToFirmasButton } from './firmas/AddToFirmasButton'
+import { InfosSection, AddInfoMenu } from './InfosSection'
+import { TIPO_CONFIG, TIPOS } from './tiposInfo'
 import { type FilaEquipo, SIN_CATEGORIA, inicioTemporada, etiquetaTemporada } from './filasEquipos'
 // ── Panel lateral (persiste entre pestañas) ───────────────────────────
 // Tres caras: formulario de alta/edición de jugador, ficha del equipo y
@@ -20,6 +22,63 @@ import { type FilaEquipo, SIN_CATEGORIA, inicioTemporada, etiquetaTemporada } fr
 
 type PlayerFormState = Omit<ScoutingPlayer, 'id' | 'createdAt'>
 type JugadorParecido = ReturnType<typeof buscarJugadoresParecidos>[number]
+
+// ── Barra de resumen de la vista ampliada ────────────────────────────
+// Solo en pantalla completa: aprovecha el ancho para enseñar de un vistazo
+// lo que en el panel estrecho hay que ir buscando (cuántos informes, cuántos
+// «Llamar», cuándo fue el último, cuántos partidos). Los tres tipos que no
+// son de partido solo aparecen si el jugador tiene alguno: lo normal es que
+// no los tenga y no deben robar sitio.
+function ResumenJugador({
+  reports, infos, partidosVistos,
+}: {
+  reports: ScoutingReport[]
+  infos: ScoutingInfo[]
+  partidosVistos: number
+}) {
+  const llamar = reports.filter(r => normConclusion(r.conclusion) === 'Llamar').length
+  const ultimo = reports.reduce<string | undefined>((max, r) => {
+    const d = r.fecha ?? r.createdAt
+    return !max || (d && d > max) ? d : max
+  }, undefined)
+
+  const celdas: { label: string; valor: string }[] = [
+    { label: 'Informes de partido', valor: String(reports.length) },
+    { label: '«Llamar»', valor: String(llamar) },
+    { label: 'Partidos vistos', valor: String(partidosVistos) },
+    { label: 'Último informe', valor: ultimo ? fmtDate(ultimo) : '—' },
+  ]
+
+  const conDatos = TIPOS
+    .map(t => ({ t, n: infos.filter(i => i.tipo === t).length }))
+    .filter(x => x.n > 0)
+
+  return (
+    <div className="px-4 pt-4">
+      <div className="flex flex-wrap border border-slate-200 rounded-lg bg-white overflow-hidden divide-x divide-slate-200">
+        {celdas.map(c => (
+          <div key={c.label} className="flex-1 min-w-[110px] px-4 py-2">
+            <div className="text-lg font-bold text-slate-800 leading-tight">{c.valor}</div>
+            <div className="text-[11px] text-slate-400">{c.label}</div>
+          </div>
+        ))}
+        {conDatos.map(({ t, n }) => {
+          const c = TIPO_CONFIG[t]
+          const Icono = c.icon
+          return (
+            <div key={t} className="flex-1 min-w-[110px] px-4 py-2">
+              <div className={`text-lg font-bold leading-tight flex items-center gap-1.5 ${c.texto}`}>
+                <Icono className="w-4 h-4" />
+                {n}
+              </div>
+              <div className="text-[11px] text-slate-400">{c.corto}</div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
 
 export function PlayerPanel({
   // carcasa
@@ -44,6 +103,8 @@ export function PlayerPanel({
   matchSearchOpen, setMatchSearchOpen, savingReport, handleAddReport, borradorRecuperado, descartarBorrador,
   confirmDeleteReport, setConfirmDeleteReport, handleDeleteReport, handleUpdateReport, handleReportEditingChange,
   matchPlayers, onRemoveMatchPlayer,
+  // informes que no son de partido (personalidad / contractual / mercado)
+  panelInfos, onAddScoutingInfo, onUpdateScoutingInfo, onDeleteScoutingInfo, handleQuickContract,
 }: {
   fullscreen: boolean
   setFullscreen: React.Dispatch<React.SetStateAction<boolean>>
@@ -125,14 +186,22 @@ export function PlayerPanel({
   handleReportEditingChange: (editing: boolean) => void
   matchPlayers: ScoutingMatchPlayer[]
   onRemoveMatchPlayer: (matchId: string, playerId: string) => Promise<void>
+  panelInfos: ScoutingInfo[]
+  onAddScoutingInfo: (i: ScoutingInfo) => void
+  onUpdateScoutingInfo: (i: ScoutingInfo) => void
+  onDeleteScoutingInfo: (id: string) => void
+  handleQuickContract: (p: ScoutingPlayer, value: string) => Promise<void>
 }) {
   const [exportandoInforme, setExportandoInforme] = useState(false)
+  // Tipo de informe «no de partido» que se está creando (lo abre el menú ▾)
+  const [nuevoInfoTipo, setNuevoInfoTipo] = useState<ScoutingInfoTipo | null>(null)
+  useEffect(() => { setNuevoInfoTipo(null) }, [panelPlayerId])
 
   async function handleExportarInforme() {
     if (!panelPlayer || exportandoInforme) return
     setExportandoInforme(true)
     try {
-      await generarInformeScouting(panelPlayer, panelReports, scoutingMatches)
+      await generarInformeScouting(panelPlayer, panelReports, scoutingMatches, panelInfos)
     } catch {
       showToast('No se ha podido generar el informe', 'error')
     } finally {
@@ -253,7 +322,7 @@ export function PlayerPanel({
         </div>
 
         {/* Panel body */}
-        <div className={`flex-1 overflow-y-auto ${fullscreen ? 'max-w-4xl mx-auto w-full' : ''} pb-14 sm:pb-0`}>
+        <div className={`flex-1 overflow-y-auto ${fullscreen ? 'max-w-6xl mx-auto w-full' : ''} pb-14 sm:pb-0`}>
 
           {/* ── Add / Edit player form ── */}
           {(showAddPlayer || showEditPlayer) && (
@@ -526,6 +595,14 @@ export function PlayerPanel({
 
           {/* ── Player detail ── */}
           {panelPlayer && !showEditPlayer && (
+          <>
+            {fullscreen && (
+              <ResumenJugador
+                reports={panelReports}
+                infos={panelInfos}
+                partidosVistos={panelPlayerId ? matchPlayers.filter(mp => mp.playerId === panelPlayerId).length : 0}
+              />
+            )}
             <div className={`p-4 space-y-5 ${fullscreen ? 'grid grid-cols-1 sm:grid-cols-2 gap-6 items-start' : ''}`}>
               <div className="space-y-4">
                 {/* Info grid */}
@@ -641,16 +718,21 @@ export function PlayerPanel({
                               <span className="ml-1 text-xs bg-slate-100 text-slate-600 rounded-full px-1.5 py-0.5">{panelReports.length}</span>
                             )}
                           </h3>
-                          <button
-                            onClick={() => {
-                              setReportTitle(''); setReportText(''); setReportConclusion(''); setReportMatchId('')
-                              // toggle: if form already open close it
-                              setShowAddReportForm(f => !f)
-                            }}
-                            className="flex items-center gap-1 px-2.5 py-2 sm:py-1 text-xs font-semibold bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
-                          >
-                            <Plus className="w-3 h-3" /> Añadir informe
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => {
+                                setReportTitle(''); setReportText(''); setReportConclusion(''); setReportMatchId('')
+                                // toggle: if form already open close it
+                                setShowAddReportForm(f => !f)
+                              }}
+                              className="flex items-center gap-1 px-2.5 py-2 sm:py-1 text-xs font-semibold bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+                            >
+                              <Plus className="w-3 h-3" /> Añadir informe
+                            </button>
+                            {/* Los otros tres tipos van aquí detrás para no robar
+                                sitio: lo normal es el informe de partido. */}
+                            <AddInfoMenu onElegir={t => { setShowAddReportForm(false); setNuevoInfoTipo(t) }} />
+                          </div>
                         </div>
 
                         {/* Add report form — shown at top when open */}
@@ -799,9 +881,28 @@ export function PlayerPanel({
                     )
                   })()}
 
+                  {/* Personalidad · contractual · mercado. Si no hay ninguno
+                      y no se está escribiendo uno, esto no pinta nada. */}
+                  {panelPlayer && (
+                    <InfosSection
+                      player={panelPlayer}
+                      infos={panelInfos}
+                      profiles={profiles}
+                      currentProfile={currentProfile}
+                      isAdmin={isAdmin}
+                      showToast={showToast}
+                      nuevoTipo={nuevoInfoTipo}
+                      setNuevoTipo={setNuevoInfoTipo}
+                      onAdd={onAddScoutingInfo}
+                      onUpdate={onUpdateScoutingInfo}
+                      onDelete={onDeleteScoutingInfo}
+                      onSetContract={handleQuickContract}
+                    />
+                  )}
+
                   <div className="space-y-3">
                     {panelReports.length === 0 ? (
-                      <p className="text-xs text-slate-400 italic">Sin informes todavía.</p>
+                      <p className="text-xs text-slate-400 italic">Sin informes de partido todavía.</p>
                     ) : panelReports.map(r => {
                       const linkedMatch = r.matchId ? scoutingMatches.find(m => m.id === r.matchId) : undefined
                       const matchLabel = linkedMatch
@@ -876,6 +977,7 @@ export function PlayerPanel({
                 })()}
               </div>
             </div>
+          </>
           )}
         </div>
 

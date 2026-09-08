@@ -53,6 +53,10 @@ export function Captacion({
   onAddReport,
   onUpdateReport,
   onDeleteReport,
+  scoutingInfos,
+  onAddScoutingInfo,
+  onUpdateScoutingInfo,
+  onDeleteScoutingInfo,
   onAddMatch,
   onUpdateMatch,
   onDeleteMatch,
@@ -367,6 +371,14 @@ export function Captacion({
       .filter(r => r.playerId === panelPlayerId)
       .sort((a, b) => (b.fecha ?? b.createdAt).localeCompare(a.fecha ?? a.createdAt))
   }, [panelPlayerId, scoutingReports])
+
+  // Informes que no son de partido del jugador abierto (los más nuevos primero)
+  const panelInfos = useMemo(() => {
+    if (!panelPlayerId) return []
+    return scoutingInfos
+      .filter(i => i.playerId === panelPlayerId)
+      .sort((a, b) => (b.fecha ?? b.createdAt).localeCompare(a.fecha ?? a.createdAt))
+  }, [panelPlayerId, scoutingInfos])
 
   const allCategories = useMemo(() => {
     const cats = new Set<string>()
@@ -1547,6 +1559,11 @@ export function Captacion({
           handleReportEditingChange={handleReportEditingChange}
           matchPlayers={matchPlayers}
           onRemoveMatchPlayer={onRemoveMatchPlayer}
+          panelInfos={panelInfos}
+          onAddScoutingInfo={onAddScoutingInfo}
+          onUpdateScoutingInfo={onUpdateScoutingInfo}
+          onDeleteScoutingInfo={onDeleteScoutingInfo}
+          handleQuickContract={handleQuickContract}
         />
       )}
 

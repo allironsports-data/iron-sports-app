@@ -30,6 +30,10 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Diez retoques pequeños: emojis sueltos en botones (CSV, Imprimir/PDF, cola pendiente, Solo Captación, Confederación, Planificación, Mi día) cambiados por iconos, corregido "Año nasc." → "Año nac.", "Nac." ambiguo → "Nacionalidad", y el botón "silenciar" de avisos en Firmar con más contraste',
       'Campogramas (Conclusiones → Llamar/Seguir/Decidir, y Fin de contrato) con botón «Descargar imagen» para bajarlos como PNG y compartirlos fuera de la app',
       'Quitada la pestaña «Pretemporada» de Captación (ya no hacía falta)',
+      'Ficha del jugador de Captación: además de los informes de partido ya se pueden meter otros tres tipos — «Personalidad y entorno» (quién lo cuenta y semáforo verde/ámbar/rojo), «Contractual» (fin de contrato, salario, cláusula, comisión, agente y fiabilidad del dato) y «Opinión del mercado» (qué club, quién lo dice y nivel de interés). Se añaden desde el botón ▾ que hay junto a «Añadir informe», y si el jugador no tiene ninguno no ocupan nada en pantalla',
+      'Informe contractual: si pones un fin de contrato distinto al de la ficha, te ofrece actualizarlo también allí, para no dejar dos fechas que se contradicen',
+      'Los tres tipos nuevos salen también en el PDF de «Exportar informe», en su propio apartado, y el resumen de IA los tiene en cuenta',
+      'Vista ampliada de la ficha del jugador (botón ⤢): más ancha y con una barra de resumen arriba — informes de partido, cuántos son «Llamar», partidos vistos, fecha del último informe y, solo si los hay, cuántos informes de personalidad, contractuales o de mercado',
     ],
     adminItems: [
       'En la consola del navegador aparece «[carga] fase 2 … ms» con el tiempo de cada tabla, ordenado de mayor a menor, para localizar la lenta',

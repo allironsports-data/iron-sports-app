@@ -1,5 +1,5 @@
 import type { CaptacionTab } from './helpers'
-import type { Player, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchOurPlayer, ScoutingMatchScout, BoulemaPeticion, FirmasEntry } from '../../types'
+import type { Player, ScoutingPlayer, ScoutingReport, ScoutingInfo, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchOurPlayer, ScoutingMatchScout, BoulemaPeticion, FirmasEntry } from '../../types'
 import type { Profile } from '../../contexts/AuthContext'
 import type { Equipo as EquipoCatalogo } from '../../lib/db'
 import type { Zona } from '../../lib/zonas'
@@ -22,6 +22,11 @@ export interface Props {
   onAddReport: (r: ScoutingReport) => void
   onUpdateReport: (r: ScoutingReport) => void
   onDeleteReport: (id: string) => void
+  /** Informes que no son de partido: personalidad, contractual, mercado */
+  scoutingInfos: ScoutingInfo[]
+  onAddScoutingInfo: (i: ScoutingInfo) => void
+  onUpdateScoutingInfo: (i: ScoutingInfo) => void
+  onDeleteScoutingInfo: (id: string) => void
   onAddMatch: (m: ScoutingMatch) => void
   onUpdateMatch: (m: ScoutingMatch) => void
   onDeleteMatch: (id: string) => void

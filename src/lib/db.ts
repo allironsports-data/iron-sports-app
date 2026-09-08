@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 import { dedupePorId } from './coleccion'
-import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchOurPlayer, ScoutingMatchScout, BoulemaPeticion, ClubLog, PlayerMeeting, PlayerActivity, MemberStatus, Postpartido, FirmasEntry, BoulemaPlayer } from '../types'
+import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation, ScoutingPlayer, ScoutingReport, ScoutingInfo, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchOurPlayer, ScoutingMatchScout, BoulemaPeticion, ClubLog, PlayerMeeting, PlayerActivity, MemberStatus, Postpartido, FirmasEntry, BoulemaPlayer } from '../types'
 
 // ── helpers ──────────────────────────────────────────────────
 
@@ -1016,6 +1016,90 @@ export async function updateScoutingReport(r: ScoutingReport): Promise<void> {
     fecha: r.fecha ?? null,
     match_id: r.matchId ?? null,
   }).eq('id', r.id)
+  if (error) throw error
+}
+
+// ── scouting_infos (personalidad · contractual · mercado) ─────
+// Tabla opcional: mientras migration_scouting_infos.sql no se ejecute, la
+// lectura devuelve [] y la app sigue funcionando igual que antes.
+
+function dbToScoutingInfo(row: Record<string, unknown>): ScoutingInfo {
+  const t = (v: unknown) => (v as string) ?? undefined
+  return {
+    id: row.id as string,
+    playerId: row.player_id as string,
+    tipo: row.tipo as ScoutingInfo['tipo'],
+    fecha: t(row.fecha),
+    texto: t(row.texto),
+    persona: t(row.persona),
+    authorId: t(row.author_id),
+    fuente: t(row.fuente),
+    semaforo: t(row.semaforo) as ScoutingInfo['semaforo'],
+    finContrato: t(row.fin_contrato),
+    salario: t(row.salario),
+    clausula: t(row.clausula),
+    comision: t(row.comision),
+    agente: t(row.agente),
+    fiabilidad: t(row.fiabilidad) as ScoutingInfo['fiabilidad'],
+    club: t(row.club),
+    quien: t(row.quien),
+    interes: t(row.interes) as ScoutingInfo['interes'],
+    createdAt: row.created_at as string,
+  }
+}
+
+/** Columnas de scouting_infos, para insert y update (mismo mapeo en los dos) */
+function scoutingInfoToDb(i: Partial<ScoutingInfo>): Record<string, unknown> {
+  return {
+    tipo: i.tipo,
+    fecha: i.fecha ?? new Date().toISOString(),
+    texto: i.texto ?? null,
+    persona: i.persona ?? null,
+    fuente: i.fuente ?? null,
+    semaforo: i.semaforo ?? null,
+    fin_contrato: i.finContrato ?? null,
+    salario: i.salario ?? null,
+    clausula: i.clausula ?? null,
+    comision: i.comision ?? null,
+    agente: i.agente ?? null,
+    fiabilidad: i.fiabilidad ?? null,
+    club: i.club ?? null,
+    quien: i.quien ?? null,
+    interes: i.interes ?? null,
+  }
+}
+
+/** Devuelve [] si la tabla aún no existe (migration_scouting_infos.sql sin ejecutar). */
+export async function fetchScoutingInfos(): Promise<ScoutingInfo[]> {
+  try {
+    const filas = await leerTodo<Record<string, unknown>>('scouting_infos', (d, h) =>
+      supabase.from('scouting_infos').select('*')
+        .order('fecha', { ascending: false }).order('id').range(d, h))
+    return filas.map(dbToScoutingInfo)
+  } catch (e) {
+    if (esTablaInexistente(e)) return []
+    throw e
+  }
+}
+
+export async function createScoutingInfo(i: Omit<ScoutingInfo, 'id' | 'createdAt'>): Promise<ScoutingInfo> {
+  const { data, error } = await supabase.from('scouting_infos').insert({
+    player_id: i.playerId,
+    author_id: i.authorId ?? null,
+    ...scoutingInfoToDb(i),
+  }).select().single()
+  if (error) throw error
+  return dbToScoutingInfo(data)
+}
+
+export async function updateScoutingInfo(i: ScoutingInfo): Promise<void> {
+  const { error } = await supabase.from('scouting_infos')
+    .update(scoutingInfoToDb(i)).eq('id', i.id)
+  if (error) throw error
+}
+
+export async function deleteScoutingInfo(id: string): Promise<void> {
+  const { error } = await supabase.from('scouting_infos').delete().eq('id', id)
   if (error) throw error
 }
 

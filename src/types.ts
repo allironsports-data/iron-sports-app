@@ -306,6 +306,39 @@ export interface ScoutingReport {
   createdAt: string
 }
 
+// ── Informes que NO son de partido (tabla scouting_infos) ──────────
+// Van aparte de ScoutingReport a propósito: «informe» en el resto de la app
+// significa «informe de partido» y sus filas se cuentan en Conclusiones, el
+// modelo de predicción, las estadísticas por scout y el informe mensual.
+// Ver migration_scouting_infos.sql.
+
+export type ScoutingInfoTipo = 'personalidad' | 'contractual' | 'mercado'
+
+export interface ScoutingInfo {
+  id: string
+  playerId: string
+  tipo: ScoutingInfoTipo
+  fecha?: string            // ISO datetime string
+  texto?: string
+  persona?: string          // avatar del que lo escribe
+  authorId?: string
+  // personalidad · entorno
+  fuente?: string
+  semaforo?: 'verde' | 'ambar' | 'rojo'
+  // contractual
+  finContrato?: string
+  salario?: string
+  clausula?: string
+  comision?: string
+  agente?: string
+  fiabilidad?: 'alta' | 'media' | 'baja'
+  // mercado
+  club?: string
+  quien?: string
+  interes?: 'alto' | 'medio' | 'bajo' | 'descartado'
+  createdAt: string
+}
+
 export interface ScoutingMatchPlayer {
   id: string
   matchId: string

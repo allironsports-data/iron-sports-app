@@ -9,7 +9,7 @@
 // quién escribió cada informe, ni el contacto/agencia. Solo lo deportivo
 // y lo que se ha observado de él.
 
-import type { ScoutingPlayer, ScoutingReport, ScoutingMatch } from '../types'
+import type { ScoutingPlayer, ScoutingReport, ScoutingInfo, ScoutingMatch } from '../types'
 import { fechaLocal } from './fechas'
 import { supabase } from './supabase'
 
@@ -50,12 +50,59 @@ function observacionesDe(reports: ScoutingReport[], matches: ScoutingMatch[]) {
     })
 }
 
+const ETIQUETA_TIPO = {
+  personalidad: 'Personalidad y entorno',
+  contractual: 'Contractual',
+  mercado: 'Opinión del mercado',
+} as const
+
+/** Los informes que no son de partido, en el mismo formato que las
+ *  observaciones: los datos estructurados se aplanan en una línea para que
+ *  se lean igual en el documento y en el resumen de IA. */
+function infosDe(infos: ScoutingInfo[]) {
+  const trozos = (i: ScoutingInfo): string => [
+    i.club && `Club: ${i.club}`,
+    i.quien && `Dice: ${i.quien}`,
+    i.interes && `Interés: ${i.interes}`,
+    i.fuente && `Fuente: ${i.fuente}`,
+    i.semaforo && `Valoración del entorno: ${i.semaforo}`,
+    i.finContrato && `Fin de contrato: ${i.finContrato}`,
+    i.salario && `Salario: ${i.salario}`,
+    i.clausula && `Cláusula: ${i.clausula}`,
+    i.comision && `Comisión: ${i.comision}`,
+    i.agente && `Agente: ${i.agente}`,
+    i.fiabilidad && `Fiabilidad del dato: ${i.fiabilidad}`,
+  ].filter(Boolean).join(' · ')
+
+  return infos
+    .filter(i => (i.texto ?? '').trim().length > 0 || trozos(i).length > 0)
+    .sort((a, b) => (b.fecha ?? b.createdAt ?? '').localeCompare(a.fecha ?? a.createdAt ?? ''))
+    .map(i => ({
+      fecha: fechaCorta(i.fecha ?? i.createdAt),
+      etiqueta: ETIQUETA_TIPO[i.tipo] ?? i.tipo,
+      datos: trozos(i),
+      texto: (i.texto ?? '').trim(),
+    }))
+}
+
 /** Pide a la Edge Function «resumen-scouting» un párrafo que sintetice todas
  *  las observaciones. Nunca lanza: si falla (sin red, función no desplegada,
  *  clave del LLM sin configurar…) devuelve null y el informe se genera sin
  *  esa sección, en vez de bloquear la descarga. */
-async function pedirResumenIA(player: ScoutingPlayer, reports: ScoutingReport[], matches: ScoutingMatch[]): Promise<string | null> {
-  const informes = observacionesDe(reports, matches)
+async function pedirResumenIA(player: ScoutingPlayer, reports: ScoutingReport[], matches: ScoutingMatch[], infos: ScoutingInfo[]): Promise<string | null> {
+  // El entorno, el contrato y lo que dice el mercado entran como observaciones
+  // más, con su etiqueta por título: así el resumen los tiene en cuenta sin
+  // tocar la Edge Function, y el LLM sigue viendo exactamente lo mismo que
+  // luego lista el documento.
+  const informes = [
+    ...observacionesDe(reports, matches),
+    ...infosDe(infos).map(i => ({
+      fecha: i.fecha,
+      partido: undefined as string | undefined,
+      titulo: i.etiqueta,
+      texto: [i.datos, i.texto].filter(Boolean).join('\n'),
+    })),
+  ]
   if (informes.length === 0) return null
   try {
     const { data, error } = await supabase.functions.invoke<{ resumen?: string; error?: string }>('resumen-scouting', {
@@ -73,8 +120,9 @@ async function pedirResumenIA(player: ScoutingPlayer, reports: ScoutingReport[],
 
 /** Construye el HTML del informe (documento puro, sin efectos secundarios).
  *  `resumen` es el párrafo generado por IA, si se ha podido obtener. */
-function construirHtmlInformeScouting(player: ScoutingPlayer, reports: ScoutingReport[], matches: ScoutingMatch[], resumen?: string | null): string {
+function construirHtmlInformeScouting(player: ScoutingPlayer, reports: ScoutingReport[], matches: ScoutingMatch[], infos: ScoutingInfo[], resumen?: string | null): string {
   const observaciones = observacionesDe(reports, matches)
+  const otros = infosDe(infos)
 
   const a = edad(player.birthdate)
   const meta = [
@@ -161,6 +209,16 @@ ${resumen ? `<section>
       </article>`).join('')}
 </section>
 
+${otros.length === 0 ? '' : `<section>
+  <h2>Entorno, contrato y mercado <span style="float:right;font-weight:400;color:#9aa3ae">${otros.length}</span></h2>
+  ${otros.map(o => `
+    <article class="obs">
+      <div class="obs-cab">${esc(o.fecha)} · ${esc(o.etiqueta)}</div>
+      ${o.datos ? `<div class="obs-title">${esc(o.datos)}</div>` : ''}
+      ${o.texto ? `<p class="desc">${esc(o.texto)}</p>` : ''}
+    </article>`).join('')}
+</section>`}
+
 <div class="pie">All Iron Sports · Ficha de ${esc(player.fullName)} · ${esc(fechaCorta(fechaLocal(new Date())))}</div>
 
 <script>window.onload = function () { window.print() }</script>
@@ -184,7 +242,7 @@ const HTML_GENERANDO = `<!doctype html><html lang="es"><head><meta charset="utf-
  *  se abriese después de esperar a la IA, el navegador la bloquearía como
  *  popup no solicitado); mientras tanto muestra un aviso de «generando…» y
  *  se rellena con el documento final en cuanto está listo. */
-export async function generarInformeScouting(player: ScoutingPlayer, reports: ScoutingReport[], matches: ScoutingMatch[]): Promise<void> {
+export async function generarInformeScouting(player: ScoutingPlayer, reports: ScoutingReport[], matches: ScoutingMatch[], infos: ScoutingInfo[] = []): Promise<void> {
   const w = window.open('', '_blank')
   if (!w) {
     alert('El navegador ha bloqueado la ventana del informe. Permite las ventanas emergentes de esta página y vuelve a intentarlo.')
@@ -193,11 +251,11 @@ export async function generarInformeScouting(player: ScoutingPlayer, reports: Sc
   w.document.write(HTML_GENERANDO)
   w.document.close()
 
-  const resumen = await pedirResumenIA(player, reports, matches)
+  const resumen = await pedirResumenIA(player, reports, matches, infos)
 
   // La persona pudo cerrar la pestaña mientras esperábamos a la IA.
   if (w.closed) return
-  const html = construirHtmlInformeScouting(player, reports, matches, resumen)
+  const html = construirHtmlInformeScouting(player, reports, matches, infos, resumen)
   w.document.open()
   w.document.write(html)
   w.document.close()
