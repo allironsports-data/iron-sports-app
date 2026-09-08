@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { FileText, Users, Target, Fingerprint, Handshake, Eye, AlertTriangle } from 'lucide-react'
+import { FileText, Users, Target, Fingerprint, Handshake, Eye, AlertTriangle, Download, ArrowUp, ArrowDown } from 'lucide-react'
 import type { ScoutingPlayer, ScoutingReport, ScoutingMatch, FirmasEntry } from '../types'
 import type { Profile } from '../contexts/AuthContext'
 import { grupoLargoDe } from '../lib/campo'
@@ -363,10 +363,10 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
     // Embudo
     const conLlamarDeAlguien = [...conclusionDe.values()].filter(m => [...m.values()].includes('Llamar')).length
     const embudo = [
-      { label: 'Jugadores en BBDD', n: scoutingPlayers.length },
+      { label: 'Jugadores en la app', n: scoutingPlayers.length },
       { label: 'Con informe', n: jugadoresConInforme.size },
       { label: 'Con algún «Llamar»', n: conLlamarDeAlguien },
-      { label: 'En pipeline Firmar', n: enFirmar.size },
+      { label: 'En Firmar', n: enFirmar.size },
       { label: 'Firmados', n: firmados },
     ]
 
@@ -408,12 +408,12 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
   const maxSpark = sel ? Math.max(...sel.mesesSpark.map(m => m.count), 1) : 1
 
   if (metrics.length === 0) {
-    return <p className="text-sm text-slate-400 italic py-8 text-center">Aún no hay informes con autor para analizar.</p>
+    return <p className="text-sm text-slate-500 italic py-8 text-center">Aún no hay informes con autor para analizar.</p>
   }
 
   const pct = (v: number | null, warnBelow?: number) =>
     v === null
-      ? <span className="text-slate-300">— <span className="text-[9px]">(pocos datos)</span></span>
+      ? <span className="text-slate-500">— <span className="text-badge">(pocos datos)</span></span>
       : <span className={warnBelow !== undefined && v < warnBelow ? 'text-amber-600 font-semibold' : 'font-semibold'}>{v}%</span>
 
   const maxMes = Math.max(...team.meses.map(m => m.count), 1)
@@ -427,45 +427,45 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
       <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-4">
         <div>
           <h3 className="text-sm font-semibold text-slate-700">El equipo</h3>
-          <p className="text-[11px] text-slate-400 mt-0.5">Cómo trabajamos entre todos: ritmo, cobertura, consenso y embudo.</p>
+          <p className="text-badge text-slate-500 mt-0.5">Cómo trabajamos entre todos: ritmo, cobertura, consenso y embudo.</p>
         </div>
 
         {/* Cifras + tendencia */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="bg-slate-50 rounded-lg p-3 text-center">
             <div className="text-2xl font-bold text-slate-800">{team.total}</div>
-            <div className="text-[11px] text-slate-500">Informes totales</div>
+            <div className="text-badge text-slate-500">Informes totales</div>
           </div>
           <div className="bg-slate-50 rounded-lg p-3 text-center">
             <div className="text-2xl font-bold text-slate-800">
               {team.ult30}
               {tendencia !== null && (
                 <span className={`text-xs font-bold ml-1 ${tendencia >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                  {tendencia >= 0 ? '↑' : '↓'}{Math.abs(tendencia)}%
+                  {tendencia >= 0 ? <ArrowUp className="w-3.5 h-3.5 inline" aria-label="sube" /> : <ArrowDown className="w-3.5 h-3.5 inline" aria-label="baja" />}{Math.abs(tendencia)}%
                 </span>
               )}
             </div>
-            <div className="text-[11px] text-slate-500">Últimos 30 días vs los 30 anteriores</div>
+            <div className="text-badge text-slate-500">Últimos 30 días vs los 30 anteriores</div>
           </div>
           <div className="bg-slate-50 rounded-lg p-3 text-center">
             <div className="text-2xl font-bold text-slate-800">{team.jugadoresConInforme}</div>
-            <div className="text-[11px] text-slate-500">Jugadores con informe</div>
+            <div className="text-badge text-slate-500">Jugadores con informe</div>
           </div>
           <div className="bg-slate-50 rounded-lg p-3 text-center">
-            <div className="text-2xl font-bold text-slate-800">{team.partidosConInforme}<span className="text-sm text-slate-400">/{team.partidosTotal}</span></div>
-            <div className="text-[11px] text-slate-500">Partidos con algún informe</div>
+            <div className="text-2xl font-bold text-slate-800">{team.partidosConInforme}<span className="text-sm text-slate-500">/{team.partidosTotal}</span></div>
+            <div className="text-badge text-slate-500">Partidos con algún informe</div>
           </div>
         </div>
 
         {/* Ritmo 12 meses */}
         <div className="border border-slate-100 rounded-lg p-3">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Ritmo del equipo · 12 meses</p>
+          <p className="text-badge font-bold text-slate-500 uppercase tracking-wide">Ritmo del equipo · 12 meses</p>
           <div className="flex items-end gap-1 mt-2 h-20">
             {team.meses.map((m, i) => (
               <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
-                <span className="text-[8px] text-slate-400">{m.count || ''}</span>
+                <span className="text-badge text-slate-500">{m.count || ''}</span>
                 <div className="w-full bg-blue-400 rounded-t" style={{ height: `${Math.max((m.count / maxMes) * 56, m.count ? 2 : 0)}px` }} />
-                <span className="text-[8px] text-slate-400">{m.label}</span>
+                <span className="text-badge text-slate-500">{m.label}</span>
               </div>
             ))}
           </div>
@@ -474,20 +474,20 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {/* Embudo */}
           <div className="border border-slate-100 rounded-lg p-3">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Embudo: de la BBDD a la firma</p>
+            <p className="text-badge font-bold text-slate-500 uppercase tracking-wide">Embudo: de la app a la firma</p>
             <div className="mt-2 space-y-1.5">
               {team.embudo.map((e, i) => {
                 const prev = i > 0 ? team.embudo[i - 1].n : 0
                 const paso = i > 0 && prev > 0 ? Math.round((e.n / prev) * 100) : null
                 return (
-                  <div key={e.label} className="flex items-center gap-2 text-[11px]">
+                  <div key={e.label} className="flex items-center gap-2 text-badge">
                     <span className="w-32 text-slate-600 flex-shrink-0">{e.label}</span>
                     <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
                       <div className={`h-full ${['bg-slate-400','bg-blue-400','bg-amber-400','bg-violet-400','bg-emerald-500'][i]}`}
                            style={{ width: `${Math.max(Math.round((e.n / maxEmbudo) * 100), e.n ? 2 : 0)}%` }} />
                     </div>
                     {/* qué porcentaje sobrevive de la etapa anterior: ahí se ve el atasco */}
-                    <span className="w-10 text-right text-[10px] text-slate-400 tabular-nums" title={paso !== null ? `${e.n} de ${prev} (${paso}%)` : ''}>
+                    <span className="w-10 text-right text-badge text-slate-500 tabular-nums" title={paso !== null ? `${e.n} de ${prev} (${paso}%)` : ''}>
                       {paso !== null ? `${paso}%` : ''}
                     </span>
                     <span className="w-12 text-right font-semibold text-slate-700">{e.n}</span>
@@ -499,7 +499,7 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
 
           {/* Consenso */}
           <div className="border border-slate-100 rounded-lg p-3">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Consenso del equipo</p>
+            <p className="text-badge font-bold text-slate-500 uppercase tracking-wide">Consenso del equipo</p>
             {team.multi > 0 ? (
               <div className="mt-2 text-xs text-slate-600 space-y-1">
                 <p><strong>{team.multi}</strong> jugadores con conclusión de 2+ scouts:</p>
@@ -509,11 +509,11 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
                   Doble opinión en destacados: {team.dobleOpinion !== null
                     ? <strong>{team.dobleOpinion}%</strong>
                     : '—'}{' '}
-                  <span className="text-slate-400">de los {team.destacadosTotal} Llamar/Basque tienen 2+ scouts detrás</span>
+                  <span className="text-slate-500">de los {team.destacadosTotal} Llamar/Basque tienen 2+ scouts detrás</span>
                 </p>
               </div>
             ) : (
-              <p className="text-xs text-slate-400 italic mt-2">Aún no hay jugadores con conclusiones de varios scouts.</p>
+              <p className="text-xs text-slate-500 italic mt-2">Aún no hay jugadores con conclusiones de varios scouts.</p>
             )}
           </div>
         </div>
@@ -523,63 +523,63 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
           <div className="border border-amber-200 bg-amber-50/40 rounded-lg p-3">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wide">⚖️ Debates pendientes</p>
-                <p className="text-[10px] text-slate-400 mb-1.5">Un scout dice «Llamar» y otro «Descartar» — merecen una charla</p>
+                <p className="text-badge font-bold text-amber-600 uppercase tracking-wide">Debates pendientes</p>
+                <p className="text-badge text-slate-500 mb-1.5">Un scout dice «Llamar» y otro «Descartar» — merecen una charla</p>
               </div>
               {team.debates.length > 0 && (
                 <button
                   onClick={() => descargarCsv('debates_pendientes', ['Jugador', 'Conclusiones'], team.debates.map(d => [d.nombre, d.detalle]))}
-                  className="flex-shrink-0 text-[10px] font-semibold text-amber-700 hover:text-amber-900 underline decoration-dotted"
+                  className="flex-shrink-0 text-badge font-semibold text-amber-700 hover:text-amber-900 underline decoration-dotted"
                 >
-                  ↓ Excel
+                  <Download className="w-3 h-3 inline -mt-0.5" aria-hidden="true" /> Excel
                 </button>
               )}
             </div>
             {team.debates.length > 0 ? (
               <>
-                <ul className={`space-y-1 text-[11px] text-slate-700 ${verTodo.debates ? 'max-h-72 overflow-y-auto pr-1' : ''}`}>
+                <ul className={`space-y-1 text-badge text-slate-700 ${verTodo.debates ? 'max-h-72 overflow-y-auto pr-1' : ''}`}>
                   {(verTodo.debates ? team.debates : team.debates.slice(0, 8)).map(d => (
-                    <li key={d.id}><strong>{d.nombre}</strong> <span className="text-slate-400">— {d.detalle}</span></li>
+                    <li key={d.id}><strong>{d.nombre}</strong> <span className="text-slate-500">— {d.detalle}</span></li>
                   ))}
                 </ul>
                 {team.debates.length > 8 && (
                   <button
                     onClick={() => setVerTodo(v => ({ ...v, debates: !v.debates }))}
-                    className="mt-1.5 text-[10.5px] font-semibold text-amber-700 hover:text-amber-900"
+                    className="mt-1.5 text-badge font-semibold text-amber-700 hover:text-amber-900"
                   >
-                    {verTodo.debates ? '← Ver solo los primeros' : `Ver los ${team.debates.length} →`}
+                    {verTodo.debates ? 'Ver solo los primeros' : `Ver los ${team.debates.length}`}
                   </button>
                 )}
               </>
             ) : (
-              <p className="text-[11px] text-slate-400 italic">Ninguno — sin choques frontales ahora mismo.</p>
+              <p className="text-badge text-slate-500 italic">Ninguno — sin choques frontales ahora mismo.</p>
             )}
           </div>
 
           <div className="border border-sky-200 bg-sky-50/40 rounded-lg p-3">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <p className="text-[10px] font-bold text-sky-600 uppercase tracking-wide">🧊 Destacados que se enfrían</p>
-                <p className="text-[10px] text-slate-400 mb-1.5">Llamar/Basque sin ningún informe en los últimos 60 días ({team.friosCount} de {team.destacadosTotal})</p>
+                <p className="text-badge font-bold text-sky-600 uppercase tracking-wide">Destacados que se enfrían</p>
+                <p className="text-badge text-slate-500 mb-1.5">Llamar/Basque sin ningún informe en los últimos 60 días ({team.friosCount} de {team.destacadosTotal})</p>
               </div>
               {team.friosTop.length > 0 && (
                 <button
                   onClick={() => descargarCsv('destacados_que_se_enfrian',
                     ['Jugador', 'Equipo', 'Posición', 'Año', 'Último informe'],
                     team.friosTop.map(f => [f.nombre, f.equipo, f.pos, f.anyo, f.ultimo]))}
-                  className="flex-shrink-0 text-[10px] font-semibold text-sky-700 hover:text-sky-900 underline decoration-dotted"
+                  className="flex-shrink-0 text-badge font-semibold text-sky-700 hover:text-sky-900 underline decoration-dotted"
                 >
-                  ↓ Excel
+                  <Download className="w-3 h-3 inline -mt-0.5" aria-hidden="true" /> Excel
                 </button>
               )}
             </div>
             {team.friosTop.length > 0 ? (
               <>
-                <ul className={`space-y-1 text-[11px] text-slate-700 ${verTodo.frios ? 'max-h-72 overflow-y-auto pr-1' : ''}`}>
+                <ul className={`space-y-1 text-badge text-slate-700 ${verTodo.frios ? 'max-h-72 overflow-y-auto pr-1' : ''}`}>
                   {(verTodo.frios ? team.friosTop : team.friosTop.slice(0, 6)).map(f => (
                     <li key={f.id}>
                       <strong>{f.nombre}</strong>
-                      <span className="text-slate-400">
+                      <span className="text-slate-500">
                         {[f.equipo, f.pos, f.anyo].filter(Boolean).length > 0 && ` (${[f.equipo, f.pos, f.anyo].filter(Boolean).join(' · ')})`}
                         {' '}— último informe: {f.ultimo}
                       </span>
@@ -589,14 +589,14 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
                 {team.friosTop.length > 6 && (
                   <button
                     onClick={() => setVerTodo(v => ({ ...v, frios: !v.frios }))}
-                    className="mt-1.5 text-[10.5px] font-semibold text-sky-700 hover:text-sky-900"
+                    className="mt-1.5 text-badge font-semibold text-sky-700 hover:text-sky-900"
                   >
-                    {verTodo.frios ? '← Ver solo los primeros' : `Ver los ${team.friosTop.length} →`}
+                    {verTodo.frios ? 'Ver solo los primeros' : `Ver los ${team.friosTop.length}`}
                   </button>
                 )}
               </>
             ) : (
-              <p className="text-[11px] text-slate-400 italic">Todos los destacados tienen informe reciente. 👏</p>
+              <p className="text-badge text-slate-500 italic">Todos los destacados tienen informe reciente. 👏</p>
             )}
           </div>
         </div>
@@ -604,7 +604,7 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
         {/* Reparto + posiciones */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="border border-slate-100 rounded-lg p-3">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Reparto del esfuerzo</p>
+            <p className="text-badge font-bold text-slate-500 uppercase tracking-wide">Reparto del esfuerzo</p>
             <div className="flex h-3 rounded-full overflow-hidden mt-2">
               {team.reparto.map(([sc, n], i) => (
                 <div key={sc}
@@ -613,19 +613,19 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
                      style={{ width: `${(n / team.total) * 100}%` }} />
               ))}
             </div>
-            <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5 text-[10px] text-slate-500">
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5 text-badge text-slate-500">
               {team.reparto.map(([sc, n]) => <span key={sc}><strong>{sc}</strong> {Math.round((n / team.total) * 100)}%</span>)}
             </div>
             {team.cargaMax >= 50 && (
-              <p className="text-[10px] text-amber-600 mt-1.5">⚠ Un solo scout firma el {team.cargaMax}% de los informes.</p>
+              <p className="text-badge text-amber-600 mt-1.5">⚠ Un solo scout firma el {team.cargaMax}% de los informes.</p>
             )}
           </div>
 
           <div className="border border-slate-100 rounded-lg p-3">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Informes por posición</p>
+            <p className="text-badge font-bold text-slate-500 uppercase tracking-wide">Informes por posición</p>
             <div className="mt-2 space-y-1.5">
               {team.posiciones.map(pz => (
-                <div key={pz.g} className="flex items-center gap-2 text-[11px]">
+                <div key={pz.g} className="flex items-center gap-2 text-badge">
                   <span className="w-20 text-slate-600 flex-shrink-0">{pz.g}</span>
                   <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
                     <div className="h-full bg-blue-400" style={{ width: `${Math.round((pz.n / maxPos) * 100)}%` }} />
@@ -634,7 +634,7 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
                 </div>
               ))}
             </div>
-            <p className="text-[10px] text-slate-300 mt-1.5">Una barra muy corta = zona del campo que apenas estamos viendo.</p>
+            <p className="text-badge text-slate-300 mt-1.5">Una barra muy corta = zona del campo que apenas estamos viendo.</p>
           </div>
         </div>
       </div>
@@ -643,7 +643,7 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-100">
           <h3 className="text-sm font-semibold text-slate-700">Comparativa de scouts</h3>
-          <p className="text-[11px] text-slate-400 mt-0.5">
+          <p className="text-badge text-slate-500 mt-0.5">
             Clic en una fila para ver el detalle. Las métricas con pocos datos se muestran como «—» en vez de engañar.
           </p>
         </div>
@@ -671,7 +671,7 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
                 >
                   <td className="px-3 py-2">
                     <span className="inline-flex items-center gap-2">
-                      <span className="w-6 h-6 rounded-full bg-slate-200 text-[9px] font-bold flex items-center justify-center text-slate-600">{m.persona}</span>
+                      <span className="w-6 h-6 rounded-full bg-slate-200 text-badge font-bold flex items-center justify-center text-slate-600">{m.persona}</span>
                       <span className="font-medium text-slate-800">{m.name}</span>
                     </span>
                   </td>
@@ -694,32 +694,32 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
       {sel && (
         <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-4">
           <div className="flex items-center gap-2.5">
-            <span className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 text-[11px] font-bold flex items-center justify-center">{sel.persona}</span>
+            <span className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 text-badge font-bold flex items-center justify-center">{sel.persona}</span>
             <div>
               <h3 className="text-sm font-bold text-slate-800">{sel.name}</h3>
-              <p className="text-[11px] text-slate-400">{sel.total} informes · {sel.jugadores} jugadores · {sel.partidos} partidos con informe</p>
+              <p className="text-badge text-slate-500">{sel.total} informes · {sel.jugadores} jugadores · {sel.partidos} partidos con informe</p>
             </div>
           </div>
 
           {/* Ritmo */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="border border-slate-100 rounded-lg p-3">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide flex items-center gap-1"><FileText className="w-3 h-3" /> Ritmo (6 meses)</p>
+              <p className="text-badge font-bold text-slate-500 uppercase tracking-wide flex items-center gap-1"><FileText className="w-3 h-3" /> Ritmo (6 meses)</p>
               <div className="flex items-end gap-1.5 mt-2 h-16">
                 {sel.mesesSpark.map(m => (
                   <div key={m.label} className="flex-1 flex flex-col items-center gap-0.5">
-                    <span className="text-[9px] text-slate-500">{m.count || ''}</span>
+                    <span className="text-badge text-slate-500">{m.count || ''}</span>
                     <div className="w-full bg-blue-400 rounded-t" style={{ height: `${Math.max((m.count / maxSpark) * 44, m.count ? 3 : 0)}px` }} />
-                    <span className="text-[9px] text-slate-400">{m.label}</span>
+                    <span className="text-badge text-slate-500">{m.label}</span>
                   </div>
                 ))}
               </div>
-              <p className="text-[10px] text-slate-400 mt-1.5">{sel.last30} en los últimos 30 días</p>
+              <p className="text-badge text-slate-500 mt-1.5">{sel.last30} en los últimos 30 días</p>
             </div>
 
             {/* Escritura */}
             <div className="border border-slate-100 rounded-lg p-3">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide flex items-center gap-1"><Fingerprint className="w-3 h-3" /> Escritura</p>
+              <p className="text-badge font-bold text-slate-500 uppercase tracking-wide flex items-center gap-1"><Fingerprint className="w-3 h-3" /> Escritura</p>
               <div className="mt-2 space-y-1 text-xs text-slate-600">
                 <p><strong>{sel.palabrasMedia}</strong> palabras/informe de media</p>
                 <p>{sel.cortos} cortos (&lt;40) · {sel.largos} largos (&gt;150)</p>
@@ -730,14 +730,14 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
 
             {/* Conclusiones */}
             <div className="border border-slate-100 rounded-lg p-3">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide flex items-center gap-1"><Target className="w-3 h-3" /> Conclusiones ({sel.pctConclusion}% de sus informes)</p>
+              <p className="text-badge font-bold text-slate-500 uppercase tracking-wide flex items-center gap-1"><Target className="w-3 h-3" /> Conclusiones ({sel.pctConclusion}% de sus informes)</p>
               <div className="mt-2 space-y-1.5">
                 {(['Llamar', 'Seguir', 'Descartar', 'Visto'] as const).map(c => {
                   const n = sel.conclusiones[c] ?? 0
                   const total = Object.values(sel.conclusiones).reduce((a, b) => a + b, 0) || 1
                   const color = c === 'Llamar' ? 'bg-amber-400' : c === 'Seguir' ? 'bg-blue-400' : c === 'Visto' ? 'bg-slate-300' : 'bg-red-400'
                   return (
-                    <div key={c} className="flex items-center gap-2 text-[11px]">
+                    <div key={c} className="flex items-center gap-2 text-badge">
                       <span className="w-16 text-slate-600">{c}</span>
                       <div className="flex-1 bg-slate-100 rounded-full h-1.5 overflow-hidden">
                         <div className={`h-full ${color}`} style={{ width: `${Math.round((n / total) * 100)}%` }} />
@@ -747,7 +747,7 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
                   )
                 })}
                 {sel.exigencia !== null && sel.exigencia === 0 && (
-                  <p className="text-[10px] text-amber-600 flex items-center gap-1 mt-1"><AlertTriangle className="w-3 h-3" /> Nunca descarta: puede que no esté filtrando</p>
+                  <p className="text-badge text-amber-600 flex items-center gap-1 mt-1"><AlertTriangle className="w-3 h-3" /> Nunca descarta: puede que no esté filtrando</p>
                 )}
               </div>
             </div>
@@ -756,26 +756,26 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
           {/* Congruencia + acierto + temprana */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="border border-slate-100 rounded-lg p-3">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide flex items-center gap-1"><Handshake className="w-3 h-3" /> Congruencia con el resto</p>
+              <p className="text-badge font-bold text-slate-500 uppercase tracking-wide flex items-center gap-1"><Handshake className="w-3 h-3" /> Congruencia con el resto</p>
               <p className="text-2xl font-bold text-slate-800 mt-1">{sel.congruencia !== null ? `${sel.congruencia}%` : '—'}</p>
-              <p className="text-[10px] text-slate-400 mt-0.5">
+              <p className="text-badge text-slate-500 mt-0.5">
                 {sel.comparables > 0
                   ? `Coincide con la mayoría en ${sel.comparables} jugador${sel.comparables !== 1 ? 'es' : ''} evaluados también por otros`
                   : 'Sin jugadores evaluados en común con otros scouts'}
               </p>
             </div>
             <div className="border border-slate-100 rounded-lg p-3">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide flex items-center gap-1"><Target className="w-3 h-3" /> Acierto de sus apuestas</p>
+              <p className="text-badge font-bold text-slate-500 uppercase tracking-wide flex items-center gap-1"><Target className="w-3 h-3" /> Acierto de sus apuestas</p>
               <p className="text-2xl font-bold text-slate-800 mt-1">{sel.aciertoPos !== null ? `${sel.aciertoPos}%` : '—'}</p>
-              <p className="text-[10px] text-slate-400 mt-0.5">
+              <p className="text-badge text-slate-500 mt-0.5">
                 De sus {sel.nPos} «Llamar», los que hoy siguen destacados (Llamar/Basque o en Firmar).
                 {sel.aciertoDesc !== null && ` Descartes confirmados: ${sel.aciertoDesc}% de ${sel.nDesc}.`}
               </p>
             </div>
             <div className="border border-slate-100 rounded-lg p-3">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide flex items-center gap-1"><Eye className="w-3 h-3" /> Detección temprana</p>
+              <p className="text-badge font-bold text-slate-500 uppercase tracking-wide flex items-center gap-1"><Eye className="w-3 h-3" /> Detección temprana</p>
               <p className="text-2xl font-bold text-slate-800 mt-1">{sel.temprana !== null ? `${sel.temprana}%` : '—'}</p>
-              <p className="text-[10px] text-slate-400 mt-0.5">
+              <p className="text-badge text-slate-500 mt-0.5">
                 {sel.nTemprana > 0
                   ? `De ${sel.nTemprana} jugadores destacados que vieron varios scouts, las veces que su informe fue el primero`
                   : 'Aún sin jugadores destacados vistos por varios scouts'}
@@ -785,19 +785,19 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
 
           {/* Frases habituales */}
           <div className="border border-slate-100 rounded-lg p-3">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide flex items-center gap-1"><Users className="w-3 h-3" /> Frases habituales</p>
+            <p className="text-badge font-bold text-slate-500 uppercase tracking-wide flex items-center gap-1"><Users className="w-3 h-3" /> Frases habituales</p>
             {sel.frases.length > 0 ? (
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {sel.frases.map(f => (
-                  <span key={f.frase} className="text-[11px] bg-slate-50 border border-slate-200 text-slate-600 px-2 py-0.5 rounded-full">
-                    «{f.frase}» <span className="text-slate-400">×{f.veces}</span>
+                  <span key={f.frase} className="text-badge bg-slate-50 border border-slate-200 text-slate-600 px-2 py-0.5 rounded-full">
+                    «{f.frase}» <span className="text-slate-500">×{f.veces}</span>
                   </span>
                 ))}
               </div>
             ) : (
-              <p className="text-[11px] text-slate-400 italic mt-1.5">Sin muletillas detectables — buena señal.</p>
+              <p className="text-badge text-slate-500 italic mt-1.5">Sin muletillas detectables — buena señal.</p>
             )}
-            <p className="text-[10px] text-slate-300 mt-1.5">Expresiones de 3 palabras que aparecen en 3 o más informes suyos.</p>
+            <p className="text-badge text-slate-300 mt-1.5">Expresiones de 3 palabras que aparecen en 3 o más informes suyos.</p>
           </div>
 
         </div>
@@ -811,7 +811,7 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
             <dt className="font-bold text-slate-800">Concluye</dt>
             <dd className="mt-0.5">
               Porcentaje de sus informes que llevan una conclusión (Llamar, Seguir o Descartar), no solo texto.
-              Un informe sin conclusión describe; con conclusión, decide. <span className="text-slate-400">Cuanto más alto mejor:
+              Un informe sin conclusión describe; con conclusión, decide. <span className="text-slate-500">Cuanto más alto mejor:
               por debajo del 50% se marca en ámbar.</span>
             </dd>
           </div>
@@ -820,7 +820,7 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
             <dd className="mt-0.5">
               De sus informes con veredicto —Seguir, Llamar o Descartar; los «Visto» no cuentan—, el porcentaje que son
               «Descartar». Mide si el scout filtra o le vale todo.
-              <span className="text-slate-400"> No es «cuanto más mejor»: un 0% avisa de que nunca descarta (no filtra), y
+              <span className="text-slate-500"> No es «cuanto más mejor»: un 0% avisa de que nunca descarta (no filtra), y
               un valor altísimo puede indicar que va a ver a los jugadores equivocados. Lo sano es un término medio, y
               sobre todo que sea parecido entre scouts que ven el mismo nivel de fútbol.</span>
             </dd>
@@ -830,7 +830,7 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
             <dd className="mt-0.5">
               Porcentaje de expresiones de 4 palabras que no se repiten entre sus propios informes. Detecta los informes
               «de plantilla»: si escribe casi lo mismo de cada jugador, el número baja.
-              <span className="text-slate-400"> Por debajo del 55% se marca en ámbar: sus informes se parecen demasiado
+              <span className="text-slate-500"> Por debajo del 55% se marca en ámbar: sus informes se parecen demasiado
               entre sí. Complementa a las «frases habituales», que enseñan exactamente qué muletillas repite.</span>
             </dd>
           </div>
@@ -838,7 +838,7 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
             <dt className="font-bold text-slate-800">Congruencia</dt>
             <dd className="mt-0.5">
               Sobre los jugadores que también evaluaron otros scouts, el porcentaje de veces que su conclusión coincide
-              con la mayoría del resto. <span className="text-slate-400">Ni un extremo ni el otro es bueno: muy baja
+              con la mayoría del resto. <span className="text-slate-500">Ni un extremo ni el otro es bueno: muy baja
               significa que va por libre (o que ve cosas que los demás no ven — merece revisión caso a caso); un 100%
               constante significa que no aporta criterio propio. Solo se calcula con 5 o más jugadores en común.</span>
             </dd>
@@ -847,8 +847,8 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
             <dt className="font-bold text-slate-800">Acierto</dt>
             <dd className="mt-0.5">
               De los jugadores que él concluyó «Llamar», el porcentaje que HOY sigue destacado: en estado Llamar o Basque,
-              o dentro del pipeline de Firmar. En su ficha se añaden los «descartes confirmados»: de sus «Descartar»,
-              cuántos están hoy Descartados. <span className="text-slate-400">Es una aproximación, no una nota: el estado
+              o dentro de Firmar. En su ficha se añaden los «descartes confirmados»: de sus «Descartar»,
+              cuántos están hoy Descartados. <span className="text-slate-500">Es una aproximación, no una nota: el estado
               actual del jugador puede deberse en parte a sus propios informes, y a un fichaje aún le queda demostrar.
               Con más histórico se puede afinar comparando contra firmas y minutos reales.</span>
             </dd>
@@ -868,7 +868,7 @@ export function ScoutStats({ scoutingPlayers, scoutingReports, scoutingMatches: 
             </dd>
           </div>
         </dl>
-        <p className="text-[10px] text-slate-400 mt-3">
+        <p className="text-badge text-slate-500 mt-3">
           Regla general de toda la página: cuando una métrica tiene pocos datos (menos de 5 casos comparables, menos de
           10 conclusiones, textos escasos…) se muestra «—» en vez de un porcentaje que engañaría.
         </p>

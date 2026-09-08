@@ -78,7 +78,7 @@ export function AddToFirmasButton({ player, firmasEntries, currentProfile, onCre
       <button
         onClick={() => { setZone(zones[0] ?? ''); setOpen(o => !o) }}
         className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-slate-300 hover:bg-slate-50 transition-colors"
-        title="Crear su tarjeta en el pipeline de Firmar, vinculada a esta ficha"
+        title="Crear su tarjeta en Firmar, vinculada a esta ficha"
       >
         <PenLine className="w-3 h-3" />
         Añadir a Firmar
@@ -87,17 +87,17 @@ export function AddToFirmasButton({ player, firmasEntries, currentProfile, onCre
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-slate-200 rounded-xl shadow-xl p-3 w-64" onClick={e => e.stopPropagation()}>
-            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">¿En qué zona?</p>
+            <p className="text-badge font-bold text-slate-500 uppercase tracking-wide mb-1.5">¿En qué zona?</p>
             <select value={zone} onChange={e => setZone(e.target.value)} className={`w-full ${SELECT_CLS}`}>
               {zones.map(z => <option key={z} value={z}>{z}</option>)}
             </select>
-            <p className="mt-1.5 text-[10.5px] text-slate-400">Entra en estatus «Llamar», vinculado a esta ficha y contigo de encargado.</p>
+            <p className="mt-1.5 text-badge text-slate-500">Entra en estatus «Llamar», vinculado a esta ficha y contigo de encargado.</p>
             <div className="mt-2 flex justify-end gap-1.5">
-              <button onClick={() => setOpen(false)} className="px-2.5 py-1 rounded-lg text-[11px] text-slate-500 hover:bg-slate-100">Cancelar</button>
+              <button onClick={() => setOpen(false)} className="px-2.5 py-1 rounded-lg text-badge text-slate-500 hover:bg-slate-100">Cancelar</button>
               <button
                 onClick={() => void create()}
                 disabled={!zone || saving}
-                className="px-3 py-1 rounded-lg bg-primary text-white text-[11px] font-semibold disabled:opacity-40 hover:bg-primary/90"
+                className="px-3 py-1 rounded-lg bg-primary text-white text-badge font-semibold disabled:opacity-40 hover:bg-primary/90"
               >
                 {saving ? 'Añadiendo…' : 'Añadir'}
               </button>

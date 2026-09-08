@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react'
-import { X } from 'lucide-react'
+import { X, Settings2, ChevronDown, ChevronUp, MapPin, Bell, Map, TrendingUp, AlertTriangle } from 'lucide-react'
+import { ClickableRow, IconButton, Chip } from '../../components/ui'
 import type { ScoutingPlayer, ScoutingReport, ScoutingAssessment } from '../../types'
 import { ZONAS, SIN_ZONA, zonaDe, type Zona } from '../../lib/zonas'
 import { PITCH_SLOTS, POS_GROUPS, slotDe as pitchSlotOf, grupoDe as posGroupOf } from '../../lib/campo'
@@ -199,8 +200,8 @@ export function ConclusionesTab({ players, reports, threshold, onThresholdChange
           <span>
             Informe de <span className="font-mono font-semibold">{r.persona ?? '—'}</span> sobre{' '}
             <button onClick={() => onOpenPlayer(p.id)} className="font-semibold text-slate-800 hover:text-primary">{p.fullName}</button>
-            {' '}concluye <span className={`inline-flex px-1.5 py-0.5 rounded text-[11px] font-medium ${CONCLUSION_STYLE[conc] ?? ''}`}>{conc}</span>
-            {nth > 1 && <span className="text-slate-400 text-[11px]"> ({nth}º en {conc})</span>}
+            {' '}concluye <span className={`inline-flex px-1.5 py-0.5 rounded text-badge font-medium ${CONCLUSION_STYLE[conc] ?? ''}`}>{conc}</span>
+            {nth > 1 && <span className="text-slate-500 text-badge"> ({nth}º en {conc})</span>}
           </span>
         ),
       })
@@ -219,20 +220,20 @@ export function ConclusionesTab({ players, reports, threshold, onThresholdChange
   [players, reportsByPlayer])
 
   const segBtn = (active: boolean) =>
-    `px-2.5 py-1 rounded text-[11px] font-semibold transition-colors ${active ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`
+    `px-2.5 py-1 rounded text-badge font-semibold transition-colors ${active ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`
 
   return (
     <div className="space-y-4">
       {/* ── a) Candidatos a Llamar — bandeja de alertas ── */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-center gap-2">
-          <h3 className="text-sm font-bold text-slate-800">🔔 Candidatos a Llamar</h3>
+          <h3 className="text-sm font-bold text-slate-800 inline-flex items-center gap-1.5"><Bell className="w-4 h-4 text-amber-500" aria-hidden="true" /> Candidatos a Llamar</h3>
           {newCandidates.length > 0 && (
             <span className="text-xs bg-amber-400 text-amber-950 rounded-full px-2 py-0.5 font-bold">{newCandidates.length} nuevo{newCandidates.length !== 1 ? 's' : ''}</span>
           )}
-          <span className="text-[11px] text-slate-400 hidden sm:inline">jugadores con {threshold}+ informes «Llamar», sea cual sea su etiqueta</span>
+          <span className="text-badge text-slate-500 hidden sm:inline">jugadores con {threshold}+ informes «Llamar», sea cual sea su etiqueta</span>
           <div className="ml-auto flex items-center gap-1.5">
-            <span className="text-[11px] text-slate-400">Umbral</span>
+            <span className="text-badge text-slate-500">Umbral</span>
             <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
               {[2, 3, 4].map(n => (
                 <button key={n} onClick={() => onThresholdChange(n)} className={segBtn(threshold === n)}>{n}</button>
@@ -247,60 +248,62 @@ export function ConclusionesTab({ players, reports, threshold, onThresholdChange
             const delta = p.candidateSeenCount != null ? llamarCount - p.candidateSeenCount : null
             const lastDate = lastReport ? (lastReport.fecha ?? lastReport.createdAt) : undefined
             return (
-              <div
+              <ClickableRow
                 key={p.id}
                 onClick={() => onOpenPlayer(p.id)}
+                aria-label={`Abrir ficha de ${p.fullName}`}
                 title={lastReport?.texto ? `Último informe (${lastReport.persona ?? '—'}): ${lastReport.texto}` : undefined}
-                className={`flex items-center gap-2 px-4 py-2 border-b border-slate-50 last:border-b-0 cursor-pointer transition-colors ${
+                className={`rounded-none px-4 py-2 border-b border-slate-50 last:border-b-0 ${
                   hidden ? 'opacity-60 hover:opacity-90 hover:bg-slate-50' : 'bg-amber-50/40 hover:bg-amber-50'
                 }`}
-              >
-                <span className="text-xs font-semibold text-slate-800 whitespace-nowrap">{p.fullName}</span>
-                <span className="text-[11px] text-slate-400 truncate hidden sm:inline">
-                  {[p.position1, birthYearFromBirthdate(p.birthdate) !== '—' ? birthYearFromBirthdate(p.birthdate) : null, p.team].filter(Boolean).join(' · ')}
-                </span>
-                <AssessmentChip a={p.assessment} small />
-                <span className="flex-1" />
-                <span className="text-[10px] font-extrabold bg-amber-500 text-white rounded-full px-2 py-0.5 whitespace-nowrap">
-                  {llamarCount}× Llamar
-                </span>
-                {!hidden && delta != null && delta > 0 && (
-                  <span className="text-[10px] font-bold text-amber-700 bg-amber-100 border border-amber-200 rounded-full px-1.5 py-0.5 whitespace-nowrap">
-                    +{delta} desde ocultado
-                  </span>
-                )}
-                {lastDate && (
-                  <span className="text-[10px] text-slate-400 whitespace-nowrap hidden md:inline">
-                    últ. {lastReport?.persona ?? '—'} · {relativeDate(lastDate) || fmtDate(lastDate)}
-                  </span>
-                )}
-                {isAdmin && (
+                actions={isAdmin ? (
                   hidden ? (
                     <button
-                      onClick={e => { e.stopPropagation(); onSetCandidateSeen(p, undefined) }}
-                      className="text-[10px] font-semibold text-slate-500 border border-slate-200 rounded-full px-2 py-0.5 hover:bg-white hover:text-slate-700 transition-colors"
+                      type="button"
+                      onClick={() => onSetCandidateSeen(p, undefined)}
+                      className="text-badge font-semibold text-slate-600 border border-slate-200 rounded-full px-2 py-0.5 hover:bg-white hover:text-slate-800 transition-colors min-h-11 sm:min-h-0"
                     >
                       Restaurar
                     </button>
                   ) : (
-                    <button
-                      onClick={e => { e.stopPropagation(); onSetCandidateSeen(p, llamarCount) }}
-                      title="Ocultar de la bandeja (reaparece si suma informes nuevos)"
-                      aria-label={`Ocultar a ${p.fullName}`}
-                      className="text-slate-300 hover:text-slate-600 p-1 transition-colors"
+                    <IconButton
+                      label={`Ocultar a ${p.fullName} de la bandeja (reaparece si suma informes nuevos)`}
+                      onClick={() => onSetCandidateSeen(p, llamarCount)}
                     >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
+                      <X />
+                    </IconButton>
                   )
+                ) : undefined}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                <span className="text-secondary font-semibold text-slate-800 whitespace-nowrap">{p.fullName}</span>
+                <span className="text-badge text-slate-500 truncate hidden sm:inline">
+                  {[p.position1, birthYearFromBirthdate(p.birthdate) !== '—' ? birthYearFromBirthdate(p.birthdate) : null, p.team].filter(Boolean).join(' · ')}
+                </span>
+                <AssessmentChip a={p.assessment} small />
+                <span className="flex-1" />
+                <span className="text-badge font-extrabold bg-amber-500 text-white rounded-full px-2 py-0.5 whitespace-nowrap">
+                  {llamarCount}× Llamar
+                </span>
+                {!hidden && delta != null && delta > 0 && (
+                  <span className="text-badge font-bold text-amber-700 bg-amber-100 border border-amber-200 rounded-full px-1.5 py-0.5 whitespace-nowrap">
+                    +{delta} desde ocultado
+                  </span>
                 )}
-              </div>
+                {lastDate && (
+                  <span className="text-badge text-slate-500 whitespace-nowrap hidden md:inline">
+                    últ. {lastReport?.persona ?? '—'} · {relativeDate(lastDate) || fmtDate(lastDate)}
+                  </span>
+                )}
+                </div>
+              </ClickableRow>
             )
           }
 
           return (
             <>
               {newCandidates.length === 0 ? (
-                <p className="text-xs text-slate-400 italic px-4 py-4">
+                <p className="text-secondary text-slate-500 italic px-4 py-4">
                   Sin candidatos nuevos — todo revisado. Los ocultados reaparecen si suman informes «Llamar» nuevos.
                 </p>
               ) : (
@@ -311,10 +314,13 @@ export function ConclusionesTab({ players, reports, threshold, onThresholdChange
               {hiddenCandidates.length > 0 && (
                 <div className="border-t border-slate-100">
                   <button
+                    type="button"
                     onClick={() => setShowHidden(v => !v)}
-                    className="w-full text-left px-4 py-2 text-[11px] font-medium text-slate-400 hover:text-slate-600 transition-colors"
+                    aria-expanded={showHidden}
+                    className="w-full text-left px-4 py-2 text-badge font-medium text-slate-600 hover:text-slate-900 transition-colors inline-flex items-center gap-1"
                   >
-                    {showHidden ? '▴ Ocultar revisados' : `▾ Ver revisados (${hiddenCandidates.length})`}
+                    {showHidden ? <ChevronUp className="w-3.5 h-3.5" aria-hidden="true" /> : <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />}
+                    {showHidden ? 'Ocultar revisados' : `Ver revisados (${hiddenCandidates.length})`}
                   </button>
                   {showHidden && (
                     <div className="max-h-[240px] overflow-y-auto border-t border-slate-50">
@@ -331,16 +337,12 @@ export function ConclusionesTab({ players, reports, threshold, onThresholdChange
       {/* ── b) Mapa ── */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-center gap-2">
-          <h3 className="text-sm font-bold text-slate-800">🗺️ Jugadores en {mapAssessment}</h3>
+          <h3 className="text-sm font-bold text-slate-800 inline-flex items-center gap-1.5"><Map className="w-4 h-4 text-slate-500" aria-hidden="true" /> Jugadores en {mapAssessment}</h3>
           <span className="text-xs bg-slate-100 text-slate-600 rounded-full px-2 py-0.5 font-semibold">{mapPlayers.length}</span>
           {zonaFilter !== 'all' && (
-            <button
-              onClick={() => { setZonaFilter('all'); setSelectedCell(null) }}
-              className="text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5 hover:bg-blue-100"
-              title="Quitar el filtro de zona"
-            >
-              📍 {zonaFilter} ✕
-            </button>
+            <Chip active icon={<MapPin />} onRemove={() => { setZonaFilter('all'); setSelectedCell(null) }}>
+              {zonaFilter}
+            </Chip>
           )}
           <div className="ml-auto flex flex-wrap items-center gap-1.5">
             {/* Filtro geográfico: los clubes están agrupados por zona en src/lib/zonas.ts */}
@@ -350,7 +352,7 @@ export function ConclusionesTab({ players, reports, threshold, onThresholdChange
               className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
               title="Filtrar por zona geográfica del club"
             >
-              <option value="all">📍 Todas las zonas</option>
+              <option value="all">Todas las zonas</option>
               {ZONAS.map(z => (
                 <option key={z} value={z} disabled={!conteoZonas[z]}>
                   {z} ({conteoZonas[z] ?? 0})
@@ -360,14 +362,12 @@ export function ConclusionesTab({ players, reports, threshold, onThresholdChange
                 <option value={SIN_ZONA}>{SIN_ZONA} ({conteoZonas[SIN_ZONA]})</option>
               )}
             </select>
-            <button
-              onClick={onAbrirZonas}
-              title="Cambiar la zona de un club"
-              className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-500 hover:text-slate-700 hover:border-slate-400"
-            >⚙</button>
+            <IconButton label="Cambiar la zona de un club" variant="secondary" onClick={onAbrirZonas}>
+              <Settings2 />
+            </IconButton>
             <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
               <button className={segBtn(mapView === 'matriz')} onClick={() => setMapView('matriz')}>Matriz</button>
-              <button className={segBtn(mapView === 'campo')} onClick={() => setMapView('campo')}>⚽ Campograma</button>
+              <button className={segBtn(mapView === 'campo')} onClick={() => setMapView('campo')}>Campograma</button>
             </div>
             {mapView === 'matriz' && (
               <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
@@ -384,7 +384,7 @@ export function ConclusionesTab({ players, reports, threshold, onThresholdChange
         </div>
 
         {mapPlayers.length === 0 ? (
-          <p className="text-xs text-slate-400 italic px-4 py-5">
+          <p className="text-xs text-slate-500 italic px-4 py-5">
             No hay jugadores en {mapAssessment}{zonaFilter !== 'all' ? ` en ${zonaFilter}` : ''}.
           </p>
         ) : mapView === 'matriz' ? (
@@ -393,11 +393,11 @@ export function ConclusionesTab({ players, reports, threshold, onThresholdChange
               <table className="w-full min-w-[560px]">
                 <thead>
                   <tr>
-                    <th className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1.5" />
+                    <th className="text-left text-badge font-bold text-slate-500 uppercase tracking-wider px-2 py-1.5" />
                     {cols.map(c => (
-                      <th key={c} className="text-center text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1.5">{c}</th>
+                      <th key={c} className="text-center text-badge font-bold text-slate-500 uppercase tracking-wider px-2 py-1.5">{c}</th>
                     ))}
-                    <th className="text-center text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1.5">Total</th>
+                    <th className="text-center text-badge font-bold text-slate-500 uppercase tracking-wider px-2 py-1.5">Total</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -406,7 +406,7 @@ export function ConclusionesTab({ players, reports, threshold, onThresholdChange
                     return (
                       <tr key={g}>
                         <td className="px-2 py-1 text-xs font-bold text-slate-600 whitespace-nowrap">
-                          {g}{g !== '—' && <span className="text-slate-400 font-medium text-[10px]"> ({new Date().getFullYear() - parseInt(g)} años)</span>}
+                          {g}{g !== '—' && <span className="text-slate-500 font-medium text-badge"> ({new Date().getFullYear() - parseInt(g)} años)</span>}
                         </td>
                         {cols.map(c => {
                           const n = matrix[g]?.[c]?.length ?? 0
@@ -435,7 +435,7 @@ export function ConclusionesTab({ players, reports, threshold, onThresholdChange
             </div>
             {selectedCell && cellPlayers.length > 0 && (
               <div className="mx-4 mb-4 border-t border-dashed border-slate-200 pt-3">
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
+                <p className="text-badge font-bold text-slate-500 uppercase tracking-wide mb-1.5">
                   {mapAssessment} · {selectedCell.row} · {selectedCell.col}
                 </p>
                 <div className="space-y-0.5">
@@ -448,8 +448,8 @@ export function ConclusionesTab({ players, reports, threshold, onThresholdChange
                         className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 text-left"
                       >
                         <span className="text-xs font-semibold text-slate-800">{p.fullName}</span>
-                        <span className="text-[11px] text-slate-400">{p.team ?? ''}</span>
-                        <span className="ml-auto text-[10px] text-slate-400">
+                        <span className="text-badge text-slate-500">{p.team ?? ''}</span>
+                        <span className="ml-auto text-badge text-slate-500">
                           {last ? `últ. informe ${fmtDate(last.fecha ?? last.createdAt)}` : 'sin informes'}
                         </span>
                       </button>
@@ -463,7 +463,7 @@ export function ConclusionesTab({ players, reports, threshold, onThresholdChange
           <div className="p-4">
             {/* Filtro de generación */}
             <div className="flex items-center gap-1.5 mb-3">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Generación</span>
+              <span className="text-badge font-bold text-slate-500 uppercase tracking-wide">Generación</span>
               <select value={genFilter} onChange={e => setGenFilter(e.target.value)} className={SELECT_CLS}>
                 <option value="all">Todas</option>
                 {pitchGens.map(g => <option key={g} value={g}>{g}</option>)}
@@ -489,10 +489,10 @@ export function ConclusionesTab({ players, reports, threshold, onThresholdChange
                 const extra = pls.length - visible.length
                 return (
                   <div key={s.id} className="absolute flex flex-col items-center gap-0.5 z-10" style={{ left: `${s.x}%`, top: `${s.y}%`, transform: 'translate(-50%,-50%)' }}>
-                    <div className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-white text-[10px] font-extrabold tracking-wide border ${pls.length === 0 ? 'opacity-40 border-white/30 bg-white/10' : 'border-white/40 bg-white/15'}`}
+                    <div className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-white text-badge font-extrabold tracking-wide border ${pls.length === 0 ? 'opacity-40 border-white/30 bg-white/10' : 'border-white/40 bg-white/15'}`}
                       style={{ backdropFilter: 'blur(2px)' }}>
                       {s.id}
-                      {pls.length > 0 && <span className="bg-amber-500 text-[9px] text-amber-950 rounded-full px-1.5 font-extrabold">{pls.length}</span>}
+                      {pls.length > 0 && <span className="bg-amber-500 text-badge text-amber-950 rounded-full px-1.5 font-extrabold">{pls.length}</span>}
                     </div>
                     <div className="flex flex-col items-center gap-0.5">
                       {visible.map(p => (
@@ -500,7 +500,7 @@ export function ConclusionesTab({ players, reports, threshold, onThresholdChange
                           key={p.id}
                           onClick={() => onOpenPlayer(p.id)}
                           title={`${p.fullName}${p.team ? ' · ' + p.team : ''}${p.position2 ? ' · 2ª: ' + p.position2 : ''}`}
-                          className="bg-amber-50 border border-amber-200 text-amber-900 text-[9.5px] font-bold rounded-md px-1.5 py-px whitespace-nowrap shadow hover:bg-amber-100 transition-colors max-w-[130px] truncate"
+                          className="bg-amber-50 border border-amber-200 text-amber-900 text-badge font-bold rounded-md px-1.5 py-px whitespace-nowrap shadow hover:bg-amber-100 transition-colors max-w-[130px] truncate"
                         >
                           {p.fullName.split(' ').slice(0, 2).join(' ')}
                           {p.birthdate && <span className="font-medium text-amber-600"> '{p.birthdate.slice(2, 4)}</span>}
@@ -509,7 +509,7 @@ export function ConclusionesTab({ players, reports, threshold, onThresholdChange
                       {extra > 0 && (
                         <button
                           onClick={() => setExpandedSlots(prev => { const n = new Set(prev); n.add(s.id); return n })}
-                          className="text-[9px] text-white/85 hover:text-white font-semibold"
+                          className="text-badge text-white/85 hover:text-white font-semibold"
                         >
                           +{extra} más
                         </button>
@@ -519,7 +519,7 @@ export function ConclusionesTab({ players, reports, threshold, onThresholdChange
                 )
               })}
             </div>
-            <p className="text-[10.5px] text-slate-400 text-center mt-2 max-w-[560px] mx-auto leading-relaxed">
+            <p className="text-badge text-slate-500 text-center mt-2 max-w-[560px] mx-auto leading-relaxed">
               Clic en un jugador → ficha. Los jugadores con 2ª posición cuentan en la principal (la 2ª se ve al pasar el ratón).
               {pitchBySlot.unmapped > 0 && ` · ${pitchBySlot.unmapped} jugador${pitchBySlot.unmapped !== 1 ? 'es' : ''} sin posición reconocida (no se muestran)`}
             </p>
@@ -530,13 +530,13 @@ export function ConclusionesTab({ players, reports, threshold, onThresholdChange
       {/* ── c) Movimientos ── */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
-          <h3 className="text-sm font-bold text-slate-800">📈 Movimientos · últimas 3 semanas</h3>
+          <h3 className="text-sm font-bold text-slate-800 inline-flex items-center gap-1.5"><TrendingUp className="w-4 h-4 text-slate-500" aria-hidden="true" /> Movimientos · últimas 3 semanas</h3>
           {staleDecidir.length > 0 && (
             <button
               onClick={() => setShowStale(v => !v)}
-              className="ml-auto text-[11px] font-semibold text-orange-700 bg-orange-50 border border-orange-200 rounded-full px-2.5 py-1 hover:bg-orange-100 transition-colors"
+              className="ml-auto text-badge font-semibold text-orange-700 bg-orange-50 border border-orange-200 rounded-full px-2.5 py-1 hover:bg-orange-100 transition-colors"
             >
-              ⚠️ {staleDecidir.length} en Decidir sin actividad {'>'}6 sem {showStale ? '▴' : '▾'}
+              <AlertTriangle className="w-3.5 h-3.5 inline -mt-0.5" aria-hidden="true" /> {staleDecidir.length} en Decidir sin actividad {'>'}6 sem {showStale ? <ChevronUp className="w-3.5 h-3.5 inline" aria-hidden="true" /> : <ChevronDown className="w-3.5 h-3.5 inline" aria-hidden="true" />}
             </button>
           )}
         </div>
@@ -546,7 +546,7 @@ export function ConclusionesTab({ players, reports, threshold, onThresholdChange
               <button
                 key={p.id}
                 onClick={() => onOpenPlayer(p.id)}
-                className="text-[11px] font-semibold bg-white border border-orange-200 text-orange-800 rounded-full px-2.5 py-1 hover:bg-orange-100 transition-colors"
+                className="text-badge font-semibold bg-white border border-orange-200 text-orange-800 rounded-full px-2.5 py-1 hover:bg-orange-100 transition-colors"
               >
                 {p.fullName}{p.birthdate ? ` '${p.birthdate.slice(2, 4)}` : ''}
               </button>
@@ -554,12 +554,12 @@ export function ConclusionesTab({ players, reports, threshold, onThresholdChange
           </div>
         )}
         {movements.length === 0 ? (
-          <p className="text-xs text-slate-400 italic px-4 py-5">Sin movimientos en las últimas 3 semanas.</p>
+          <p className="text-secondary text-slate-500 italic px-4 py-5">Sin movimientos en las últimas 3 semanas.</p>
         ) : (
           <div className="px-4 py-2">
             {movements.map((m, i) => (
               <div key={i} className="flex items-baseline gap-3 py-2 border-b border-slate-50 last:border-b-0 text-xs text-slate-600">
-                <span className="text-[10.5px] text-slate-400 whitespace-nowrap w-14 flex-shrink-0">
+                <span className="text-badge text-slate-500 whitespace-nowrap w-14 flex-shrink-0">
                   {new Date(m.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
                 </span>
                 {m.node}

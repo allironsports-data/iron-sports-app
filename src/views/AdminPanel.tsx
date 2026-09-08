@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react'
-import logoImg from '../assets/logo.jpeg'
 import type { Profile } from '../contexts/AuthContext'
 import type { Task, Player, ScoutingPlayer, ScoutingReport, ScoutingMatch, FirmasEntry } from '../types'
 import { CaptacionStats } from './CaptacionStats'
@@ -10,7 +9,12 @@ import { AUDIT_TABLAS } from '../lib/dbAudit'
 import { HistorialCambios } from '../components/HistorialCambios'
 import { fechaRelativa } from '../lib/formato'
 import { fetchClientErrors, vaciarErroresAntiguos, type ClientError } from '../lib/dbErrors'
-import { ArrowLeft, LogOut, Shield, UserPlus, Check, X, Edit3, Copy, Trash2, KeyRound, AlertTriangle, BarChart3, Users, ChevronDown, ChevronRight, Clock, CheckCircle2, Circle, Eye, History, Bug, Search } from 'lucide-react'
+import { Shield, UserPlus, Check, X, Edit3, Copy, Trash2, KeyRound, AlertTriangle, BarChart3, Users, ChevronDown, ChevronRight, Clock, CheckCircle2, Circle, Eye, History, Bug, Search } from 'lucide-react'
+import { DetailHeader } from '../components/shell'
+import { SectionTabs, Button, IconButton, Field, Input, Select, Badge } from '../components/ui'
+import { ConfirmModal } from '../components/ConfirmModal'
+import { useToastContext } from '../hooks/useToastContext'
+import { L, PRIORITY_LABELS } from '../lib/labels'
 
 
 function generatePassword() {
@@ -28,50 +32,34 @@ interface Props {
   firmasEntries: FirmasEntry[]
   onBack: () => void
   onRefresh: () => Promise<void>
-  onLogout: () => void
   onOpenTable?: () => void
 }
 
 type AdminTab = 'equipo' | 'tareas' | 'captacion' | 'historial' | 'errores'
 
-export function AdminPanel({ profiles, tasks, players, scoutingPlayers, scoutingReports, scoutingMatches, firmasEntries, onBack, onRefresh, onLogout, onOpenTable }: Props) {
+export function AdminPanel({ profiles, tasks, players, scoutingPlayers, scoutingReports, scoutingMatches, firmasEntries, onBack, onRefresh, onOpenTable }: Props) {
   const [tab, setTab] = useState<AdminTab>('equipo')
 
-  const tabs: { id: AdminTab; label: string; icon: React.ReactNode }[] = [
-    { id: 'equipo', label: 'Equipo', icon: <Users className="w-4 h-4" /> },
-    { id: 'tareas', label: 'Seguimiento', icon: <BarChart3 className="w-4 h-4" /> },
-    { id: 'captacion', label: 'Stats Captación', icon: <Eye className="w-4 h-4" /> },
-    { id: 'historial', label: 'Historial', icon: <History className="w-4 h-4" /> },
-    { id: 'errores', label: 'Errores', icon: <Bug className="w-4 h-4" /> },
+  const tabs = [
+    { id: 'equipo' as const, label: L.equipo, icon: <Users /> },
+    { id: 'tareas' as const, label: 'Seguimiento', icon: <BarChart3 /> },
+    { id: 'captacion' as const, label: `Stats ${L.captacion}`, icon: <Eye /> },
+    { id: 'historial' as const, label: 'Historial', icon: <History /> },
+    { id: 'errores' as const, label: 'Errores', icon: <Bug /> },
   ]
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
-        <div className="max-w-5xl mx-auto flex items-center gap-3 px-4 py-3">
-          <button onClick={onBack} className="p-2 sm:p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <img src={logoImg} alt="" className="h-8 w-auto rounded" />
-          <div className="flex-1 min-w-0">
-            <h1 className="text-base font-bold text-slate-800 truncate">Administración</h1>
-            <p className="text-xs text-slate-400 truncate">Gestión del equipo y seguimiento</p>
-          </div>
-          <button onClick={onLogout} className="p-2 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600" title="Cerrar sesión">
-            <LogOut className="w-4 h-4" />
-          </button>
-        </div>
-        <div className="max-w-5xl mx-auto px-4 flex gap-1 overflow-x-auto">
-          {tabs.map((t) => (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
-                tab === t.id ? 'border-primary text-slate-800' : 'border-transparent text-slate-400 hover:text-slate-600'
-              }`}>
-              {t.icon}{t.label}
-            </button>
-          ))}
-        </div>
-      </header>
+    <div className="min-h-dvh bg-slate-50">
+      {/* Pantalla admin sin nivel 1 propio: DetailHeader con atrás */}
+      <DetailHeader onBack={onBack} title="Administración" subtitle="Gestión del equipo y seguimiento" />
+      <SectionTabs<AdminTab>
+        variant="secondary"
+        label="Secciones de administración"
+        className="sticky top-[var(--shell-h)] z-20 bg-white border-b border-slate-200 px-4 [&>div]:mx-auto [&>div]:max-w-5xl"
+        items={tabs}
+        value={tab}
+        onChange={setTab}
+      />
 
       <main className="max-w-5xl mx-auto px-4 py-6">
         {tab === 'equipo' && <TeamTab profiles={profiles} players={players} onRefresh={onRefresh} onOpenTable={onOpenTable} />}
@@ -94,6 +82,8 @@ export function AdminPanel({ profiles, tasks, players, scoutingPlayers, scouting
 
 /* ========== TEAM TAB ========== */
 function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Profile[]; players: Player[]; onRefresh: () => Promise<void>; onOpenTable?: () => void }) {
+  const { showToast } = useToastContext()
+  const ERROR_GUARDAR = 'No se pudo guardar. Inténtalo de nuevo.'
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteName, setInviteName] = useState('')
   const [inviteAvatar, setInviteAvatar] = useState('')
@@ -161,6 +151,7 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
       setTimeout(() => { setResetStatus('idle'); setResetId(null); setNewPassword('') }, 2000)
     } catch {
       setResetStatus('error')
+      showToast('No se pudo cambiar la contraseña.', 'error')
       setTimeout(() => setResetStatus('idle'), 3000)
     }
   }
@@ -171,12 +162,17 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
       if (error) throw error
       setDeleteId(null)
       await onRefresh()
-    } catch { /* ignore */ }
+      showToast(`${p.name} eliminado`, 'info')
+    } catch {
+      showToast('No se pudo eliminar el usuario. Inténtalo de nuevo.', 'error')
+    }
   }
 
   const handleToggleAdmin = async (p: Profile) => {
-    await updateProfile(p.id, { is_admin: !p.is_admin })
-    await onRefresh()
+    try {
+      await updateProfile(p.id, { is_admin: !p.is_admin })
+      await onRefresh()
+    } catch { showToast(ERROR_GUARDAR, 'error') }
   }
 
   /**
@@ -186,20 +182,26 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
    * admin lo apruebe.
    */
   const handleToggleActivo = async (p: Profile) => {
-    await updateProfile(p.id, { activo: p.activo === false })
-    await onRefresh()
+    try {
+      await updateProfile(p.id, { activo: p.activo === false })
+      await onRefresh()
+    } catch { showToast(ERROR_GUARDAR, 'error') }
   }
 
   /** Cuenta restringida: solo ve Captación (Jugadores, Partidos e Informes) */
   const handleToggleCaptacionOnly = async (p: Profile) => {
-    await updateProfile(p.id, { captacion_only: !p.captacion_only })
-    await onRefresh()
+    try {
+      await updateProfile(p.id, { captacion_only: !p.captacion_only })
+      await onRefresh()
+    } catch { showToast(ERROR_GUARDAR, 'error') }
   }
 
   const handleSaveEdit = async (id: string) => {
-    await updateProfile(id, { name: editName, avatar: editAvatar })
-    await onRefresh()
-    setEditingId(null)
+    try {
+      await updateProfile(id, { name: editName, avatar: editAvatar })
+      await onRefresh()
+      setEditingId(null)
+    } catch { showToast(ERROR_GUARDAR, 'error') }
   }
 
   return (
@@ -220,7 +222,7 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
             <div className="bg-white rounded border border-emerald-100 px-3 py-2 text-sm font-mono text-slate-700 mb-2">
               <div>Email: <strong>{createdInfo.email}</strong></div>
               <div>Contraseña: <strong>{createdInfo.password}</strong></div>
-              <div className="text-xs text-slate-400 mt-1">allironsports.vercel.app</div>
+              <div className="text-meta text-slate-500 mt-1">allironsports.vercel.app</div>
             </div>
             <div className="bg-amber-50 border border-amber-200 rounded px-3 py-2 text-xs text-amber-800 mb-2">
               La cuenta nace <strong>pendiente</strong>: hasta que la actives en la lista
@@ -228,13 +230,12 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
               registre y entre.
             </div>
             <div className="flex items-center gap-3">
-              <button onClick={handleCopy} className="text-xs flex items-center gap-1 text-emerald-700 hover:text-emerald-900">
-                <Copy className="w-3 h-3" />{copied ? '¡Copiado!' : 'Copiar al portapapeles'}
-              </button>
-              <button onClick={() => { setCreatedInfo(null); setInviteStatus('idle') }}
-                className="text-xs text-slate-400 hover:text-slate-600 underline">
+              <Button size="sm" variant="link" icon={<Copy />} onClick={handleCopy} className="text-emerald-700">
+                {copied ? '¡Copiado!' : 'Copiar al portapapeles'}
+              </Button>
+              <Button size="sm" variant="link" onClick={() => { setCreatedInfo(null); setInviteStatus('idle') }} className="text-slate-600">
                 Añadir otro
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -242,43 +243,30 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
         {inviteStatus !== 'ok' && (
           <form onSubmit={handleInvite} className="space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Email</label>
-                <input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} required
-                  placeholder="nombre@email.com"
-                  className="w-full rounded-md border border-slate-200 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Nombre completo</label>
-                <input type="text" value={inviteName} onChange={(e) => setInviteName(e.target.value)} required
-                  placeholder="Nombre Apellido"
-                  className="w-full rounded-md border border-slate-200 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Siglas (avatar)</label>
-                <input type="text" value={inviteAvatar} onChange={(e) => setInviteAvatar(e.target.value.toUpperCase().slice(0, 3))}
-                  placeholder="Auto (iniciales)" maxLength={3}
-                  className="w-full rounded-md border border-slate-200 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Contraseña temporal</label>
-                <div className="flex gap-2">
-                  <input type="text" value={tempPassword} onChange={(e) => setTempPassword(e.target.value)} required
-                    className="w-full rounded-md border border-slate-200 px-2.5 py-1.5 text-sm font-mono focus:outline-none focus:ring-2" />
-                  <button type="button" onClick={() => setTempPassword(generatePassword())}
-                    className="text-xs px-2 py-1.5 border border-slate-200 rounded-md text-slate-500 hover:text-slate-700 whitespace-nowrap">
-                    Nueva
-                  </button>
-                </div>
-              </div>
+              <Field label="Email" required>
+                <Input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} required placeholder="nombre@email.com" />
+              </Field>
+              <Field label="Nombre completo" required>
+                <Input type="text" value={inviteName} onChange={(e) => setInviteName(e.target.value)} required placeholder="Nombre Apellido" />
+              </Field>
+              <Field label="Siglas (avatar)">
+                <Input type="text" value={inviteAvatar} onChange={(e) => setInviteAvatar(e.target.value.toUpperCase().slice(0, 3))} placeholder="Auto (iniciales)" maxLength={3} />
+              </Field>
+              <Field label="Contraseña temporal" required>
+                {(fp) => (
+                  <div className="flex gap-2">
+                    <Input {...fp} type="text" value={tempPassword} onChange={(e) => setTempPassword(e.target.value)} required className="font-mono" />
+                    <Button onClick={() => setTempPassword(generatePassword())} className="whitespace-nowrap">Nueva</Button>
+                  </div>
+                )}
+              </Field>
             </div>
             <div className="flex items-center gap-3">
-              <button type="submit" disabled={inviteStatus === 'sending'}
-                className="rounded-md text-white text-sm font-medium px-4 py-2 disabled:opacity-50 bg-primary hover:bg-primary/90">
-                {inviteStatus === 'sending' ? 'Creando...' : 'Crear usuario'}
-              </button>
+              <Button type="submit" variant="primary" loading={inviteStatus === 'sending'}>
+                {inviteStatus === 'sending' ? 'Creando…' : 'Crear usuario'}
+              </Button>
               {inviteStatus === 'error' && (
-                <span className="text-xs text-red-500">{inviteError || 'Error al crear el usuario.'}</span>
+                <span className="text-secondary text-red-600" role="alert">{inviteError || 'Error al crear el usuario.'}</span>
               )}
             </div>
           </form>
@@ -291,7 +279,7 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
           <h2 className="text-sm font-semibold text-slate-800">Miembros del equipo ({profiles.length})</h2>
         </div>
         {profiles.length === 0 && (
-          <p className="text-sm text-slate-400 text-center py-8">Sin miembros aún.</p>
+          <p className="text-body text-slate-500 text-center py-8">Sin miembros aún.</p>
         )}
         <div className="divide-y divide-slate-100">
           {profiles.map((p) => {
@@ -299,102 +287,84 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
             return (
               <div key={p.id} className="px-4 sm:px-5 py-3">
                 <div className="flex items-center gap-3 flex-wrap">
-                  <div className="w-9 h-9 rounded-full text-white text-xs font-bold flex items-center justify-center flex-shrink-0 bg-primary"
+                  <div aria-hidden="true" className="w-9 h-9 rounded-full text-white text-badge font-bold flex items-center justify-center flex-shrink-0 bg-primary"
                    >{p.avatar}</div>
 
                   {editingId === p.id ? (
-                    <div className="flex items-center gap-2 flex-1 flex-wrap">
-                      <input value={editName} onChange={(e) => setEditName(e.target.value)}
-                        className="rounded-md border border-slate-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 w-40" />
-                      <input value={editAvatar} onChange={(e) => setEditAvatar(e.target.value.toUpperCase().slice(0, 3))}
-                        className="rounded-md border border-slate-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 w-16" maxLength={3} />
-                      <button onClick={() => handleSaveEdit(p.id)} className="text-emerald-500 hover:text-emerald-700"><Check className="w-4 h-4" /></button>
-                      <button onClick={() => setEditingId(null)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
-                    </div>
+                    <form onSubmit={e => { e.preventDefault(); void handleSaveEdit(p.id) }} className="flex items-center gap-2 flex-1 flex-wrap">
+                      <Input value={editName} onChange={(e) => setEditName(e.target.value)} aria-label="Nombre" className="w-44 py-1" />
+                      <Input value={editAvatar} onChange={(e) => setEditAvatar(e.target.value.toUpperCase().slice(0, 3))} aria-label="Siglas" className="w-20 py-1" maxLength={3} />
+                      <IconButton label={L.guardar} type="submit" className="text-emerald-600 hover:text-emerald-700"><Check /></IconButton>
+                      <IconButton label={L.cancelar} onClick={() => setEditingId(null)}><X /></IconButton>
+                    </form>
                   ) : (
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-sm font-medium text-slate-800 truncate">{p.name}</span>
+                        <span className="text-body font-medium text-slate-800 truncate">{p.name}</span>
                         {p.is_admin && (
-                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] font-semibold bg-blue-50 text-blue-700">
-                            <Shield className="w-2.5 h-2.5" /> Admin
-                          </span>
+                          <Badge tone="primary" pill={false}><Shield className="w-3 h-3" aria-hidden="true" /> Admin</Badge>
                         )}
                         {p.activo === false && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-amber-100 text-amber-800 border border-amber-200">
-                            Pendiente
-                          </span>
+                          <Badge tone="warning" pill={false}>Pendiente</Badge>
                         )}
                       </div>
-                      <p className="text-xs text-slate-400">{managedCount} jugador{managedCount !== 1 ? 'es' : ''}</p>
+                      <p className="text-secondary text-slate-500">{managedCount} jugador{managedCount !== 1 ? 'es' : ''}</p>
                     </div>
                   )}
 
                   <div className="flex items-center gap-1 sm:gap-1.5 ml-auto flex-wrap justify-end">
-                    <button onClick={() => { setEditingId(p.id); setEditName(p.name); setEditAvatar(p.avatar) }}
-                      className="p-2 sm:p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600" title="Editar" aria-label="Editar">
-                      <Edit3 className="w-3.5 h-3.5" />
-                    </button>
-                    <button onClick={() => { setResetId(resetId === p.id ? null : p.id); setNewPassword(generatePassword()) }}
-                      className="p-2 sm:p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-amber-500" title="Cambiar contraseña" aria-label="Cambiar contraseña">
-                      <KeyRound className="w-3.5 h-3.5" />
-                    </button>
-                    <button onClick={() => setDeleteId(deleteId === p.id ? null : p.id)}
-                      className="p-2 sm:p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-red-500" title="Eliminar" aria-label="Eliminar">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button onClick={() => handleToggleActivo(p)}
+                    <IconButton label={`Editar a ${p.name}`} onClick={() => { setEditingId(p.id); setEditName(p.name); setEditAvatar(p.avatar) }}>
+                      <Edit3 />
+                    </IconButton>
+                    <IconButton label={`Cambiar contraseña de ${p.name}`} onClick={() => { setResetId(resetId === p.id ? null : p.id); setNewPassword(generatePassword()) }} className="hover:text-amber-600">
+                      <KeyRound />
+                    </IconButton>
+                    <IconButton label={`Eliminar a ${p.name}`} onClick={() => setDeleteId(p.id)} className="hover:text-red-600">
+                      <Trash2 />
+                    </IconButton>
+                    <Button size="sm" onClick={() => handleToggleActivo(p)}
+                      aria-pressed={p.activo !== false}
+                      icon={p.activo === false ? undefined : <Check />}
                       title={p.activo === false
                         ? 'La cuenta no recibe ningún dato de la base de datos — clic para darle acceso'
                         : 'Cortar el acceso de esta cuenta sin borrarla'}
-                      className={`text-[11px] px-2 py-1 rounded border transition-colors ${
-                        p.activo === false
+                      className={p.activo === false
                           ? 'border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 font-semibold'
-                          : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'
-                      }`}>
-                      {p.activo === false ? 'Activar' : '✓ Activa'}
-                    </button>
-                    <button onClick={() => handleToggleAdmin(p)}
-                      className={`text-[11px] px-2 py-1 rounded border transition-colors ${
-                        p.is_admin ? 'border-blue-200 text-blue-600 hover:bg-blue-50' : 'border-slate-200 text-slate-500 hover:text-slate-700'
-                      }`}>
+                          : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'}>
+                      {p.activo === false ? 'Activar' : 'Activa'}
+                    </Button>
+                    <Button size="sm" onClick={() => handleToggleAdmin(p)}
+                      className={p.is_admin ? 'border-blue-200 text-blue-700 hover:bg-blue-50' : undefined}>
                       {p.is_admin ? 'Quitar admin' : 'Hacer admin'}
-                    </button>
-                    <button onClick={() => handleToggleCaptacionOnly(p)}
+                    </Button>
+                    <Button size="sm" onClick={() => handleToggleCaptacionOnly(p)}
+                      aria-pressed={!!p.captacion_only}
+                      icon={p.captacion_only ? <Eye /> : undefined}
                       title={p.captacion_only
                         ? 'Ahora solo ve Captación (Jugadores, Partidos e Informes) — clic para darle acceso completo'
                         : 'Restringir esta cuenta a Captación: solo Jugadores, Partidos e Informes'}
-                      className={`text-[11px] px-2 py-1 rounded border transition-colors ${
-                        p.captacion_only ? 'border-violet-200 text-violet-600 bg-violet-50 hover:bg-violet-100' : 'border-slate-200 text-slate-500 hover:text-slate-700'
-                      }`}>
-                      {p.captacion_only ? '👁 Solo Captación' : 'Solo Captación'}
-                    </button>
+                      className={p.captacion_only ? 'border-violet-200 text-violet-700 bg-violet-50 hover:bg-violet-100' : undefined}>
+                      Solo {L.captacion}
+                    </Button>
                   </div>
                 </div>
 
                 {/* Reset password */}
                 {resetId === p.id && (
-                  <div className="mt-2 ml-0 sm:ml-12 flex items-center gap-2 flex-wrap bg-amber-50 border border-amber-200 rounded-lg p-2.5">
-                    <input type="text" value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
-                      className="flex-1 rounded border border-amber-200 px-2 py-1 text-sm font-mono" placeholder="Nueva contraseña" />
-                    <button onClick={() => handleResetPassword(p.id)} disabled={resetStatus === 'saving'}
-                      className="text-xs px-2.5 py-1 rounded bg-amber-500 text-white hover:bg-amber-600">
-                      {resetStatus === 'ok' ? '✓ Guardada' : resetStatus === 'saving' ? '...' : 'Guardar'}
-                    </button>
-                    <button onClick={() => setResetId(null)} className="text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>
-                    {resetStatus === 'error' && <span className="text-xs text-red-500">Error — usa Supabase Auth</span>}
-                  </div>
+                  <form onSubmit={e => { e.preventDefault(); void handleResetPassword(p.id) }}
+                    className="mt-2 ml-0 sm:ml-12 flex items-center gap-2 flex-wrap bg-amber-50 border border-amber-200 rounded-lg p-2.5">
+                    <Input type="text" value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
+                      aria-label="Nueva contraseña" className="flex-1 w-auto border-amber-200 py-1 font-mono" placeholder="Nueva contraseña" />
+                    <Button type="submit" size="sm" variant="primary" loading={resetStatus === 'saving'}
+                      icon={resetStatus === 'ok' ? <Check /> : undefined}
+                      className="bg-amber-500 hover:bg-amber-600 disabled:hover:bg-amber-500">
+                      {resetStatus === 'ok' ? 'Guardada' : L.guardar}
+                    </Button>
+                    <IconButton label={L.cancelar} onClick={() => setResetId(null)}><X /></IconButton>
+                    {resetStatus === 'error' && <span className="text-secondary text-red-600" role="alert">Error — usa Supabase Auth</span>}
+                  </form>
                 )}
 
-                {/* Delete confirm */}
-                {deleteId === p.id && (
-                  <div className="mt-2 ml-0 sm:ml-12 flex items-center gap-2 flex-wrap bg-red-50 border border-red-200 rounded-lg p-2.5">
-                    <span className="text-xs text-red-700 flex-1">¿Eliminar a <strong>{p.name}</strong>? Esta acción no se puede deshacer.</span>
-                    <button onClick={() => handleDeleteUser(p)}
-                      className="text-xs px-2.5 py-1 rounded bg-red-500 text-white hover:bg-red-600">Eliminar</button>
-                    <button onClick={() => setDeleteId(null)} className="text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>
-                  </div>
-                )}
               </div>
             )
           })}
@@ -406,14 +376,23 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="min-w-0">
               <h2 className="text-sm font-semibold text-slate-800">Tabla de jugadores</h2>
-              <p className="text-xs text-slate-400 mt-0.5">Edición rápida de datos de jugadores</p>
+              <p className="text-secondary text-slate-500 mt-0.5">Edición rápida de datos de jugadores</p>
             </div>
-            <button onClick={onOpenTable} className="inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg text-white font-medium bg-primary hover:bg-primary/90" >
-              Abrir tabla
-            </button>
+            <Button variant="primary" onClick={onOpenTable}>Abrir tabla</Button>
           </div>
         </div>
       )}
+
+      {/* Confirmación de borrado de usuario */}
+      <ConfirmModal
+        open={!!deleteId}
+        title={`¿Eliminar a ${profiles.find(p => p.id === deleteId)?.name ?? ''}?`}
+        message="Esta acción no se puede deshacer."
+        confirmLabel={L.eliminar}
+        variant="danger"
+        onConfirm={async () => { const p = profiles.find(x => x.id === deleteId); if (p) await handleDeleteUser(p) }}
+        onCancel={() => setDeleteId(null)}
+      />
     </div>
   )
 }
@@ -428,18 +407,16 @@ function HistorialTab({ profiles }: { profiles: Profile[] }) {
     <div className="space-y-4">
       <div className="bg-white border border-slate-200 rounded-lg p-4">
         <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2"><History className="w-4 h-4" /> Historial de cambios</h2>
-        <p className="text-xs text-slate-400 mt-0.5">Quién cambió qué en jugadores, clubes, negociaciones, firmas, scouting y tareas. Lo apunta la base de datos, no la app.</p>
+        <p className="text-secondary text-slate-500 mt-0.5">Quién cambió qué en jugadores, clubes, negociaciones, firmas, scouting y tareas. Lo apunta la base de datos, no la app.</p>
         <form onSubmit={e => { e.preventDefault(); setFilaId(filaInput.trim()) }} className="mt-3 flex items-center gap-2 flex-wrap">
-          <select value={tabla} onChange={e => setTabla(e.target.value)}
-            className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+          <Select value={tabla} onChange={e => setTabla(e.target.value)} aria-label="Tabla" className="w-auto">
             <option value="">Todas las tablas</option>
             {AUDIT_TABLAS.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
-          </select>
+          </Select>
           <div className="flex items-center gap-1 flex-1 min-w-[200px]">
-            <input value={filaInput} onChange={e => setFilaInput(e.target.value)} placeholder="Buscar por id de fila (uuid)"
-              className="flex-1 text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
-            <button type="submit" className="p-1.5 rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50" title="Buscar"><Search className="w-3.5 h-3.5" /></button>
-            {filaId && <button type="button" onClick={() => { setFilaId(''); setFilaInput('') }} className="text-xs text-slate-400 hover:text-slate-600 underline">Quitar</button>}
+            <Input value={filaInput} onChange={e => setFilaInput(e.target.value)} placeholder="Buscar por id de fila (uuid)" aria-label="Id de fila" className="flex-1 font-mono" />
+            <IconButton label={L.buscar} type="submit" variant="secondary" size="md"><Search /></IconButton>
+            {filaId && <Button variant="link" size="sm" onClick={() => { setFilaId(''); setFilaInput('') }}>Quitar</Button>}
           </div>
         </form>
       </div>
@@ -452,6 +429,7 @@ function HistorialTab({ profiles }: { profiles: Profile[] }) {
 
 /* ========== ERRORES TAB ========== */
 function ErroresTab({ profiles }: { profiles: Profile[] }) {
+  const [confirmVaciar, setConfirmVaciar] = useState(false)
   const [items, setItems] = useState<ClientError[]>([])
   const [cargando, setCargando] = useState(false)
   const [fin, setFin] = useState(false)
@@ -478,7 +456,7 @@ function ErroresTab({ profiles }: { profiles: Profile[] }) {
   useEffect(() => { void cargar() }, [cargar])
 
   const vaciar = async () => {
-    if (!confirm('¿Borrar los errores de hace más de 30 días?')) return
+    setConfirmVaciar(false)
     setVaciando(true)
     try { await vaciarErroresAntiguos(30); await cargar() } catch { setError('No se han podido borrar.') } finally { setVaciando(false) }
   }
@@ -493,43 +471,51 @@ function ErroresTab({ profiles }: { profiles: Profile[] }) {
       <div className="bg-white border border-slate-200 rounded-lg p-4 flex items-center justify-between gap-3 flex-wrap">
         <div className="min-w-0">
           <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2"><Bug className="w-4 h-4" /> Errores del cliente</h2>
-          <p className="text-xs text-slate-400 mt-0.5">Fallos que han saltado en el navegador de alguien del equipo (pantalla rota, promesas sin capturar). Máx. 5 por minuto y usuario.</p>
+          <p className="text-secondary text-slate-500 mt-0.5">Fallos que han saltado en el navegador de alguien del equipo (pantalla rota, promesas sin capturar). Máx. 5 por minuto y usuario.</p>
         </div>
-        <button onClick={vaciar} disabled={vaciando}
-          className="text-xs px-3 py-1.5 rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 inline-flex items-center gap-1">
-          <Trash2 className="w-3.5 h-3.5" /> {vaciando ? 'Borrando…' : 'Vaciar antiguos (>30 días)'}
-        </button>
+        <Button size="sm" icon={<Trash2 />} loading={vaciando} onClick={() => setConfirmVaciar(true)}>
+          {vaciando ? 'Borrando…' : 'Vaciar antiguos (>30 días)'}
+        </Button>
       </div>
-      {error && <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">{error}</p>}
+      <ConfirmModal
+        open={confirmVaciar}
+        title="¿Borrar los errores de hace más de 30 días?"
+        message="Se eliminan del registro. No se puede deshacer."
+        confirmLabel="Borrar"
+        variant="danger"
+        onConfirm={vaciar}
+        onCancel={() => setConfirmVaciar(false)}
+      />
+      {error && <p className="text-secondary text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">{error}</p>}
       <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-        {items.length === 0 && !cargando && !error && <p className="text-xs text-slate-400 text-center py-8">Sin errores registrados. 🎉</p>}
+        {items.length === 0 && !cargando && !error && <p className="text-secondary text-slate-500 text-center py-8">Sin errores registrados. 🎉</p>}
         <div className="divide-y divide-slate-100">
           {items.map(e => (
-            <div key={e.id} className="px-4 py-2.5 text-xs">
-              <button onClick={() => setAbierto(abierto === e.id ? null : e.id)} className="w-full text-left">
+            <div key={e.id} className="px-4 py-2.5 text-secondary">
+              <button type="button" aria-expanded={abierto === e.id} onClick={() => setAbierto(abierto === e.id ? null : e.id)} className="w-full text-left rounded outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
                 <div className="flex items-center gap-2 flex-wrap text-slate-500">
-                  <span className="text-slate-400 w-20 flex-shrink-0" title={new Date(e.at).toLocaleString('es-ES')}>{fechaRelativa(e.at)}</span>
+                  <span className="text-slate-500 w-20 flex-shrink-0" title={new Date(e.at).toLocaleString('es-ES')}>{fechaRelativa(e.at)}</span>
                   <span className="font-medium text-slate-700">{nombre(e.userId)}</span>
-                  {e.buildId && <span className="font-mono text-[10.5px] bg-slate-100 rounded px-1">{e.buildId}</span>}
-                  {e.ruta && <span className="font-mono text-[10.5px] text-slate-400 truncate max-w-[200px]">{e.ruta}</span>}
+                  {e.buildId && <span className="font-mono text-badge bg-slate-100 rounded px-1">{e.buildId}</span>}
+                  {e.ruta && <span className="font-mono text-badge text-slate-500 truncate max-w-[200px]">{e.ruta}</span>}
                   {abierto === e.id ? <ChevronDown className="w-3.5 h-3.5 ml-auto" /> : <ChevronRight className="w-3.5 h-3.5 ml-auto" />}
                 </div>
                 <div className="mt-0.5 text-slate-800 break-words">{e.mensaje}</div>
               </button>
               {abierto === e.id && (
                 <div className="mt-2 space-y-1.5">
-                  {e.contexto && <pre className="text-[10.5px] text-slate-500 bg-slate-50 rounded p-2 overflow-x-auto whitespace-pre-wrap break-words">{JSON.stringify(e.contexto, null, 1)}</pre>}
-                  <pre className="text-[10.5px] text-slate-500 bg-slate-50 rounded p-2 overflow-x-auto whitespace-pre-wrap break-words">{e.stack ?? '(sin stack)'}</pre>
-                  {e.userAgent && <p className="text-[10.5px] text-slate-400 break-words">{e.userAgent}</p>}
+                  {e.contexto && <pre className="text-badge text-slate-600 bg-slate-50 rounded p-2 overflow-x-auto whitespace-pre-wrap break-words">{JSON.stringify(e.contexto, null, 1)}</pre>}
+                  <pre className="text-badge text-slate-600 bg-slate-50 rounded p-2 overflow-x-auto whitespace-pre-wrap break-words">{e.stack ?? '(sin stack)'}</pre>
+                  {e.userAgent && <p className="text-badge text-slate-500 break-words">{e.userAgent}</p>}
                 </div>
               )}
             </div>
           ))}
         </div>
-        {cargando && <p className="text-xs text-slate-400 px-4 py-2">Cargando…</p>}
+        {cargando && <p className="text-secondary text-slate-500 px-4 py-2">Cargando…</p>}
         {!fin && !cargando && items.length > 0 && (
           <div className="px-4 py-2 border-t border-slate-100">
-            <button onClick={() => void cargar(items[items.length - 1].at)} className="text-xs px-3 py-1.5 border border-slate-200 rounded-md text-slate-600 hover:bg-slate-50">Cargar más</button>
+            <Button size="sm" onClick={() => void cargar(items[items.length - 1].at)}>Cargar más</Button>
           </div>
         )}
       </div>
@@ -556,7 +542,7 @@ function TaskTrackingTab({ profiles, tasks, players }: { profiles: Profile[]; ta
   function taskStatusIcon(t: Task) {
     if (t.status === 'completada') return <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
     if (t.status === 'en_progreso') return <Clock className="w-3.5 h-3.5 text-violet-500 flex-shrink-0" />
-    return <Circle className="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />
+    return <Circle className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
   }
 
   return (
@@ -571,18 +557,19 @@ function TaskTrackingTab({ profiles, tasks, players }: { profiles: Profile[]; ta
 
       {/* Controls */}
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <select
+        <Select
           value={statusFilter}
           onChange={e => setStatusFilter(e.target.value as 'all' | 'active' | 'overdue')}
-          className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 text-slate-700"
+          aria-label="Filtro de estado"
+          className="w-auto"
         >
           <option value="all">Todas las tareas</option>
           <option value="active">Activas</option>
           <option value="overdue">Vencidas</option>
-        </select>
+        </Select>
         <div className="flex items-center gap-2">
-          <button onClick={expandAll} className="text-xs text-slate-400 hover:text-slate-600 underline">Expandir todo</button>
-          <button onClick={collapseAll} className="text-xs text-slate-400 hover:text-slate-600 underline">Colapsar todo</button>
+          <Button variant="link" size="sm" onClick={expandAll} className="text-slate-600">Expandir todo</Button>
+          <Button variant="link" size="sm" onClick={collapseAll} className="text-slate-600">Colapsar todo</Button>
         </div>
       </div>
 
@@ -617,20 +604,20 @@ function TaskTrackingTab({ profiles, tasks, players }: { profiles: Profile[]; ta
             <div key={p.id} className="bg-white border border-slate-200 rounded-lg overflow-hidden">
               {/* Card header */}
               <button
+                type="button"
+                aria-expanded={isExpanded}
                 onClick={() => toggleExpand(p.id)}
-                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left"
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
               >
-                <div className="w-9 h-9 rounded-full text-white text-xs font-bold flex items-center justify-center flex-shrink-0 bg-primary">{p.avatar}</div>
+                <div aria-hidden="true" className="w-9 h-9 rounded-full text-white text-badge font-bold flex items-center justify-center flex-shrink-0 bg-primary">{p.avatar}</div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap min-w-0">
                     <p className="text-sm font-semibold text-slate-800 truncate">{p.name}</p>
                     {overdue.length > 0 && (
-                      <span className="flex items-center gap-0.5 text-[11px] text-red-600 bg-red-50 border border-red-200 rounded-full px-1.5 py-0.5">
-                        <AlertTriangle className="w-2.5 h-2.5" /> {overdue.length} vencida{overdue.length !== 1 ? 's' : ''}
-                      </span>
+                      <Badge tone="danger"><AlertTriangle className="w-3 h-3" aria-hidden="true" /> {overdue.length} vencida{overdue.length !== 1 ? 's' : ''}</Badge>
                     )}
                   </div>
-                  <p className="text-xs text-slate-400">{managedCount} jugador{managedCount !== 1 ? 'es' : ''} · {assigned.length} tarea{assigned.length !== 1 ? 's' : ''}</p>
+                  <p className="text-secondary text-slate-500">{managedCount} jugador{managedCount !== 1 ? 'es' : ''} · {assigned.length} tarea{assigned.length !== 1 ? 's' : ''}</p>
                 </div>
                 {/* Mini progress bar */}
                 {assigned.length > 0 && (
@@ -638,23 +625,23 @@ function TaskTrackingTab({ profiles, tasks, players }: { profiles: Profile[]; ta
                     <div className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
                       <div className="h-full rounded-full bg-emerald-400 transition-all" style={{ width: `${(completed.length / assigned.length) * 100}%` }} />
                     </div>
-                    <span className="text-[11px] text-slate-400">{Math.round((completed.length / assigned.length) * 100)}% hecho</span>
+                    <span className="text-meta text-slate-500">{Math.round((completed.length / assigned.length) * 100)}% hecho</span>
                   </div>
                 )}
                 {/* Stats pills */}
                 <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <span className="text-[11px] bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded">{completed.length}✓</span>
-                  {inProgress.length > 0 && <span className="text-[11px] bg-violet-50 text-violet-600 px-1.5 py-0.5 rounded">{inProgress.length}▶</span>}
-                  {pending.length > 0 && <span className="text-[11px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded">{pending.filter(t => t.status === 'pendiente').length}○</span>}
+                  <Badge tone="success" pill={false} title="Completadas"><CheckCircle2 className="w-3 h-3" aria-hidden="true" />{completed.length}</Badge>
+                  {inProgress.length > 0 && <Badge tone="primary" pill={false} title="En progreso"><Clock className="w-3 h-3" aria-hidden="true" />{inProgress.length}</Badge>}
+                  {pending.length > 0 && <Badge tone="warning" pill={false} title="Pendientes"><Circle className="w-3 h-3" aria-hidden="true" />{pending.filter(t => t.status === 'pendiente').length}</Badge>}
                 </div>
-                {isExpanded ? <ChevronDown className="w-4 h-4 text-slate-400 flex-shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 flex-shrink-0" />}
+                {isExpanded ? <ChevronDown className="w-4 h-4 text-slate-500 flex-shrink-0" aria-hidden="true" /> : <ChevronRight className="w-4 h-4 text-slate-500 flex-shrink-0" aria-hidden="true" />}
               </button>
 
               {/* Task list */}
               {isExpanded && (
                 <div className="border-t border-slate-100">
                   {visibleTasks.length === 0 ? (
-                    <p className="text-xs text-slate-400 text-center py-4">Sin tareas con este filtro</p>
+                    <p className="text-secondary text-slate-500 text-center py-4">Sin tareas con este filtro</p>
                   ) : (
                     <div className="divide-y divide-slate-50">
                       {visibleTasks.map(t => {
@@ -664,18 +651,18 @@ function TaskTrackingTab({ profiles, tasks, players }: { profiles: Profile[]; ta
                           <div key={t.id} className={`flex items-start gap-2.5 px-4 py-2.5 ${t.status === 'completada' ? 'opacity-50' : ''}`}>
                             {taskStatusIcon(t)}
                             <div className="flex-1 min-w-0">
-                              <div className="text-xs font-medium text-slate-700 truncate">{t.title}</div>
-                              <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400 flex-wrap">
+                              <div className="text-body font-medium text-slate-800 truncate">{t.title}</div>
+                              <div className="flex items-center gap-2 mt-0.5 text-meta text-slate-500 flex-wrap">
                                 <span className="truncate">{playerName}</span>
-                                {t.priority === 'alta' && <span className="text-red-500 font-semibold">Alta</span>}
+                                {t.priority === 'alta' && <span className="text-red-600 font-semibold">{PRIORITY_LABELS.alta}</span>}
                                 {t.dueDate && (
-                                  <span className={isOverdue ? 'text-red-500 font-semibold' : ''}>
-                                    {isOverdue ? '⚠ ' : ''}{parseDia(t.dueDate).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
+                                  <span className={`inline-flex items-center gap-1 ${isOverdue ? 'text-red-600 font-semibold' : ''}`}>
+                                    {isOverdue && <AlertTriangle className="w-3 h-3" aria-label="Vencida" />}{parseDia(t.dueDate).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
                                   </span>
                                 )}
                               </div>
                             </div>
-                            <span className={`text-[11px] px-1.5 py-0.5 rounded flex-shrink-0 ${
+                            <span className={`text-badge px-1.5 py-0.5 rounded flex-shrink-0 ${
                               t.status === 'completada' ? 'bg-emerald-50 text-emerald-600' :
                               t.status === 'en_progreso' ? 'bg-violet-50 text-violet-600' :
                               'bg-slate-100 text-slate-500'
@@ -708,7 +695,7 @@ function SummaryBox({ label, value, color }: { label: string; value: number; col
   return (
     <div className={`rounded-lg p-3 ${colors[color] || colors.blue}`}>
       <p className="text-xl font-bold">{value}</p>
-      <p className="text-[11px] font-medium opacity-70 uppercase tracking-wide">{label}</p>
+      <p className="text-badge font-medium opacity-80 uppercase tracking-wide">{label}</p>
     </div>
   )
 }

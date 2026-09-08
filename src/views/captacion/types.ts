@@ -12,10 +12,12 @@ export interface Props {
   scoutingMatches: ScoutingMatch[]
   profiles: Profile[]
   currentProfile: Profile
-  onBack: () => void
-  onGoToSection: (s: 'tareas' | 'jugadores' | 'distribucion' | 'boulema') => void
-  onLogout: () => void
-  onAdmin?: () => void
+  /** Sub-pestaña controlada desde App (#/captacion/sub). Si no llega, se usa sessionStorage. */
+  tab?: CaptacionTab
+  /** Se llama con cada cambio de sub-pestaña (también los internos) */
+  onTabChange?: (t: CaptacionTab) => void
+  /** Carga de la fase 2 (partidos, informes…): muestra estado de carga en las pestañas */
+  loading?: boolean
   onAddPlayer: (p: ScoutingPlayer) => void
   onUpdatePlayer: (p: ScoutingPlayer) => void
   onDeletePlayer: (id: string) => void

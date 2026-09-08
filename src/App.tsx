@@ -7,6 +7,14 @@ import type { Profile } from './contexts/AuthContext'
 import { LoginScreen } from './views/LoginScreen'
 import { SavingIndicator, BottomNav, GlobalSearch, SystemNotifPrompt } from './components/GlobalExtras'
 import { fireSystemNotification, type MainSection } from './components/globalExtras'
+import { AppShell } from './components/shell'
+import { NotificationsBell } from './components/NotificationsBell'
+import { parseHash, buildHash, type Ruta } from './lib/rutas'
+import { useIsDesktop } from './hooks/useIsDesktop'
+import type { DashboardTab } from './views/Dashboard'
+import type { CaptacionTab } from './views/captacion/helpers'
+import type { DistributionTabId } from './views/distribution/Distribution'
+import type { BoulemaTabId } from './views/Boulema'
 import { ConflictModal } from './components/ConflictModal'
 import type { ConflictInfo } from './components/conflict'
 import { BUILD_ID } from './changelog'
@@ -31,6 +39,20 @@ const Contactos        = lazy(() => import('./views/Contactos').then(m => ({ def
 const TeamMemberDetail = lazy(() => import('./views/TeamMemberDetail').then(m => ({ default: m.TeamMemberDetail })))
 const Boulema          = lazy(() => import('./views/Boulema').then(m => ({ default: m.Boulema })))
 const MiDia            = lazy(() => import('./views/MiDia').then(m => ({ default: m.MiDia })))
+
+// Sub-pestañas (nivel 2) de cada sección, sincronizadas con el hash
+// (#/captacion/partidos, #/equipo…). Las de Mantenimiento van como sección
+// propia en la ruta (#/equipo, #/postpartidos) y aquí como `tareas`.
+interface SubTabs {
+  tareas?: Exclude<DashboardTab, 'jugadores'>
+  captacion?: CaptacionTab
+  distribucion?: DistributionTabId
+  boulema?: BoulemaTabId
+}
+const CAPT_TABS: readonly CaptacionTab[] = ['jugadores', 'firmar', 'conclusiones', 'contratos', 'equipos', 'informes', 'partidos', 'planificacion', 'pretemporada']
+const DIST_TABS: readonly DistributionTabId[] = ['jugadores', 'clubes', 'solicitudes', 'oportunidades', 'pipeline', 'encargados']
+const BOU_TABS: readonly BoulemaTabId[] = ['peticiones', 'mantenimiento']
+const es = <T extends string>(lista: readonly T[], v: string | undefined): v is T => !!v && (lista as readonly string[]).includes(v)
 
 export interface AppNotification {
   id: string
@@ -115,6 +137,8 @@ export default function App() {
   const [showOverview, setShowOverview] = useState(false)
   const [showTable, setShowTable] = useState(false)
   const [showContacts, setShowContacts] = useState(() => window.location.hash === '#contactos')
+  const [subTabs, setSubTabs] = useState<SubTabs>({})
+  const isDesktop = useIsDesktop()
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [searchOpen, setSearchOpen] = useState(false)
   const [phase2Loading, setPhase2Loading] = useState(false)
@@ -186,6 +210,13 @@ export default function App() {
     [tasks, profile?.is_admin],
   )
 
+  // Tareas vencidas del usuario (contador en la cabecera; barato)
+  const tareasVencidas = useMemo(() => {
+    if (!profile) return 0
+    const hoy = hoyISO()
+    return tasks.filter(t => t.status !== 'completada' && t.assigneeId === profile.id && !!t.dueDate && t.dueDate < hoy).length
+  }, [tasks, profile])
+
   // Guard anti-bucle de la sincronización Firmar ⇄ Tareas.
   // DEBE declararse aquí arriba: es un hook y no puede ir después de los
   // returns tempranos (loading/login) — romperlo deja la app en blanco.
@@ -250,20 +281,41 @@ export default function App() {
 
   // ── Título del documento según dónde estés ────────────────
   useEffect(() => {
-    const names: Record<string, string> = { tareas: 'Mantenimiento', jugadores: 'Jugadores', distribucion: 'Distribución', captacion: 'Captación', boulema: 'Boulema', 'mi-dia': 'Mi día' }
+    const names: Record<string, string> = { tareas: 'Mantenimiento', jugadores: 'Jugadores', equipo: 'Equipo', postpartidos: 'Postpartidos', distribucion: 'Distribución', captacion: 'Captación', boulema: 'Boulema', 'mi-dia': 'Mi día' }
     const player = selectedPlayerId ? players.find(p => p.id === selectedPlayerId) : undefined
-    document.title = player ? `${player.name} · AIS` : `${names[mainSection] ?? 'AIS'} · All Iron Sports`
-  }, [mainSection, selectedPlayerId, players])
+    const seccion = mainSection === 'tareas' ? (subTabs.tareas ?? 'tareas') : mainSection
+    document.title = player ? `${player.name} · AIS` : `${names[seccion] ?? 'AIS'} · All Iron Sports`
+  }, [mainSection, subTabs.tareas, selectedPlayerId, players])
 
-  // ── Rutas compartibles (hash): #/seccion, #/jugador/id, #/club/id, #/miembro/id ──
+  // ── Rutas compartibles (hash), ver src/lib/rutas.ts ──────────
+  // #/seccion[/sub] · #/equipo · #/postpartidos · #/jugador/id · #/club/id ·
+  // #/miembro/id · #contactos. Las sub-pestañas viven en `subTabs`; cambiar
+  // de pestaña en una vista actualiza el hash (push ⇒ «atrás» funciona).
+  const ruta: Ruta = useMemo(() => {
+    if (showContacts) return { section: 'contactos' }
+    if (selectedPlayerId) return { section: 'jugadores', entidad: { tipo: 'jugador', id: selectedPlayerId } }
+    if (selectedProfileId) return { section: 'equipo', entidad: { tipo: 'miembro', id: selectedProfileId } }
+    if (selectedClubId) return { section: 'distribucion', entidad: { tipo: 'club', id: selectedClubId } }
+    switch (mainSection) {
+      case 'tareas': return { section: subTabs.tareas ?? 'tareas' }
+      case 'captacion': return { section: 'captacion', sub: subTabs.captacion }
+      case 'distribucion': return { section: 'distribucion', sub: subTabs.distribucion }
+      case 'boulema': return { section: 'boulema', sub: subTabs.boulema }
+      default: return { section: mainSection }
+    }
+  }, [showContacts, selectedPlayerId, selectedProfileId, selectedClubId, mainSection, subTabs])
+
   useEffect(() => {
-    if (showContacts) return  // #contactos se gestiona aparte
-    const h = selectedPlayerId ? `#/jugador/${selectedPlayerId}`
-      : selectedProfileId ? `#/miembro/${selectedProfileId}`
-      : selectedClubId ? `#/club/${selectedClubId}`
-      : `#/${mainSection}`
-    if (window.location.hash !== h) window.location.hash = h
-  }, [mainSection, selectedPlayerId, selectedClubId, selectedProfileId, showContacts])
+    const h = buildHash(ruta)
+    if (window.location.hash === h) return
+    // Si solo se rellena la sub-pestaña de la misma sección (p. ej. al montar
+    // Captación, #/captacion → #/captacion/jugadores) se sustituye la entrada
+    // de historial en vez de añadir otra: «atrás» no debe pasar por ahí.
+    const actual = parseHash(window.location.hash)
+    const soloSub = !!actual && !actual.entidad && !ruta.entidad && actual.section === ruta.section && !actual.sub && !!ruta.sub
+    if (soloSub) history.replaceState(history.state, '', h)
+    else window.location.hash = h
+  }, [ruta])
 
   // Cuenta «solo Captación»: el router de hash no debe abrir jugador/club/
   // miembro ni otras secciones aunque alguien pegue el enlace.
@@ -272,31 +324,53 @@ export default function App() {
     captacionOnlyRef.current = !!profile?.captacion_only
     if (profile?.captacion_only) {
       setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(null)
-      setMainSection('captacion')
+      setMainSection(s => s === 'mi-dia' ? s : 'captacion')
     }
   }, [profile?.captacion_only])
 
   useEffect(() => {
     const apply = () => {
-      const h = window.location.hash
-      if (!h || h === '#contactos') return
-      const m = h.match(/^#\/(jugador|club|miembro)\/(.+)$/)
+      const r = parseHash(window.location.hash)
+      if (!r) return
       if (captacionOnlyRef.current) {
         // solo Captación y Mi día
-        if (h === '#/mi-dia') setMainSection('mi-dia')
-        else if (h !== '#/captacion') setMainSection('captacion')
+        if (r.section === 'mi-dia') setMainSection('mi-dia')
+        else {
+          setMainSection('captacion')
+          if (r.section === 'captacion' && es(CAPT_TABS, r.sub)) setSubTabs(t => ({ ...t, captacion: r.sub as CaptacionTab }))
+        }
         return
       }
-      if (m) {
-        if (m[1] === 'jugador') { setSelectedProfileId(null); setSelectedPlayerId(m[2]) }
-        else if (m[1] === 'club') { setSelectedPlayerId(null); setSelectedProfileId(null); setSelectedClubId(m[2]); setMainSection('distribucion') }
-        else { setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(m[2]) }
+      if (r.section === 'contactos') { setShowContacts(true); return }
+      setShowContacts(false)
+      if (r.entidad) {
+        const { tipo, id } = r.entidad
+        if (tipo === 'jugador') { setSelectedProfileId(null); setSelectedPlayerId(id) }
+        else if (tipo === 'club') { setSelectedPlayerId(null); setSelectedProfileId(null); setSelectedClubId(id); setMainSection('distribucion') }
+        else { setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(id) }
         return
       }
-      const s = h.replace('#/', '')
-      if (['tareas', 'jugadores', 'distribucion', 'captacion', 'boulema', 'mi-dia'].includes(s)) {
-        setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(null)
-        setMainSection(s as typeof mainSection)
+      setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(null); setClubExpanded(false)
+      switch (r.section) {
+        case 'equipo':
+        case 'postpartidos':
+          setMainSection('tareas'); setSubTabs(t => ({ ...t, tareas: r.section as 'equipo' | 'postpartidos' })); break
+        case 'tareas':
+          setMainSection('tareas'); setSubTabs(t => ({ ...t, tareas: 'tareas' })); break
+        case 'captacion':
+          setMainSection('captacion')
+          if (es(CAPT_TABS, r.sub)) setSubTabs(t => ({ ...t, captacion: r.sub as CaptacionTab }))
+          break
+        case 'distribucion':
+          setMainSection('distribucion')
+          if (es(DIST_TABS, r.sub)) setSubTabs(t => ({ ...t, distribucion: r.sub as DistributionTabId }))
+          break
+        case 'boulema':
+          setMainSection('boulema')
+          if (es(BOU_TABS, r.sub)) setSubTabs(t => ({ ...t, boulema: r.sub as BoulemaTabId }))
+          break
+        default:
+          setMainSection(r.section)
       }
     }
     window.addEventListener('hashchange', apply)
@@ -1344,6 +1418,37 @@ export default function App() {
     setMainSection('distribucion')
   }
 
+  // Ir a una sección de nivel 1 cerrando fichas y pantallas admin
+  function irASeccion(s: MainSection) {
+    setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(null); setClubExpanded(false)
+    setShowTable(false); setShowAdmin(false); setShowContacts(false); setShowOverview(false)
+    if (s === 'tareas') setSubTabs(t => ({ ...t, tareas: 'tareas' }))
+    setMainSection(s)
+  }
+  // Pestaña activa del Dashboard: «jugadores» es sección propia; el resto va en subTabs
+  const dashboardTab: DashboardTab = mainSection === 'jugadores' ? 'jugadores' : (subTabs.tareas ?? 'tareas')
+  const onDashboardTab = (t: DashboardTab) => {
+    if (t === 'jugadores') { setMainSection('jugadores'); return }
+    setSubTabs(st => ({ ...st, tareas: t }))
+    setMainSection('tareas')
+  }
+  // Abrir una tarea del tablero desde fuera (Mi día, buscador)
+  const abrirTarea = (id: string) => {
+    setOpenTaskId(id)
+    setSubTabs(t => ({ ...t, tareas: 'tareas' }))
+    setMainSection('tareas')
+  }
+  const abrirAdmin = () => {
+    setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(null); setClubExpanded(false)
+    setShowTable(false); setShowOverview(false); setShowContacts(false)
+    setShowAdmin(true)
+  }
+  const abrirOverview = () => {
+    setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(null); setClubExpanded(false)
+    setShowTable(false); setShowAdmin(false); setShowContacts(false)
+    setShowOverview(true)
+  }
+
   // Modal de conflicto de edición: tiene que salir en cualquier vista
   const conflictNode = (
     <ConflictModal
@@ -1356,17 +1461,16 @@ export default function App() {
   // Botón flotante «Planificación» (la hoja del fin de semana), visible en
   // todas las pantallas, también en móvil (encima de la barra inferior).
   const irAPlanificacion = () => {
-    setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(null)
-    setShowTable(false); setShowAdmin(false); setShowContacts(false); setShowOverview(false)
     setCaptacionOpenTab('planificacion')
-    setMainSection('captacion')
+    setSubTabs(t => ({ ...t, captacion: 'planificacion' }))
+    irASeccion('captacion')
   }
   const planificacionFab = (
     <button
       onClick={irAPlanificacion}
       title="Planificación del fin de semana"
       aria-label="Planificación"
-      className="fixed bottom-[5.5rem] sm:bottom-4 right-3 sm:right-4 z-40 inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-slate-900 text-white text-xs font-semibold shadow-lg hover:bg-slate-700 print:hidden"
+      className={`fixed bottom-[5.5rem] sm:bottom-4 right-3 sm:right-4 z-40 inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-slate-900 text-white text-badge font-semibold shadow-lg hover:bg-slate-700 print:hidden ${searchOpen ? 'hidden sm:inline-flex' : ''}`}
     >
       🗓️ <span className="hidden sm:inline">Planificación</span>
     </button>
@@ -1381,7 +1485,7 @@ export default function App() {
       {conflictNode}
       {mostrarSincronizando && (
         <div className="fixed bottom-16 sm:bottom-3 left-1/2 -translate-x-1/2 z-[45] pointer-events-none">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800/90 text-white text-[11px] font-medium shadow-lg">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800/90 text-white text-badge font-medium shadow-lg">
             <span className="w-2.5 h-2.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
             Sincronizando datos…
           </span>
@@ -1389,7 +1493,7 @@ export default function App() {
       )}
       {!phase2Loading && cargasFallidas.length > 0 && (
         <div className="fixed bottom-16 sm:bottom-3 left-1/2 -translate-x-1/2 z-[46] px-3 max-w-[92vw]">
-          <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-600 text-white text-[11px] font-semibold shadow-lg">
+          <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-600 text-white text-badge font-semibold shadow-lg">
             <span className="truncate">No se ha podido cargar: {cargasFallidas.join(', ')}</span>
             <button onClick={() => window.location.reload()} className="underline underline-offset-2 flex-shrink-0">
               reintentar
@@ -1402,7 +1506,7 @@ export default function App() {
       )}
       <BottomNav
         current={mainSection}
-        onGo={(s) => { setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(null); setClubExpanded(false); setMainSection(s) }}
+        onGo={irASeccion}
         onSearch={() => setSearchOpen(true)}
       />
       <SystemNotifPrompt />
@@ -1415,10 +1519,11 @@ export default function App() {
           tasks={tasksVisibles}
           onClose={() => setSearchOpen(false)}
           onOpenPlayer={(id) => navigateToPlayer(id, false)}
-          onOpenScoutingPlayer={(id) => { setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(null); setCaptacionOpenPlayerId(id); setMainSection('captacion') }}
-          onOpenFirmasEntry={(id) => { setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(null); setCaptacionOpenFirmasId(id); setMainSection('captacion') }}
+          onOpenScoutingPlayer={(id) => { setCaptacionOpenPlayerId(id); irASeccion('captacion') }}
+          onOpenFirmasEntry={(id) => { setCaptacionOpenFirmasId(id); irASeccion('captacion') }}
           onOpenClub={navigateToClub}
-          onGoTareas={() => { setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(null); setMainSection('tareas') }}
+          onGoTareas={() => irASeccion('tareas')}
+          onOpenTask={abrirTarea}
         />
       )}
     </>
@@ -1437,10 +1542,9 @@ export default function App() {
       scoutingMatches={scoutingMatches}
       profiles={profiles}
       currentProfile={profile}
-      onBack={() => { if (!profile.captacion_only) setMainSection('tareas') }}
-      onGoToSection={(s) => { if (!profile.captacion_only) setMainSection(s) }}
-      onLogout={signOut}
-      onAdmin={profile.is_admin && !profile.captacion_only ? () => { setMainSection('tareas'); setShowAdmin(true) } : undefined}
+      tab={subTabs.captacion}
+      onTabChange={(t) => setSubTabs(st => st.captacion === t ? st : { ...st, captacion: t })}
+      loading={phase2Loading}
       onAddPlayer={handleAddScoutingPlayer}
       onUpdatePlayer={handleUpdateScoutingPlayer}
       onDeletePlayer={handleDeleteScoutingPlayer}
@@ -1498,8 +1602,7 @@ export default function App() {
       postpartidos={postpartidos}
       players={players}
       scoutingPlayers={scoutingPlayers}
-      onBack={() => setMainSection(profile.captacion_only ? 'captacion' : 'tareas')}
-      onOpenTask={(id) => { setOpenTaskId(id); setMainSection('tareas') }}
+      onOpenTask={abrirTarea}
       onOpenMatch={(id) => { setCaptacionOpenMatchId(id); setMainSection('captacion') }}
       onOpenFirmasEntry={(id) => { setCaptacionOpenFirmasId(id); setMainSection('captacion') }}
       onOpenPlayer={(id) => navigateToPlayer(id, false)}
@@ -1527,27 +1630,41 @@ export default function App() {
     />
   )
 
+  // Cabecera única de la app (barra superior + nivel 1) para las vistas de sección
+  const enShell = (node: ReactNode, mainClassName?: string) => (
+    <AppShell
+      section={mainSection}
+      onGo={irASeccion}
+      profile={profile}
+      onLogout={signOut}
+      onAdmin={profile.is_admin ? abrirAdmin : undefined}
+      onOverview={profile.is_admin ? abrirOverview : undefined}
+      onSearch={() => setSearchOpen(true)}
+      bell={<NotificationsBell notifications={notifications} onDismiss={dismissNotification} onOpenPlayer={(id) => navigateToPlayer(id, false)} />}
+      captacionOnly={!!profile.captacion_only}
+      counts={tareasVencidas > 0 ? { tareas: { count: tareasVencidas, alert: true } } : undefined}
+      mainClassName={mainClassName}
+    >
+      {node}
+    </AppShell>
+  )
+
   if (profile.captacion_only) {
-    if (mainSection === 'mi-dia') return <>{miDiaNode}<SavingIndicator />{conflictNode}</>
+    if (mainSection === 'mi-dia') return <>{enShell(miDiaNode)}<SavingIndicator />{conflictNode}</>
     // Sin bottom nav: acceso a «Mi día» con un botón flotante
+    // Nivel 1 reducido (Captación y Mi día) en el AppShell; en móvil, BottomNav reducida
     return (
       <>
-        {captacionNode}
+        {enShell(captacionNode)}
         <button
-          onClick={() => setMainSection('mi-dia')}
-          className="fixed bottom-4 right-4 z-40 inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-amber-500 text-white text-xs font-semibold shadow-lg hover:bg-amber-600"
-          aria-label="Mi día"
-        >
-          ☀️ Mi día
-        </button>
-        <button
-          onClick={() => setCaptacionOpenTab('planificacion')}
+          onClick={irAPlanificacion}
           title="Planificación del fin de semana"
           aria-label="Planificación"
-          className="fixed bottom-16 right-4 z-40 inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-slate-900 text-white text-xs font-semibold shadow-lg hover:bg-slate-700"
+          className="fixed bottom-[5.5rem] sm:bottom-4 right-3 sm:right-4 z-40 inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-slate-900 text-white text-badge font-semibold shadow-lg hover:bg-slate-700 print:hidden"
         >
-          🗓️ Planificación
+          🗓️ <span className="hidden sm:inline">Planificación</span>
         </button>
+        <BottomNav current={mainSection} onGo={irASeccion} onSearch={() => setSearchOpen(true)} captacionOnly />
         <SavingIndicator />{conflictNode}
       </>
     )
@@ -1571,8 +1688,6 @@ export default function App() {
         profiles={profiles}
         onUpdatePlayer={handleUpdatePlayer}
         onBack={() => setShowTable(false)}
-        onLogout={signOut}
-        onAdmin={() => { setShowTable(false); setShowAdmin(true); }}
         onDeletePlayer={handleDeletePlayer}
       />
     )
@@ -1586,8 +1701,6 @@ export default function App() {
         postpartidos={postpartidos}
         tasks={tasks}
         onBack={() => setShowOverview(false)}
-        onLogout={signOut}
-        onAdmin={profile.is_admin ? () => { setShowOverview(false); setShowAdmin(true); } : undefined}
       />
     )
   }
@@ -1604,7 +1717,6 @@ export default function App() {
         firmasEntries={firmasEntries}
         onBack={() => setShowAdmin(false)}
         onRefresh={handleRefreshProfiles}
-        onLogout={signOut}
         onOpenTable={() => { setShowAdmin(false); setShowTable(true); }}
       />
     )
@@ -1643,8 +1755,7 @@ export default function App() {
         onDeleteTask={handleDeleteTask}
         onUpdatePlayer={handleUpdatePlayer}
         onDeletePlayer={profile.is_admin ? handleDeletePlayer : undefined}
-        onLogout={signOut}
-        onAdmin={profile.is_admin ? () => setShowAdmin(true) : undefined}
+        origen={playerReturnToClub ? 'distribucion' : 'jugadores'}
         distributionEntry={distEntries.find(e => e.playerId === selectedPlayer.id)}
         playerNegotiations={negotiations.filter(n => n.playerId === selectedPlayer.id)}
         clubs={clubs}
@@ -1663,6 +1774,9 @@ export default function App() {
 
   // El detalle de club se muestra en pantalla partida dentro de Distribución
   // (ver más abajo), por lo que la lista no se desmonta y los filtros se conservan.
+  // A pantalla completa (ampliado o en pantallas < lg) va sin AppShell y con
+  // su DetailHeader publicando --shell-h; en pantalla partida va embebido.
+  const clubFull = !!selectedClub && (clubExpanded || !isDesktop)
   const clubDetailNode = selectedClub ? (
     <ClubDetail
       key={selectedClub.id}
@@ -1672,12 +1786,10 @@ export default function App() {
       negotiations={negotiations}
       currentProfile={profile}
       profiles={profiles}
-      embedded
+      embedded={!clubFull}
       expanded={clubExpanded}
       onExpand={() => setClubExpanded(e => !e)}
       onBack={() => { setSelectedClubId(null); setClubExpanded(false) }}
-      onLogout={signOut}
-      onAdmin={profile.is_admin ? () => { setSelectedClubId(null); setClubExpanded(false); setShowAdmin(true) } : undefined}
       onSelectPlayer={(id) => navigateToPlayer(id, true)}
       onUpdateClub={handleUpdateClub}
       onDeleteClub={async (id) => { await handleDeleteClub(id); setSelectedClubId(null); setClubExpanded(false) }}
@@ -1687,8 +1799,10 @@ export default function App() {
     />
   ) : null
 
+  if (clubFull) return withExtras(clubDetailNode)
+
   if (mainSection === 'boulema') {
-    return withExtras(
+    return withExtras(enShell(
       <Boulema
         profiles={profiles}
         currentProfile={profile}
@@ -1704,32 +1818,24 @@ export default function App() {
         onAddBoulemaPlayer={handleAddBoulemaPlayer}
         onUpdateBoulemaPlayer={handleUpdateBoulemaPlayer}
         onDeleteBoulemaPlayer={handleDeleteBoulemaPlayer}
-        onGoToSection={(s) => setMainSection(s)}
+        tab={subTabs.boulema}
+        onTabChange={(t) => setSubTabs(st => st.boulema === t ? st : { ...st, boulema: t })}
         onOpenScoutingPlayer={(id) => { setCaptacionOpenPlayerId(id); setMainSection('captacion') }}
-        onLogout={signOut}
-        onAdmin={profile.is_admin ? () => { setMainSection('tareas'); setShowAdmin(true) } : undefined}
       />
-    )
+    ))
   }
 
-  if (mainSection === 'captacion') return withExtras(captacionNode)
+  if (mainSection === 'captacion') return withExtras(enShell(captacionNode))
 
-  if (mainSection === 'mi-dia') return withExtras(miDiaNode)
+  if (mainSection === 'mi-dia') return withExtras(enShell(miDiaNode))
 
   if (mainSection === 'distribucion' || selectedClub) {
     const splitOpen = !!selectedClub
-    return withExtras(
-      <div className="flex h-screen overflow-hidden">
-        {/* Lista (se oculta en móvil cuando hay club abierto, y al ampliar) */}
-        <div
-          className={
-            !splitOpen
-              ? 'flex-1 min-w-0 h-screen overflow-y-auto'
-              : clubExpanded
-                ? 'hidden'
-                : 'hidden lg:block lg:w-[44%] xl:w-[40%] flex-shrink-0 h-screen overflow-y-auto border-r border-slate-200'
-          }
-        >
+    // Pantalla partida (solo lg+): la lista scrollea con la página; el club
+    // va sticky bajo la cabecera con scroll propio.
+    return withExtras(enShell(
+      <div className={splitOpen ? 'flex items-start gap-0' : ''}>
+        <div className={splitOpen ? 'w-[44%] xl:w-[40%] flex-shrink-0 min-w-0 border-r border-slate-200 pr-4' : 'min-w-0'}>
           <Distribution
             players={players}
             clubs={clubs}
@@ -1737,14 +1843,10 @@ export default function App() {
             negotiations={negotiations}
             currentProfile={profile}
             profiles={profiles}
-            splitActive={splitOpen && !clubExpanded}
+            splitActive={splitOpen}
             activeClubId={selectedClubId ?? undefined}
-            onBack={() => setMainSection('tareas')}
-            onGoToJugadores={() => setMainSection('jugadores')}
-            onGoToCaptacion={() => setMainSection('captacion')}
-            onGoToBoulema={() => setMainSection('boulema')}
-            onLogout={signOut}
-            onAdmin={profile.is_admin ? () => { setMainSection('tareas'); setShowAdmin(true) } : undefined}
+            tab={subTabs.distribucion}
+            onTabChange={(t) => setSubTabs(st => st.distribucion === t ? st : { ...st, distribucion: t })}
             onSelectPlayer={(id) => navigateToPlayer(id, false)}
             onSelectClub={navigateToClub}
             onCreateClub={handleCreateClub}
@@ -1762,32 +1864,28 @@ export default function App() {
 
         {/* Panel del club */}
         {splitOpen && (
-          <div className="flex-1 min-w-0 h-screen overflow-y-auto bg-white">
+          <div className="flex-1 min-w-0 lg:sticky lg:top-[var(--shell-h)] lg:h-[calc(100dvh-var(--shell-h))] overflow-y-auto bg-white -my-4">
             {clubDetailNode}
           </div>
         )}
-      </div>
-    )
+      </div>,
+      splitOpen ? 'max-w-none px-3 sm:px-6 py-4' : undefined,
+    ))
   }
 
-  // 'tareas' and 'jugadores' both use Dashboard with a view prop
-  return withExtras(
+  // 'tareas' y 'jugadores' (y equipo/postpartidos vía subTabs) usan Dashboard con `tab`
+  return withExtras(enShell(
     <Dashboard
-      view={mainSection === 'jugadores' ? 'jugadores' : 'tareas'}
-      onViewChange={(v) => setMainSection(v)}
+      tab={dashboardTab}
+      onTabChange={onDashboardTab}
       players={players}
       tasks={tasks}
       profiles={profiles}
       currentProfile={profile}
       onSelectPlayer={(id) => navigateToPlayer(id, false)}
-      onLogout={signOut}
       onAddPlayer={handleAddPlayer}
-      onAdmin={profile.is_admin ? () => setShowAdmin(true) : undefined}
       onBulkDelete={profile.is_admin ? handleBulkDelete : undefined}
       onBulkAssignManager={profile.is_admin ? handleBulkAssignManager : undefined}
-      onOverview={profile.is_admin ? () => setShowOverview(true) : undefined}
-      notifications={notifications}
-      onDismissNotification={dismissNotification}
       onAddGeneralTask={handleAddTask}
       onUpdateGeneralTask={handleUpdateTask}
       onUpdateTask={handleUpdateTask}
@@ -1808,6 +1906,6 @@ export default function App() {
       onOpenTaskConsumed={() => setOpenTaskId(null)}
       updateAvailable={updateAvailable}
     />
-  )
+  ))
 }
 

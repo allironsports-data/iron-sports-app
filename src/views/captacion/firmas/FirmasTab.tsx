@@ -1,10 +1,11 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react'
-import { Search, X, Plus, ChevronDown, ChevronRight, Pencil, Users, PenLine, MapPin, MessageSquare, LayoutGrid } from 'lucide-react'
+import { Search, X, Plus, ChevronDown, ChevronRight, Pencil, Users, PenLine, MapPin, MessageSquare, LayoutGrid, ClipboardList, Copy, AlertTriangle, Check } from 'lucide-react'
+import { Button, IconButton, Dialog, Input } from '../../../components/ui'
+import { L } from '../../../lib/labels'
 import type { Player, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion, FirmasEntry, FirmasStatus, FirmasComment } from '../../../types'
 import type { Profile } from '../../../contexts/AuthContext'
 import { ConfirmModal } from '../../../components/ConfirmModal'
 import { EmptyState } from '../../../components/EmptyState'
-import { useEscapeKey } from '../../../hooks/useEscapeKey'
 import { useDebounce } from '../../../hooks/useDebounce'
 import { ZONAS_PIPELINE as FIRMAS_ZONE_ORDER } from '../../../lib/zonas'
 import { teamsAlike, equipoMatchKind } from '../../../lib/equipos'
@@ -19,7 +20,7 @@ import { FirmasAddModal } from './FirmasAddModal'
 export function FirmasTab({
   entries, profiles, currentProfile, scoutingPlayers, scoutingReports, scoutingMatches,
   matchPlayers, boulemaPeticiones, players, onCreatePlayer, onSyncActionTasks,
-  onCreate, onPatch, onDelete, onOpenScoutingPlayer, showToast, headerHeight,
+  onCreate, onPatch, onDelete, onOpenScoutingPlayer, showToast,
   openEntryId, onOpenEntryConsumed,
 }: {
   entries: FirmasEntry[]
@@ -38,7 +39,6 @@ export function FirmasTab({
   onDelete: (id: string) => Promise<void>
   onOpenScoutingPlayer: (id: string) => void
   showToast: ShowToast
-  headerHeight: number
   openEntryId?: string | null
   onOpenEntryConsumed?: () => void
 }) {
@@ -99,7 +99,7 @@ export function FirmasTab({
   const canHover = typeof window !== 'undefined' && window.matchMedia?.('(hover: hover)').matches
 
   const panelEntry = entries.find(e => e.id === panelId) ?? null
-  useEscapeKey(() => setPanelId(null), !!panelEntry && !confirmDelete)
+  // Escape / atrás del móvil los gestiona el Sheet del panel de detalle
 
   // Navegación externa (p. ej. desde el aviso del Dashboard)
   useEffect(() => {
@@ -188,7 +188,7 @@ export function FirmasTab({
     active.forEach(e => {
       const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
       if (sp?.assessment === 'Descartado') {
-        out.push({ icon: '🚫', tone: 'red', entryId: e.id, kind: 'descartado', text: `${e.playerName}: en scouting está Descartado — ¿sacarlo del pipeline?` })
+        out.push({ icon: '🚫', tone: 'red', entryId: e.id, kind: 'descartado', text: `${e.playerName}: en scouting está Descartado — ¿sacarlo de Firmar?` })
       }
     })
 
@@ -293,7 +293,7 @@ export function FirmasTab({
     const byLink: Record<string, FirmasEntry[]> = {}
     entries.forEach(e => { if (e.scoutingPlayerId) (byLink[e.scoutingPlayerId] ??= []).push(e) })
     Object.values(byLink).filter(l => l.length > 1).forEach(l => {
-      out.push({ icon: '👥', tone: 'red', entryId: l[0].id, kind: 'duplicado', text: `${l[0].playerName} está ${l.length} veces en el pipeline (${l.map(x => x.zone).join(' y ')})` })
+      out.push({ icon: '👥', tone: 'red', entryId: l[0].id, kind: 'duplicado', text: `${l[0].playerName} está ${l.length} veces en Firmar (${l.map(x => x.zone).join(' y ')})` })
     })
 
     // firmado que aún no está en Mantenimiento
@@ -428,7 +428,7 @@ export function FirmasTab({
             <FirmasManagers managerIds={e.managers} profiles={profiles} />
           </span>
         </div>
-        <div className="mt-1 flex items-center gap-2 text-[11px] text-slate-400">
+        <div className="mt-1 flex items-center gap-2 text-badge text-slate-500">
           <span className="truncate min-w-0">
             {sp
               ? [sp.team, sp.birthdate ? sp.birthdate.slice(0, 4) : null].filter(Boolean).join(' · ') || e.zone
@@ -439,7 +439,7 @@ export function FirmasTab({
           )}
           {e.nextActionDate && e.status !== 'firmado' && (
             <span
-              className={`flex-shrink-0 font-medium ${actionOverdue ? 'text-red-500' : actionToday ? 'text-blue-600' : 'text-slate-400'}`}
+              className={`flex-shrink-0 font-medium ${actionOverdue ? 'text-red-500' : actionToday ? 'text-blue-600' : 'text-slate-500'}`}
               title={`${e.nextAction ?? 'Próxima acción'} · ${fmtDate(e.nextActionDate)}`}
             >
               {FIRMAS_ACTION_KIND_META[e.nextActionKind ?? '']?.icon ?? '📌'} {actionOverdue ? 'vencida' : actionToday ? 'hoy' : parseDia(e.nextActionDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
@@ -465,22 +465,27 @@ export function FirmasTab({
     // deslizada: fila de estatus rápidos
     if (swipedId === e.id) {
       return (
-        <div key={e.id} className="flex items-center gap-1.5 px-3 py-2 bg-slate-50">
-          <span className="text-xs font-semibold text-slate-700 truncate flex-1 min-w-0">{e.playerName}</span>
+        <div key={e.id} role="group" aria-label={`Cambiar estatus de ${e.playerName}`} className="flex items-center gap-0.5 px-2 py-1 bg-slate-50">
+          <span className="text-secondary font-semibold text-slate-700 truncate flex-1 min-w-0 pl-1">{e.playerName}</span>
+          {/* Puntos de estatus: área táctil de 44px y nombre accesible con el estatus */}
           {FIRMAS_STATUSES.map(s => (
             <button
               key={s}
+              type="button"
               onClick={() => { if (s !== e.status) changeStatus(e, s); setSwipedId(null) }}
-              className={`w-7 h-7 rounded-full flex items-center justify-center border transition-colors ${
-                s === e.status ? `${FIRMAS_CONFIG[s].bg} ${FIRMAS_CONFIG[s].border} ring-1 ring-current ${FIRMAS_CONFIG[s].text}` : 'bg-white border-slate-200'
-              }`}
+              className="min-w-11 min-h-11 rounded-full flex items-center justify-center"
               title={FIRMAS_CONFIG[s].label}
-              aria-label={FIRMAS_CONFIG[s].label}
+              aria-label={`${FIRMAS_CONFIG[s].label}: ${e.playerName}`}
+              aria-pressed={s === e.status}
             >
-              <span className={`w-2.5 h-2.5 rounded-full ${FIRMAS_CONFIG[s].dot}`} />
+              <span className={`w-7 h-7 rounded-full flex items-center justify-center border ${
+                s === e.status ? `${FIRMAS_CONFIG[s].bg} ${FIRMAS_CONFIG[s].border} ring-1 ring-current ${FIRMAS_CONFIG[s].text}` : 'bg-white border-slate-200'
+              }`}>
+                <span className={`w-2.5 h-2.5 rounded-full ${FIRMAS_CONFIG[s].dot}`} />
+              </span>
             </button>
           ))}
-          <button onClick={() => setSwipedId(null)} aria-label="Cerrar" className="p-1 text-slate-400"><X className="w-4 h-4" /></button>
+          <IconButton label={L.cerrar} onClick={() => setSwipedId(null)}><X /></IconButton>
         </div>
       )
     }
@@ -507,7 +512,7 @@ export function FirmasTab({
         )}
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-semibold text-slate-800 truncate leading-tight">{e.playerName}</span>
-          <span className="block text-[11px] text-slate-400 truncate">
+          <span className="block text-badge text-slate-500 truncate">
             {sp
               ? [sp.team, sp.birthdate ? sp.birthdate.slice(0, 4) : null].filter(Boolean).join(' · ') || e.zone
               : e.zone}
@@ -515,7 +520,7 @@ export function FirmasTab({
               <span className="ml-1.5" title="Pendiente de conseguir teléfono">📵</span>
             )}
             {e.nextActionDate && e.status !== 'firmado' && (
-              <span className={`ml-1.5 font-medium ${actionOverdue ? 'text-red-500' : actionToday ? 'text-blue-600' : 'text-slate-400'}`}>
+              <span className={`ml-1.5 font-medium ${actionOverdue ? 'text-red-500' : actionToday ? 'text-blue-600' : 'text-slate-500'}`}>
                 {FIRMAS_ACTION_KIND_META[e.nextActionKind ?? '']?.icon ?? '📌'} {actionOverdue ? 'vencida' : actionToday ? 'hoy' : parseDia(e.nextActionDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
               </span>
             )}
@@ -531,7 +536,7 @@ export function FirmasTab({
 
   const mobileList = (list: FirmasEntry[], showStatusDot = true) => (
     list.length === 0 ? (
-      <div className="bg-white border border-slate-200 rounded-lg py-8 text-center text-xs text-slate-400">Sin jugadores</div>
+      <div className="bg-white border border-slate-200 rounded-lg py-8 text-center text-xs text-slate-500">Sin jugadores</div>
     ) : (
       <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100 overflow-hidden">
         {list.map(e => mobileRow(e, showStatusDot))}
@@ -565,16 +570,16 @@ export function FirmasTab({
             <div className="flex items-center gap-1.5 px-2.5 py-2">
               <span className={`w-2 h-2 rounded-full ${FIRMAS_CONFIG[s].dot}`} />
               <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">{FIRMAS_CONFIG[s].label}</span>
-              <span className="text-[11px] text-slate-400 font-medium">{groups[s].length}</span>
+              <span className="text-badge text-slate-500 font-medium">{groups[s].length}</span>
               {groups[s].filter(necesitaTelefono).length > 0 && (
-                <span className="ml-auto text-[11px] text-violet-600 font-medium" title="Pendientes de conseguir teléfono">
+                <span className="ml-auto text-badge text-violet-600 font-medium" title="Pendientes de conseguir teléfono">
                   📵 {groups[s].filter(necesitaTelefono).length}
                 </span>
               )}
             </div>
             <div className="px-2 pb-2 space-y-1.5 max-h-[65vh] overflow-y-auto">
               {groups[s].length === 0 ? (
-                <div className="text-[11px] text-slate-400 text-center py-4">—</div>
+                <div className="text-badge text-slate-500 text-center py-4">—</div>
               ) : groups[s].map(e => card(e))}
             </div>
           </div>
@@ -589,32 +594,33 @@ export function FirmasTab({
     <div className="flex-1 w-full px-3 sm:px-6 py-4 space-y-3">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <h2 className="text-sm font-semibold text-slate-800">Pipeline/Firmar</h2>
-          <p className="text-xs text-slate-400">Captación activa: jugadores en proceso de conseguir la firma, por zona y estatus</p>
+          <h2 className="text-body font-semibold text-slate-800">{L.firmar}</h2>
+          <p className="text-secondary text-slate-500">Captación activa: jugadores en proceso de conseguir la firma, por zona y estatus</p>
         </div>
         <div className="flex-shrink-0 flex items-center gap-1.5">
-          <button
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={<ClipboardList />}
             onClick={() => setShowResumen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 text-xs font-medium hover:bg-slate-50 transition-colors"
-            title="Resumen semanal del pipeline, listo para copiar"
+            title="Resumen semanal, listo para copiar"
+            aria-label="Resumen semanal, listo para copiar"
           >
-            📋 <span className="hidden sm:inline">Resumen</span>
-          </button>
-          <button
-            onClick={() => setShowAdd(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-medium hover:bg-primary/90 transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Resumen</span>
+          </Button>
+          <Button size="sm" variant="primary" icon={<Plus />} onClick={() => setShowAdd(true)}>
             Añadir jugador
-          </button>
+          </Button>
         </div>
       </div>
 
       {entries.length === 0 ? (
         <EmptyState
           icon={<PenLine className="w-10 h-10" />}
-          title="Aún no hay jugadores en el pipeline de firmas"
-          subtitle="Si acabas de activar esta función, recuerda ejecutar la migración SQL en Supabase y el snippet de importación del Trello"
+          title="Aún no hay jugadores en Firmar"
+          subtitle={currentProfile.is_admin
+            ? 'Si acabas de activar esta función, recuerda ejecutar la migración SQL en Supabase y el snippet de importación del Trello'
+            : 'Añade el primer jugador con «Añadir jugador»'}
         />
       ) : (
         <>
@@ -631,7 +637,7 @@ export function FirmasTab({
                     <span className="text-sm">⚠️</span>
                     <span className="text-xs font-bold text-red-700">{urgentes} que requieren acción</span>
                     {totalAvisos > urgentes && (
-                      <span className="text-[11px] text-slate-500">· {totalAvisos - urgentes} informativos</span>
+                      <span className="text-badge text-slate-500">· {totalAvisos - urgentes} informativos</span>
                     )}
                   </>
                 ) : (
@@ -640,10 +646,10 @@ export function FirmasTab({
                     <span className="text-xs font-semibold text-slate-600">{totalAvisos} avisos informativos</span>
                   </>
                 )}
-                <span className="hidden sm:inline text-[11px] text-slate-500 truncate ml-1">
+                <span className="hidden sm:inline text-badge text-slate-500 truncate ml-1">
                   {gruposAviso.slice(0, 3).map(g => `${g.titulo} (${g.items.length})`).join(' · ')}
                 </span>
-                <ChevronDown className={`w-4 h-4 text-slate-400 ml-auto flex-shrink-0 transition-transform ${showAlerts ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`w-4 h-4 text-slate-500 ml-auto flex-shrink-0 transition-transform ${showAlerts ? 'rotate-180' : ''}`} />
               </button>
 
               {showAlerts && (
@@ -659,7 +665,7 @@ export function FirmasTab({
                           >
                             <span className="flex-shrink-0">{g.icon}</span>
                             <span className={`text-xs font-semibold truncate ${g.tone === 'red' ? 'text-red-700' : 'text-slate-700'}`}>{g.titulo}</span>
-                            <span className={`text-[10px] font-bold rounded-full px-1.5 py-px flex-shrink-0 ${
+                            <span className={`text-badge font-bold rounded-full px-1.5 py-px flex-shrink-0 ${
                               g.tone === 'red' ? 'bg-red-100 text-red-700' :
                               g.tone === 'amber' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
                             }`}>{g.items.length}</span>
@@ -668,7 +674,7 @@ export function FirmasTab({
                           <button
                             onClick={() => silenciar(g.kind)}
                             title="No volver a enseñarme este tipo de aviso (solo en este navegador)"
-                            className="text-[10px] text-slate-300 hover:text-slate-600 flex-shrink-0"
+                            className="text-badge text-slate-600 hover:text-slate-900 flex-shrink-0 min-h-11 sm:min-h-0 px-1"
                           >silenciar</button>
                         </div>
                         {abierto && (
@@ -677,7 +683,7 @@ export function FirmasTab({
                               <button
                                 key={i}
                                 onClick={() => setPanelId(a.entryId)}
-                                className="w-full text-left text-[11.5px] text-slate-700 px-3 py-1.5 pl-9 hover:bg-white transition-colors"
+                                className="w-full text-left text-meta text-slate-700 px-3 py-1.5 pl-9 hover:bg-white transition-colors"
                               >
                                 {a.text}
                               </button>
@@ -690,7 +696,7 @@ export function FirmasTab({
                   {avisosMudos.size > 0 && (
                     <button
                       onClick={() => { setAvisosMudos(new Set()); localStorage.removeItem('firmas_avisos_mudos') }}
-                      className="w-full text-[11px] text-slate-400 hover:text-slate-600 px-3 py-2 text-left"
+                      className="w-full text-badge text-slate-600 hover:text-slate-900 px-3 py-2 text-left"
                     >
                       Tienes {avisosMudos.size} tipo{avisosMudos.size !== 1 ? 's' : ''} de aviso silenciado{avisosMudos.size !== 1 ? 's' : ''} — volver a enseñarlos
                     </button>
@@ -710,7 +716,7 @@ export function FirmasTab({
                 <span className="text-sm">📌</span>
                 <span className="text-xs font-semibold text-blue-800">Agenda · {agenda.length} próxima{agenda.length !== 1 ? 's' : ''} acci{agenda.length !== 1 ? 'ones' : 'ón'}</span>
                 {agenda.some(e => (e.nextActionDate ?? '') < todayISO()) && (
-                  <span className="text-[10.5px] font-semibold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600">
+                  <span className="text-badge font-semibold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600">
                     {agenda.filter(e => (e.nextActionDate ?? '') < todayISO()).length} vencida{agenda.filter(e => (e.nextActionDate ?? '') < todayISO()).length !== 1 ? 's' : ''}
                   </span>
                 )}
@@ -729,7 +735,7 @@ export function FirmasTab({
                         setSyncingTasks(false)
                       }
                     }}
-                    className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-blue-600 text-white hover:bg-blue-700 cursor-pointer transition-colors"
+                    className="text-badge font-semibold px-2 py-0.5 rounded-full bg-blue-600 text-white hover:bg-blue-700 cursor-pointer transition-colors"
                     title="Crea una tarea en el tablero por cada acción que aún no la tenga (asignada a su encargado, con la fecha como límite)"
                   >
                     {syncingTasks ? 'Creando…' : `⇪ Crear tareas (${agenda.filter(e => !e.nextActionTaskId).length})`}
@@ -756,7 +762,7 @@ export function FirmasTab({
                         <span className="font-semibold truncate">{e.playerName}</span>
                         <span className="text-slate-500 truncate">{e.nextAction ?? ''}</span>
                         {assignee && (
-                          <span className="ml-auto flex-shrink-0 px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-mono font-bold text-[10px]">
+                          <span className="ml-auto flex-shrink-0 px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-mono font-bold text-badge">
                             {assignee.avatar || assignee.name.split(' ')[0]}
                           </span>
                         )}
@@ -771,17 +777,18 @@ export function FirmasTab({
           {/* Filtros + toggle de vista */}
           <div className="bg-white border border-slate-200 rounded-lg px-3 py-2.5 flex flex-wrap items-center gap-2">
             <div className="relative flex-1 min-w-[150px] max-w-xs">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-              <input
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" aria-hidden="true" />
+              <Input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Buscar jugador, club..."
-                className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                aria-label="Buscar jugador o club"
+                className="pl-8 pr-9"
               />
               {search && (
-                <button onClick={() => setSearch('')} aria-label="Limpiar búsqueda" className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                  <X className="w-3 h-3" />
-                </button>
+                <IconButton label="Limpiar búsqueda" onClick={() => setSearch('')} className="absolute right-0 top-1/2 -translate-y-1/2 text-slate-600">
+                  <X />
+                </IconButton>
               )}
             </div>
             {view === 'estatus' && (
@@ -910,20 +917,20 @@ export function FirmasTab({
                       >
                         <div className="flex items-center justify-between gap-1">
                           <span className={`text-xs font-semibold truncate ${active ? 'text-primary' : 'text-slate-700'}`}>{z}</span>
-                          <span className={`text-xs font-bold flex-shrink-0 ${active ? 'text-primary' : 'text-slate-400'}`}>{zEntries.length}</span>
+                          <span className={`text-xs font-bold flex-shrink-0 ${active ? 'text-primary' : 'text-slate-500'}`}>{zEntries.length}</span>
                         </div>
                         <div className="mt-1 flex items-center gap-2">
                           {FIRMAS_STATUSES.map(s => {
                             const n = zEntries.filter(e => e.status === s).length
                             if (n === 0) return null
                             return (
-                              <span key={s} className="inline-flex items-center gap-0.5 text-[10.5px] text-slate-500" title={FIRMAS_CONFIG[s].label}>
+                              <span key={s} className="inline-flex items-center gap-0.5 text-badge text-slate-500" title={FIRMAS_CONFIG[s].label}>
                                 <span className={`w-1.5 h-1.5 rounded-full ${FIRMAS_CONFIG[s].dot}`} />
                                 {n}
                               </span>
                             )
                           })}
-                          {zEntries.length === 0 && <span className="text-[10.5px] text-slate-300">sin jugadores</span>}
+                          {zEntries.length === 0 && <span className="text-badge text-slate-500">sin jugadores</span>}
                         </div>
                       </button>
                     )
@@ -934,33 +941,32 @@ export function FirmasTab({
                 {activeZone ? (
                   <div>
                     <div className="flex items-center gap-2 mb-2">
-                      <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                      <MapPin className="w-3.5 h-3.5 text-slate-500" />
                       {renamingZone ? (
                         <span className="flex items-center gap-1.5">
-                          <input
+                          <Input
                             value={renameValue}
                             onChange={e => setRenameValue(e.target.value)}
                             onKeyDown={e => { if (e.key === 'Enter') void renameZone(activeZone); if (e.key === 'Escape') setRenamingZone(false) }}
                             autoFocus
-                            className="text-xs font-bold text-slate-700 border border-blue-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                            aria-label="Nuevo nombre de la zona"
+                            className="w-auto py-1 font-bold"
                           />
-                          <button onClick={() => void renameZone(activeZone)} className="text-[11px] font-medium text-primary hover:underline">Guardar</button>
-                          <button onClick={() => setRenamingZone(false)} className="text-[11px] text-slate-400 hover:text-slate-600">Cancelar</button>
+                          <Button size="sm" variant="primary" onClick={() => void renameZone(activeZone)}>{L.guardar}</Button>
+                          <Button size="sm" variant="ghost" onClick={() => setRenamingZone(false)}>{L.cancelar}</Button>
                         </span>
                       ) : (
                         <>
                           <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">{activeZone}</span>
-                          <button
+                          <IconButton
+                            label="Renombrar zona (se aplica a todos sus jugadores)"
                             onClick={() => { setRenameValue(activeZone); setRenamingZone(true) }}
-                            className="p-0.5 text-slate-300 hover:text-slate-500"
-                            title="Renombrar zona (se aplica a todos sus jugadores)"
-                            aria-label="Renombrar zona"
                           >
-                            <Pencil className="w-3 h-3" />
-                          </button>
+                            <Pencil />
+                          </IconButton>
                         </>
                       )}
-                      <span className="text-[11px] text-slate-400">{zoneEntries.length} jugador{zoneEntries.length !== 1 ? 'es' : ''}</span>
+                      <span className="text-badge text-slate-500">{zoneEntries.length} jugador{zoneEntries.length !== 1 ? 'es' : ''}</span>
                     </div>
                     <div className="sm:hidden space-y-2.5">
                       {FIRMAS_STATUSES.map(s => {
@@ -972,8 +978,8 @@ export function FirmasTab({
                           <div key={s}>
                             <div className="flex items-center gap-1.5 px-1 pb-1">
                               <span className={`w-2 h-2 rounded-full ${FIRMAS_CONFIG[s].dot}`} />
-                              <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">{FIRMAS_CONFIG[s].label}</span>
-                              <span className="text-[11px] text-slate-400">{l.length}</span>
+                              <span className="text-badge font-bold text-slate-600 uppercase tracking-wide">{FIRMAS_CONFIG[s].label}</span>
+                              <span className="text-badge text-slate-500">{l.length}</span>
                             </div>
                             {mobileList(l, false)}
                           </div>
@@ -983,7 +989,7 @@ export function FirmasTab({
                     {statusBoard(zoneEntries)}
                   </div>
                 ) : (
-                  <p className="text-xs text-slate-400 text-center py-6">No hay zonas todavía</p>
+                  <p className="text-xs text-slate-500 text-center py-6">No hay zonas todavía</p>
                 )}
               </div>
             )
@@ -1042,18 +1048,18 @@ export function FirmasTab({
                   return (
                     <div key={p.id} className="flex-shrink-0 w-[250px] bg-slate-50 border border-slate-200 rounded-lg">
                       <div className="flex items-center gap-1.5 px-2.5 py-2">
-                        <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[8.5px] font-bold ${c.bg} ${c.text}`}>
+                        <span className={`w-5 h-5 rounded-full flex items-center justify-center text-badge font-bold ${c.bg} ${c.text}`}>
                           {(p.avatar || p.name.slice(0, 2)).slice(0, 3).toUpperCase()}
                         </span>
                         <span className="text-xs font-bold text-slate-700 truncate">{p.name.split(' ')[0]}</span>
-                        <span className="text-[11px] text-slate-400 font-medium">{list.length}</span>
+                        <span className="text-badge text-slate-500 font-medium">{list.length}</span>
                         <span className="ml-auto flex items-center gap-1.5">
                           {calientes > 0 && (
-                            <span className="inline-flex items-center gap-0.5 text-[10.5px] text-red-600 font-semibold" title="Calientes">
+                            <span className="inline-flex items-center gap-0.5 text-badge text-red-600 font-semibold" title="Calientes">
                               <span className="w-1.5 h-1.5 rounded-full bg-red-500" />{calientes}
                             </span>
                           )}
-                          {overdue > 0 && <span className="text-[10.5px] text-red-500" title="Desatendidos">⚠ {overdue}</span>}
+                          {overdue > 0 && <span className="text-badge text-red-500" title="Desatendidos">⚠ {overdue}</span>}
                         </span>
                       </div>
                       <div className="px-2 pb-2 space-y-1.5 max-h-[65vh] overflow-y-auto">
@@ -1068,12 +1074,12 @@ export function FirmasTab({
                 {/* Sin encargado — para repartir */}
                 <div className={`flex-shrink-0 w-[250px] rounded-lg border ${noManager.length > 0 ? 'bg-red-50/60 border-red-200' : 'bg-slate-50 border-slate-200'}`}>
                   <div className="flex items-center gap-1.5 px-2.5 py-2">
-                    <span className={`text-xs font-bold ${noManager.length > 0 ? 'text-red-700' : 'text-slate-400'}`}>⚠ Sin encargado</span>
-                    <span className="text-[11px] text-slate-400 font-medium">{noManager.length}</span>
+                    <span className={`inline-flex items-center gap-1 text-xs font-bold ${noManager.length > 0 ? 'text-red-700' : 'text-slate-500'}`}><AlertTriangle className="w-3.5 h-3.5" aria-hidden="true" /> {L.sinEncargado}</span>
+                    <span className="text-badge text-slate-500 font-medium">{noManager.length}</span>
                   </div>
                   <div className="px-2 pb-2 space-y-1.5 max-h-[65vh] overflow-y-auto">
                     {noManager.length === 0 ? (
-                      <div className="text-[11px] text-slate-400 text-center py-4">Todos repartidos ✓</div>
+                      <div className="text-badge text-slate-500 text-center py-4 inline-flex items-center justify-center gap-1 w-full">Todos repartidos <Check className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" /></div>
                     ) : noManager.map(e => card(e, true))}
                   </div>
                 </div>
@@ -1109,7 +1115,6 @@ export function FirmasTab({
           players={players}
           onCreatePlayer={onCreatePlayer}
           showToast={showToast}
-          headerHeight={headerHeight}
           onClose={() => setPanelId(null)}
           onPatch={patch}
           onChangeStatus={changeStatus}
@@ -1122,8 +1127,8 @@ export function FirmasTab({
       {confirmDelete && (
         <ConfirmModal
           open
-          title="Eliminar jugador del pipeline"
-          message={`¿Seguro que quieres eliminar a ${confirmDelete.playerName} del pipeline de firmas? Se perderá su historial.`}
+          title="Eliminar jugador de Firmar"
+          message={`¿Seguro que quieres eliminar a ${confirmDelete.playerName} de Firmar? Se perderá su historial y sus apuntes.`}
           confirmLabel="Eliminar"
           variant="danger"
           onConfirm={async () => {
@@ -1131,7 +1136,7 @@ export function FirmasTab({
               await onDelete(confirmDelete.id)
               setConfirmDelete(null)
               setPanelId(null)
-              showToast('Jugador eliminado del pipeline')
+              showToast('Jugador eliminado de Firmar')
             } catch (err) {
               console.error(err)
               showToast('No se pudo eliminar', 'error')
@@ -1151,7 +1156,7 @@ export function FirmasTab({
         const firmados7 = entries.filter(e => e.status === 'firmado' && (e.signedAt ?? '') >= since7)
         const nombreEnc = (e: FirmasEntry) => e.managers.map(id => profiles.find(p => p.id === id)?.avatar).filter(Boolean).join('/')
         const lines: string[] = []
-        lines.push(`📋 PIPELINE FIRMAR · ${new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })}`)
+        lines.push(`📋 FIRMAR · ${new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })}`)
         lines.push('')
         lines.push(`Activos: ${active.length} · ${FIRMAS_STATUSES.filter(s => s !== 'firmado').map(s => `${entries.filter(e => e.status === s).length} ${FIRMAS_CONFIG[s].label.toLowerCase()}`).join(' · ')}`)
         lines.push('')
@@ -1174,27 +1179,27 @@ export function FirmasTab({
         }
         const text = lines.join('\n')
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4" onClick={() => setShowResumen(false)}>
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-5 max-h-[85vh] flex flex-col" onClick={ev => ev.stopPropagation()}>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-bold text-slate-800">Resumen del pipeline</h3>
-                <button onClick={() => setShowResumen(false)} aria-label="Cerrar" className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"><X className="w-4 h-4" /></button>
-              </div>
-              <pre className="flex-1 overflow-y-auto text-[11.5px] leading-relaxed text-slate-700 bg-slate-50 border border-slate-200 rounded-lg p-3 whitespace-pre-wrap font-sans">{text}</pre>
-              <div className="mt-3 flex justify-end gap-2">
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(text)
-                      .then(() => showToast('Resumen copiado — pégalo en WhatsApp'))
-                      .catch(() => showToast('No se pudo copiar', 'error'))
-                  }}
-                  className="px-4 py-1.5 rounded-lg bg-primary text-white text-xs font-medium hover:bg-primary/90 transition-colors"
-                >
-                  📋 Copiar
-                </button>
-              </div>
-            </div>
-          </div>
+          <Dialog
+            open
+            onClose={() => setShowResumen(false)}
+            title="Resumen semanal"
+            historyKey="firmas-resumen"
+            footer={
+              <Button
+                variant="primary"
+                icon={<Copy />}
+                onClick={() => {
+                  navigator.clipboard.writeText(text)
+                    .then(() => showToast('Resumen copiado — pégalo en WhatsApp'))
+                    .catch(() => showToast('No se pudo copiar', 'error'))
+                }}
+              >
+                Copiar
+              </Button>
+            }
+          >
+            <pre className="text-meta leading-relaxed text-slate-700 bg-slate-50 border border-slate-200 rounded-lg p-3 whitespace-pre-wrap font-sans">{text}</pre>
+          </Dialog>
         )
       })()}
 
@@ -1213,10 +1218,10 @@ export function FirmasTab({
               const saved = await onCreate({ ...draft, sortPos: maxPos + 1 })
               setShowAdd(false)
               setPanelId(saved.id)
-              showToast(`${draft.playerName} añadido al pipeline`)
+              showToast(`${draft.playerName} añadido a Firmar`)
             } catch (err) {
               console.error(err)
-              showToast('No se pudo crear (¿has ejecutado la migración SQL?)', 'error')
+              showToast(currentProfile.is_admin ? 'No se pudo crear (¿has ejecutado la migración SQL?)' : 'No se pudo crear. Inténtalo de nuevo.', 'error')
             }
           }}
         />

@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Plus, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { Plus, ChevronLeft, ChevronRight, X, Printer } from 'lucide-react'
+import { Button, IconButton } from '../../components/ui'
+import { L } from '../../lib/labels'
 import type { Player, ScoutingMatch, ScoutingMatchOurPlayer, ScoutingMatchScout } from '../../types'
 import type { Profile } from '../../contexts/AuthContext'
 import { BotonCsv } from '../../components/BotonCsv'
@@ -12,7 +14,7 @@ import { norm } from '../../lib/texto'
 import { MatchFormPanel, type MatchFormState } from './partidos/MatchFormPanel'
 
 // ── Pestaña PLANIFICACIÓN · la hoja de fin de semana (Día · Hora · Partido ·
-// Jugador · Persona · Vía) con edición en la propia tabla ──
+// Jugador · Scout · Vía) con edición en la propia tabla ──
 
 type Modo = 'finde' | 'semana'
 
@@ -27,7 +29,7 @@ const COLOR_DIA: Record<string, { celda: string; fila: string }> = {
   Jueves:    { celda: 'bg-orange-100',  fila: 'bg-orange-50/50' },
 }
 
-const SELECT_MINI = 'text-[11px] border border-slate-200 rounded px-1 py-0.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30'
+const SELECT_MINI = 'text-badge border border-slate-200 rounded px-1 py-0.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30'
 
 export function PlanificacionTab({
   scoutingMatches, matchScouts, matchOurPlayers, players, profiles, currentProfile,
@@ -99,10 +101,10 @@ export function PlanificacionTab({
         {/* Cabecera: rango, navegación, modo y acciones */}
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1">
-            <button onClick={() => setOffset(o => o - 1)} aria-label="Anterior" className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50"><ChevronLeft className="w-4 h-4" /></button>
+            <IconButton label="Periodo anterior" variant="secondary" onClick={() => setOffset(o => o - 1)}><ChevronLeft /></IconButton>
             <h2 className="text-sm sm:text-base font-bold text-slate-800 px-1 whitespace-nowrap">{titulo}</h2>
-            <button onClick={() => setOffset(o => o + 1)} aria-label="Siguiente" className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50"><ChevronRight className="w-4 h-4" /></button>
-            {offset !== 0 && <button onClick={() => setOffset(0)} className="text-[11px] text-blue-600 hover:underline ml-1">hoy</button>}
+            <IconButton label="Periodo siguiente" variant="secondary" onClick={() => setOffset(o => o + 1)}><ChevronRight /></IconButton>
+            {offset !== 0 && <Button size="sm" variant="link" onClick={() => setOffset(0)} className="ml-1">hoy</Button>}
           </div>
           <div className="flex items-center rounded-lg border border-slate-200 overflow-hidden">
             {([['semana', 'Semana (mar-lun)'], ['finde', 'Fin de semana']] as [Modo, string][]).map(([id, label]) => (
@@ -117,7 +119,7 @@ export function PlanificacionTab({
           </div>
           <button
             onClick={() => setSoloMios(v => !v)}
-            title="Muestra solo los partidos donde apareces como Persona asignada"
+            title={`Muestra solo los partidos donde apareces como ${L.scout.toLowerCase()}`}
             className={`flex-shrink-0 px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
               soloMios ? 'bg-primary text-white border-primary' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
             }`}
@@ -125,16 +127,13 @@ export function PlanificacionTab({
             Solo mis partidos
           </button>
           <div className="flex-1" />
-          <button onClick={imprimir} title="Abre la hoja lista para imprimir o guardar como PDF" className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-1.5 text-[11px] font-semibold border border-slate-200 text-slate-500 rounded-lg bg-white hover:border-primary hover:text-primary">
-            🖨️ Imprimir / PDF
-          </button>
-          <BotonCsv nombre={`planificacion_${rango.desde}`} conSello={false} etiqueta="⤓ Excel" cabeceras={CABECERAS_PLANIFICACION} filas={() => planificacionACsv(filas)} />
-          <button
-            onClick={openAddMatch}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" /> Añadir partido
-          </button>
+          <Button size="sm" variant="secondary" icon={<Printer />} onClick={imprimir} title="Abre la hoja lista para imprimir o guardar como PDF">
+            Imprimir / PDF
+          </Button>
+          <BotonCsv nombre={`planificacion_${rango.desde}`} conSello={false} etiqueta="Excel" cabeceras={CABECERAS_PLANIFICACION} filas={() => planificacionACsv(filas)} />
+          <Button size="sm" variant="primary" icon={<Plus />} onClick={openAddMatch}>
+            Añadir partido
+          </Button>
         </div>
 
         {showAddMatch && (
@@ -156,23 +155,23 @@ export function PlanificacionTab({
           <table className="w-full min-w-[820px] text-xs border-collapse">
             <thead>
               <tr className="bg-slate-100 text-slate-700">
-                {['Día', 'Hora', 'Partido', 'Jugador', 'Persona', 'Vía', 'Notas'].map(h => (
+                {['Día', 'Hora', L.partido, L.jugador, L.scout, 'Vía', 'Notas'].map(h => (
                   <th key={h} className={`px-2 py-2 font-bold border-b border-slate-200 ${h === 'Notas' ? 'text-left' : 'text-center'}`}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {filas.length === 0 && (
-                <tr><td colSpan={7} className="px-3 py-8 text-center text-slate-400">
+                <tr><td colSpan={7} className="px-3 py-8 text-center text-slate-500">
                   {soloMios
                     ? <>Ningún partido asignado a ti entre el {rango.desde.slice(8)} y el {rango.hasta.slice(8)}. <button onClick={() => setSoloMios(false)} className="text-primary hover:underline">Ver todos</button></>
-                    : <>Sin partidos entre el {rango.desde.slice(8)} y el {rango.hasta.slice(8)}. Añade uno con «＋ Añadir partido».</>}
+                    : <>Sin partidos entre el {rango.desde.slice(8)} y el {rango.hasta.slice(8)}. Añade uno con «Añadir partido».</>}
                 </td></tr>
               )}
               {filas.map(f => {
                 const color = COLOR_DIA[f.diaLabel] ?? { celda: 'bg-slate-100', fila: '' }
                 const visto = f.status === 'visto'
-                const tach = visto ? 'line-through text-slate-400' : ''
+                const tach = visto ? 'line-through text-slate-500' : ''
                 return (
                   <tr key={f.matchId} className={`border-b border-slate-100 ${color.fila} hover:bg-slate-50`}>
                     <td className={`px-2 py-1.5 text-center font-medium whitespace-nowrap ${color.celda}`}>{f.diaLabel}</td>
@@ -211,8 +210,8 @@ export function PlanificacionTab({
             </tbody>
           </table>
         </div>
-        <p className="text-[10.5px] text-slate-400">
-          Negrita = jugadores nuestros asignados a ese partido (clic en Jugador para añadir o quitar). «Captación» = partido solo de scouting. Tachado = partido ya visto. Clic en el partido para corregir los equipos sin abrir la ficha. Clic en Persona para elegir quién lo ve (perfil o nombre suelto) y quitar a cualquiera con la ✕; la vía se cambia por scout.
+        <p className="text-badge text-slate-500">
+          Negrita = jugadores nuestros asignados a ese partido (clic en Jugador para añadir o quitar). «Captación» = partido solo de scouting. Tachado = partido ya visto. Clic en el partido para corregir los equipos sin abrir la ficha. Clic en Scout para elegir quién lo ve (perfil o nombre suelto) y quitar a cualquiera con el botón de quitar; la vía se cambia por scout.
         </p>
       </div>
 
@@ -246,7 +245,7 @@ function NotasCell({ fila, onSave }: { fila: FilaPlanificacion; onSave: (n: stri
       onBlur={() => { if (v.trim() !== fila.notas) onSave(v.trim()) }}
       onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
       placeholder="—"
-      className="w-full min-w-[120px] text-[11px] px-1 py-0.5 rounded border border-transparent bg-transparent hover:border-slate-200 focus:border-slate-300 focus:bg-white focus:outline-none"
+      className="w-full min-w-[120px] text-badge px-1 py-0.5 rounded border border-transparent bg-transparent hover:border-slate-200 focus:border-slate-300 focus:bg-white focus:outline-none"
     />
   )
 }
@@ -314,29 +313,29 @@ function JugadorCell({ fila, players, onAddNuestro, onRemoveNuestro, showToast }
       </button>
       {open && (
         <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 z-30 bg-white border border-slate-200 rounded-lg shadow-lg p-2 w-[260px] text-left no-underline text-slate-700 font-normal">
-          <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Jugadores nuestros en este partido</div>
+          <div className="text-badge font-semibold text-slate-500 uppercase tracking-wide mb-1">Jugadores nuestros en este partido</div>
           <ul className="space-y-0.5 mb-1">
             {fila.nuestros.map(p => (
-              <li key={p.id} className="flex items-center gap-1 text-[11px]">
+              <li key={p.id} className="flex items-center gap-1 text-badge">
                 <span className="font-bold truncate flex-1">{p.name}</span>
-                <button onClick={() => void accion(() => onRemoveNuestro(p.id), 'No se pudo quitar al jugador')} disabled={ocupado} title="Quitar del partido" className="p-0.5 rounded text-slate-400 hover:text-red-500 hover:bg-red-50"><X className="w-3 h-3" /></button>
+                <IconButton label={`Quitar a ${p.name} del partido`} onClick={() => void accion(() => onRemoveNuestro(p.id), 'No se pudo quitar al jugador')} disabled={ocupado} className="text-slate-600 hover:text-red-600 hover:bg-red-50"><X /></IconButton>
               </li>
             ))}
-            {fila.nuestros.length === 0 && <li className="text-[11px] text-slate-400 italic">Ninguno</li>}
+            {fila.nuestros.length === 0 && <li className="text-badge text-slate-500 italic">Ninguno</li>}
           </ul>
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Añadir jugador nuestro…" className="w-full text-[11px] px-1.5 py-1 rounded border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30" autoFocus />
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Añadir jugador nuestro…" className="w-full text-badge px-1.5 py-1 rounded border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30" autoFocus />
           {resultados.length > 0 && (
             <ul className="mt-1 border border-slate-100 rounded max-h-40 overflow-y-auto">
               {resultados.map(p => (
                 <li key={p.id}>
-                  <button onClick={() => void accion(async () => { await onAddNuestro(p.id); setQ('') }, 'No se pudo asignar al jugador')} disabled={ocupado} className="w-full text-left px-1.5 py-1 text-[11px] hover:bg-slate-50">
-                    {p.name}{p.clubs[0]?.name && <span className="text-slate-400"> · {p.clubs[0].name}</span>}
+                  <button onClick={() => void accion(async () => { await onAddNuestro(p.id); setQ('') }, 'No se pudo asignar al jugador')} disabled={ocupado} className="w-full text-left px-1.5 py-1 text-badge hover:bg-slate-50">
+                    {p.name}{p.clubs[0]?.name && <span className="text-slate-500"> · {p.clubs[0].name}</span>}
                   </button>
                 </li>
               ))}
             </ul>
           )}
-          {q.trim() !== '' && resultados.length === 0 && <div className="mt-1 text-[10.5px] text-slate-400">Sin resultados en Mantenimiento</div>}
+          {q.trim() !== '' && resultados.length === 0 && <div className="mt-1 text-badge text-slate-500">Sin resultados en Mantenimiento</div>}
         </div>
       )}
     </div>
@@ -377,25 +376,25 @@ function PartidoCell({ fila, onSave, onOpenFicha }: {
       </button>
       {open && (
         <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 z-30 bg-white border border-slate-200 rounded-lg shadow-lg p-2 w-[220px] text-left no-underline font-normal">
-          <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Equipos</div>
+          <div className="text-badge font-semibold text-slate-500 uppercase tracking-wide mb-1">Equipos</div>
           <input
             value={home}
             onChange={e => setHome(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') guardarYcerrar(); if (e.key === 'Escape') setOpen(false) }}
             placeholder="Local"
             autoFocus
-            className="w-full mb-1 text-[11px] px-1.5 py-1 rounded border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+            className="w-full mb-1 text-badge px-1.5 py-1 rounded border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
           />
           <input
             value={away}
             onChange={e => setAway(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') guardarYcerrar(); if (e.key === 'Escape') setOpen(false) }}
             placeholder="Visitante"
-            className="w-full mb-1.5 text-[11px] px-1.5 py-1 rounded border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+            className="w-full mb-1.5 text-badge px-1.5 py-1 rounded border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
           />
           <div className="flex items-center justify-between gap-1">
-            <button onClick={guardarYcerrar} className="text-[11px] font-semibold px-2 py-1 rounded bg-primary text-white hover:bg-primary/90">Guardar</button>
-            <button onClick={() => { setOpen(false); onOpenFicha() }} className="text-[10.5px] text-slate-400 hover:text-primary hover:underline">Ficha completa →</button>
+            <button onClick={guardarYcerrar} className="text-badge font-semibold px-2 py-1 rounded bg-primary text-white hover:bg-primary/90">Guardar</button>
+            <Button size="sm" variant="link" onClick={() => { setOpen(false); onOpenFicha() }} className="text-slate-600">Ficha completa</Button>
           </div>
         </div>
       )}
@@ -441,28 +440,28 @@ function PersonaCell({ fila, profiles, onAdd, onRemove }: {
         title="Elegir quién ve este partido"
         className={`px-2 py-0.5 rounded border font-mono font-semibold whitespace-nowrap ${open ? 'border-primary text-primary bg-white' : 'border-transparent hover:border-slate-300 hover:bg-white'}`}
       >
-        {fila.personas.join(' / ') || <span className="text-slate-300 font-sans font-normal">—</span>}
+        {fila.personas.join(' / ') || <span className="text-slate-500 font-sans font-normal">—</span>}
       </button>
       {open && (
         <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 z-30 bg-white border border-slate-200 rounded-lg shadow-lg p-1.5 min-w-[190px] text-left">
-          <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1 px-1">Asignados</div>
+          <div className="text-badge font-semibold text-slate-500 uppercase tracking-wide mb-1 px-1">Asignados</div>
           <ul className="space-y-0.5 mb-1.5">
-            {elegidos.length === 0 && <li className="px-1 py-0.5 text-[11px] text-slate-400 italic">Nadie asignado</li>}
+            {elegidos.length === 0 && <li className="px-1 py-0.5 text-badge text-slate-500 italic">Nadie asignado</li>}
             {elegidos.map(s => (
-              <li key={s} className="flex items-center gap-1 px-1 py-0.5 rounded hover:bg-slate-50 text-[11px] text-slate-700">
+              <li key={s} className="flex items-center gap-1 px-1 py-0.5 rounded hover:bg-slate-50 text-badge text-slate-700">
                 <span className="font-mono font-bold flex-1 truncate">{s}</span>
-                <button onClick={() => void accion(() => onRemove(s))} disabled={ocupado} title="Quitar" className="p-0.5 rounded text-slate-400 hover:text-red-500 hover:bg-red-50"><X className="w-3 h-3" /></button>
+                <IconButton label={`Quitar a ${s}`} onClick={() => void accion(() => onRemove(s))} disabled={ocupado} className="text-slate-600 hover:text-red-600 hover:bg-red-50"><X /></IconButton>
               </li>
             ))}
           </ul>
           {disponibles.length > 0 && (
             <>
               <div className="border-t border-slate-100 my-1" />
-              <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1 px-1">Añadir</div>
+              <div className="text-badge font-semibold text-slate-500 uppercase tracking-wide mb-1 px-1">Añadir</div>
               <ul className="space-y-0.5 mb-1.5">
                 {disponibles.map(p => (
                   <li key={p.id}>
-                    <button onClick={() => void accion(() => onAdd(p.avatar))} disabled={ocupado} className="w-full flex items-center gap-2 px-1 py-0.5 rounded hover:bg-slate-50 text-[11px] text-slate-700 text-left">
+                    <button onClick={() => void accion(() => onAdd(p.avatar))} disabled={ocupado} className="w-full flex items-center gap-2 px-1 py-0.5 rounded hover:bg-slate-50 text-badge text-slate-700 text-left">
                       <span className="font-mono font-bold w-8">{p.avatar}</span>
                       <span className="truncate">{p.name}</span>
                     </button>
@@ -478,9 +477,9 @@ function PersonaCell({ fila, profiles, onAdd, onRemove }: {
               onChange={e => setNuevo(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') añadirLibre() }}
               placeholder="Otro nombre…"
-              className="flex-1 min-w-0 text-[11px] px-1.5 py-1 rounded border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              className="flex-1 min-w-0 text-badge px-1.5 py-1 rounded border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
             />
-            <button onClick={añadirLibre} disabled={ocupado || !nuevo.trim()} className="text-[11px] font-semibold px-2 py-1 rounded bg-primary text-white hover:bg-primary/90 disabled:opacity-40">+</button>
+            <IconButton label="Añadir este nombre" variant="primary" onClick={añadirLibre} disabled={ocupado || !nuevo.trim()}><Plus /></IconButton>
           </div>
         </div>
       )}
@@ -514,7 +513,7 @@ function ViaCell({ fila, onScoutMode, onMatchMode }: {
   return (
     <div className="inline-flex flex-col gap-0.5 items-stretch">
       {reales.map(s => (
-        <label key={s.scout} className="flex items-center gap-1 text-[10.5px] text-slate-500">
+        <label key={s.scout} className="flex items-center gap-1 text-badge text-slate-500">
           <span className="font-mono font-bold w-7 text-right">{s.scout}</span>
           <select value={s.via} onChange={e => void onScoutMode(s.scout, e.target.value as Via)} className={SELECT_MINI}>
             {opciones}

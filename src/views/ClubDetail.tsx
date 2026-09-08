@@ -1,9 +1,10 @@
 import { useState, useMemo, useEffect } from 'react'
 import {
-  ArrowLeft, Building2, Star, Plus, X, Pencil,
-  ChevronRight, Trash2, Check, LogOut, AlertCircle, Phone, Users,
-  Maximize2, Minimize2, History,
+  Star, Plus, X, Pencil,
+  ChevronRight, Trash2, Check, AlertCircle, Phone, Users,
+  Maximize2, Minimize2, History, ExternalLink,
 } from 'lucide-react'
+import type { FormEvent } from 'react'
 import type { Club, ClubNegotiation, DistributionEntry, Player, ClubNeed } from '../types'
 import type { Profile } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -11,18 +12,15 @@ import { ConfirmModal } from '../components/ConfirmModal'
 import { EmptyState } from '../components/EmptyState'
 import { useToastContext } from '../hooks/useToastContext'
 import { HistorialCambios } from '../components/HistorialCambios'
-import { useEscapeKey } from '../hooks/useEscapeKey'
 import { isValidName } from '../lib/validate'
+import { Badge, Button, ClickableRow, Dialog, Field, IconButton, Input, SectionTabs, Select, Textarea } from '../components/ui'
+import { DetailHeader } from '../components/shell'
+import { L, NEG_STATUS_LABELS } from '../lib/labels'
 import { ManagerSelect } from '../components/ManagerSelect'
 import { POSITIONS, positionLabel, needMatchesPlayer } from '../lib/positions'
 import { NegDetail } from '../components/PlayerClubList'
 import { NEG_STATUSES as SHARED_NEG_STATUSES, NEG_STATUS_CONFIG } from '../components/playerClubList'
 import { suggestPlayersForNeed } from '../lib/distribution'
-
-/** Spinner pequeño para botones de guardado */
-function BtnSpinner() {
-  return <span className="inline-block w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin align-middle" />
-}
 
 // ── constants ─────────────────────────────────────────────────
 
@@ -41,7 +39,7 @@ const ACTIVE_STATUSES: ClubNegotiation['status'][] = ['pendiente', 'ofrecido', '
 
 // ── types ─────────────────────────────────────────────────────
 
-type TabId = 'jugadores' | 'necesidades' | 'info'
+type TabId = 'jugadores' | 'solicitudes' | 'info'
 
 interface Props {
   club: Club
@@ -51,8 +49,6 @@ interface Props {
   currentProfile: Profile
   profiles: Profile[]
   onBack: () => void
-  onLogout: () => void
-  onAdmin?: () => void
   onSelectPlayer: (id: string) => void
   onUpdateClub: (c: Club) => Promise<void>
   onDeleteClub: (id: string) => Promise<void>
@@ -73,28 +69,28 @@ function ClubInfoStrip({ club }: { club: Club }) {
   const hasAny = club.league || club.contactPerson || club.aisManager || club.isPriority
   if (!hasAny) return null
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-500">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-secondary text-slate-600">
       {club.league && (
         <span className="flex items-center gap-1">
-          <span className="text-slate-400">Liga</span>
+          <span className="text-slate-500">Liga</span>
           <span className="font-medium text-slate-700">{club.league}</span>
         </span>
       )}
       {club.contactPerson && (
         <span className="flex items-center gap-1">
-          <Phone className="w-3 h-3 text-slate-400" />
+          <Phone className="w-3 h-3 text-slate-500" aria-hidden="true" />
           <span className="font-medium text-slate-700">{club.contactPerson}</span>
         </span>
       )}
       {club.aisManager && (
         <span className="flex items-center gap-1">
-          <span className="text-slate-400">Gestor</span>
+          <span className="text-slate-500">{L.encargado}</span>
           <span className="font-mono bg-white border border-slate-200 text-slate-700 px-1.5 py-0.5 rounded">{club.aisManager}</span>
         </span>
       )}
       {club.isPriority && (
-        <span className="flex items-center gap-1 text-amber-600 font-medium">
-          <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+        <span className="flex items-center gap-1 text-amber-700 font-medium">
+          <Star className="w-3 h-3 fill-amber-400 text-amber-400" aria-hidden="true" />
           Prioritario
         </span>
       )}
@@ -103,8 +99,8 @@ function ClubInfoStrip({ club }: { club: Club }) {
 }
 
 function Avatar({ name, photo, size = 'sm' }: { name: string; photo?: string; size?: 'sm' | 'md' | 'lg' }) {
-  const cls = size === 'sm' ? 'w-8 h-8 text-xs' : size === 'md' ? 'w-10 h-10 text-sm' : 'w-12 h-12 text-base'
-  if (photo) return <img src={photo} className={`${cls} rounded-full object-cover flex-shrink-0`} />
+  const cls = size === 'sm' ? 'w-8 h-8 text-meta' : size === 'md' ? 'w-10 h-10 text-body' : 'w-12 h-12 text-base'
+  if (photo) return <img src={photo} alt="" className={`${cls} rounded-full object-cover flex-shrink-0`} />
   const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
   return (
     <div className={`${cls} rounded-full bg-slate-200 flex items-center justify-center font-semibold text-slate-600 flex-shrink-0`}>
@@ -117,7 +113,7 @@ function Avatar({ name, photo, size = 'sm' }: { name: string; photo?: string; si
 
 export function ClubDetail({
   club, players, entries, negotiations: negotiationsAll, currentProfile, profiles,
-  onBack, onLogout, onAdmin, onSelectPlayer,
+  onBack, onSelectPlayer,
   onUpdateClub, onDeleteClub,
   onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation,
   embedded = false, expanded = false, onExpand,
@@ -167,10 +163,10 @@ export function ClubDetail({
 
   const activeCount = clubNegs.filter(n => ACTIVE_STATUSES.includes(n.status)).length
 
-  const tabs: { id: TabId; label: string; badge?: number }[] = [
-    { id: 'jugadores', label: 'Jugadores', badge: clubNegs.length || undefined },
-    { id: 'necesidades', label: 'Necesidades', badge: club.needs.length || undefined },
-    { id: 'info', label: 'Info' },
+  const tabs = [
+    { id: 'jugadores' as const, label: L.jugadores, count: clubNegs.length },
+    { id: 'solicitudes' as const, label: L.solicitudes, count: club.needs.length },
+    { id: 'info' as const, label: 'Info' },
   ]
 
   async function handleStatusChange(neg: ClubNegotiation, status: ClubNegotiation['status']) {
@@ -187,73 +183,59 @@ export function ClubDetail({
 
   return (
     <div className={`${embedded ? 'h-full' : 'min-h-screen'} bg-slate-50 flex flex-col`}>
-      {/* Header */}
-      <header className="bg-white border-b border-slate-200 px-4 h-11 sm:h-14 flex items-center gap-3 flex-shrink-0">
-        <button
-          onClick={onBack}
-          aria-label={embedded ? 'Cerrar' : 'Volver'}
-          title={embedded ? 'Cerrar panel' : 'Volver'}
-          className="p-2 sm:p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 flex-shrink-0"
-        >
-          {embedded ? <X className="w-4 h-4" /> : <ArrowLeft className="w-4 h-4" />}
-        </button>
-        <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
-          <Building2 className="w-4 h-4 text-slate-400" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <h1 className="font-semibold text-slate-800 text-sm sm:text-base truncate">{club.name}</h1>
-            {club.isPriority && <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400 flex-shrink-0" />}
-          </div>
-          {club.league && <p className="text-xs text-slate-500 truncate">{club.league}</p>}
-        </div>
-        <div className="flex items-center gap-1 flex-shrink-0">
-          {activeCount > 0 && (
-            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">
-              {activeCount} activo{activeCount !== 1 ? 's' : ''}
-            </span>
-          )}
-          {embedded && onExpand && (
-            <button
-              onClick={onExpand}
-              aria-label={expanded ? 'Reducir panel' : 'Ampliar panel'}
-              title={expanded ? 'Reducir' : 'Ampliar'}
-              className="hidden lg:inline-flex p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"
-            >
-              {expanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-            </button>
-          )}
-          {!embedded && currentProfile.is_admin && onAdmin && (
-            <button onClick={onAdmin} className="text-xs text-slate-500 px-2 py-1 rounded hover:bg-slate-100 hidden sm:block">Admin</button>
-          )}
-          {!embedded && (
-            <button onClick={onLogout} aria-label="Cerrar sesión" className="p-2 sm:p-1.5 rounded-lg hover:bg-slate-100 text-slate-400">
-              <LogOut className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-      </header>
-
-      {/* Tabs */}
-      <div className="bg-white border-b border-slate-200 px-4 flex gap-1 overflow-x-auto scrollbar-none">
-        {tabs.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setActiveTab(t.id)}
-            className={`flex-shrink-0 whitespace-nowrap px-3 py-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
-              activeTab === t.id
-                ? 'border-primary text-primary'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            {t.label}
-            {t.badge !== undefined && (
-              <span className={`text-xs rounded-full px-1.5 py-0.5 font-semibold ${activeTab === t.id ? 'bg-primary text-white' : 'bg-slate-100 text-slate-500'}`}>
-                {t.badge}
-              </span>
+      {/* Cabecera de ficha: atrás + miga + acciones. Embebida (pantalla
+          partida bajo el AppHeader) no publica --shell-h y va en un bloque
+          sticky propio junto con las sub-pestañas. */}
+      <div className={embedded ? 'sticky top-0 z-20' : 'contents'}>
+      <DetailHeader
+        onBack={onBack}
+        publishHeight={!embedded}
+        className={embedded ? 'static' : undefined}
+        crumbs={[{ label: L.distribucion, onClick: onBack }, { label: club.name }]}
+        title={
+          <span className="inline-flex items-center gap-2">
+            {club.name}
+            {club.isPriority && <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400 flex-shrink-0" aria-label="Prioritario" />}
+          </span>
+        }
+        subtitle={club.league}
+        actions={
+          <>
+            {activeCount > 0 && (
+              <Badge tone="primary" className="hidden sm:inline-flex">{activeCount} activo{activeCount !== 1 ? 's' : ''}</Badge>
             )}
-          </button>
-        ))}
+            {onExpand && (
+              <IconButton
+                onClick={onExpand}
+                label={expanded ? 'Reducir panel' : 'Ampliar panel'}
+                className="hidden md:inline-flex"
+              >
+                {expanded ? <Minimize2 /> : <Maximize2 />}
+              </IconButton>
+            )}
+            <IconButton label="Editar información del club" onClick={() => setEditingInfo(true)}>
+              <Pencil />
+            </IconButton>
+            {currentProfile.is_admin && (
+              <IconButton label="Eliminar club" onClick={() => setShowDeleteConfirm(true)} className="text-red-600 hover:bg-red-50">
+                <Trash2 />
+              </IconButton>
+            )}
+          </>
+        }
+      />
+
+      {/* Sub-pestañas de la ficha */}
+      <div className={embedded ? 'bg-white border-b border-slate-200' : 'sticky top-[var(--shell-h)] z-20 bg-white border-b border-slate-200'}>
+        <SectionTabs<TabId>
+          variant="secondary"
+          label="Secciones del club"
+          items={tabs}
+          value={activeTab}
+          onChange={setActiveTab}
+          className="bg-white px-1"
+        />
+      </div>
       </div>
 
       {/* Content */}
@@ -263,26 +245,24 @@ export function ClubDetail({
         {activeTab === 'jugadores' && (
           <div className="max-w-2xl space-y-3">
             <ClubInfoStrip club={club} />
-            {/* Status filter */}
-            <select
-              value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value as ClubNegotiation['status'] | 'todos')}
-              className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 text-slate-700"
-            >
-              <option value="todos">Todos ({clubNegs.length})</option>
-              {NEG_STATUSES.filter(s => (countByStatus[s] ?? 0) > 0).map(s => (
-                <option key={s} value={s}>{STATUS_CONFIG[s].label} ({countByStatus[s]})</option>
-              ))}
-            </select>
-
-            {/* Add player button */}
-            <div className="flex justify-end">
-              <button
-                onClick={() => setShowAddPlayer(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-sm rounded-lg hover:bg-primary/90"
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              {/* Status filter */}
+              <Select
+                value={statusFilter}
+                onChange={e => setStatusFilter(e.target.value as ClubNegotiation['status'] | 'todos')}
+                aria-label="Filtrar por estado"
+                className="w-auto py-1 text-secondary bg-slate-50"
               >
-                <Plus className="w-4 h-4" /> Añadir jugador
-              </button>
+                <option value="todos">Todos ({clubNegs.length})</option>
+                {NEG_STATUSES.filter(s => (countByStatus[s] ?? 0) > 0).map(s => (
+                  <option key={s} value={s}>{NEG_STATUS_LABELS[s]} ({countByStatus[s]})</option>
+                ))}
+              </Select>
+
+              {/* Ofrecer jugador */}
+              <Button variant="primary" size="sm" icon={<Plus />} onClick={() => setShowAddPlayer(true)}>
+                Ofrecer jugador
+              </Button>
             </div>
 
             {/* Player list */}
@@ -293,54 +273,58 @@ export function ClubDetail({
                 const entry = entries.find(e => e.playerId === neg.playerId)
                 const scfg = STATUS_CONFIG[neg.status]
                 return (
-                  <div key={neg.id} onClick={() => setEditingNeg(neg)} className="bg-white rounded-xl border border-slate-200 p-3 flex items-center gap-3 cursor-pointer hover:border-slate-300 transition-colors">
-                    <button onClick={e => { e.stopPropagation(); onSelectPlayer(player.id) }} title="Ver ficha del jugador" aria-label="Ver ficha del jugador" className="flex-shrink-0">
-                      <Avatar name={player.name} photo={player.photo} size="md" />
-                    </button>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap min-w-0">
-                        <span className="font-medium text-slate-800 text-sm truncate max-w-full">{player.name}</span>
-                        <span className="text-xs text-slate-400">{player.positions[0]}</span>
-                        {entry && (
-                          <span className={`text-xs px-1.5 py-0.5 rounded font-bold ${PRIORITY_CONFIG[entry.priority].bg} ${PRIORITY_CONFIG[entry.priority].text}`}>
-                            {entry.priority}
-                          </span>
-                        )}
-                        {entry?.condition && (
-                          <span className="text-xs text-slate-500 bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded">{entry.condition}</span>
-                        )}
-                      </div>
-                      {neg.notes && <p className="text-xs text-slate-500 mt-0.5 truncate">{neg.notes}</p>}
-                      {neg.aisManager && (
-                        <span className="text-xs font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded mt-0.5 inline-block">{neg.aisManager}</span>
-                      )}
-                    </div>
-                    <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1 sm:gap-2 flex-shrink-0">
-                      {/* Status dropdown */}
-                      <select
-                        value={neg.status}
-                        disabled={updatingNegId === neg.id}
-                        onClick={e => e.stopPropagation()}
-                        onChange={e => handleStatusChange(neg, e.target.value as ClubNegotiation['status'])}
-                        aria-label="Cambiar estado de la negociación"
-                        className={`text-xs px-2 py-1 rounded-full border-0 font-medium cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-300 disabled:opacity-50 disabled:cursor-wait ${scfg.color}`}
-                      >
-                        {NEG_STATUSES.map(s => (
-                          <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
-                        ))}
-                      </select>
-                      <div className="flex items-center gap-1 sm:gap-2">
-                        <button
-                          onClick={e => { e.stopPropagation(); setEditingNeg(neg) }}
-                          className="p-2 sm:p-1 text-slate-300 hover:text-blue-500"
-                          title="Abrir esta negociación"
-                          aria-label="Abrir esta negociación"
+                  <ClickableRow
+                    key={neg.id}
+                    onClick={() => setEditingNeg(neg)}
+                    className="bg-white rounded-xl border border-slate-200 p-3 hover:border-slate-300 hover:bg-white transition-colors"
+                    actionsClassName="flex-col sm:flex-row items-end sm:items-center gap-1 sm:gap-2"
+                    actions={
+                      <>
+                        {/* Status dropdown */}
+                        <select
+                          value={neg.status}
+                          disabled={updatingNegId === neg.id}
+                          onChange={e => handleStatusChange(neg, e.target.value as ClubNegotiation['status'])}
+                          aria-label="Cambiar estado de la negociación"
+                          className={`text-secondary px-2 min-h-9 sm:min-h-7 rounded-full border-0 font-medium cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-300 disabled:opacity-50 disabled:cursor-wait ${scfg.color}`}
                         >
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
+                          {NEG_STATUSES.map(s => (
+                            <option key={s} value={s}>{NEG_STATUS_LABELS[s]}</option>
+                          ))}
+                        </select>
+                        <div className="flex items-center gap-0.5">
+                          <IconButton label="Ver ficha del jugador" onClick={() => onSelectPlayer(player.id)}>
+                            <ExternalLink />
+                          </IconButton>
+                          <IconButton label="Abrir esta negociación" onClick={() => setEditingNeg(neg)}>
+                            <ChevronRight />
+                          </IconButton>
+                        </div>
+                      </>
+                    }
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Avatar name={player.name} photo={player.photo} size="md" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap min-w-0">
+                          <span className="font-medium text-slate-800 text-body truncate max-w-full">{player.name}</span>
+                          <span className="text-secondary text-slate-500" title={positionLabel(player.positions[0])}>{player.positions[0]}</span>
+                          {entry && (
+                            <span className={`text-badge px-1.5 py-0.5 rounded font-bold ${PRIORITY_CONFIG[entry.priority].bg} ${PRIORITY_CONFIG[entry.priority].text}`} title={`${L.prioridad} ${entry.priority}`}>
+                              {entry.priority}
+                            </span>
+                          )}
+                          {entry?.condition && (
+                            <Badge>{entry.condition}</Badge>
+                          )}
+                        </div>
+                        {neg.notes && <p className="text-secondary text-slate-600 mt-0.5 truncate">{neg.notes}</p>}
+                        {neg.aisManager && (
+                          <span className="text-badge font-mono bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded mt-0.5 inline-block" title={L.encargado}>{neg.aisManager}</span>
+                        )}
                       </div>
                     </div>
-                  </div>
+                  </ClickableRow>
                 )
               })}
               {filteredNegs.length === 0 && (
@@ -350,26 +334,16 @@ export function ClubDetail({
                     title="No hay jugadores asignados a este club aún"
                     subtitle="Ofrece jugadores de la cartera para empezar a negociar con este club."
                     action={
-                      <button
-                        onClick={() => setShowAddPlayer(true)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-sm rounded-lg hover:bg-primary/90"
-                      >
-                        <Plus className="w-4 h-4" /> Añadir jugador
-                      </button>
+                      <Button variant="primary" icon={<Plus />} onClick={() => setShowAddPlayer(true)}>Ofrecer jugador</Button>
                     }
                   />
                 ) : (
                   <EmptyState
                     icon={<Users className="w-10 h-10" />}
-                    title={`No hay jugadores con estado "${STATUS_CONFIG[statusFilter].label}"`}
+                    title={`No hay jugadores con estado "${NEG_STATUS_LABELS[statusFilter]}"`}
                     subtitle="Prueba con otro filtro de estado o muestra todos."
                     action={
-                      <button
-                        onClick={() => setStatusFilter('todos')}
-                        className="text-xs text-blue-600 hover:text-blue-700 font-medium"
-                      >
-                        Ver todos
-                      </button>
+                      <Button variant="link" size="sm" onClick={() => setStatusFilter('todos')}>Ver todos</Button>
                     }
                   />
                 )
@@ -378,17 +352,12 @@ export function ClubDetail({
           </div>
         )}
 
-        {/* ── NECESIDADES TAB ── */}
-        {activeTab === 'necesidades' && (
+        {/* ── SOLICITUDES TAB ── */}
+        {activeTab === 'solicitudes' && (
           <div className="max-w-2xl space-y-3">
             <ClubInfoStrip club={club} />
             <div className="flex justify-end">
-              <button
-                onClick={() => setShowAddNeed(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-sm rounded-lg hover:bg-primary/90"
-              >
-                <Plus className="w-4 h-4" /> Añadir necesidad
-              </button>
+              <Button variant="primary" size="sm" icon={<Plus />} onClick={() => setShowAddNeed(true)}>Añadir solicitud</Button>
             </div>
 
             <div className="space-y-2">
@@ -403,7 +372,7 @@ export function ClubDetail({
                           const newNeeds = club.needs.map((n, idx) => idx === i ? withMeta : n)
                           await onUpdateClub({ ...club, needs: newNeeds })
                           setEditingNeed(null)
-                          showToast('Necesidad actualizada')
+                          showToast('Solicitud actualizada')
                         } catch {
                           showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
                         }
@@ -413,18 +382,18 @@ export function ClubDetail({
                   ) : (
                     <div className="flex items-start gap-3">
                       <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center flex-shrink-0">
-                        <AlertCircle className="w-4 h-4 text-amber-500" />
+                        <AlertCircle className="w-4 h-4 text-amber-500" aria-hidden="true" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-medium text-slate-800 text-sm">{positionLabel(need.position)}</span>
-                          {need.ageMax && <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">Sub-{need.ageMax}</span>}
-                          {need.transferBudget && <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full">Traspaso: {need.transferBudget}</span>}
-                          {need.salaryBudget && <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">Salario: {need.salaryBudget}</span>}
+                          <span className="font-medium text-slate-800 text-body">{positionLabel(need.position)}</span>
+                          {need.ageMax && <Badge>Sub-{need.ageMax}</Badge>}
+                          {need.transferBudget && <Badge tone="success">Traspaso: {need.transferBudget}</Badge>}
+                          {need.salaryBudget && <Badge tone="primary">Salario: {need.salaryBudget}</Badge>}
                         </div>
-                        {need.notes && <p className="text-xs text-slate-500 mt-1">{need.notes}</p>}
+                        {need.notes && <p className="text-secondary text-slate-600 mt-1">{need.notes}</p>}
                         {(need.createdAt || need.addedBy) && (
-                          <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-400">
+                          <div className="flex items-center gap-2 mt-1 text-meta text-slate-500">
                             {need.createdAt && (
                               <span>{new Date(need.createdAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                             )}
@@ -444,7 +413,7 @@ export function ClubDetail({
                           if (matchingPlayers.length === 0) return null
                           return (
                             <div className="mt-2 pt-2 border-t border-slate-100">
-                              <p className="text-xs text-slate-400 mb-1.5">Jugadores que podrían encajar:</p>
+                              <p className="text-secondary text-slate-500 mb-1.5">Jugadores que podrían encajar:</p>
                               <div className="flex flex-wrap gap-1.5">
                                 {matchingPlayers.slice(0, 8).map(p => {
                                   const alreadyAssigned = clubNegs.some(n => n.playerId === p.id)
@@ -453,9 +422,9 @@ export function ClubDetail({
                                     return (
                                       <span
                                         key={p.id}
-                                        className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border bg-blue-50 border-blue-200 text-blue-700"
+                                        className="flex items-center gap-1 text-secondary px-2 py-1 rounded-full border bg-blue-50 border-blue-200 text-blue-700"
                                       >
-                                        <Check className="w-3 h-3" />
+                                        <Check className="w-3 h-3" aria-hidden="true" />
                                         {p.name}
                                       </span>
                                     )
@@ -475,9 +444,11 @@ export function ClubDetail({
                                           setOfferingPlayerId(null)
                                         }
                                       }}
-                                      className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border bg-slate-50 border-slate-200 text-slate-600 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 disabled:opacity-50 transition-colors"
+                                      type="button"
+                                      className="flex items-center gap-1 text-secondary px-2 min-h-9 sm:min-h-7 rounded-full border bg-slate-50 border-slate-300 text-slate-600 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 disabled:opacity-50 transition-colors"
+                                      title={`Ofrecer a ${p.name}`}
                                     >
-                                      {isOffering ? '…' : <Plus className="w-3 h-3" />}
+                                      {isOffering ? '…' : <Plus className="w-3 h-3" aria-hidden="true" />}
                                       {p.name}
                                     </button>
                                   )
@@ -488,24 +459,22 @@ export function ClubDetail({
                         })()}
                       </div>
                       <div className="flex flex-col sm:flex-row gap-1 flex-shrink-0 items-end sm:items-center">
-                        <button
+                        <Button
+                          size="sm"
+                          icon={<Plus />}
                           onClick={() => { setAddPlayerPositionHint(need.position); setShowAddPlayer(true) }}
-                          className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium px-2 py-1 rounded hover:bg-blue-50 transition-colors border border-blue-200"
-                          title="Ofrecer jugador para esta necesidad"
+                          className="text-primary border-blue-200 hover:bg-blue-50"
+                          title="Ofrecer jugador para esta solicitud"
                         >
-                          <Plus className="w-3 h-3" /> Ofrecer
-                        </button>
+                          {L.ofrecer}
+                        </Button>
                         <div className="flex items-center gap-1">
-                          <button onClick={() => setEditingNeed({ index: i, need })} aria-label="Editar necesidad" className="p-2 sm:p-1 text-slate-300 hover:text-slate-500">
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => setConfirmDeleteNeedIdx(i)}
-                            aria-label="Eliminar necesidad"
-                            className="p-2 sm:p-1 text-slate-300 hover:text-red-400"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          <IconButton label="Editar solicitud" onClick={() => setEditingNeed({ index: i, need })}>
+                            <Pencil />
+                          </IconButton>
+                          <IconButton label="Eliminar solicitud" onClick={() => setConfirmDeleteNeedIdx(i)} className="hover:text-red-600 hover:bg-red-50">
+                            <Trash2 />
+                          </IconButton>
                         </div>
                       </div>
                     </div>
@@ -515,15 +484,10 @@ export function ClubDetail({
               {club.needs.length === 0 && !showAddNeed && (
                 <EmptyState
                   icon={<AlertCircle className="w-10 h-10" />}
-                  title="No hay necesidades registradas"
+                  title="No hay solicitudes registradas"
                   subtitle="Anota las posiciones que busca este club para cruzarlas con tu cartera."
                   action={
-                    <button
-                      onClick={() => setShowAddNeed(true)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-sm rounded-lg hover:bg-primary/90"
-                    >
-                      <Plus className="w-4 h-4" /> Añadir necesidad
-                    </button>
+                    <Button variant="primary" icon={<Plus />} onClick={() => setShowAddNeed(true)}>Añadir solicitud</Button>
                   }
                 />
               )}
@@ -535,7 +499,7 @@ export function ClubDetail({
                         const enriched = { ...need, createdAt: new Date().toISOString(), addedBy: currentProfile.avatar }
                         await onUpdateClub({ ...club, needs: [...club.needs, enriched] })
                         setShowAddNeed(false)
-                        showToast('Necesidad añadida')
+                        showToast('Solicitud añadida')
                       } catch {
                         showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
                       }
@@ -553,71 +517,54 @@ export function ClubDetail({
           <div className="max-w-lg space-y-3">
             <div className="bg-white rounded-xl border border-slate-200 p-4">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Información del club</span>
-                <button onClick={() => setEditingInfo(!editingInfo)} aria-label="Editar información del club" className="p-2 sm:p-1 text-slate-400 hover:text-slate-600">
-                  <Pencil className="w-3.5 h-3.5" />
-                </button>
+                <span className="text-meta font-semibold text-slate-600 uppercase tracking-wider">Información del club</span>
+                <IconButton label="Editar información del club" onClick={() => setEditingInfo(true)}>
+                  <Pencil />
+                </IconButton>
               </div>
-              {editingInfo ? (
-                <InfoEditForm
-                  club={club}
-                  profiles={profiles}
-                  onSave={async (updates) => {
-                    try {
-                      await onUpdateClub({ ...club, ...updates })
-                      setEditingInfo(false)
-                      showToast('Información del club guardada')
-                    } catch {
-                      showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
-                    }
-                  }}
-                  onCancel={() => setEditingInfo(false)}
-                />
-              ) : (
-                <div className="space-y-2.5">
-                  {club.league && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <span className="text-xs text-slate-400 w-24">Liga</span>
-                      <span className="text-slate-700">{club.league}</span>
-                    </div>
-                  )}
-                  {club.contactPerson && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <span className="text-xs text-slate-400 w-24">Contacto club</span>
-                      <span className="text-slate-700 flex items-center gap-1">
-                        <Phone className="w-3 h-3 text-slate-400" />{club.contactPerson}
-                      </span>
-                    </div>
-                  )}
-                  {club.aisManager && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <span className="text-xs text-slate-400 w-24">Gestor AIS</span>
-                      <span className="text-slate-700 text-sm flex items-center gap-1.5">
-                        {profiles.find(p => p.avatar === club.aisManager)?.name ?? null}
-                        <span className="font-mono bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-xs">{club.aisManager}</span>
-                      </span>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="text-xs text-slate-400 w-24">Prioritario</span>
-                    <span className={`text-xs ${club.isPriority ? 'text-amber-600 font-medium' : 'text-slate-400'}`}>
-                      {club.isPriority ? '⭐ Sí' : 'No'}
+              <div className="space-y-2.5">
+                {club.league && (
+                  <div className="flex items-center gap-2 text-body">
+                    <span className="text-secondary text-slate-500 w-24">Liga</span>
+                    <span className="text-slate-700">{club.league}</span>
+                  </div>
+                )}
+                {club.contactPerson && (
+                  <div className="flex items-center gap-2 text-body">
+                    <span className="text-secondary text-slate-500 w-24">Contacto club</span>
+                    <span className="text-slate-700 flex items-center gap-1">
+                      <Phone className="w-3 h-3 text-slate-500" aria-hidden="true" />{club.contactPerson}
                     </span>
                   </div>
-                  {club.notes && (
-                    <div className="pt-2 border-t border-slate-100">
-                      <p className="text-xs text-slate-400 mb-1">Notas</p>
-                      <p className="text-sm text-slate-600 whitespace-pre-wrap">{club.notes}</p>
-                    </div>
-                  )}
+                )}
+                {club.aisManager && (
+                  <div className="flex items-center gap-2 text-body">
+                    <span className="text-secondary text-slate-500 w-24">{L.encargado}</span>
+                    <span className="text-slate-700 text-body flex items-center gap-1.5">
+                      {profiles.find(p => p.avatar === club.aisManager)?.name ?? null}
+                      <span className="font-mono bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-meta">{club.aisManager}</span>
+                    </span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2 text-body">
+                  <span className="text-secondary text-slate-500 w-24">Prioritario</span>
+                  <span className={`text-secondary inline-flex items-center gap-1 ${club.isPriority ? 'text-amber-700 font-medium' : 'text-slate-500'}`}>
+                    {club.isPriority ? <><Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" aria-hidden="true" /> Sí</> : 'No'}
+                  </span>
                 </div>
-              )}
+                {club.notes && (
+                  <div className="pt-2 border-t border-slate-100">
+                    <p className="text-secondary text-slate-500 mb-1">Notas</p>
+                    <p className="text-body text-slate-600 whitespace-pre-wrap">{club.notes}</p>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Historial de cambios (audit_log), plegado por defecto */}
             <details className="bg-white rounded-xl border border-slate-200 px-4 py-3">
-              <summary className="cursor-pointer text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
-                <History className="w-3.5 h-3.5 text-slate-400" /> Historial de cambios
+              <summary className="cursor-pointer text-meta font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-2">
+                <History className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" /> Historial de cambios
               </summary>
               <div className="mt-2">
                 <HistorialCambios tabla="clubs" filaId={club.id} profiles={profiles} compacto />
@@ -627,32 +574,10 @@ export function ClubDetail({
             {/* Danger zone */}
             {currentProfile.is_admin && (
               <div className="bg-white rounded-xl border border-red-100 p-4">
-                <p className="text-xs font-semibold text-red-500 uppercase tracking-wider mb-3">Zona de peligro</p>
-                {!showDeleteConfirm ? (
-                  <button onClick={() => setShowDeleteConfirm(true)} className="text-sm text-red-500 hover:text-red-600 flex items-center gap-1.5">
-                    <Trash2 className="w-4 h-4" /> Eliminar club
-                  </button>
-                ) : (
-                  <div className="space-y-2">
-                    <p className="text-sm text-slate-600">¿Eliminar {club.name} y todas sus negociaciones?</p>
-                    <div className="flex gap-2">
-                      <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-1.5 text-sm border border-slate-200 rounded-lg text-slate-500">Cancelar</button>
-                      <button
-                        onClick={async () => {
-                          try {
-                            await onDeleteClub(club.id)
-                            onBack()
-                          } catch {
-                            showToast('No se pudo eliminar. Inténtalo de nuevo.', 'error')
-                          }
-                        }}
-                        className="flex-1 py-1.5 text-sm bg-red-500 text-white rounded-lg"
-                      >
-                        Eliminar
-                      </button>
-                    </div>
-                  </div>
-                )}
+                <p className="text-meta font-semibold text-red-600 uppercase tracking-wider mb-3">Zona de peligro</p>
+                <Button variant="ghost" icon={<Trash2 />} onClick={() => setShowDeleteConfirm(true)} className="text-red-600 hover:bg-red-50">
+                  Eliminar club
+                </Button>
               </div>
             )}
           </div>
@@ -660,6 +585,40 @@ export function ClubDetail({
       </main>
 
       {/* ── MODALS ── */}
+
+      {editingInfo && (
+        <InfoEditForm
+          club={club}
+          profiles={profiles}
+          onSave={async (updates) => {
+            try {
+              await onUpdateClub({ ...club, ...updates })
+              setEditingInfo(false)
+              showToast('Información del club guardada')
+            } catch {
+              showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+            }
+          }}
+          onCancel={() => setEditingInfo(false)}
+        />
+      )}
+
+      <ConfirmModal
+        open={showDeleteConfirm}
+        title={`¿Eliminar ${club.name}?`}
+        message="Se eliminarán también todas sus negociaciones. Esta acción no se puede deshacer."
+        confirmLabel={L.eliminar}
+        onConfirm={async () => {
+          try {
+            await onDeleteClub(club.id)
+            setShowDeleteConfirm(false)
+            onBack()
+          } catch {
+            showToast('No se pudo eliminar. Inténtalo de nuevo.', 'error')
+          }
+        }}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
 
       {showAddPlayer && (
         <AddPlayerToClubModal
@@ -731,14 +690,14 @@ export function ClubDetail({
       {/* Confirmación de borrado de necesidad */}
       <ConfirmModal
         open={confirmDeleteNeedIdx !== null}
-        title={`¿Eliminar la necesidad${confirmDeleteNeedIdx !== null && club.needs[confirmDeleteNeedIdx] ? ` de ${positionLabel(club.needs[confirmDeleteNeedIdx].position)}` : ''}?`}
+        title={`¿Eliminar la solicitud${confirmDeleteNeedIdx !== null && club.needs[confirmDeleteNeedIdx] ? ` de ${positionLabel(club.needs[confirmDeleteNeedIdx].position)}` : ''}?`}
         message="Esta acción no se puede deshacer."
         confirmLabel="Eliminar"
         onConfirm={async () => {
           if (confirmDeleteNeedIdx === null) return
           try {
             await onUpdateClub({ ...club, needs: club.needs.filter((_, idx) => idx !== confirmDeleteNeedIdx) })
-            showToast('Necesidad eliminada')
+            showToast('Solicitud eliminada')
           } catch {
             showToast('No se pudo eliminar. Inténtalo de nuevo.', 'error')
           } finally {
@@ -797,9 +756,8 @@ function AddPlayerToClubModal({ players, entries, existingPlayerIds, clubId, def
       ]
     : baseAvailable
 
-  useEscapeKey(onClose)
-
-  async function handleSave() {
+  async function handleSave(e?: FormEvent<HTMLFormElement>) {
+    e?.preventDefault()
     if (!selected || saving) return
     setSaving(true)
     try {
@@ -808,87 +766,85 @@ function AddPlayerToClubModal({ players, entries, existingPlayerIds, clubId, def
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
-      <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white">
-          <div>
-            <h2 className="font-semibold text-slate-800 text-sm">Ofrecer jugador</h2>
-            {positionHint && (
-              <p className="text-xs text-blue-600 mt-0.5">Buscando: <span className="font-semibold">{positionLabel(positionHint)}</span></p>
-            )}
-          </div>
-          <button onClick={onClose} aria-label="Cerrar" className="p-2 sm:p-1 rounded hover:bg-slate-100"><X className="w-4 h-4 text-slate-400" /></button>
-        </div>
-        <div className="p-4 space-y-3 safe-area-bottom">
-          {!selected ? (
-            <>
-              <input autoFocus value={query} onChange={e => setQuery(e.target.value)} placeholder="Buscar jugador…"
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
-              <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
-                <input type="checkbox" checked={showAll} onChange={e => setShowAll(e.target.checked)} />
-                Mostrar todos los jugadores (no solo los en distribución)
-              </label>
-              <div className="max-h-56 overflow-y-auto space-y-1">
-                {available.slice(0, 20).map(p => {
-                  const entry = entries.find(e => e.playerId === p.id)
-                  const posMatch = positionHint ? matchesPosition(p.positions, positionHint) : false
-                  return (
-                    <button key={p.id} onClick={() => setSelected(p)}
-                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-100 text-left ${posMatch && !query ? 'bg-blue-50/50' : ''}`}>
-                      <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-semibold text-slate-600 flex-shrink-0">
-                        {p.name.split(' ').map(w => w[0]).join('').slice(0, 2)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-slate-800">{p.name}</div>
-                        <div className="text-xs text-slate-500">{p.positions[0]}</div>
-                      </div>
-                      {posMatch && !query && (
-                        <span className="text-[11px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded font-medium flex-shrink-0">✓ pos.</span>
-                      )}
-                      {entry && (
-                        <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${PRIORITY_CONFIG[entry.priority].bg} ${PRIORITY_CONFIG[entry.priority].text}`}>{entry.priority}</span>
-                      )}
-                    </button>
-                  )
-                })}
-                {available.length === 0 && <p className="text-sm text-slate-400 text-center py-4">Sin resultados</p>}
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="flex items-center gap-3 bg-slate-50 rounded-lg px-3 py-2">
-                <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-600">
-                  {selected.name.split(' ').map(w => w[0]).join('').slice(0, 2)}
-                </div>
-                <span className="font-medium text-slate-800 text-sm">{selected.name}</span>
-                <button onClick={() => setSelected(null)} aria-label="Quitar selección" className="ml-auto text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1.5">Estado</label>
-                <div className="flex flex-wrap gap-1.5">
+    <Dialog
+      open
+      onClose={onClose}
+      title="Ofrecer jugador"
+      description={positionHint ? <>Buscando: <span className="font-semibold text-primary">{positionLabel(positionHint)}</span></> : undefined}
+      onSubmit={handleSave}
+      dirty={!!notes.trim()}
+      historyKey="club-ofrecer"
+      footer={selected ? <>
+        <Button onClick={onClose} className="mr-auto">{L.cancelar}</Button>
+        <Button type="submit" variant="primary" loading={saving}>Ofrecer jugador</Button>
+      </> : undefined}
+    >
+      <div className="space-y-3">
+        {!selected ? (
+          <>
+            <Field label="Buscar jugador">
+              <Input autoFocus value={query} onChange={e => setQuery(e.target.value)} placeholder="Buscar jugador…" />
+            </Field>
+            <label className="flex items-center gap-2 text-secondary text-slate-600 cursor-pointer">
+              <input type="checkbox" checked={showAll} onChange={e => setShowAll(e.target.checked)} className="w-4 h-4 rounded" />
+              Mostrar todos los jugadores (no solo los de distribución)
+            </label>
+            <div className="max-h-56 overflow-y-auto space-y-1">
+              {available.slice(0, 20).map(p => {
+                const entry = entries.find(e => e.playerId === p.id)
+                const posMatch = positionHint ? matchesPosition(p.positions, positionHint) : false
+                return (
+                  <button key={p.id} type="button" onClick={() => setSelected(p)}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-100 text-left ${posMatch && !query ? 'bg-blue-50/50' : ''}`}>
+                    <Avatar name={p.name} photo={p.photo} size="sm" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-body font-medium text-slate-800">{p.name}</div>
+                      <div className="text-secondary text-slate-500">{positionLabel(p.positions[0])}</div>
+                    </div>
+                    {posMatch && !query && (
+                      <Badge tone="primary" title="Encaja con la posición buscada"><Check className="w-3 h-3" aria-hidden="true" /> pos.</Badge>
+                    )}
+                    {entry && (
+                      <span className={`text-badge font-bold px-1.5 py-0.5 rounded ${PRIORITY_CONFIG[entry.priority].bg} ${PRIORITY_CONFIG[entry.priority].text}`} title={`${L.prioridad} ${entry.priority}`}>{entry.priority}</span>
+                    )}
+                  </button>
+                )
+              })}
+              {available.length === 0 && <p className="text-body text-slate-500 text-center py-4">Sin resultados</p>}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center gap-3 bg-slate-50 rounded-lg px-3 py-2">
+              <Avatar name={selected.name} photo={selected.photo} size="sm" />
+              <span className="font-medium text-slate-800 text-body">{selected.name}</span>
+              <IconButton label="Quitar selección" onClick={() => setSelected(null)} className="ml-auto"><X /></IconButton>
+            </div>
+            <Field label={L.estado}>
+              {() => (
+                <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={L.estado}>
                   {NEG_STATUSES.map(s => {
                     const cfg = STATUS_CONFIG[s]
                     return (
-                      <button key={s} onClick={() => setStatus(s)}
-                        className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${status === s ? cfg.color + ' ring-2 ring-offset-1 ring-current' : 'bg-slate-100 text-slate-500'}`}>
-                        {cfg.label}
+                      <button key={s} type="button" role="radio" aria-checked={status === s} onClick={() => setStatus(s)}
+                        className={`px-3 min-h-9 sm:min-h-8 rounded-full text-secondary font-medium transition-all ${status === s ? cfg.color + ' ring-2 ring-offset-1 ring-current' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                        {NEG_STATUS_LABELS[s]}
                       </button>
                     )
                   })}
                 </div>
-              </div>
-              <ManagerSelect value={aisManager || undefined} onChange={(v) => setAisManager(v ?? '')} profiles={profiles} />
-              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Notas (opcional)"
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none" />
-              <button onClick={handleSave} disabled={saving}
-                className="w-full py-2 bg-primary text-white text-sm rounded-lg hover:bg-primary/90 disabled:opacity-60">
-                {saving ? <span className="flex items-center justify-center gap-2"><BtnSpinner /> Guardando…</span> : 'Añadir'}
-              </button>
-            </>
-          )}
-        </div>
+              )}
+            </Field>
+            <Field label={L.encargado}>
+              {() => <ManagerSelect value={aisManager || undefined} onChange={(v) => setAisManager(v ?? '')} profiles={profiles} />}
+            </Field>
+            <Field label="Notas (opcional)">
+              <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} />
+            </Field>
+          </>
+        )}
       </div>
-    </div>
+    </Dialog>
   )
 }
 
@@ -921,59 +877,51 @@ function NeedForm({ initial, onSave, onCancel }: {
   }
 
   return (
-    <div className="space-y-3">
-      <div>
-        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-2">Posición *</label>
-        <div className="flex flex-wrap gap-1.5">
-          {POSITIONS.map(pos => (
-            <button
-              key={pos.code}
-              type="button"
-              title={pos.es}
-              onClick={() => setPosition(pos.code)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                position === pos.code
-                  ? 'bg-primary text-white border-primary'
-                  : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-              }`}
-            >
-              {pos.code}
-            </button>
-          ))}
-        </div>
+    <form onSubmit={e => { e.preventDefault(); void handleSave() }} className="space-y-3">
+      <Field label="Posición" required>
+        {() => (
+          <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Posición">
+            {POSITIONS.map(pos => (
+              <button
+                key={pos.code}
+                type="button"
+                role="radio"
+                aria-checked={position === pos.code}
+                title={pos.es}
+                onClick={() => setPosition(pos.code)}
+                className={`px-3 min-h-9 sm:min-h-8 rounded-lg text-secondary font-medium border transition-colors ${
+                  position === pos.code
+                    ? 'bg-primary text-white border-primary'
+                    : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400 hover:bg-slate-50'
+                }`}
+              >
+                {pos.code}
+              </button>
+            ))}
+          </div>
+        )}
+      </Field>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Field label="Edad máx.">
+          <Input type="number" value={ageMax} onChange={e => setAgeMax(e.target.value)} placeholder="Ej: 23" />
+        </Field>
+        <Field label="Traspaso">
+          <Input value={transferBudget} onChange={e => setTransferBudget(e.target.value)} placeholder="400k, 2M…" />
+        </Field>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Edad máx.</label>
-          <input type="number" value={ageMax} onChange={e => setAgeMax(e.target.value)} placeholder="Ej: 23"
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
-        </div>
-        <div>
-          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Traspaso</label>
-          <input value={transferBudget} onChange={e => setTransferBudget(e.target.value)} placeholder="400k, 2M…"
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
-        </div>
+        <Field label="Salario">
+          <Input value={salaryBudget} onChange={e => setSalaryBudget(e.target.value)} placeholder="60k/año…" />
+        </Field>
+        <Field label="Notas">
+          <Input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Contexto adicional…" />
+        </Field>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Salario</label>
-          <input value={salaryBudget} onChange={e => setSalaryBudget(e.target.value)} placeholder="60k/año…"
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
-        </div>
-        <div>
-          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Notas</label>
-          <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Contexto adicional…"
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
-        </div>
+      <div className="flex gap-2 justify-end">
+        <Button onClick={onCancel} className="mr-auto">{L.cancelar}</Button>
+        <Button type="submit" variant="primary" disabled={!position.trim()} loading={saving}>{L.guardar}</Button>
       </div>
-      <div className="flex gap-2">
-        <button onClick={onCancel} className="flex-1 py-2 text-sm border border-slate-200 rounded-lg text-slate-500">Cancelar</button>
-        <button onClick={handleSave} disabled={!position.trim() || saving}
-          className="flex-1 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-60">
-          {saving ? <span className="flex items-center justify-center gap-2"><BtnSpinner /> Guardando…</span> : 'Guardar'}
-        </button>
-      </div>
-    </div>
+    </form>
   )
 }
 
@@ -1027,7 +975,12 @@ function InfoEditForm({ club, profiles, onSave, onCancel }: {
   const [saving, setSaving] = useState(false)
   const [nameError, setNameError] = useState('')
 
-  async function handleSave() {
+  const dirty = name !== club.name || country !== (club.country ?? '') || league !== (club.league ?? '')
+    || contactPerson !== (club.contactPerson ?? '') || aisManager !== (club.aisManager ?? '')
+    || notes !== (club.notes ?? '') || isPriority !== club.isPriority
+
+  async function handleSave(e?: FormEvent<HTMLFormElement>) {
+    e?.preventDefault()
     if (saving) return
     if (!isValidName(name)) {
       setNameError('Introduce un nombre válido (mínimo 2 caracteres).')
@@ -1043,77 +996,75 @@ function InfoEditForm({ club, profiles, onSave, onCancel }: {
   }
 
   return (
-    <div className="space-y-3">
-      <div>
-        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Nombre</label>
-        <input value={name} onChange={e => { setName(e.target.value); if (nameError) setNameError('') }} className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 ${nameError ? 'border-red-300' : 'border-slate-200'}`} />
-        {nameError && <p className="text-xs text-red-600 mt-1">{nameError}</p>}
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">País</label>
-          <input value={country} onChange={e => setCountry(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+    <Dialog
+      open
+      onClose={onCancel}
+      title="Editar información del club"
+      onSubmit={handleSave}
+      dirty={dirty}
+      historyKey="club-info"
+      footer={<>
+        <Button onClick={onCancel} className="mr-auto">{L.cancelar}</Button>
+        <Button type="submit" variant="primary" disabled={!name.trim()} loading={saving}>{L.guardar}</Button>
+      </>}
+    >
+      <div className="space-y-3">
+        <Field label="Nombre" required error={nameError || undefined}>
+          <Input value={name} onChange={e => { setName(e.target.value); if (nameError) setNameError('') }} />
+        </Field>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field label="País">
+            <Input value={country} onChange={e => setCountry(e.target.value)} />
+          </Field>
+          <div>
+            <Field label="Liga">
+              <Select
+                value={showCustomLeague ? '__new__' : league}
+                onChange={e => {
+                  if (e.target.value === '__new__') {
+                    setShowCustomLeague(true)
+                    setLeague(customLeague)
+                  } else {
+                    setShowCustomLeague(false)
+                    setCustomLeague('')
+                    setLeague(e.target.value)
+                  }
+                }}
+              >
+                <option value="">— Sin liga —</option>
+                {allLeagues.map(l => <option key={l} value={l}>{l}</option>)}
+                <option value="__new__">+ Añadir nueva liga</option>
+              </Select>
+            </Field>
+            {showCustomLeague && (
+              <Input
+                autoFocus
+                value={customLeague}
+                onChange={e => { setCustomLeague(e.target.value); setLeague(e.target.value) }}
+                placeholder="Nombre de la nueva liga…"
+                aria-label="Nombre de la nueva liga"
+                className="mt-2 border-blue-300"
+              />
+            )}
+          </div>
         </div>
-        <div>
-          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Liga</label>
-          <select
-            value={showCustomLeague ? '__new__' : league}
-            onChange={e => {
-              if (e.target.value === '__new__') {
-                setShowCustomLeague(true)
-                setLeague(customLeague)
-              } else {
-                setShowCustomLeague(false)
-                setCustomLeague('')
-                setLeague(e.target.value)
-              }
-            }}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
-          >
-            <option value="">— Sin liga —</option>
-            {allLeagues.map(l => <option key={l} value={l}>{l}</option>)}
-            <option value="__new__">➕ Añadir nueva liga</option>
-          </select>
-          {showCustomLeague && (
-            <input
-              autoFocus
-              value={customLeague}
-              onChange={e => { setCustomLeague(e.target.value); setLeague(e.target.value) }}
-              placeholder="Nombre de la nueva liga…"
-              className="mt-2 w-full border border-blue-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-            />
-          )}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field label="Contacto club">
+            <Input value={contactPerson} onChange={e => setContactPerson(e.target.value)} />
+          </Field>
+          <Field label={L.encargado}>
+            {() => <ManagerSelect value={aisManager || undefined} onChange={(v) => setAisManager(v ?? '')} profiles={profiles} />}
+          </Field>
         </div>
+        <Field label="Notas">
+          <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} />
+        </Field>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" checked={isPriority} onChange={e => setIsPriority(e.target.checked)} className="w-4 h-4 rounded" />
+          <span className="text-body text-slate-700">Club prioritario</span>
+          <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" aria-hidden="true" />
+        </label>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Contacto club</label>
-          <input value={contactPerson} onChange={e => setContactPerson(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
-        </div>
-        <div>
-          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Gestor AIS</label>
-          <ManagerSelect value={aisManager || undefined} onChange={(v) => setAisManager(v ?? '')} profiles={profiles} />
-        </div>
-      </div>
-      <div>
-        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Notas</label>
-        <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none" />
-      </div>
-      <label className="flex items-center gap-2 cursor-pointer">
-        <input type="checkbox" checked={isPriority} onChange={e => setIsPriority(e.target.checked)} className="w-4 h-4 rounded" />
-        <span className="text-sm text-slate-600">Club prioritario ⭐</span>
-      </label>
-      <div className="flex gap-2">
-        <button onClick={onCancel} className="flex-1 py-2 text-sm border border-slate-200 rounded-lg text-slate-500">Cancelar</button>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="flex-1 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-60"
-        >
-          {saving ? <span className="flex items-center justify-center gap-2"><BtnSpinner /> Guardando…</span> : 'Guardar'}
-        </button>
-      </div>
-    </div>
+    </Dialog>
   )
 }
-

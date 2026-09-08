@@ -3,7 +3,9 @@ import { Plus, Search, Users, ChevronRight, ChevronDown, Flag, List, LayoutGrid,
 import type { DistributionEntry } from '../../types'
 import type { Profile } from '../../contexts/AuthContext'
 import { EmptyState } from '../../components/EmptyState'
-import { POSITION_CODES } from '../../lib/positions'
+import { Badge, Button, ClickableRow, IconButton, Input } from '../../components/ui'
+import { L } from '../../lib/labels'
+import { POSITION_CODES, positionLabel } from '../../lib/positions'
 import { contractBadge, topNegotiation, topStatus as topStatusOf } from '../../lib/distribution'
 import { Avatar, FilterCheck, FilterSheet, MultiSelect } from './shared'
 import { PRIORITY_CONFIG, STATUS_CONFIG, SIN_NEGOCIACIONES } from './constantes'
@@ -17,14 +19,14 @@ export type FilterSheetId = null | 'jugadores' | 'clubes' | 'solicitudes' | 'pip
 /** Semáforo de olvido (como en Firmar): verde <15 días, ámbar 15-30, rojo >30, gris sin actividad */
 function activityChip(lastNegActivity: Record<string, string>, playerId: string) {
   const last = lastNegActivity[playerId]
-  if (!last) return <span className="text-[10.5px] text-slate-300">sin mov.</span>
+  if (!last) return <span className="text-badge text-slate-500">sin mov.</span>
   const days = Math.floor((Date.now() - new Date(last).getTime()) / 86400000)
   const cls = days > 30 ? 'text-red-600' : days > 14 ? 'text-amber-600' : 'text-emerald-600'
   const dot = days > 30 ? 'bg-red-500' : days > 14 ? 'bg-amber-400' : 'bg-emerald-500'
   const label = days === 0 ? 'hoy' : days === 1 ? 'ayer' : `${days}d`
   return (
-    <span className={`inline-flex items-center gap-1 text-[10.5px] font-medium whitespace-nowrap ${cls}`} title={`Último movimiento de negociación hace ${days} día${days !== 1 ? 's' : ''}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
+    <span className={`inline-flex items-center gap-1 text-badge font-medium whitespace-nowrap ${cls}`} title={`Último movimiento de negociación hace ${days} día${days !== 1 ? 's' : ''}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${dot}`} aria-hidden="true" />
       {label}
     </span>
   )
@@ -94,14 +96,16 @@ export function JugadoresTab({
         onClick={() => setHideClosed(!hideClosed)}
       />
       {playersActiveFilters > 0 && (
-        <button
+        <Button
+          size="sm"
+          icon={<SlidersHorizontal />}
           onClick={() => { setPosFilters([]); setYearFilters([]); setActivityFilter(false); setHideClosed(false) }}
-          className="flex items-center gap-1.5 text-xs bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg font-medium transition-colors"
+          className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+          title="Quitar filtros"
         >
-          <SlidersHorizontal className="w-3 h-3" />
           {playersActiveFilters} filtro{playersActiveFilters !== 1 ? 's' : ''} activo{playersActiveFilters !== 1 ? 's' : ''}
-          <X className="w-3 h-3 ml-0.5 opacity-60" />
-        </button>
+          <X className="w-3 h-3 ml-0.5 opacity-60" aria-hidden="true" />
+        </Button>
       )}
     </>
   )
@@ -111,69 +115,62 @@ export function JugadoresTab({
     <div className="hidden sm:flex items-center justify-between gap-2 mb-3 flex-wrap">
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
-          <input
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" aria-hidden="true" />
+          <Input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Buscar jugador…"
-            className="w-36 sm:w-48 pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200"
+            aria-label="Buscar jugador"
+            className="w-36 sm:w-48 pl-8 py-1.5 bg-slate-50"
           />
         </div>
         {playersFilterControls}
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
-        <button
+        <Button
+          size="sm"
           onClick={() => setJugadoresTableView(v => !v)}
-          title={jugadoresTableView ? 'Ver tarjetas' : 'Ver tabla'}
-          className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border transition-colors ${
-            jugadoresTableView
-              ? 'bg-slate-800 text-white border-slate-800'
-              : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
-          }`}
+          aria-pressed={jugadoresTableView}
+          icon={jugadoresTableView ? <LayoutGrid /> : <List />}
+          className={jugadoresTableView ? 'bg-slate-800 text-white border-slate-800 hover:bg-slate-700' : ''}
         >
-          {jugadoresTableView
-            ? <><LayoutGrid className="w-4 h-4" /> Tarjetas</>
-            : <><List className="w-4 h-4" /> Tabla</>}
-        </button>
-        <button
-          onClick={() => onAddPlayer()}
-          className="hidden sm:inline-flex flex-shrink-0 items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-sm rounded-lg hover:bg-primary/90 transition-colors"
-        >
-          <Plus className="w-4 h-4" /> Añadir jugador
-        </button>
+          {jugadoresTableView ? 'Tarjetas' : 'Tabla'}
+        </Button>
+        <Button size="sm" variant="primary" icon={<Plus />} onClick={() => onAddPlayer()}>
+          Añadir jugador
+        </Button>
       </div>
     </div>
 
     {/* Móvil: barra compacta búsqueda + botón Filtros */}
     <div className="flex sm:hidden items-center gap-2 mb-3">
       <div className="relative flex-1">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
-        <input
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" aria-hidden="true" />
+        <Input
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Buscar jugador…"
-          className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200"
+          aria-label="Buscar jugador"
+          className="pl-8 bg-slate-50"
         />
       </div>
-      <button
+      <Button
+        variant={playersActiveFilters > 0 ? 'primary' : 'secondary'}
+        icon={<SlidersHorizontal />}
         onClick={() => setFilterSheet('jugadores')}
-        className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
-          playersActiveFilters > 0 ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200'
-        }`}
+        className="flex-shrink-0"
       >
-        <SlidersHorizontal className="w-4 h-4" /> Filtros
-        {playersActiveFilters > 0 && <span className="text-xs">({playersActiveFilters})</span>}
-      </button>
-      <button
+        Filtros{playersActiveFilters > 0 && ` (${playersActiveFilters})`}
+      </Button>
+      <IconButton
+        size="md"
+        variant="secondary"
         onClick={() => setJugadoresTableView(v => !v)}
-        title={jugadoresTableView ? 'Ver tarjetas' : 'Ver tabla'}
-        aria-label={jugadoresTableView ? 'Ver tarjetas' : 'Ver tabla'}
-        className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
-          jugadoresTableView ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200'
-        }`}
+        label={jugadoresTableView ? 'Ver tarjetas' : 'Ver tabla'}
+        className={jugadoresTableView ? 'bg-slate-800 text-white border-slate-800 hover:bg-slate-700' : ''}
       >
-        {jugadoresTableView ? <LayoutGrid className="w-4 h-4" /> : <List className="w-4 h-4" />}
-      </button>
+        {jugadoresTableView ? <LayoutGrid /> : <List />}
+      </IconButton>
     </div>
 
     <FilterSheet open={filterSheet === 'jugadores'} onClose={() => setFilterSheet(null)} title="Filtros de jugadores">
@@ -185,16 +182,16 @@ export function JugadoresTab({
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
-                <th className="px-3 py-2.5 w-9">Pr.</th>
-                <th className="px-3 py-2.5">Jugador</th>
-                <th className="px-3 py-2.5">Pos.</th>
+              <tr className="bg-slate-50 border-b border-slate-200 text-left text-meta font-semibold text-slate-600 uppercase tracking-wide">
+                <th className="px-3 py-2.5 w-9" title={L.prioridad}><abbr title={L.prioridad} className="no-underline">Prio.</abbr></th>
+                <th className="px-3 py-2.5">{L.jugador}</th>
+                <th className="px-3 py-2.5">Posición</th>
                 <th className="px-3 py-2.5">Tipo</th>
                 <th className="px-3 py-2.5">Contrato</th>
-                <th className="px-3 py-2.5">Estado</th>
-                <th className="px-3 py-2.5 text-right">Clubs</th>
-                <th className="px-3 py-2.5">Encargado</th>
-                <th className="px-3 py-2.5 w-8" />
+                <th className="px-3 py-2.5">{L.estado}</th>
+                <th className="px-3 py-2.5 text-right">{L.clubes}</th>
+                <th className="px-3 py-2.5">{L.encargado}</th>
+                <th className="px-3 py-2.5 w-8"><span className="sr-only">Abrir</span></th>
               </tr>
             </thead>
             <tbody>
@@ -210,13 +207,16 @@ export function JugadoresTab({
                 return (
                   <tr
                     key={entry.id}
+                    tabIndex={0}
+                    role="button"
                     onClick={() => { setSelectedEntryId(entry.id); setSelectedClubId(null) }}
-                    className={`border-b border-slate-50 last:border-0 cursor-pointer hover:bg-slate-50 transition-colors ${
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedEntryId(entry.id); setSelectedClubId(null) } }}
+                    className={`border-b border-slate-50 last:border-0 cursor-pointer hover:bg-slate-50 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40 ${
                       selectedEntryId === entry.id ? 'bg-blue-50/60' : hasClosed ? 'bg-emerald-50/50' : ''
                     }`}
                   >
                     <td className="px-3 py-2">
-                      <span className={`inline-flex w-5 h-5 rounded text-[11px] font-bold items-center justify-center ${cfg.bg} ${cfg.text}`}>
+                      <span className={`inline-flex w-6 h-6 rounded text-badge font-bold items-center justify-center ${cfg.bg} ${cfg.text}`} title={`${L.prioridad} ${entry.priority}`}>
                         {entry.priority}
                       </span>
                     </td>
@@ -225,12 +225,12 @@ export function JugadoresTab({
                         <Avatar name={player.name} photo={player.photo} size="xs" />
                         <span className="font-medium text-slate-800 truncate">{player.name}</span>
                         {player.hiddenFromManagement && (
-                          <span className="text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full font-medium flex-shrink-0">Interm.</span>
+                          <Badge className="bg-orange-100 text-orange-700 flex-shrink-0">Intermediar</Badge>
                         )}
                         <span className="ml-auto flex-shrink-0">{activityChip(lastNegActivity, entry.playerId)}</span>
                       </div>
                     </td>
-                    <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{player.positions[0] ?? '—'}</td>
+                    <td className="px-3 py-2 text-slate-600 whitespace-nowrap" title={positionLabel(player.positions[0])}>{player.positions[0] ?? '—'}</td>
                     <td className="px-3 py-2">
                       {entry.condition
                         ? <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full whitespace-nowrap">{entry.condition}</span>
@@ -251,21 +251,22 @@ export function JugadoresTab({
                             setOpenStatusDropId(topNeg.id)
                           }}
                           title="Cambiar estado"
-                          className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full whitespace-nowrap transition-colors hover:brightness-95 ${STATUS_CONFIG[topNeg.status].color}`}
+                          aria-label={`Cambiar estado (${STATUS_CONFIG[topNeg.status].label})`}
+                          className={`inline-flex items-center gap-1 text-secondary min-h-9 sm:min-h-0 px-2 py-1 rounded-full whitespace-nowrap transition-colors hover:brightness-95 ${STATUS_CONFIG[topNeg.status].color}`}
                         >
                           {STATUS_CONFIG[topNeg.status].label}
-                          <ChevronDown className="w-3 h-3 opacity-60" />
+                          <ChevronDown className="w-3 h-3 opacity-60" aria-hidden="true" />
                         </button>
                       ) : (
                         <span className="text-slate-300 text-xs">—</span>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-right text-slate-500">{negCount || '—'}</td>
+                    <td className="px-3 py-2 text-right text-slate-600">{negCount || '—'}</td>
                     <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
                       <button
                         title={entry.aisManager
                           ? (profiles.find(p => p.avatar === entry.aisManager)?.name ?? entry.aisManager)
-                          : 'Sin encargado'}
+                          : L.sinEncargado}
                         onClick={e => {
                           if (openManagerDropId === entry.id) {
                             setOpenManagerDropId(null); setManagerDropPos(null); return;
@@ -274,17 +275,18 @@ export function JugadoresTab({
                           setManagerDropPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
                           setOpenManagerDropId(entry.id);
                         }}
-                        className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold border-2 transition-colors ${
+                        aria-label={entry.aisManager ? `${L.encargado}: ${entry.aisManager}` : `Asignar ${L.encargado.toLowerCase()}`}
+                        className={`w-7 h-7 min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 rounded-full flex items-center justify-center text-badge font-bold border-2 transition-colors ${
                           entry.aisManager
                             ? 'bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-200'
-                            : 'bg-slate-100 text-slate-400 border-dashed border-slate-300 hover:bg-slate-200'
+                            : 'bg-slate-100 text-slate-600 border-dashed border-slate-300 hover:bg-slate-200'
                         }`}
                       >
-                        {entry.aisManager ?? '+'}
+                        {entry.aisManager ?? <Plus className="w-3.5 h-3.5" aria-hidden="true" />}
                       </button>
                     </td>
                     <td className="px-3 py-2">
-                      <ChevronRight className="w-4 h-4 text-slate-300" />
+                      <ChevronRight className="w-4 h-4 text-slate-400" aria-hidden="true" />
                     </td>
                   </tr>
                 )
@@ -314,26 +316,55 @@ export function JugadoresTab({
                 const topStatus = topStatusOf(negsDelJugador)
 
                 return (
-                  <div
+                  <ClickableRow
                     key={entry.id}
                     onClick={() => { setSelectedEntryId(entry.id); setSelectedClubId(null) }}
-                    className={`rounded-lg border cursor-pointer hover:shadow-sm transition-all flex items-center gap-2.5 px-3 py-2 overflow-hidden relative ${
+                    selected={selectedEntryId === entry.id}
+                    className={`rounded-lg border hover:shadow-sm transition-all gap-2.5 px-3 py-2 overflow-hidden relative ${
                       selectedEntryId === entry.id ? 'border-blue-300 ring-1 ring-blue-200 bg-white'
-                        : hasClosed ? 'bg-emerald-50 border-emerald-300'
-                        : 'bg-white border-slate-200'
+                        : hasClosed ? 'bg-emerald-50 border-emerald-300 hover:bg-emerald-50'
+                        : 'bg-white border-slate-200 hover:bg-white'
                     }`}
+                    actions={
+                      <>
+                        <button
+                          type="button"
+                          title={entry.aisManager
+                            ? (profiles.find(p => p.avatar === entry.aisManager)?.name ?? entry.aisManager)
+                            : L.sinEncargado}
+                          aria-label={entry.aisManager ? `${L.encargado}: ${entry.aisManager}` : `Asignar ${L.encargado.toLowerCase()}`}
+                          onClick={e => {
+                            if (openManagerDropId === entry.id) {
+                              setOpenManagerDropId(null); setManagerDropPos(null); return;
+                            }
+                            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                            setManagerDropPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                            setOpenManagerDropId(entry.id);
+                          }}
+                          className={`w-7 h-7 min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 rounded-full flex items-center justify-center text-badge font-bold border-2 transition-colors ${
+                            entry.aisManager
+                              ? 'bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-200'
+                              : 'bg-slate-100 text-slate-600 border-dashed border-slate-300 hover:bg-slate-200'
+                          }`}
+                        >
+                          {entry.aisManager ?? <Plus className="w-3.5 h-3.5" aria-hidden="true" />}
+                        </button>
+                        <ChevronRight className="w-4 h-4 text-slate-400 flex-shrink-0" aria-hidden="true" />
+                      </>
+                    }
                   >
                     {/* Negotiation status bar */}
                     {topStatus && (
-                      <div className={`absolute left-0 top-0 bottom-0 w-0.5 rounded-l ${STATUS_CONFIG[topStatus].dot}`} />
+                      <div className={`absolute left-0 top-0 bottom-0 w-0.5 rounded-l ${STATUS_CONFIG[topStatus].dot}`} aria-hidden="true" />
                     )}
+                    <div className="flex items-center gap-2.5 min-w-0">
                     <Avatar name={player.name} photo={player.photo} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-medium text-slate-800 text-sm truncate">{player.name}</span>
-                        <span className="text-xs text-slate-400 flex-shrink-0">{player.positions[0]}</span>
+                        <span className="font-medium text-slate-800 text-body truncate">{player.name}</span>
+                        <span className="text-secondary text-slate-500 flex-shrink-0" title={positionLabel(player.positions[0])}>{player.positions[0]}</span>
                         {player.hiddenFromManagement && (
-                          <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full font-medium flex-shrink-0">Intermediar</span>
+                          <Badge className="bg-orange-100 text-orange-700 flex-shrink-0">Intermediar</Badge>
                         )}
                       </div>
                       <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
@@ -355,37 +386,12 @@ export function JugadoresTab({
                         )}
                         {activityChip(lastNegActivity, entry.playerId)}
                         {negCount > 0 && (
-                          <span className="text-xs text-slate-400">{negCount} club{negCount !== 1 ? 's' : ''}</span>
+                          <span className="text-secondary text-slate-500">{negCount} club{negCount !== 1 ? 'es' : ''}</span>
                         )}
                       </div>
                     </div>
-
-                    {/* Manager badge — fixed dropdown to escape overflow:hidden */}
-                    <div className="flex-shrink-0" onClick={e => e.stopPropagation()}>
-                      <button
-                        title={entry.aisManager
-                          ? (profiles.find(p => p.avatar === entry.aisManager)?.name ?? entry.aisManager)
-                          : 'Sin encargado'}
-                        onClick={e => {
-                          if (openManagerDropId === entry.id) {
-                            setOpenManagerDropId(null); setManagerDropPos(null); return;
-                          }
-                          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                          setManagerDropPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
-                          setOpenManagerDropId(entry.id);
-                        }}
-                        className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold border-2 transition-colors ${
-                          entry.aisManager
-                            ? 'bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-200'
-                            : 'bg-slate-100 text-slate-400 border-dashed border-slate-300 hover:bg-slate-200'
-                        }`}
-                      >
-                        {entry.aisManager ?? '+'}
-                      </button>
                     </div>
-
-                    <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
-                  </div>
+                  </ClickableRow>
                 )
               })}
             </div>
@@ -407,12 +413,9 @@ export function JugadoresTab({
             activityFilter && 'con actividad',
           ].filter(Boolean).join(' · ')}
           action={
-            <button
-              onClick={() => { setSearch(''); setPosFilters([]); setYearFilters([]); setActivityFilter(false) }}
-              className="text-xs text-blue-600 hover:text-blue-700 font-medium"
-            >
+            <Button variant="link" size="sm" onClick={() => { setSearch(''); setPosFilters([]); setYearFilters([]); setActivityFilter(false) }}>
               Limpiar filtros
-            </button>
+            </Button>
           }
         />
       ) : (
@@ -421,12 +424,7 @@ export function JugadoresTab({
           title="No hay jugadores en distribución"
           subtitle="Añade jugadores de la cartera para empezar a distribuirlos esta temporada."
           action={
-            <button
-              onClick={() => onAddPlayer()}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-sm rounded-lg hover:bg-primary/90 transition-colors"
-            >
-              <Plus className="w-4 h-4" /> Añadir jugador
-            </button>
+            <Button variant="primary" icon={<Plus />} onClick={() => onAddPlayer()}>Añadir jugador</Button>
           }
         />
       )
@@ -434,11 +432,12 @@ export function JugadoresTab({
 
     {/* FAB Añadir jugador — móvil */}
     <button
+      type="button"
       onClick={() => onAddPlayer()}
       aria-label="Añadir jugador"
-      className="sm:hidden fixed bottom-5 right-4 z-40 w-14 h-14 rounded-full bg-primary text-white shadow-lg flex items-center justify-center safe-area-bottom"
+      className="sm:hidden fixed bottom-20 right-4 z-40 w-14 h-14 rounded-full bg-primary text-white shadow-lg flex items-center justify-center"
     >
-      <Plus className="w-6 h-6" />
+      <Plus className="w-6 h-6" aria-hidden="true" />
     </button>
   </div>
   )

@@ -1,9 +1,18 @@
 import { useState } from 'react'
 import logoImg from '../assets/logo.jpeg'
+import { Button, Field, Input } from '../components/ui'
 
 interface Props {
   onLogin: (email: string, password: string) => Promise<string | null>
 }
+
+/** Detecta un fallo de red (sin conexión o fetch caído) para dar un mensaje útil. */
+function esErrorDeRed(err: string): boolean {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return true
+  return /fetch|network|failed to|conexi[oó]n|timeout|ERR_/i.test(err)
+}
+
+const MSG_RED = 'No hay conexión. Comprueba tu red e inténtalo de nuevo.'
 
 export function LoginScreen({ onLogin }: Props) {
   const [email, setEmail] = useState('')
@@ -15,9 +24,16 @@ export function LoginScreen({ onLogin }: Props) {
     e.preventDefault()
     setError('')
     setLoading(true)
-    const err = await onLogin(email, password)
-    if (err) setError('Email o contraseña incorrectos')
-    setLoading(false)
+    try {
+      const err = await onLogin(email, password)
+      if (err) setError(esErrorDeRed(err) ? MSG_RED : 'Email o contraseña incorrectos')
+    } catch (err) {
+      // onLogin no debería lanzar, pero si el fetch revienta lo tratamos como red
+      const msg = err instanceof Error ? err.message : ''
+      setError(esErrorDeRed(msg) ? MSG_RED : 'No se pudo iniciar sesión. Inténtalo de nuevo.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -30,50 +46,45 @@ export function LoginScreen({ onLogin }: Props) {
           <h1 className="text-2xl font-black tracking-tight text-slate-900 uppercase">
             All Iron Sports
           </h1>
-          <p className="text-xs text-slate-400 mt-1 uppercase tracking-widest">
+          <p className="text-meta text-slate-500 mt-1 uppercase tracking-widest">
             Gestión de jugadores
           </p>
         </div>
 
         <form
           onSubmit={handleSubmit}
-          className="bg-white border border-slate-200 rounded-lg p-6 shadow-sm"
+          className="bg-white border border-slate-200 rounded-lg p-6 shadow-sm space-y-4"
         >
-          <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1.5">
-            Email
-          </label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            autoComplete="email"
-            className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-primary"
-          />
+          {/* Labels a 14px (text-body): Field pone text-meta por defecto */}
+          <Field label={<span className="text-body">Email</span>} required>
+            <Input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              autoFocus
+              autoComplete="email"
+              inputMode="email"
+            />
+          </Field>
 
-          <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1.5">
-            Contraseña
-          </label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            autoComplete="current-password"
-            className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm mb-6 focus:outline-none focus:ring-2"
-          />
+          <Field label={<span className="text-body">Contraseña</span>} required>
+            <Input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              autoComplete="current-password"
+            />
+          </Field>
 
           {error && (
-            <p className="text-xs text-red-500 mb-4 text-center">{error}</p>
+            <p className="text-secondary text-red-600 text-center" role="alert">{error}</p>
           )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-md text-white text-sm font-semibold py-2.5 disabled:opacity-60 transition-colors bg-primary hover:bg-primary/90"
-          >
-            {loading ? 'Entrando...' : 'Entrar'}
-          </button>
+          <Button type="submit" variant="primary" loading={loading} className="w-full">
+            {loading ? 'Entrando…' : 'Entrar'}
+          </Button>
         </form>
       </div>
     </div>

@@ -1,10 +1,12 @@
 import { useState, useMemo } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
-import { Plus, Search, Star, Building2, Users, X, Check, AlertCircle, CircleDot, Flag, ChevronDown, SlidersHorizontal, CheckSquare } from 'lucide-react'
+import { Plus, Search, Star, Building2, Users, X, Check, AlertCircle, CircleDot, Flag, ChevronDown, SlidersHorizontal, CheckSquare, Globe } from 'lucide-react'
 import type { Club } from '../../types'
 import type { Profile } from '../../contexts/AuthContext'
 import { EmptyState } from '../../components/EmptyState'
 import { BotonCsv } from '../../components/BotonCsv'
+import { Button, IconButton, Input, Select } from '../../components/ui'
+import { L } from '../../lib/labels'
 import { TIER_CONFIG, CONFEDERATION_LABELS, getClubTier, getClubConfederation, countryCode3 } from '../../lib/clubTiers'
 import type { LeagueTier, Confederation } from '../../lib/clubTiers'
 import { fmtDateTime } from '../../lib/distribution'
@@ -165,15 +167,15 @@ export function ClubesTab({
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-[10.5px] text-slate-500 uppercase tracking-wide">
-                  {clubBulkMode && <th className="w-8 px-2 py-2" />}
-                  <th className="w-6 px-1 py-2" />
-                  <th className="text-left px-2 py-2 font-semibold">Club</th>
+                <tr className="bg-slate-50 border-b border-slate-200 text-meta text-slate-600 uppercase tracking-wide">
+                  {clubBulkMode && <th className="w-8 px-2 py-2"><span className="sr-only">Seleccionar</span></th>}
+                  <th className="w-6 px-1 py-2"><span className="sr-only">Prioritario</span></th>
+                  <th className="text-left px-2 py-2 font-semibold">{L.club}</th>
                   <th className="text-left px-2 py-2 font-semibold">Liga</th>
-                  <th className="text-left px-2 py-2 font-semibold">Encargado</th>
+                  <th className="text-left px-2 py-2 font-semibold">{L.encargado}</th>
                   <th className="text-left px-2 py-2 font-semibold">Contacto</th>
-                  <th className="text-center px-2 py-2 font-semibold" title="Jugadores ofrecidos a este club">Ofr.</th>
-                  <th className="text-center px-2 py-2 font-semibold" title="Necesidades declaradas">Nec.</th>
+                  <th className="text-center px-2 py-2 font-semibold" title="Jugadores ofrecidos a este club">Ofrecidos</th>
+                  <th className="text-center px-2 py-2 font-semibold" title="Solicitudes declaradas">{L.solicitudes}</th>
                   <th className="text-left px-2 py-2 font-semibold">Contactado</th>
                 </tr>
               </thead>
@@ -187,28 +189,34 @@ export function ClubesTab({
                   return (
                     <tr
                       key={club.id}
+                      tabIndex={0}
+                      role="button"
                       onClick={() => clubBulkMode ? toggleClubSelected(club.id) : abrirClub(club.id)}
-                      className={`cursor-pointer transition-colors ${activo ? 'bg-blue-50/60' : clubSelected.has(club.id) ? 'bg-blue-50/40' : 'hover:bg-slate-50'}`}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (clubBulkMode) toggleClubSelected(club.id); else abrirClub(club.id) } }}
+                      className={`cursor-pointer transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40 ${activo ? 'bg-blue-50/60' : clubSelected.has(club.id) ? 'bg-blue-50/40' : 'hover:bg-slate-50'}`}
                     >
                       {clubBulkMode && (
                         <td className="px-2 py-1.5 text-center" onClick={e => e.stopPropagation()}>
-                          <input type="checkbox" className="accent-blue-600" checked={clubSelected.has(club.id)} onChange={() => toggleClubSelected(club.id)} />
+                          <input type="checkbox" className="accent-blue-600 w-4 h-4" checked={clubSelected.has(club.id)} onChange={() => toggleClubSelected(club.id)} aria-label={`Seleccionar ${club.name}`} />
                         </td>
                       )}
                       <td className="px-1 py-1.5 text-center" onClick={e => e.stopPropagation()}>
-                        <button
+                        <IconButton
                           onClick={() => onUpdateClub({ ...club, isPriority: !club.isPriority }).catch(() => showToast('No se pudo guardar. Inténtalo de nuevo.', 'error'))}
-                          title={club.isPriority ? 'Quitar de prioritarios' : 'Marcar como prioritario'}
-                          className={`text-sm leading-none ${club.isPriority ? 'text-green-500' : 'text-slate-200 hover:text-green-400'}`}
-                        >★</button>
+                          label={club.isPriority ? 'Quitar de prioritarios' : 'Marcar como prioritario'}
+                          aria-pressed={club.isPriority}
+                          className={club.isPriority ? 'text-green-500' : 'text-slate-400 hover:text-green-500'}
+                        >
+                          <Star className={club.isPriority ? 'fill-current' : ''} />
+                        </IconButton>
                       </td>
                       <td className="px-2 py-1.5">
                         <div className="flex items-center gap-1.5 min-w-0">
-                          <span className={`text-[9.5px] font-bold px-1 rounded flex-shrink-0 ${cfg.bg} ${cfg.text}`}>{tier}</span>
+                          <span className={`text-badge font-bold px-1 rounded flex-shrink-0 ${cfg.bg} ${cfg.text}`} title={`${L.nivel} ${tier}`}>{tier}</span>
                           <span className="font-medium text-slate-800 truncate">{club.name}</span>
                         </div>
                       </td>
-                      <td className="px-2 py-1.5 text-[11px] text-slate-500 whitespace-nowrap">
+                      <td className="px-2 py-1.5 text-secondary text-slate-600 whitespace-nowrap">
                         {club.league ?? '—'}{club.country ? ` · ${countryCode3(club.country)}` : ''}
                       </td>
                       <td className="px-2 py-1.5" onClick={e => e.stopPropagation()}>
@@ -216,7 +224,8 @@ export function ClubesTab({
                           value={club.aisManager ?? ''}
                           onChange={e => onUpdateClub({ ...club, aisManager: e.target.value || undefined })
                             .catch(() => showToast('No se pudo guardar. Inténtalo de nuevo.', 'error'))}
-                          className="text-[11px] border border-transparent hover:border-slate-300 rounded px-1 py-0.5 bg-transparent w-full max-w-[150px] focus:outline-none focus:border-primary"
+                          aria-label={`${L.encargado} de ${club.name}`}
+                          className="text-secondary border border-transparent hover:border-slate-300 rounded px-1 py-0.5 bg-transparent w-full max-w-[150px] focus:outline-none focus:border-primary"
                         >
                           <option value="">—</option>
                           {opcionesEncargado}
@@ -233,14 +242,15 @@ export function ClubesTab({
                               .catch(() => showToast('No se pudo guardar. Inténtalo de nuevo.', 'error'))
                           }}
                           onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-                          className="text-[11px] border border-transparent hover:border-slate-300 rounded px-1 py-0.5 bg-transparent w-full max-w-[160px] focus:outline-none focus:border-primary"
+                          aria-label={`Contacto de ${club.name}`}
+                          className="text-secondary border border-transparent hover:border-slate-300 rounded px-1 py-0.5 bg-transparent w-full max-w-[160px] focus:outline-none focus:border-primary"
                         />
                       </td>
-                      <td className="px-2 py-1.5 text-center text-[11px]">
-                        {negs.length ? <span className="font-semibold text-blue-600">{negs.length}</span> : <span className="text-slate-300">—</span>}
+                      <td className="px-2 py-1.5 text-center text-secondary">
+                        {negs.length ? <span className="font-semibold text-blue-700">{negs.length}</span> : <span className="text-slate-400">—</span>}
                       </td>
-                      <td className="px-2 py-1.5 text-center text-[11px]">
-                        {nNec ? <span className="font-semibold text-amber-600">{nNec}</span> : <span className="text-slate-300">—</span>}
+                      <td className="px-2 py-1.5 text-center text-secondary">
+                        {nNec ? <span className="font-semibold text-amber-700">{nNec}</span> : <span className="text-slate-400">—</span>}
                       </td>
                       <td className="px-2 py-1.5 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                         <select
@@ -250,8 +260,9 @@ export function ClubesTab({
                             void reassignClubContacted(club, v === '__no__' ? undefined : v)
                           }}
                           title={club.contacted ? `Contactado · ${fmtDateTime(club.contactedAt)}` : 'Sin contactar'}
-                          className={`text-[11px] border border-transparent hover:border-slate-300 rounded px-1 py-0.5 bg-transparent focus:outline-none focus:border-primary ${
-                            club.contacted ? 'text-emerald-700 font-semibold' : 'text-slate-300'
+                          aria-label={`Contactado ${club.name}`}
+                          className={`text-secondary border border-transparent hover:border-slate-300 rounded px-1 py-0.5 bg-transparent focus:outline-none focus:border-primary ${
+                            club.contacted ? 'text-emerald-700 font-semibold' : 'text-slate-500'
                           }`}
                         >
                           <option value="__no__">sin contactar</option>
@@ -270,17 +281,15 @@ export function ClubesTab({
 
   const clubsActiveFilters = leagueFilter.length + countryFilter.length + tierFilter.length + confederationFilter.length + (priorityOnly ? 1 : 0) + (hasNeedsOnly ? 1 : 0) + (hasContactOnly ? 1 : 0) + (clubManagerFilter ? 1 : 0) + (staleOnly ? 1 : 0) + (contactedFilter ? 1 : 0) + (groupByTier ? 1 : 0)
   const clubsGroupToggle = (
-    <button
+    <Button
+      size="sm"
+      icon={<CircleDot />}
       onClick={() => setGroupByTier(v => !v)}
-      className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
-        groupByTier
-          ? 'bg-slate-800 text-white border-slate-800'
-          : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-      }`}
+      aria-pressed={groupByTier}
+      className={groupByTier ? 'bg-slate-800 text-white border-slate-800 hover:bg-slate-700' : ''}
     >
-      <CircleDot className="w-3.5 h-3.5" />
       {groupByTier ? 'Por nivel' : 'Por liga'}
-    </button>
+    </Button>
   )
   const clubsFilterControls = (
     <>
@@ -300,13 +309,14 @@ export function ClubesTab({
       <div className="relative">
         <button
           onClick={() => setConfDropdownOpen(o => !o)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
+          type="button" aria-expanded={confDropdownOpen} className={`flex items-center gap-1.5 px-3 min-h-9 sm:min-h-8 border rounded-lg text-secondary font-medium transition-colors ${
             confederationFilter.length > 0
               ? 'bg-primary text-white border-primary'
-              : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+              : 'bg-white border-slate-300 text-slate-600 hover:border-slate-400'
           }`}
         >
-          🌍 {confederationFilter.length === 0 ? 'Confederación' : confederationFilter.map(c => c).join(', ')}
+          <Globe className="w-3.5 h-3.5" aria-hidden="true" />
+          {confederationFilter.length === 0 ? 'Confederación' : confederationFilter.map(c => c).join(', ')}
           <ChevronDown className="w-3 h-3 opacity-60" />
         </button>
         {confDropdownOpen && (
@@ -314,14 +324,14 @@ export function ClubesTab({
             <div className="fixed inset-0 z-40" onClick={() => setConfDropdownOpen(false)} />
             <div className="absolute z-50 mt-1 w-52 max-w-[calc(100vw-2rem)] bg-white border border-slate-200 rounded-xl shadow-xl max-h-[50vh] overflow-y-auto">
               <div className="p-1.5 border-b border-slate-100">
-                <button onClick={() => { setConfederationFilter([]); setConfDropdownOpen(false) }} className="w-full text-left px-2 py-1.5 rounded-lg text-xs hover:bg-slate-50 text-slate-600">Todas las confederaciones</button>
+                <button onClick={() => { setConfederationFilter([]); setConfDropdownOpen(false) }} className="w-full text-left px-2 py-1.5 rounded-lg text-secondary hover:bg-slate-50 text-slate-600">Todas las confederaciones</button>
               </div>
               <div className="p-1.5 space-y-0.5">
                 {(['UEFA', 'CONMEBOL', 'CONCACAF', 'AFC', 'CAF'] as Confederation[]).map(conf => {
                   const sel = confederationFilter.includes(conf)
                   return (
                     <button key={conf} onClick={() => setConfederationFilter(prev => sel ? prev.filter(c => c !== conf) : [...prev, conf])}
-                      className={`w-full text-left px-2 py-1.5 rounded-lg text-xs flex items-center gap-2 ${sel ? 'bg-blue-50 text-primary' : 'hover:bg-slate-50 text-slate-700'}`}
+                      className={`w-full text-left px-2 py-1.5 rounded-lg text-secondary flex items-center gap-2 ${sel ? 'bg-blue-50 text-primary' : 'hover:bg-slate-50 text-slate-700'}`}
                     >
                       <div className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center ${sel ? 'bg-primary border-primary' : 'border-slate-300'}`}>
                         {sel && <Check className="w-2 h-2 text-white" />}
@@ -344,10 +354,10 @@ export function ClubesTab({
         <div className="relative">
           <button
             onClick={() => setLeagueDropdownOpen(o => !o)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
+            type="button" aria-expanded={leagueDropdownOpen} className={`flex items-center gap-1.5 px-3 min-h-9 sm:min-h-8 border rounded-lg text-secondary font-medium transition-colors ${
               leagueFilter.length > 0
                 ? 'bg-primary text-white border-primary'
-                : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                : 'bg-white border-slate-300 text-slate-600 hover:border-slate-400'
             }`}
           >
             <Flag className="w-3.5 h-3.5" />
@@ -375,12 +385,12 @@ export function ClubesTab({
                         <div className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${selected ? 'bg-primary border-primary' : 'border-slate-300'}`}>
                           {selected && <Check className="w-2.5 h-2.5 text-white" />}
                         </div>
-                        <span className={`text-[11px] font-bold px-1 py-0.5 rounded ${tierCfg.bg} ${tierCfg.text} flex-shrink-0`}>{tier}</span>
+                        <span className={`text-badge font-bold px-1 py-0.5 rounded ${tierCfg.bg} ${tierCfg.text} flex-shrink-0`}>{tier}</span>
                         <span className="flex-1 min-w-0">
-                          <span className="font-medium truncate block">{league}{country && <span className="text-slate-400 font-normal"> · {countryCode3(country)}</span>}</span>
-                          {country && <span className="text-xs text-slate-400">{country}</span>}
+                          <span className="font-medium truncate block">{league}{country && <span className="text-slate-500 font-normal"> · {countryCode3(country)}</span>}</span>
+                          {country && <span className="text-meta text-slate-500">{country}</span>}
                         </span>
-                        <span className="text-xs text-slate-400 flex-shrink-0">{count}</span>
+                        <span className="text-meta text-slate-500 flex-shrink-0">{count}</span>
                       </button>
                     )
                   })}
@@ -398,10 +408,10 @@ export function ClubesTab({
       <div className="relative">
         <button
           onClick={() => setCountryDropdownOpen(o => !o)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
+          type="button" aria-expanded={countryDropdownOpen} className={`flex items-center gap-1.5 px-3 min-h-9 sm:min-h-8 border rounded-lg text-secondary font-medium transition-colors ${
             countryFilter.length > 0
               ? 'bg-primary text-white border-primary'
-              : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+              : 'bg-white border-slate-300 text-slate-600 hover:border-slate-400'
           }`}
         >
           <Flag className="w-3.5 h-3.5" />
@@ -413,20 +423,20 @@ export function ClubesTab({
             <div className="fixed inset-0 z-40" onClick={() => setCountryDropdownOpen(false)} />
             <div className="absolute z-50 mt-1 w-56 max-w-[calc(100vw-2rem)] bg-white border border-slate-200 rounded-xl shadow-xl max-h-[50vh] overflow-y-auto">
               <div className="p-1.5 border-b border-slate-100">
-                <button onClick={() => { setCountryFilter([]); setCountryDropdownOpen(false) }} className="w-full text-left px-2 py-1.5 rounded-lg text-xs hover:bg-slate-50 text-slate-600">Todos los países</button>
+                <button onClick={() => { setCountryFilter([]); setCountryDropdownOpen(false) }} className="w-full text-left px-2 py-1.5 rounded-lg text-secondary hover:bg-slate-50 text-slate-600">Todos los países</button>
               </div>
               <div className="p-1.5 space-y-0.5">
                 {sortedCountries.map(({ country, count }) => {
                   const sel = countryFilter.includes(country)
                   return (
                     <button key={country} onClick={() => setCountryFilter(prev => sel ? prev.filter(c => c !== country) : [...prev, country])}
-                      className={`w-full text-left px-2 py-1.5 rounded-lg text-xs flex items-center gap-2 ${sel ? 'bg-blue-50 text-primary' : 'hover:bg-slate-50 text-slate-700'}`}
+                      className={`w-full text-left px-2 py-1.5 rounded-lg text-secondary flex items-center gap-2 ${sel ? 'bg-blue-50 text-primary' : 'hover:bg-slate-50 text-slate-700'}`}
                     >
                       <div className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center ${sel ? 'bg-primary border-primary' : 'border-slate-300'}`}>
                         {sel && <Check className="w-2 h-2 text-white" />}
                       </div>
                       <span className="flex-1 truncate">{country}</span>
-                      <span className="text-slate-400">{count}</span>
+                      <span className="text-slate-500">{count}</span>
                     </button>
                   )
                 })}
@@ -449,47 +459,49 @@ export function ClubesTab({
       <FilterCheck label="Paradas >7d" checked={staleOnly} onClick={() => setStaleOnly(v => !v)} />
 
       {/* Filtro por encargado del club */}
-      <select
+      <Select
         value={clubManagerFilter}
         onChange={e => setClubManagerFilter(e.target.value)}
         aria-label="Filtrar por encargado"
-        className="px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors cursor-pointer bg-white border-slate-200 text-slate-600 hover:border-slate-300"
+        className="w-auto py-1 text-secondary font-medium"
       >
-        <option value="">Encargado: todos</option>
+        <option value="">{L.encargado}: todos</option>
         {profiles.map(p => (
           <option key={p.id} value={p.avatar}>{p.name} ({p.avatar})</option>
         ))}
-        <option value="__sin__">Sin encargado</option>
-      </select>
+        <option value="__sin__">{L.sinEncargado}</option>
+      </Select>
 
       {/* Filtro por contactado */}
-      <select
+      <Select
         value={contactedFilter}
         onChange={e => setContactedFilter(e.target.value)}
         aria-label="Filtrar por contactado"
-        className="px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors cursor-pointer bg-white border-slate-200 text-slate-600 hover:border-slate-300"
+        className="w-auto py-1 text-secondary font-medium"
       >
         <option value="">Contactado: todos</option>
         <option value="yes">Contactados</option>
         <option value="no">Sin contactar</option>
-      </select>
+      </Select>
 
       {/* Clear all */}
       {(leagueFilter.length > 0 || countryFilter.length > 0 || tierFilter.length > 0 || confederationFilter.length > 0 || priorityOnly || hasNeedsOnly || hasContactOnly || clubManagerFilter || staleOnly || contactedFilter) && (() => {
         const count = leagueFilter.length + countryFilter.length + tierFilter.length + confederationFilter.length + (priorityOnly ? 1 : 0) + (hasNeedsOnly ? 1 : 0) + (hasContactOnly ? 1 : 0) + (clubManagerFilter ? 1 : 0) + (staleOnly ? 1 : 0) + (contactedFilter ? 1 : 0)
         return (
-          <button
+          <Button
+            size="sm"
+            icon={<SlidersHorizontal />}
             onClick={() => { setLeagueFilter([]); setCountryFilter([]); setTierFilter([]); setConfederationFilter([]); setPriorityOnly(false); setHasNeedsOnly(false); setHasContactOnly(false); setClubManagerFilter(''); setStaleOnly(false); setContactedFilter('') }}
-            className="flex items-center gap-1.5 text-xs bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg font-medium transition-colors ml-1"
+            className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 ml-1"
+            title="Quitar filtros"
           >
-            <SlidersHorizontal className="w-3 h-3" />
             {count} filtro{count !== 1 ? 's' : ''}
-            <X className="w-3 h-3 ml-0.5 opacity-60" />
-          </button>
+            <X className="w-3 h-3 ml-0.5 opacity-60" aria-hidden="true" />
+          </Button>
         )
       })()}
 
-      <span className="ml-auto text-xs text-slate-400">{filteredClubs.length} club{filteredClubs.length !== 1 ? 's' : ''}</span>
+      <span className="ml-auto text-secondary text-slate-500">{filteredClubs.length} club{filteredClubs.length !== 1 ? 'es' : ''}</span>
     </div>
     </>
   )
@@ -513,7 +525,7 @@ export function ClubesTab({
         <button
           onClick={() => { setClubBulkMode(v => !v); if (clubBulkMode) setClubSelected(new Set()) }}
           className={`hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 border text-sm rounded-lg font-medium transition-colors ${
-            clubBulkMode ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+            clubBulkMode ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-white border-slate-300 text-slate-600 hover:border-slate-400'
           }`}
         >
           <CheckSquare className="w-4 h-4" /> {clubBulkMode ? 'Cancelar selección' : 'Seleccionar'}
@@ -535,7 +547,7 @@ export function ClubesTab({
     {/* Barra de selección múltiple — asignar encargado en bulk */}
     {clubBulkMode && (
       <div className="flex items-center gap-3 mb-2 flex-wrap bg-blue-50/50 border border-blue-100 rounded-lg px-3 py-2">
-        <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer">
+        <label className="flex items-center gap-1.5 text-secondary text-slate-600 cursor-pointer">
           <input
             type="checkbox"
             className="w-4 h-4 rounded"
@@ -550,16 +562,18 @@ export function ClubesTab({
         </label>
         {clubSelected.size > 0 && (
           <>
-            <span className="text-xs text-slate-500">{clubSelected.size} club{clubSelected.size !== 1 ? 'es' : ''} seleccionado{clubSelected.size !== 1 ? 's' : ''}</span>
-            <button
+            <span className="text-secondary text-slate-600">{clubSelected.size} club{clubSelected.size !== 1 ? 'es' : ''} seleccionado{clubSelected.size !== 1 ? 's' : ''}</span>
+            <Button
+              size="sm"
+              variant="primary"
+              icon={<Users />}
               onClick={e => {
                 const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
                 setBulkClubManagerPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
               }}
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-white bg-primary hover:bg-primary/90 px-3 py-1.5 rounded-lg"
             >
-              <Users className="w-3.5 h-3.5" /> Asignar encargado ({clubSelected.size})
-            </button>
+              Asignar {L.encargado.toLowerCase()} ({clubSelected.size})
+            </Button>
             <button
               disabled={bulkContactedAssigning}
               onClick={async () => {
@@ -576,11 +590,11 @@ export function ClubesTab({
                   setBulkContactedAssigning(false)
                 }
               }}
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-60 px-3 py-1.5 rounded-lg"
+              className="inline-flex items-center gap-1.5 text-secondary font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-60 px-3 h-8 rounded-lg"
             >
-              <Check className="w-3.5 h-3.5" /> Marcar contactado ({clubSelected.size})
+              <Check className="w-3.5 h-3.5" aria-hidden="true" /> Marcar contactado ({clubSelected.size})
             </button>
-            <button onClick={() => setClubSelected(new Set())} className="text-xs text-slate-500 hover:text-slate-700">Limpiar selección</button>
+            <Button variant="link" size="sm" onClick={() => setClubSelected(new Set())}>Limpiar selección</Button>
           </>
         )}
       </div>
@@ -589,26 +603,26 @@ export function ClubesTab({
     {/* Móvil: barra compacta búsqueda + botón Filtros */}
     <div className="flex sm:hidden items-center gap-2 mb-3">
       <div className="relative flex-1">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
-        <input
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" aria-hidden="true" />
+        <Input
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Buscar club…"
-          className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200"
+          aria-label="Buscar club"
+          className="pl-8 bg-slate-50"
         />
       </div>
-      <button
+      <Button
+        variant={clubsActiveFilters > 0 ? 'primary' : 'secondary'}
+        icon={<SlidersHorizontal />}
         onClick={() => setFilterSheet('clubes')}
-        className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
-          clubsActiveFilters > 0 ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200'
-        }`}
+        className="flex-shrink-0"
       >
-        <SlidersHorizontal className="w-4 h-4" /> Filtros
-        {clubsActiveFilters > 0 && <span className="text-xs">({clubsActiveFilters})</span>}
-      </button>
+        Filtros{clubsActiveFilters > 0 && ` (${clubsActiveFilters})`}
+      </Button>
       <BotonCsv
         nombre="clubes-distribucion"
-        cabeceras={['Club', 'Liga', 'País', 'Nivel', 'Confederación', 'Encargado', 'Contacto', 'Prioritario', 'Ofrecidos', 'Necesidades', 'Contactado', 'Fecha contacto']}
+        cabeceras={['Club', 'Liga', 'País', 'Nivel', 'Confederación', 'Encargado', 'Contacto', 'Prioritario', 'Ofrecidos', 'Solicitudes', 'Contactado', 'Fecha contacto']}
         filas={() => filteredClubs.map(c => [
           c.name, c.league ?? '', c.country ?? '',
           getClubTier(c.league, c.country),
@@ -622,14 +636,16 @@ export function ClubesTab({
           c.contactedAt ? c.contactedAt.slice(0, 10) : '',
         ])}
       />
-      <button
+      <IconButton
+        size="md"
+        variant="secondary"
+        label={clubBulkMode ? 'Cancelar selección' : 'Seleccionar varios'}
+        aria-pressed={clubBulkMode}
         onClick={() => { setClubBulkMode(v => !v); if (clubBulkMode) setClubSelected(new Set()) }}
-        className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
-          clubBulkMode ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-white text-slate-600 border-slate-200'
-        }`}
+        className={clubBulkMode ? 'bg-blue-100 text-blue-700 border-blue-200' : ''}
       >
-        <CheckSquare className="w-4 h-4" />
-      </button>
+        <CheckSquare />
+      </IconButton>
     </div>
 
     <FilterSheet open={filterSheet === 'clubes'} onClose={() => setFilterSheet(null)} title="Filtros de clubes">
@@ -649,9 +665,9 @@ export function ClubesTab({
           return (
             <div key={t}>
               <div className="flex items-center gap-2 mb-1.5">
-                <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${tierCfg.bg} ${tierCfg.text}`}>{t}</span>
-                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{tierCfg.title}</span>
-                <span className="text-xs text-slate-400">({tierClubs.length})</span>
+                <span className={`text-badge font-bold px-1.5 py-0.5 rounded ${tierCfg.bg} ${tierCfg.text}`}>{t}</span>
+                <span className="text-meta font-semibold text-slate-600 uppercase tracking-wider">{tierCfg.title}</span>
+                <span className="text-meta text-slate-500">({tierClubs.length})</span>
                 <div className="flex-1 h-px bg-slate-200" />
               </div>
               {renderClubes(tierClubs)}
@@ -668,10 +684,10 @@ export function ClubesTab({
           return (
             <div key={key}>
               <div className="flex items-center gap-2 mb-1.5">
-                <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${tierCfg.bg} ${tierCfg.text}`}>{tier}</span>
-                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{league}{country && ` · ${countryCode3(country)}`}</span>
-                <span className="text-xs text-slate-400">({leagueClubs.length})</span>
-                <span className="text-xs text-slate-300">{CONFEDERATION_LABELS[confederation]}</span>
+                <span className={`text-badge font-bold px-1.5 py-0.5 rounded ${tierCfg.bg} ${tierCfg.text}`}>{tier}</span>
+                <span className="text-meta font-semibold text-slate-600 uppercase tracking-wider">{league}{country && ` · ${countryCode3(country)}`}</span>
+                <span className="text-meta text-slate-500">({leagueClubs.length})</span>
+                <span className="text-meta text-slate-500">{CONFEDERATION_LABELS[confederation]}</span>
                 <div className="flex-1 h-px bg-slate-200" />
               </div>
               {renderClubes(leagueClubs)}
@@ -688,12 +704,9 @@ export function ClubesTab({
           title="Sin resultados con estos filtros"
           subtitle="Prueba a quitar algún filtro o cambia la búsqueda."
           action={
-            <button
-              onClick={() => { setSearch(''); setLeagueFilter([]); setCountryFilter([]); setTierFilter([]); setConfederationFilter([]); setPriorityOnly(false); setHasNeedsOnly(false); setHasContactOnly(false) }}
-              className="text-xs text-blue-600 hover:text-blue-700 font-medium"
-            >
+            <Button variant="link" size="sm" onClick={() => { setSearch(''); setLeagueFilter([]); setCountryFilter([]); setTierFilter([]); setConfederationFilter([]); setPriorityOnly(false); setHasNeedsOnly(false); setHasContactOnly(false) }}>
               Limpiar filtros
-            </button>
+            </Button>
           }
         />
       ) : (
@@ -702,12 +715,7 @@ export function ClubesTab({
           title="No hay clubes todavía"
           subtitle="Añade clubes para poder ofrecerles jugadores y registrar sus solicitudes."
           action={
-            <button
-              onClick={() => onAddClub()}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-sm rounded-lg hover:bg-primary/90 transition-colors"
-            >
-              <Plus className="w-4 h-4" /> Añadir club
-            </button>
+            <Button variant="primary" icon={<Plus />} onClick={() => onAddClub()}>Añadir club</Button>
           }
         />
       )
@@ -715,11 +723,12 @@ export function ClubesTab({
 
     {/* FAB Añadir club — móvil */}
     <button
+      type="button"
       onClick={() => onAddClub()}
       aria-label="Añadir club"
-      className="sm:hidden fixed bottom-5 right-4 z-40 w-14 h-14 rounded-full bg-primary text-white shadow-lg flex items-center justify-center safe-area-bottom"
+      className="sm:hidden fixed bottom-20 right-4 z-40 w-14 h-14 rounded-full bg-primary text-white shadow-lg flex items-center justify-center"
     >
-      <Plus className="w-6 h-6" />
+      <Plus className="w-6 h-6" aria-hidden="true" />
     </button>
   </div>
   )

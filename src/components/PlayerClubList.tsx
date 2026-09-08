@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { Plus, Search, Edit3, ExternalLink, Trash2, Users, X, CheckSquare, ChevronDown, Check, ArrowLeft, List, LayoutGrid } from 'lucide-react'
+import { Plus, Search, Edit3, ExternalLink, Trash2, Users, X, CheckSquare, ChevronDown, Check, ArrowLeft, List, LayoutGrid, MessageSquare, Clock } from 'lucide-react'
 import type { Club, ClubNegotiation } from '../types'
 import type { Profile } from '../contexts/AuthContext'
 import type { ToastVariant } from '../hooks/useToast'
 import { ManagerSelect } from './ManagerSelect'
 import { ConfirmModal } from './ConfirmModal'
+import { Button, ClickableRow, IconButton, Input, Select, Sheet, Textarea } from './ui'
+import { L, NEG_STATUS_LABELS } from '../lib/labels'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import { getClubTier, leagueLabel } from '../lib/clubTiers'
 import { NEG_STATUSES, NEG_STATUS_CONFIG, NEG_STATUS_ORDER, parseGestores } from './playerClubList'
@@ -42,11 +44,13 @@ function FilterDropdown({ label, active, children, widthClass = 'w-60' }: {
   return (
     <div className="relative">
       <button
+        type="button"
+        aria-expanded={open}
         onClick={() => setOpen(o => !o)}
-        className={`flex items-center gap-1 px-2.5 py-1.5 border rounded-lg text-xs font-medium transition-colors ${active ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'}`}
+        className={`flex items-center gap-1 px-2.5 min-h-9 sm:min-h-8 border rounded-lg text-secondary font-medium transition-colors ${active ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-white border-slate-300 text-slate-600 hover:border-slate-400'}`}
       >
         {label}{active ? ` (${active})` : ''}
-        <ChevronDown className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
       </button>
       {open && (
         <>
@@ -67,12 +71,12 @@ function CheckItem({ selected, onToggle, count, children }: {
   children: ReactNode
 }) {
   return (
-    <button onClick={onToggle} className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center gap-2 hover:bg-slate-50">
-      <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0 ${selected ? 'bg-primary border-primary' : 'border-slate-300'}`}>
+    <button type="button" role="checkbox" aria-checked={selected} onClick={onToggle} className="w-full text-left px-2.5 py-1.5 rounded-lg text-secondary flex items-center gap-2 hover:bg-slate-50">
+      <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0 ${selected ? 'bg-primary border-primary' : 'border-slate-300'}`} aria-hidden="true">
         {selected && <Check className="w-2.5 h-2.5 text-white" />}
       </span>
       <span className="flex-1 truncate text-slate-700 flex items-center gap-1.5">{children}</span>
-      {count !== undefined && <span className="text-slate-400 font-mono">{count}</span>}
+      {count !== undefined && <span className="text-slate-500 font-mono">{count}</span>}
     </button>
   )
 }
@@ -148,34 +152,36 @@ export function NegDetail({ neg, club, profiles, currentProfile, onUpdateNegotia
     } finally { setSavingUpdate(false) }
   }
 
-  const body = (
-    <>
-      {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 flex-shrink-0">
-        <div className="flex-1 min-w-0">
-          <div className="font-semibold text-slate-800 text-sm truncate">{heading ?? club.name}</div>
-          <div className="flex items-center gap-1.5">
-            {(subheading ?? club.league) && <span className="text-xs text-slate-400">{subheading ?? club.league}</span>}
-            <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded-full ${scfg.color}`}>{scfg.label}</span>
-          </div>
-        </div>
-        <button onClick={onClose} aria-label="Cerrar detalle" className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400">
-          <X className="w-4 h-4" />
-        </button>
-      </div>
+  // Cambios sin guardar (información o nota en curso): el Sheet pregunta antes de cerrar
+  const dirty = notesDraft !== (neg.notes ?? '') || !!updateText.trim()
 
+  const cabecera = (
+    <>
+      <div className="font-semibold text-slate-800 text-body truncate">{heading ?? club.name}</div>
+      <div className="flex items-center gap-1.5">
+        {(subheading ?? club.league) && <span className="text-secondary text-slate-500">{subheading ?? club.league}</span>}
+        <span className={`text-badge font-medium px-1.5 py-0.5 rounded-full ${scfg.color}`}>{scfg.label}</span>
+      </div>
+    </>
+  )
+
+  const cuerpo = (
+    <>
       {/* Estado + encargado + info */}
       <div className="px-4 py-3 border-b border-slate-100 flex-shrink-0 space-y-3">
         <div>
-          <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Estado</div>
-          <div className="flex flex-wrap gap-1">
+          <div className="text-meta font-semibold text-slate-600 uppercase tracking-wider mb-1.5">{L.estado}</div>
+          <div className="flex flex-wrap gap-1" role="radiogroup" aria-label={L.estado}>
             {NEG_STATUSES.map(s => {
               const cfg = NEG_STATUS_CONFIG[s]
               return (
                 <button
                   key={s}
+                  type="button"
+                  role="radio"
+                  aria-checked={neg.status === s}
                   onClick={() => changeStatus(s)}
-                  className={`px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${neg.status === s ? cfg.color + ' ring-1 ring-current' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                  className={`px-2 min-h-9 sm:min-h-7 rounded-full text-secondary font-medium transition-colors ${neg.status === s ? cfg.color + ' ring-1 ring-current' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                 >
                   {cfg.label}
                 </button>
@@ -185,69 +191,59 @@ export function NegDetail({ neg, club, profiles, currentProfile, onUpdateNegotia
         </div>
 
         <div>
-          <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Encargado</div>
+          <div className="text-meta font-semibold text-slate-600 uppercase tracking-wider mb-1.5">{L.encargado}</div>
           <ManagerSelect value={neg.aisManager || undefined} onChange={changeManager} profiles={profiles} />
         </div>
 
         <div>
-          <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Información</div>
-          <textarea
+          <label className="block text-meta font-semibold text-slate-600 uppercase tracking-wider mb-1.5" htmlFor={`neg-info-${neg.id}`}>Información</label>
+          <Textarea
+            id={`neg-info-${neg.id}`}
             value={notesDraft}
             onChange={e => setNotesDraft(e.target.value)}
             placeholder="Condiciones, contexto, contacto…"
             rows={2}
-            className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-blue-200"
+            onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void saveNotes() } }}
           />
           {notesDraft !== (neg.notes ?? '') && (
-            <button
-              onClick={saveNotes}
-              disabled={savingNotes}
-              className="mt-1 w-full py-1.5 text-xs bg-primary text-white rounded-lg disabled:opacity-50 hover:bg-primary/90 transition-colors inline-flex items-center justify-center gap-2"
-            >
-              {savingNotes && <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
-              {savingNotes ? 'Guardando…' : 'Guardar información'}
-            </button>
+            <Button variant="primary" size="sm" onClick={saveNotes} loading={savingNotes} className="mt-1 w-full">
+              Guardar información
+            </Button>
           )}
         </div>
 
-        <div className="flex items-center gap-3 text-xs text-slate-500">
-          <span className="text-slate-400">{new Date(neg.createdAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+        <div className="flex items-center gap-3 text-secondary text-slate-600 flex-wrap">
+          <span className="text-slate-500">{new Date(neg.createdAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
           {onSelectClub && (
-            <button
-              onClick={() => { onClose(); onSelectClub(club.id) }}
-              className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
-            >
-              <ExternalLink className="w-3 h-3" /> Ver ficha del club
-            </button>
+            <Button variant="link" size="sm" icon={<ExternalLink />} onClick={() => { onClose(); onSelectClub(club.id) }}>
+              Ver ficha del club
+            </Button>
           )}
           {onRequestDelete && (
-            <button
-              onClick={onRequestDelete}
-              className="flex items-center gap-1 text-xs text-red-500 hover:text-red-600 ml-auto"
-            >
-              <Trash2 className="w-3 h-3" /> Eliminar
-            </button>
+            <Button variant="link" size="sm" icon={<Trash2 />} onClick={onRequestDelete} className="ml-auto text-red-600">
+              {L.eliminar}
+            </Button>
           )}
         </div>
       </div>
 
       {/* Notas de seguimiento */}
       <div className={`flex-1 overflow-y-auto px-4 py-3 space-y-2.5 ${variant === 'side' ? 'max-h-72' : ''}`}>
-        <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Notas de seguimiento</div>
+        <div className="text-meta font-semibold text-slate-600 uppercase tracking-wider">Notas de seguimiento</div>
         {sortedUpdates.length === 0 && (
-          <p className="text-xs text-slate-400 py-4 text-center">Sin notas aún</p>
+          <p className="text-secondary text-slate-500 py-4 text-center">Sin notas aún</p>
         )}
         {sortedUpdates.map(u => (
           <div key={u.id} className="bg-slate-50 rounded-lg px-3 py-2.5">
             <div className="flex items-center gap-2 mb-1">
-              {u.author && <span className="text-[11px] font-mono bg-white border border-slate-200 text-slate-500 px-1.5 py-0.5 rounded">{u.author}</span>}
-              <span className="text-[11px] text-slate-400 ml-auto">
+              {u.author && <span className="text-badge font-mono bg-white border border-slate-200 text-slate-600 px-1.5 py-0.5 rounded">{u.author}</span>}
+              <span className="text-meta text-slate-500 ml-auto">
                 {new Date(u.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
                 {' '}
                 {new Date(u.date).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
               </span>
             </div>
-            <p className="text-xs text-slate-700">{u.text}</p>
+            <p className="text-body text-slate-700">{u.text}</p>
           </div>
         ))}
       </div>
@@ -255,22 +251,18 @@ export function NegDetail({ neg, club, profiles, currentProfile, onUpdateNegotia
       {/* Añadir nota */}
       {onUpdateNegotiation && (
         <div className="px-4 py-3 border-t border-slate-100 flex-shrink-0 space-y-2">
-          <textarea
+          <label className="sr-only" htmlFor={`neg-nota-${neg.id}`}>Nueva nota de seguimiento</label>
+          <Textarea
+            id={`neg-nota-${neg.id}`}
             value={updateText}
             onChange={e => setUpdateText(e.target.value)}
             placeholder="Añadir nota de seguimiento…"
             rows={2}
-            className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-blue-200"
-            onKeyDown={e => { if (e.key === 'Enter' && e.metaKey) { e.preventDefault(); addUpdate() } }}
+            onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void addUpdate() } }}
           />
-          <button
-            onClick={addUpdate}
-            disabled={!updateText.trim() || savingUpdate}
-            className="w-full py-1.5 text-xs bg-primary text-white rounded-lg disabled:opacity-50 hover:bg-primary/90 transition-colors inline-flex items-center justify-center gap-2"
-          >
-            {savingUpdate && <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
-            {savingUpdate ? 'Guardando…' : 'Guardar nota'}
-          </button>
+          <Button variant="primary" size="sm" onClick={addUpdate} disabled={!updateText.trim()} loading={savingUpdate} className="w-full" title="Ctrl+Enter o ⌘+Enter">
+            Guardar nota
+          </Button>
         </div>
       )}
     </>
@@ -279,18 +271,34 @@ export function NegDetail({ neg, club, profiles, currentProfile, onUpdateNegotia
   if (variant === 'side') {
     return (
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden flex flex-col">
-        {body}
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 flex-shrink-0">
+          <div className="flex-1 min-w-0">{cabecera}</div>
+          <IconButton label="Cerrar detalle" onClick={onClose}>
+            <X />
+          </IconButton>
+        </div>
+        {cuerpo}
       </div>
     )
   }
 
   return (
-    <>
-      <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose} />
-      <div className="fixed right-0 top-0 h-full w-full sm:w-80 z-50 bg-white border-l border-slate-200 shadow-xl flex flex-col">
-        {body}
-      </div>
-    </>
+    <Sheet
+      open
+      onClose={onClose}
+      dirty={dirty}
+      historyKey="neg-detalle"
+      title={heading ?? club.name}
+      description={
+        <span className="flex items-center gap-1.5">
+          {(subheading ?? club.league) && <span>{subheading ?? club.league}</span>}
+          <span className={`text-badge font-medium px-1.5 py-0.5 rounded-full ${scfg.color}`}>{scfg.label}</span>
+        </span>
+      }
+      className="sm:max-w-sm"
+    >
+      <div className="-mx-4 sm:-mx-5 -my-4 flex flex-col">{cuerpo}</div>
+    </Sheet>
   )
 }
 
@@ -463,22 +471,22 @@ export function PlayerClubList({
     const cfg = NEG_STATUS_CONFIG[neg.status]
     if (editingNeg?.id === neg.id) {
       return (
-        <div key={neg.id} className="bg-slate-50 px-3 py-3 space-y-2">
-          <div className="text-xs font-semibold text-slate-700">{club.name}</div>
-          <div className="flex flex-wrap gap-1">
+        <form key={neg.id} onSubmit={e => { e.preventDefault(); void saveEditNeg() }} className="bg-slate-50 px-3 py-3 space-y-2">
+          <div className="text-secondary font-semibold text-slate-700">{club.name}</div>
+          <div className="flex flex-wrap gap-1" role="radiogroup" aria-label={L.estado}>
             {NEG_STATUSES.map(s => {
               const c2 = NEG_STATUS_CONFIG[s]
-              return <button key={s} onClick={() => setEditingNeg({ ...editingNeg!, status: s })} className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${editingNeg!.status === s ? c2.color + ' ring-1 ring-current' : 'bg-white border border-slate-200 text-slate-500'}`}>{c2.label}</button>
+              return <button key={s} type="button" role="radio" aria-checked={editingNeg!.status === s} onClick={() => setEditingNeg({ ...editingNeg!, status: s })} className={`px-2 min-h-8 sm:min-h-7 rounded-full text-badge font-medium ${editingNeg!.status === s ? c2.color + ' ring-1 ring-current' : 'bg-white border border-slate-200 text-slate-600'}`}>{c2.label}</button>
             })}
           </div>
           <div className="w-full"><ManagerSelect value={editingNeg!.aisManager || undefined} onChange={(v) => setEditingNeg({ ...editingNeg!, aisManager: v ?? '' })} profiles={profiles} /></div>
-          <input value={editingNeg!.notes ?? ''} onChange={e => setEditingNeg({ ...editingNeg!, notes: e.target.value })} placeholder="Notas" className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs" />
-          <div className="flex gap-1.5">
-            {onDeleteNegotiation && <button onClick={() => setNegToDelete(neg)} className="px-2 py-1 text-[11px] border border-red-200 text-red-500 rounded-lg">Eliminar</button>}
-            <button onClick={() => setEditingNeg(null)} className="flex-1 py-1 text-[11px] border border-slate-200 rounded-lg text-slate-500">Cancelar</button>
-            <button onClick={saveEditNeg} className="flex-1 py-1 text-[11px] bg-primary hover:bg-primary/90 text-white rounded-lg">Guardar</button>
+          <Input value={editingNeg!.notes ?? ''} onChange={e => setEditingNeg({ ...editingNeg!, notes: e.target.value })} placeholder="Notas" aria-label="Notas" />
+          <div className="flex gap-1.5 justify-end">
+            {onDeleteNegotiation && <Button size="sm" variant="danger" onClick={() => setNegToDelete(neg)} className="mr-auto">{L.eliminar}</Button>}
+            <Button size="sm" onClick={() => setEditingNeg(null)}>{L.cancelar}</Button>
+            <Button size="sm" type="submit" variant="primary">{L.guardar}</Button>
           </div>
-        </div>
+        </form>
       )
     }
     const isSelected = selectedNegIds.has(neg.id)
@@ -486,11 +494,30 @@ export function PlayerClubList({
       ? [...neg.updates].sort((a, b) => b.date.localeCompare(a.date))[0]
       : null
     return (
-      <div
+      <ClickableRow
         key={neg.id}
         onClick={() => selectMode ? toggleNegSelected(neg.id) : setPanelNegId(neg.id)}
-        className={`flex items-center gap-2.5 px-3 py-2.5 cursor-pointer transition-all border-l-[3px] ${cfg.rowBorder} ${isSelected ? 'bg-blue-100/60' : panelNegId === neg.id ? 'bg-blue-50/70' : `${cfg.rowBg} hover:brightness-[0.97]`} ${neg.status === 'descartado' ? 'opacity-60' : ''}`}
+        selected={panelNegId === neg.id}
+        className={`rounded-none gap-2.5 px-3 py-2.5 transition-all border-l-[3px] ${cfg.rowBorder} ${isSelected ? 'bg-blue-100/60 hover:bg-blue-100/60' : panelNegId === neg.id ? 'bg-blue-50/70 hover:bg-blue-50/70' : `${cfg.rowBg} hover:brightness-[0.97] hover:bg-transparent`} ${neg.status === 'descartado' ? 'opacity-60' : ''}`}
+        actionsClassName="gap-0.5"
+        actions={
+          <>
+            {neg.aisManager && <span className="text-badge font-mono bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded flex-shrink-0 hidden sm:inline" title={L.encargado}>{neg.aisManager}</span>}
+            <span className={`text-badge font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${cfg.color}`}>{cfg.label}</span>
+            {!selectMode && (
+              <IconButton label="Edición rápida" onClick={() => setEditingNeg(neg)}>
+                <Edit3 />
+              </IconButton>
+            )}
+            {!selectMode && onSelectClub && (
+              <IconButton label="Ver ficha del club" onClick={() => onSelectClub(club.id)} className="hidden sm:inline-flex">
+                <ExternalLink />
+              </IconButton>
+            )}
+          </>
+        }
       >
+        <div className="flex items-center gap-2.5 min-w-0">
         {selectMode && (
           <input
             type="checkbox"
@@ -503,45 +530,29 @@ export function PlayerClubList({
         )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
-            <span className={`text-sm font-medium flex-shrink-0 max-w-[60%] truncate ${neg.status === 'descartado' ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{club.name}</span>
-            {club.league && <span className="text-[11px] text-slate-400 truncate min-w-0 hidden sm:inline">· {leagueLabel(club.league, club.country)}</span>}
-            {neg.updates && neg.updates.length > 0 && <span className="text-[11px] text-slate-400 flex-shrink-0">📝 {neg.updates.length}</span>}
+            <span className={`text-body font-medium flex-shrink-0 max-w-[60%] truncate ${neg.status === 'descartado' ? 'text-slate-500 line-through' : 'text-slate-800'}`}>{club.name}</span>
+            {club.league && <span className="text-meta text-slate-500 truncate min-w-0 hidden sm:inline">· {leagueLabel(club.league, club.country)}</span>}
+            {neg.updates && neg.updates.length > 0 && (
+              <span className="inline-flex items-center gap-0.5 text-meta text-slate-500 flex-shrink-0" title={`${neg.updates.length} nota${neg.updates.length !== 1 ? 's' : ''} de seguimiento`}>
+                <MessageSquare className="w-3 h-3" aria-hidden="true" /> {neg.updates.length}
+              </span>
+            )}
             {isStale(neg) && (
-              <span title={`Sin actividad en ${daysSince(lastActivity(neg))} días`} className="text-[11px] font-medium text-amber-600 flex-shrink-0">
-                ⏰ {daysSince(lastActivity(neg))}d
+              <span title={`Sin actividad en ${daysSince(lastActivity(neg))} días`} className="inline-flex items-center gap-0.5 text-meta font-medium text-amber-700 flex-shrink-0">
+                <Clock className="w-3 h-3" aria-hidden="true" /> {daysSince(lastActivity(neg))}d
               </span>
             )}
           </div>
-          {neg.notes && <p className="text-[11px] text-slate-400 truncate mt-0.5">{neg.notes}</p>}
+          {neg.notes && <p className="text-meta text-slate-500 truncate mt-0.5">{neg.notes}</p>}
           {expanded && (lastActivity(neg) || lastUpdate) && (
-            <p className="text-[11px] text-slate-400 truncate mt-0.5">
-              {lastActivity(neg) && <span className="text-slate-300">Actualizado {fmtShort(lastActivity(neg))}</span>}
-              {lastUpdate && <span> · 📝 {lastUpdate.text}</span>}
+            <p className="text-meta text-slate-500 truncate mt-0.5">
+              {lastActivity(neg) && <span>Actualizado {fmtShort(lastActivity(neg))}</span>}
+              {lastUpdate && <span> · {lastUpdate.text}</span>}
             </p>
           )}
         </div>
-        {neg.aisManager && <span className="text-[11px] font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded flex-shrink-0 hidden sm:inline">{neg.aisManager}</span>}
-        <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${cfg.color}`}>{cfg.label}</span>
-        {!selectMode && (
-          <button
-            onClick={e => { e.stopPropagation(); setEditingNeg(neg) }}
-            aria-label="Edición rápida"
-            title="Edición rápida"
-            className="p-1 text-slate-300 hover:text-slate-600 flex-shrink-0"
-          >
-            <Edit3 className="w-3.5 h-3.5" />
-          </button>
-        )}
-        {!selectMode && onSelectClub && (
-          <button
-            onClick={e => { e.stopPropagation(); onSelectClub(club.id) }}
-            title="Ver ficha del club"
-            className="p-1 text-slate-300 hover:text-blue-500 flex-shrink-0 hidden sm:inline-flex"
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-          </button>
-        )}
-      </div>
+        </div>
+      </ClickableRow>
     )
   }
 
@@ -565,63 +576,65 @@ export function PlayerClubList({
     <div className="space-y-2">
       {/* Cabecera: título + acciones */}
       <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+        <span className="text-meta font-semibold text-slate-600 uppercase tracking-wider">
           {title} <span>({withClub.length})</span>
         </span>
         <div className="flex items-center gap-2">
           {/* Vista: lista (1 col) / tarjetas (2 col) */}
-          <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden flex-shrink-0">
-            <button
+          <div className="flex items-center border border-slate-300 rounded-lg overflow-hidden flex-shrink-0">
+            <IconButton
+              label="Vista de lista"
+              aria-pressed={viewMode === 'list'}
               onClick={() => setViewMode('list')}
-              title="Vista de lista"
-              aria-label="Vista de lista"
-              className={`p-1.5 transition-colors ${viewMode === 'list' ? 'bg-slate-800 text-white' : 'bg-white text-slate-400 hover:text-slate-600'}`}
+              className={`rounded-none ${viewMode === 'list' ? 'bg-slate-800 text-white hover:bg-slate-700' : ''}`}
             >
-              <List className="w-3.5 h-3.5" />
-            </button>
-            <button
+              <List />
+            </IconButton>
+            <IconButton
+              label="Vista de tarjetas (2 columnas)"
+              aria-pressed={viewMode === 'grid'}
               onClick={() => setViewMode('grid')}
-              title="Vista de tarjetas (2 columnas)"
-              aria-label="Vista de tarjetas (2 columnas)"
-              className={`p-1.5 transition-colors border-l border-slate-200 ${viewMode === 'grid' ? 'bg-slate-800 text-white' : 'bg-white text-slate-400 hover:text-slate-600'}`}
+              className={`rounded-none border-l border-slate-300 ${viewMode === 'grid' ? 'bg-slate-800 text-white hover:bg-slate-700' : ''}`}
             >
-              <LayoutGrid className="w-3.5 h-3.5" />
-            </button>
+              <LayoutGrid />
+            </IconButton>
           </div>
           {onAssignLeague && (
-            <button onClick={onAssignLeague} className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-700 font-medium" title="Asignar ligas completas">
-              <Users className="w-3.5 h-3.5" /> Por liga
-            </button>
+            <Button variant="link" size="sm" icon={<Users />} onClick={onAssignLeague} className="text-purple-700" title="Asignar ligas completas">
+              Por liga
+            </Button>
           )}
           {onAddClub && (
-            <button onClick={onAddClub} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium">
-              <Plus className="w-3.5 h-3.5" /> Añadir club
-            </button>
+            <Button variant="link" size="sm" icon={<Plus />} onClick={onAddClub}>
+              Añadir club
+            </Button>
           )}
         </div>
       </div>
 
       {withClub.length === 0 ? (
-        <p className="text-center text-slate-400 text-xs py-6">Sin clubes contactados aún</p>
+        <p className="text-center text-slate-500 text-secondary py-6">Sin clubes contactados aún</p>
       ) : (
         <>
           {/* Barra de filtros compacta */}
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative flex-1 min-w-[140px]">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-              <input
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden="true" />
+              <Input
                 value={clubSearch}
                 onChange={e => setClubSearch(e.target.value)}
                 placeholder="Buscar club, liga o nota…"
-                className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+                aria-label="Buscar club, liga o nota"
+                className="pl-8 py-1.5"
               />
             </div>
 
             {/* Estado (multiselección + estancadas) */}
-            <FilterDropdown label="Estado" active={statusFilter.length + (staleOnly ? 1 : 0)} widthClass="w-56">
+            <FilterDropdown label={L.estado} active={statusFilter.length + (staleOnly ? 1 : 0)} widthClass="w-56">
               <button
+                type="button"
                 onClick={() => { setStatusFilter([]); setStaleOnly(false) }}
-                className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium ${statusFilter.length === 0 && !staleOnly ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                className={`w-full text-left px-2.5 py-1.5 rounded-lg text-secondary font-medium ${statusFilter.length === 0 && !staleOnly ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
               >
                 Todos <span className="font-mono opacity-70">{withClub.length}</span>
               </button>
@@ -630,7 +643,7 @@ export function PlayerClubList({
                 const sel = statusFilter.includes(st)
                 return (
                   <CheckItem key={st} selected={sel} count={statusCounts[st]} onToggle={() => setStatusFilter(prev => sel ? prev.filter(x => x !== st) : [...prev, st])}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />{cfg.label}
+                    <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} aria-hidden="true" />{cfg.label}
                   </CheckItem>
                 )
               })}
@@ -638,7 +651,7 @@ export function PlayerClubList({
                 <>
                   <div className="border-t border-slate-100 my-1" />
                   <CheckItem selected={staleOnly} count={staleCount} onToggle={() => setStaleOnly(v => !v)}>
-                    <span className="text-amber-600">⏰ Estancadas</span>
+                    <span className="inline-flex items-center gap-1 text-amber-700"><Clock className="w-3 h-3" aria-hidden="true" /> Estancadas</span>
                   </CheckItem>
                 </>
               )}
@@ -646,10 +659,11 @@ export function PlayerClubList({
 
             {/* Gestor (multiselección) */}
             {gestores.length > 1 && (
-              <FilterDropdown label="Gestor" active={gestorFilter.length} widthClass="w-44">
+              <FilterDropdown label={L.encargado} active={gestorFilter.length} widthClass="w-44">
                 <button
+                  type="button"
                   onClick={() => setGestorFilter([])}
-                  className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium ${gestorFilter.length === 0 ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                  className={`w-full text-left px-2.5 py-1.5 rounded-lg text-secondary font-medium ${gestorFilter.length === 0 ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
                 >
                   Todos
                 </button>
@@ -667,8 +681,9 @@ export function PlayerClubList({
             {/* Ligas (multiselección) */}
             <FilterDropdown label="Ligas" active={leagueFilter.length} widthClass="w-64">
               <button
+                type="button"
                 onClick={() => setLeagueFilter([])}
-                className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium ${leagueFilter.length === 0 ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                className={`w-full text-left px-2.5 py-1.5 rounded-lg text-secondary font-medium ${leagueFilter.length === 0 ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
               >
                 Todas las ligas
               </button>
@@ -682,40 +697,34 @@ export function PlayerClubList({
               })}
             </FilterDropdown>
 
-            <select value={sortBy} onChange={e => setSortBy(e.target.value as typeof sortBy)} aria-label="Ordenar" className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white text-slate-600">
+            <Select value={sortBy} onChange={e => setSortBy(e.target.value as typeof sortBy)} aria-label="Ordenar" className="w-auto py-1 text-secondary">
               <option value="estado">Orden: estado</option>
               <option value="nombre">Orden: nombre</option>
               <option value="liga">Orden: liga</option>
               <option value="actualizado">Orden: actualizado</option>
-            </select>
-            <select value={groupBy} onChange={e => setGroupBy(e.target.value as typeof groupBy)} aria-label="Agrupar" className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white text-slate-600">
+            </Select>
+            <Select value={groupBy} onChange={e => setGroupBy(e.target.value as typeof groupBy)} aria-label="Agrupar" className="w-auto py-1 text-secondary">
               <option value="none">Sin agrupar</option>
               <option value="estado">Agrupar: estado</option>
               <option value="liga">Agrupar: liga</option>
               <option value="nivel">Agrupar: nivel</option>
-            </select>
+            </Select>
             {(statusFilter.length > 0 || gestorFilter.length > 0 || leagueFilter.length > 0 || staleOnly || clubSearch) && (
-              <button
-                onClick={() => { setStatusFilter([]); setGestorFilter([]); setLeagueFilter([]); setStaleOnly(false); setClubSearch('') }}
-                className="text-xs text-blue-600 hover:text-blue-700 font-medium"
-              >
+              <Button variant="link" size="sm" onClick={() => { setStatusFilter([]); setGestorFilter([]); setLeagueFilter([]); setStaleOnly(false); setClubSearch('') }}>
                 Limpiar
-              </button>
+              </Button>
             )}
           </div>
 
           {/* Selección múltiple (opt-in) */}
           <div className="flex items-center gap-3 flex-wrap">
             {!selectMode ? (
-              <button
-                onClick={() => setSelectMode(true)}
-                className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-700"
-              >
-                <CheckSquare className="w-3.5 h-3.5" /> Seleccionar varios
-              </button>
+              <Button variant="ghost" size="sm" icon={<CheckSquare />} onClick={() => setSelectMode(true)}>
+                Seleccionar varios
+              </Button>
             ) : (
               <>
-                <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer">
+                <label className="flex items-center gap-1.5 text-secondary text-slate-600 cursor-pointer">
                   <input
                     type="checkbox"
                     className="w-4 h-4 rounded"
@@ -728,51 +737,51 @@ export function PlayerClubList({
                   />
                   Seleccionar visibles
                 </label>
-                <button onClick={exitSelectMode} className="text-xs text-slate-500 hover:text-slate-700">Salir de selección</button>
+                <Button variant="ghost" size="sm" onClick={exitSelectMode}>Salir de selección</Button>
               </>
             )}
-            <span className="text-xs text-slate-400 ml-auto">{visible.length} de {withClub.length} club{withClub.length !== 1 ? 'es' : ''}</span>
+            <span className="text-secondary text-slate-500 ml-auto">{visible.length} de {withClub.length} club{withClub.length !== 1 ? 'es' : ''}</span>
           </div>
 
           {selectMode && selectedNegIds.size > 0 && (
             <div className="flex items-center gap-2 flex-wrap bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
-              <span className="text-xs font-semibold text-slate-700">{selectedNegIds.size} seleccionado{selectedNegIds.size !== 1 ? 's' : ''}</span>
+              <span className="text-secondary font-semibold text-slate-700">{selectedNegIds.size} seleccionado{selectedNegIds.size !== 1 ? 's' : ''}</span>
               {onUpdateNegotiation && (
-                <select
+                <Select
                   value=""
                   disabled={bulkBusy}
                   onChange={e => { const v = e.target.value as ClubNegotiation['status'] | ''; if (v) bulkChangeStatus(v) }}
                   aria-label="Cambiar estado de los seleccionados"
-                  className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white text-slate-600 disabled:opacity-50"
+                  className="w-auto py-1 text-secondary"
                 >
                   <option value="">Cambiar estado a…</option>
-                  {NEG_STATUSES.filter(s => s !== 'descartado').map(s => <option key={s} value={s}>{NEG_STATUS_CONFIG[s].label}</option>)}
-                </select>
+                  {NEG_STATUSES.filter(s => s !== 'descartado').map(s => <option key={s} value={s}>{NEG_STATUS_LABELS[s]}</option>)}
+                </Select>
               )}
               {onUpdateNegotiation && (
-                <button onClick={() => bulkChangeStatus('descartado')} disabled={bulkBusy} className="px-2.5 py-1.5 rounded-lg text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50">
+                <Button size="sm" onClick={() => bulkChangeStatus('descartado')} disabled={bulkBusy} className="border-red-200 text-red-600 hover:bg-red-50">
                   Descartar
-                </button>
+                </Button>
               )}
               {onDeleteNegotiation && (
-                <button onClick={() => setConfirmBulkDelete(true)} disabled={bulkBusy} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50">
-                  <Trash2 className="w-3.5 h-3.5" /> Eliminar
-                </button>
+                <Button size="sm" variant="danger" icon={<Trash2 />} onClick={() => setConfirmBulkDelete(true)} disabled={bulkBusy}>
+                  {L.eliminar}
+                </Button>
               )}
-              <button onClick={() => setSelectedNegIds(new Set())} className="text-xs text-slate-500 hover:text-slate-700 ml-auto">Limpiar</button>
+              <Button variant="ghost" size="sm" onClick={() => setSelectedNegIds(new Set())} className="ml-auto">Limpiar</Button>
               {bulkBusy && <span className="w-3.5 h-3.5 border-2 border-slate-300 border-t-slate-500 rounded-full animate-spin" />}
             </div>
           )}
 
           {/* Lista */}
           {visible.length === 0 ? (
-            <p className="text-center text-slate-400 text-xs py-6">Ningún club coincide con los filtros</p>
+            <p className="text-center text-slate-500 text-secondary py-6">Ningún club coincide con los filtros</p>
           ) : (
             <div className={viewMode === 'grid' ? 'space-y-3' : 'border border-slate-200 rounded-xl overflow-hidden bg-white'}>
               {groups.map(g => (
                 <div key={g.key}>
                   {groupBy !== 'none' && (
-                    <div className={`px-3 py-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5 ${viewMode === 'grid' ? '' : 'bg-slate-50 border-y border-slate-100'}`}>
+                    <div className={`px-3 py-1.5 text-meta font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-1.5 ${viewMode === 'grid' ? '' : 'bg-slate-50 border-y border-slate-100'}`}>
                       {g.label} <span className="font-mono opacity-60">{g.items.length}</span>
                     </div>
                   )}
@@ -802,12 +811,9 @@ export function PlayerClubList({
   if (detailMode === 'push' && detailNode) {
     return (
       <div className="space-y-2">
-        <button
-          onClick={() => setPanelNegId(null)}
-          className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" /> Volver a la lista ({withClub.length})
-        </button>
+        <Button variant="link" size="sm" icon={<ArrowLeft />} onClick={() => setPanelNegId(null)}>
+          Volver a la lista ({withClub.length})
+        </Button>
         {detailNode}
 
         {/* Confirmación de borrado individual */}
@@ -845,7 +851,7 @@ export function PlayerClubList({
         <div className="w-full sm:w-80 flex-shrink-0 order-1 sm:order-2 sm:min-h-0 sm:overflow-y-auto">
           {detailNode ?? (
             <div className="hidden sm:block border-2 border-dashed border-slate-200 rounded-xl py-16 px-6 text-center">
-              <p className="text-xs text-slate-400">Haz clic en un club para ver y editar la oportunidad: estado, encargado, información y notas de seguimiento.</p>
+              <p className="text-secondary text-slate-500">Haz clic en un club para ver y editar la negociación: estado, encargado, información y notas de seguimiento.</p>
             </div>
           )}
         </div>

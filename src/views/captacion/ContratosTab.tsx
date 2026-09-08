@@ -1,5 +1,7 @@
 import { useState, useMemo, useCallback } from 'react'
-import { Search, Pencil } from 'lucide-react'
+import { Search, Pencil, Star, X, Settings2 } from 'lucide-react'
+import { IconButton, Button, Input } from '../../components/ui'
+import { L } from '../../lib/labels'
 import type { ScoutingPlayer, ScoutingAssessment, FirmasEntry } from '../../types'
 import { ZONAS, SIN_ZONA, zonaDe, type Zona } from '../../lib/zonas'
 import { PITCH_SLOTS, SLOT_LABELS, SLOT_ORDER, slotDe as pitchSlotOf } from '../../lib/campo'
@@ -205,72 +207,69 @@ export function ContratosTab({ players, firmasEntries, isAdmin, onOpenPlayer, on
     if (editingId === p.id) {
       return (
         <div key={p.id} className="flex items-center gap-1 px-2 py-1 bg-blue-50/60">
-          <input
+          <Input
             value={editValue}
             onChange={ev => setEditValue(ev.target.value)}
             onKeyDown={ev => { if (ev.key === 'Enter') void saveContract(p); if (ev.key === 'Escape') setEditingId(null) }}
             placeholder="30/06/2027"
+            aria-label={`Fin de contrato de ${p.fullName}`}
             autoFocus
-            className="flex-1 min-w-0 text-[11px] border border-slate-200 rounded px-1.5 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+            className="flex-1 min-w-0 py-1 text-meta"
           />
-          <button onClick={() => setEditingId(null)} className="px-1.5 py-1 text-[11px] text-slate-500 hover:bg-white rounded">✕</button>
-          <button onClick={() => void saveContract(p)} disabled={saving}
-            className="px-2 py-1 rounded bg-primary text-white text-[11px] font-medium hover:bg-primary/90 disabled:opacity-40">OK</button>
+          <IconButton label="Cancelar edición" onClick={() => setEditingId(null)}><X /></IconButton>
+          <Button size="sm" variant="primary" onClick={() => void saveContract(p)} loading={saving}>OK</Button>
         </div>
       )
     }
     return (
       <div key={p.id} className="group flex items-center gap-1.5 px-2 py-1 hover:bg-slate-50 transition-colors">
-        <button onClick={() => onOpenPlayer(p.id)} className="min-w-0 flex-1 text-left">
-          <span className="block text-[11.5px] font-semibold text-slate-800 truncate">
+        <button type="button" onClick={() => onOpenPlayer(p.id)} className="min-w-0 flex-1 text-left rounded focus-visible:ring-2 focus-visible:ring-primary/40 outline-none" aria-label={`Abrir ficha de ${p.fullName}`}>
+          <span className="block text-meta font-semibold text-slate-800 truncate">
             {p.fullName}
-            {p.birthdate && <span className="text-slate-400 font-medium"> '{p.birthdate.slice(2, 4)}</span>}
+            {p.birthdate && <span className="text-slate-500 font-medium"> '{p.birthdate.slice(2, 4)}</span>}
           </span>
-          <span className="block text-[10.5px] text-slate-400 truncate">
+          <span className="block text-badge text-slate-500 truncate">
             {e.liga && <span className="text-slate-500 font-semibold">{e.liga}</span>}
             {e.liga ? ' · ' : ''}{p.team || '—'}{p.agency ? ` · ${p.agency}` : ''}
           </span>
         </button>
         {(() => {
-          // Estatus en el pipeline: color + etiqueta (o punto hueco si no está)
+          // Estatus en Firmar: color + etiqueta (o punto hueco si no está)
           const fe = firmasByPlayer[p.id]
           if (!fe) return (
-            <span className="w-1.5 h-1.5 rounded-full border border-slate-200 flex-shrink-0" title="No está en el pipeline" />
+            <span className="w-1.5 h-1.5 rounded-full border border-slate-200 flex-shrink-0" title={`No está en ${L.firmar}`} />
           )
           const cfg = FIRMAS_CONFIG[fe.status]
           return (
             <span
-              className={`flex-shrink-0 inline-flex items-center gap-1 rounded-full border px-1.5 py-px text-[9.5px] font-bold ${cfg.bg} ${cfg.text} ${cfg.border}`}
-              title={`Pipeline: ${cfg.label}`}
+              className={`flex-shrink-0 inline-flex items-center gap-1 rounded-full border px-1.5 py-px text-badge font-bold ${cfg.bg} ${cfg.text} ${cfg.border}`}
+              title={`${L.firmar}: ${cfg.label}`}
             >
               <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
               <span className="hidden sm:inline">{cfg.label}</span>
             </span>
           )
         })()}
-        <span className="text-[10.5px] text-slate-400 flex-shrink-0 tabular-nums">{fmtShort(e.date)}</span>
+        <span className="text-badge text-slate-500 flex-shrink-0 tabular-nums">{fmtShort(e.date)}</span>
         {isAdmin && (
           <>
-            <button
+            <IconButton
+              label={`Editar fin de contrato de ${p.fullName}`}
               onClick={() => { setEditingId(p.id); setEditValue(p.clubContract ?? '') }}
-              className="p-0.5 rounded text-slate-300 hover:text-slate-600 hover:bg-white transition-colors flex-shrink-0"
-              title="Editar fin de contrato"
-              aria-label="Editar fin de contrato"
+              className="text-slate-600 hover:text-slate-900"
             >
-              <Pencil className="w-3 h-3" />
-            </button>
+              <Pencil />
+            </IconButton>
             {/* Estrella siempre visible: es la forma de meter y sacar
                 jugadores del campograma (también en móvil, sin hover) */}
-            <button
+            <IconButton
+              label={p.marketMap ? `Quitar a ${p.fullName} del campograma de mercado` : `Añadir a ${p.fullName} al campograma de mercado`}
+              aria-pressed={!!p.marketMap}
               onClick={() => void onToggleMarketMap(p, !p.marketMap)}
-              className={`px-0.5 text-[13px] leading-none flex-shrink-0 transition-colors ${
-                p.marketMap ? 'text-amber-500 hover:text-amber-600' : 'text-slate-300 hover:text-amber-500'
-              }`}
-              title={p.marketMap ? 'Quitar del campograma de mercado' : 'Añadir al campograma de mercado'}
-              aria-label={p.marketMap ? 'Quitar del campograma' : 'Añadir al campograma'}
+              className={p.marketMap ? 'text-amber-500 hover:text-amber-600' : 'text-slate-500 hover:text-amber-500'}
             >
-              {p.marketMap ? '★' : '☆'}
-            </button>
+              <Star className={p.marketMap ? 'fill-current' : ''} />
+            </IconButton>
           </>
         )}
       </div>
@@ -286,7 +285,7 @@ export function ContratosTab({ players, firmasEntries, isAdmin, onOpenPlayer, on
       }`}
     >
       {label}
-      <span className={`ml-1.5 text-[10px] font-bold ${year === id ? 'text-white/75' : 'text-slate-400'}`}>{n}</span>
+      <span className={`ml-1.5 text-badge font-bold ${year === id ? 'text-white/75' : 'text-slate-500'}`}>{n}</span>
     </button>
   )
 
@@ -294,41 +293,41 @@ export function ContratosTab({ players, firmasEntries, isAdmin, onOpenPlayer, on
     <div className="flex-1 w-full px-3 sm:px-6 py-4 space-y-3">
       <div className="flex items-start justify-between gap-2 flex-wrap">
         <div>
-          <h2 className="text-sm font-semibold text-slate-800">Fin de contrato</h2>
-          <p className="text-xs text-slate-400">
+          <h2 className="text-body font-semibold text-slate-800">Fin de contrato</h2>
+          <p className="text-secondary text-slate-500">
             {source === 'mapa'
-              ? 'Tu campograma de mercado: solo los jugadores marcados con ★, por año de fin de contrato'
-              : 'Toda la BBDD de 1ª, 2ª y 1ª RFEF — marca con ☆ los que quieras en tu campograma'}
+              ? 'Tu campograma de mercado: solo los jugadores marcados con la estrella, por año de fin de contrato'
+              : 'Todos los jugadores de 1ª, 2ª y 1ª RFEF — marca con la estrella los que quieras en tu campograma'}
           </p>
         </div>
         <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
           <button
             onClick={() => { setSource('mapa'); setYearSel(null); setExpandedSlots(new Set()) }}
             className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${source === 'mapa' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-          >★ Mi campograma <span className="text-slate-400 font-semibold">{enMapa.length}</span></button>
+          ><Star className="w-3.5 h-3.5 inline -mt-0.5 text-amber-500" aria-hidden="true" /> Mi campograma <span className="text-slate-500 font-semibold">{enMapa.length}</span></button>
           <button
             onClick={() => { setSource('todos'); setYearSel(null); setExpandedSlots(new Set()) }}
             className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${source === 'todos' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-          >Toda la BBDD</button>
+          >Todos los jugadores</button>
         </div>
       </div>
 
-      {/* Ligas (solo al mirar toda la BBDD) */}
+      {/* Ligas (solo al mirar todos los jugadores) */}
       {source === 'todos' && (
         <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Liga</span>
+          <span className="text-badge font-bold text-slate-500 uppercase tracking-wide">Liga</span>
           {[...LIGAS as string[], 'otros'].map(l => (
             <button
               key={l}
               onClick={() => toggleLiga(l)}
-              className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border transition-colors ${
+              className={`px-2 py-0.5 rounded-md text-badge font-semibold border transition-colors ${
                 ligaFilter.has(l)
                   ? 'bg-primary/10 text-primary border-primary/30'
-                  : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'
+                  : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
               }`}
             >
               {l === 'otros' ? 'Resto' : l}
-              <span className="ml-1 text-[10px] opacity-70">{all.filter(e => (e.liga ?? 'otros') === l).length}</span>
+              <span className="ml-1 text-badge opacity-70">{all.filter(e => (e.liga ?? 'otros') === l).length}</span>
             </button>
           ))}
         </div>
@@ -364,10 +363,10 @@ export function ContratosTab({ players, firmasEntries, isAdmin, onOpenPlayer, on
           ))}
           {!!conteoZonas[SIN_ZONA] && <option value={SIN_ZONA}>{SIN_ZONA} ({conteoZonas[SIN_ZONA]})</option>}
         </select>
-        <button onClick={onAbrirZonas} title="Cambiar la zona de un club" className={SELECT_CLS}>⚙</button>
+        <IconButton label="Cambiar la zona de un club" variant="secondary" onClick={onAbrirZonas}><Settings2 /></IconButton>
         <BotonCsv
           nombre="fin-de-contrato"
-          cabeceras={['Jugador', 'Posición', 'Año nac.', 'Equipo', 'Liga', 'Zona', 'Agencia', 'Fin contrato', 'Año', 'Assessment', 'Pipeline']}
+          cabeceras={[L.jugador, 'Posición', 'Año nac.', 'Equipo', 'Liga', 'Zona', 'Agencia', 'Fin contrato', 'Año', L.etiquetaJugador, L.firmar]}
           filas={() => shown.map(({ p, year, liga }) => [
             p.fullName, p.position1 ?? '', birthYearFromBirthdate(p.birthdate),
             p.team ?? '', liga ?? '', zonaDe(p.team, clubZonas) ?? '',
@@ -377,7 +376,7 @@ export function ContratosTab({ players, firmasEntries, isAdmin, onOpenPlayer, on
           ])}
         />
         <div className="relative flex-1 min-w-[140px] max-w-xs">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
           <input
             value={q}
             onChange={e => setQ(e.target.value)}
@@ -385,20 +384,20 @@ export function ContratosTab({ players, firmasEntries, isAdmin, onOpenPlayer, on
             className="w-full text-xs border border-slate-200 rounded-lg pl-8 pr-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20"
           />
         </div>
-        <span className="text-[11px] text-slate-400">
+        <span className="text-badge text-slate-500">
           {shown.length} jugador{shown.length !== 1 ? 'es' : ''}
-          {ignoreYear && <span className="text-slate-300"> · buscando en todos los años</span>}
+          {ignoreYear && <span className="text-slate-500"> · buscando en todos los años</span>}
         </span>
         {source === 'todos' && isAdmin && (
-          <span className="text-[11px] text-amber-600 font-medium">☆ = añadir al campograma</span>
+          <span className="text-badge text-amber-600 font-medium inline-flex items-center gap-1"><Star className="w-3 h-3" aria-hidden="true" /> = añadir al campograma</span>
         )}
       </div>
 
       {shown.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-xl px-4 py-8 text-center">
-          <p className="text-xs text-slate-400 italic">
+          <p className="text-secondary text-slate-500 italic">
             {source === 'mapa' && enMapa.length === 0
-              ? 'Tu campograma está vacío: entra en «Toda la BBDD» y marca jugadores con ☆.'
+              ? 'Tu campograma está vacío: entra en «Todos los jugadores» y marca jugadores con la estrella.'
               : year === 'sin' ? 'Todos los jugadores del filtro tienen fin de contrato.'
               : year === 'otros' ? 'Nadie con fin de contrato fuera de estos tres años.'
               : `Ningún jugador acaba contrato en ${year} con ese filtro.`}
@@ -409,8 +408,8 @@ export function ContratosTab({ players, firmasEntries, isAdmin, onOpenPlayer, on
           {SLOT_ORDER.filter(s => (bySlot[s]?.length ?? 0) > 0).map(s => (
             <div key={s} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
               <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-50 border-b border-slate-100">
-                <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">{SLOT_LABELS[s]}</span>
-                <span className="text-[10px] font-bold text-slate-400">{bySlot[s].length}</span>
+                <span className="text-badge font-extrabold text-slate-500 uppercase tracking-wider">{SLOT_LABELS[s]}</span>
+                <span className="text-badge font-bold text-slate-500">{bySlot[s].length}</span>
               </div>
               <div className="divide-y divide-slate-50">{bySlot[s].map(playerRow)}</div>
             </div>
@@ -418,8 +417,8 @@ export function ContratosTab({ players, firmasEntries, isAdmin, onOpenPlayer, on
           {sinPos.length > 0 && (
             <div className="bg-white border border-dashed border-slate-200 rounded-xl overflow-hidden">
               <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-50 border-b border-slate-100">
-                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Sin posición</span>
-                <span className="text-[10px] font-bold text-slate-400">{sinPos.length}</span>
+                <span className="text-badge font-extrabold text-slate-500 uppercase tracking-wider">Sin posición</span>
+                <span className="text-badge font-bold text-slate-500">{sinPos.length}</span>
               </div>
               <div className="divide-y divide-slate-50">{sinPos.map(playerRow)}</div>
             </div>
@@ -445,10 +444,10 @@ export function ContratosTab({ players, firmasEntries, isAdmin, onOpenPlayer, on
               const extra = pls.length - visible.length
               return (
                 <div key={s.id} className="absolute flex flex-col items-center gap-0.5 z-10" style={{ left: `${s.x}%`, top: `${s.y}%`, transform: 'translate(-50%,-50%)' }}>
-                  <div className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-white text-[10px] font-extrabold tracking-wide border ${pls.length === 0 ? 'opacity-40 border-white/30 bg-white/10' : 'border-white/40 bg-white/15'}`}
+                  <div className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-white text-badge font-extrabold tracking-wide border ${pls.length === 0 ? 'opacity-40 border-white/30 bg-white/10' : 'border-white/40 bg-white/15'}`}
                     style={{ backdropFilter: 'blur(2px)' }}>
                     {s.id}
-                    {pls.length > 0 && <span className="bg-amber-500 text-[9px] text-amber-950 rounded-full px-1.5 font-extrabold">{pls.length}</span>}
+                    {pls.length > 0 && <span className="bg-amber-500 text-badge text-amber-950 rounded-full px-1.5 font-extrabold">{pls.length}</span>}
                   </div>
                   <div className="flex flex-col items-center gap-0.5">
                     {visible.map(({ p, date }) => {
@@ -458,7 +457,7 @@ export function ContratosTab({ players, firmasEntries, isAdmin, onOpenPlayer, on
                           key={p.id}
                           onClick={() => onOpenPlayer(p.id)}
                           title={`${p.fullName}${p.team ? ' · ' + p.team : ''}${p.agency ? ' · ' + p.agency : ''} · fin ${p.clubContract ?? '—'}${fe ? ` · pipeline: ${FIRMAS_CONFIG[fe.status].label}` : ''}`}
-                          className="bg-amber-50 border border-amber-200 text-amber-900 text-[9.5px] font-bold rounded-md px-1.5 py-px whitespace-nowrap shadow hover:bg-amber-100 transition-colors max-w-[130px] truncate inline-flex items-center gap-1"
+                          className="bg-amber-50 border border-amber-200 text-amber-900 text-badge font-bold rounded-md px-1.5 py-px whitespace-nowrap shadow hover:bg-amber-100 transition-colors max-w-[130px] truncate inline-flex items-center gap-1"
                         >
                           {fe && <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${FIRMAS_CONFIG[fe.status].dot}`} />}
                           {p.fullName.split(' ').slice(0, 2).join(' ')}
@@ -469,7 +468,7 @@ export function ContratosTab({ players, firmasEntries, isAdmin, onOpenPlayer, on
                     {extra > 0 && (
                       <button
                         onClick={() => setExpandedSlots(prev => { const n = new Set(prev); n.add(s.id); return n })}
-                        className="text-[9px] text-white/85 hover:text-white font-semibold"
+                        className="text-badge text-white/85 hover:text-white font-semibold"
                       >
                         +{extra} más
                       </button>
@@ -479,7 +478,7 @@ export function ContratosTab({ players, firmasEntries, isAdmin, onOpenPlayer, on
               )
             })}
           </div>
-          <p className="text-[10.5px] text-slate-400 text-center mt-2 max-w-[560px] mx-auto leading-relaxed">
+          <p className="text-badge text-slate-500 text-center mt-2 max-w-[560px] mx-auto leading-relaxed">
             Clic en un jugador → su ficha. Al pasar el ratón ves equipo, agencia y la fecha exacta.
             {sinPos.length > 0 && ` · ${sinPos.length} sin posición reconocida (solo salen en la lista)`}
           </p>

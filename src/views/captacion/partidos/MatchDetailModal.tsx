@@ -1,12 +1,16 @@
 import { useState, useMemo } from 'react'
-import { Search, X, Plus, Pencil } from 'lucide-react'
+import { Search, X, Plus, Pencil, Check, Video, MapPin, Link2 } from 'lucide-react'
+import { Dialog, Button, IconButton, Textarea, Input } from '../../../components/ui'
+import { ConfirmModal } from '../../../components/ConfirmModal'
+import { useBeforeUnload } from '../../../hooks/useBeforeUnload'
+import { L } from '../../../lib/labels'
+import { useEscapeKey } from '../../../hooks/useEscapeKey'
 import type { ScoutingPlayer, ScoutingReport, ScoutingMatch } from '../../../types'
 import type { Profile } from '../../../contexts/AuthContext'
 import * as db from '../../../lib/db'
-import { useEscapeKey } from '../../../hooks/useEscapeKey'
 import { teamMatchKind, teamsAlike } from '../../../lib/equipos'
 import { POS_GROUPS, grupoDe as posGroupOf, type PosGroup } from '../../../lib/campo'
-import { AssessmentChip, Spinner, FichaCarcasa } from '../comun'
+import { AssessmentChip, FichaCarcasa } from '../comun'
 import { type ShowToast, type MatchScoutInfo, type ConclusionOption, type SuggestWhy, CONCLUSION_OPTIONS, normConclusion, CONCLUSION_STYLE, MONTHS_ES, birthYearFromBirthdate, personaToName, fmtDate, SUGGEST_ORDER, SUGGEST_LABEL, SEARCH_LIMIT, scoutColor } from '../helpers'
 import { PegarAlineacion } from './PegarAlineacion'
 
@@ -69,8 +73,12 @@ export function MatchDetailModal({
   const [savingQuick, setSavingQuick] = useState(false)
   const [addScoutOpen, setAddScoutOpen] = useState(false)
   const [informeAbierto, setInformeAbierto] = useState<string | null>(null)
+  /** Informe que se va a soltar del partido (antes era un confirm() nativo) */
+  const [confirmQuitar, setConfirmQuitar] = useState<{ r: ScoutingReport; p: ScoutingPlayer } | null>(null)
 
-  useEscapeKey(onClose)
+  // Informe rápido a medio escribir: avisar antes de cerrar / recargar
+  const dirty = reportFormFor !== null && quickText.trim().length > 0
+  useBeforeUnload(dirty)
 
   const day = match.date.slice(8)
   const mon = MONTHS_ES[parseInt(match.date.slice(5, 7)) - 1]
@@ -252,60 +260,60 @@ export function MatchDetailModal({
   const freeProfiles = profiles.filter(p => p.avatar && !scouts.some(s => s.scout === p.avatar))
 
   const esPanel = variant === 'panel'
+  // En la columna fija de escritorio no hay Dialog: ESC cierra igual (si no hay confirmación abierta)
+  useEscapeKey(onClose, esPanel && !confirmQuitar)
 
-  return (
-    <FichaCarcasa esPanel={esPanel} onClose={onClose}>
-      <>
-        {/* ── Cabecera ── */}
-        <div className="px-4 sm:px-5 py-3 border-b border-slate-200 flex items-start gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500">
-              <span className="font-semibold text-slate-600">{day} {mon} '{yr}{match.time ? ` · ${match.time}` : ''}</span>
-              {match.competition && <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">{match.competition}</span>}
-              {match.viewMode === 'campo'
-                ? <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded font-medium">🏟️ Campo</span>
-                : <span className="text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded font-medium">📹 Vídeo</span>}
-            </div>
-            <h3 className="mt-1 text-base font-bold text-slate-800 break-words">
-              {/* Los nombres llevan a la ficha del equipo: cobertura, plantilla y sus partidos */}
-              <button
-                onClick={() => onOpenEquipo(match.homeTeam)}
-                title={`Ver la ficha de ${match.homeTeam}`}
-                className="hover:text-primary hover:underline decoration-dotted underline-offset-2"
-              >{match.homeTeam}</button>
-              <span className="text-slate-400 font-medium"> vs </span>
-              <button
-                onClick={() => onOpenEquipo(match.awayTeam)}
-                title={`Ver la ficha de ${match.awayTeam}`}
-                className="hover:text-primary hover:underline decoration-dotted underline-offset-2"
-              >{match.awayTeam}</button>
-            </h3>
-          </div>
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <button
-              onClick={() => onToggleStatus(match)}
-              className={`text-[11px] font-bold px-2.5 py-1.5 rounded-lg border transition-colors ${
-                isVisto
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                  : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
-              }`}
-              title="Estado del partido"
-            >
-              {isVisto ? '✓ Visto' : 'Pendiente'}
-            </button>
-            <button onClick={() => { onEdit(match); onClose() }} className="p-1.5 text-slate-400 hover:text-blue-500 rounded-lg" title="Editar partido" aria-label="Editar partido">
-              <Pencil className="w-4 h-4" />
-            </button>
-            <button onClick={onClose} aria-label="Cerrar" className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
+  const meta = (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-badge text-slate-500">
+      <span className="font-semibold text-slate-600">{day} {mon} '{yr}{match.time ? ` · ${match.time}` : ''}</span>
+      {match.competition && <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">{match.competition}</span>}
+      {match.viewMode === 'campo'
+        ? <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded font-medium"><MapPin className="w-3 h-3" aria-hidden="true" /> Campo</span>
+        : <span className="inline-flex items-center gap-1 text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded font-medium"><Video className="w-3 h-3" aria-hidden="true" /> Vídeo</span>}
+    </div>
+  )
+  // Los nombres llevan a la ficha del equipo: cobertura, plantilla y sus partidos
+  const titulo = (
+    <span className="text-base font-bold text-slate-800 break-words">
+      <button
+        type="button"
+        onClick={() => onOpenEquipo(match.homeTeam)}
+        title={`Ver la ficha de ${match.homeTeam}`}
+        className="hover:text-primary hover:underline decoration-dotted underline-offset-2 rounded"
+      >{match.homeTeam}</button>
+      <span className="text-slate-500 font-medium"> vs </span>
+      <button
+        type="button"
+        onClick={() => onOpenEquipo(match.awayTeam)}
+        title={`Ver la ficha de ${match.awayTeam}`}
+        className="hover:text-primary hover:underline decoration-dotted underline-offset-2 rounded"
+      >{match.awayTeam}</button>
+    </span>
+  )
+  const acciones = (
+    <>
+      <Button
+        size="sm"
+        variant="secondary"
+        icon={isVisto ? <Check /> : undefined}
+        onClick={() => onToggleStatus(match)}
+        aria-pressed={isVisto}
+        title={isVisto ? 'Partido visto — clic para volver a pendiente' : 'Partido pendiente — clic para marcar visto'}
+        className={isVisto ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : ''}
+      >
+        {isVisto ? 'Visto' : 'Pendiente'}
+      </Button>
+      <IconButton label="Editar partido" onClick={() => { onEdit(match); onClose() }}>
+        <Pencil />
+      </IconButton>
+    </>
+  )
 
-        <div className={`px-4 sm:px-5 py-4 space-y-5 overflow-y-auto ${esPanel ? 'max-h-[calc(100vh-13rem)]' : 'max-h-[72vh]'}`}>
+  const cuerpo = (
+        <div className={esPanel ? 'px-4 sm:px-5 py-4 space-y-5 overflow-y-auto max-h-[calc(100vh-13rem)]' : 'space-y-5'}>
           {/* ── Scouts asignados ── */}
           <div>
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
+            <span className="text-badge font-semibold text-slate-500 uppercase tracking-wide">
               Scouts asignados {scouts.length > 1 ? `(${scouts.length})` : ''}
             </span>
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -314,39 +322,40 @@ export function MatchDetailModal({
                 const name = personaToName(s.scout, profiles)
                 const isMe = s.scout === currentProfile.avatar
                 return (
-                  <span key={s.scout} className={`inline-flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-full border text-xs font-semibold ${c.bg} ${c.text} ${c.border}`}>
+                  <span key={s.scout} className={`inline-flex items-center gap-1 pl-2.5 pr-1 py-0.5 rounded-full border text-secondary font-semibold ${c.bg} ${c.text} ${c.border}`}>
                     <span className="font-mono">{s.scout}</span>
                     {name && name !== s.scout && <span className="font-normal opacity-70">{name}</span>}
-                    <button
+                    <IconButton
+                      label={s.viewMode === 'campo' ? `${name || s.scout}: lo ve en el campo — cambiar a vídeo` : `${name || s.scout}: lo ve por vídeo — cambiar a campo`}
                       onClick={() => onSetScoutMode(match, s.scout, s.viewMode === 'campo' ? 'video' : 'campo')}
-                      title={s.viewMode === 'campo' ? 'Lo vio en el campo — clic para cambiar a vídeo' : 'Lo vio por vídeo — clic para cambiar a campo'}
-                      className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border transition-colors whitespace-nowrap ${
+                      className={`rounded-full border ${
                         s.viewMode === 'campo'
                           ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                           : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
                       }`}
                     >
-                      {s.viewMode === 'campo' ? '🏟️ Campo' : '📹 Vídeo'}
-                    </button>
-                    <button
+                      {s.viewMode === 'campo' ? <MapPin /> : <Video />}
+                    </IconButton>
+                    <IconButton
+                      label={s.status === 'visto' ? `${name || s.scout} ya lo ha visto — marcar como pendiente` : `Marcar como visto por ${name || s.scout}`}
                       onClick={() => onSetScoutStatus(match, s.scout, s.status === 'visto' ? 'pendiente' : 'visto')}
-                      title={s.status === 'visto' ? 'Ya lo ha visto — marcar como pendiente' : 'Marcar como visto'}
-                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border transition-colors ${
+                      aria-pressed={s.status === 'visto'}
+                      className={`rounded-full border ${
                         s.status === 'visto'
-                          ? 'bg-emerald-500 text-white border-emerald-500'
+                          ? 'bg-emerald-500 text-white border-emerald-500 hover:bg-emerald-600'
                           : 'bg-white/70 text-slate-500 border-slate-200 hover:bg-white'
                       }`}
                     >
-                      {s.status === 'visto' ? '✓ visto' : isMe ? 'marcar visto' : 'pendiente'}
-                    </button>
+                      <Check />
+                    </IconButton>
                     {(isAdmin || isMe) && (
-                      <button
+                      <IconButton
+                        label={`Quitar a ${name || s.scout} del partido`}
                         onClick={() => onRemoveScout(match, s.scout)}
-                        aria-label={`Quitar a ${name || s.scout} del partido`}
-                        className="text-slate-400 hover:text-red-500 p-0.5"
+                        className="text-slate-600 hover:text-red-600"
                       >
-                        <X className="w-3 h-3" />
-                      </button>
+                        <X />
+                      </IconButton>
                     )}
                   </span>
                 )
@@ -354,7 +363,8 @@ export function MatchDetailModal({
               {addScoutOpen ? (
                 <select
                   autoFocus
-                  className="text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400/30"
+                  aria-label="Añadir scout al partido"
+                  className="ui-input w-auto py-1"
                   defaultValue=""
                   onBlur={() => setAddScoutOpen(false)}
                   onChange={e => { if (e.target.value) onAddScout(match, e.target.value); setAddScoutOpen(false) }}
@@ -363,17 +373,14 @@ export function MatchDetailModal({
                   {freeProfiles.map(p => <option key={p.id} value={p.avatar}>{p.avatar} · {p.name}</option>)}
                 </select>
               ) : (
-                <button
-                  onClick={() => setAddScoutOpen(true)}
-                  className="inline-flex items-center gap-1 text-[11px] font-bold border border-dashed border-slate-300 text-slate-500 hover:border-blue-400 hover:text-blue-600 px-2 py-1 rounded-full transition-colors"
-                >
-                  <Plus className="w-3 h-3" /> Añadir scout
-                </button>
+                <Button size="sm" variant="secondary" icon={<Plus />} onClick={() => setAddScoutOpen(true)} className="rounded-full border-dashed">
+                  Añadir {L.scout.toLowerCase()}
+                </Button>
               )}
-              {scouts.length === 0 && <span className="text-xs text-slate-400 italic">Nadie asignado todavía</span>}
+              {scouts.length === 0 && <span className="text-xs text-slate-500 italic">Nadie asignado todavía</span>}
             </div>
             {scouts.length > 1 && (
-              <p className="mt-1 text-[11px] text-slate-400">
+              <p className="mt-1 text-badge text-slate-500">
                 Cada scout marca su parte y escribe su propio informe de cada jugador.
               </p>
             )}
@@ -390,7 +397,7 @@ export function MatchDetailModal({
               ].map(x => (
                 <div key={x.l} className="bg-slate-50 rounded-lg px-2.5 py-1.5">
                   <div className={`text-base font-bold leading-none ${x.cls}`}>{x.n}</div>
-                  <div className="text-[10.5px] text-slate-500 mt-0.5">{x.l}</div>
+                  <div className="text-badge text-slate-500 mt-0.5">{x.l}</div>
                 </div>
               ))}
             </div>
@@ -398,25 +405,25 @@ export function MatchDetailModal({
 
           {/* ── Jugadores nuestros (Mantenimiento) ── */}
           {nuestros && nuestros.length > 0 && (
-            <p className="text-xs text-slate-600"><span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Nuestros</span>: <span className="font-bold">{nuestros.join(', ')}</span></p>
+            <p className="text-xs text-slate-600"><span className="text-badge font-semibold text-slate-500 uppercase tracking-wide">Nuestros</span>: <span className="font-bold">{nuestros.join(', ')}</span></p>
           )}
 
           {/* ── Notas del partido ── */}
           {match.notes && (
             <div>
-              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Notas</span>
+              <span className="text-badge font-semibold text-slate-500 uppercase tracking-wide">Notas</span>
               <p className="mt-1 text-xs text-slate-600 whitespace-pre-wrap break-words">{match.notes}</p>
             </div>
           )}
 
           {/* ── Jugadores vistos ── */}
           <div>
-            <span className="text-[11px] font-semibold text-violet-600 uppercase tracking-wide">
+            <span className="text-badge font-semibold text-violet-600 uppercase tracking-wide">
               Vistos en este partido · {linkedPlayers.length} jugador{linkedPlayers.length !== 1 ? 'es' : ''} · {linkedWithReport} con informe
             </span>
             <div className="mt-1.5 space-y-1.5">
               {linkedPlayers.length === 0 && (
-                <p className="text-xs text-slate-400 italic">Aún no hay jugadores vinculados a este partido.</p>
+                <p className="text-xs text-slate-500 italic">Aún no hay jugadores vinculados a este partido.</p>
               )}
               {playersBySide.flatMap(grupo => grupo.jugadores.map((p, i) => {
                 const pReports = matchReportsByPlayer[p.id] ?? []
@@ -430,8 +437,8 @@ export function MatchDetailModal({
                   {/* Cabecera del equipo: se ve de un vistazo de qué lado juega cada uno */}
                   {i === 0 && (
                     <div className="flex items-center gap-1.5 mt-2 mb-1 first:mt-0">
-                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{grupo.titulo}</span>
-                      <span className="text-[10px] text-slate-400">{grupo.jugadores.length}</span>
+                      <span className="text-badge font-bold text-slate-500 uppercase tracking-wider">{grupo.titulo}</span>
+                      <span className="text-badge text-slate-500">{grupo.jugadores.length}</span>
                       <span className="flex-1 h-px bg-slate-100" />
                     </div>
                   )}
@@ -439,12 +446,12 @@ export function MatchDetailModal({
                     <div className="flex flex-wrap items-center gap-2">
                       <button
                         onClick={() => onOpenPlayer?.(p.id)}
-                        className="text-xs font-semibold text-slate-800 hover:text-primary transition-colors"
+                        className="text-secondary font-semibold text-slate-800 hover:text-primary transition-colors rounded"
                         title="Abrir ficha del jugador"
                       >
                         {p.fullName}
                       </button>
-                      <span className="text-[11px] text-slate-400">
+                      <span className="text-badge text-slate-500">
                         {[p.position1, birthYearFromBirthdate(p.birthdate) !== '—' ? birthYearFromBirthdate(p.birthdate) : null, p.team].filter(Boolean).join(' · ')}
                       </span>
                       <AssessmentChip a={p.assessment} small />
@@ -455,7 +462,7 @@ export function MatchDetailModal({
                           key={r.id}
                           onClick={() => setInformeAbierto(id => id === r.id ? null : r.id)}
                           title="Ver el informe completo"
-                          className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border transition-colors ${
+                          className={`inline-flex items-center gap-1 text-badge font-semibold px-2 py-0.5 rounded-full border transition-colors ${
                             (r.authorId && r.authorId === currentProfile.id) || r.persona === currentProfile.avatar
                               ? 'text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100'
                               : 'text-slate-600 bg-slate-50 border-slate-200 hover:bg-slate-100'
@@ -463,7 +470,7 @@ export function MatchDetailModal({
                         >
                           ✓ {r.persona ?? '—'}
                           {normConclusion(r.conclusion) && (
-                            <span className={`ml-0.5 px-1.5 rounded-full text-[10px] ${CONCLUSION_STYLE[normConclusion(r.conclusion)!] ?? 'bg-slate-100 text-slate-500'}`}>
+                            <span className={`ml-0.5 px-1.5 rounded-full text-badge ${CONCLUSION_STYLE[normConclusion(r.conclusion)!] ?? 'bg-slate-100 text-slate-500'}`}>
                               {normConclusion(r.conclusion)}
                             </span>
                           )}
@@ -480,63 +487,67 @@ export function MatchDetailModal({
                             key={r.id}
                             title={otherMatch
                               ? `Informe de ${r.persona ?? '—'} en ${otherMatch.homeTeam} vs ${otherMatch.awayTeam} (${fmtDate(otherMatch.date)}). Pertenece a ese partido; aquí sale solo como referencia.`
-                              : `Informe de ${r.persona ?? '—'} sin partido asignado — pulsa ⇄ para vincularlo a este`}
-                            className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border border-dashed border-slate-300 text-slate-400 bg-white"
+                              : `Informe de ${r.persona ?? '—'} sin partido asignado — vincúlalo a este con el botón del enlace`}
+                            className="inline-flex items-center gap-1 text-badge font-semibold px-2 py-0.5 rounded-full border border-dashed border-slate-300 text-slate-500 bg-white"
                           >
                             {r.persona ?? '—'}
                             {normConclusion(r.conclusion) && (
-                              <span className="ml-0.5 px-1.5 rounded-full text-[10px] bg-slate-100 text-slate-500">
+                              <span className="ml-0.5 px-1.5 rounded-full text-badge bg-slate-100 text-slate-500">
                                 {normConclusion(r.conclusion)}
                               </span>
                             )}
-                            <span className="text-[9px] text-slate-400">
+                            <span className="text-badge text-slate-500">
                               {otherMatch ? `${otherMatch.homeTeam} – ${otherMatch.awayTeam}` : 'sin partido'}
                             </span>
                             {!otherMatch && (
-                              <button
+                              <IconButton
+                                label="Vincular este informe al partido"
                                 onClick={() => void onLinkReportToMatch(r, match.id)}
-                                className="ml-0.5 text-slate-400 hover:text-primary font-bold"
-                                aria-label="Vincular este informe al partido"
+                                className="ml-0.5 text-slate-600 hover:text-primary"
                               >
-                                ⇄
-                              </button>
+                                <Link2 />
+                              </IconButton>
                             )}
                           </span>
                         )
                       })}
                       {!myReport && (
-                        <button
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          icon={isFormOpen ? undefined : <Plus />}
                           onClick={() => {
                             setReportFormFor(isFormOpen ? null : p.id)
                             setQuickText('')
                             setQuickConclusion('')
                           }}
-                          className="text-[11px] font-bold border border-primary text-primary bg-white hover:bg-blue-50 px-2.5 py-1 rounded-lg transition-colors"
+                          className={isFormOpen ? '' : 'border-primary text-primary hover:bg-blue-50'}
                         >
-                          {isFormOpen ? 'Cancelar' : pReports.length > 0 ? '+ Mi informe' : '+ Informe'}
-                        </button>
+                          {isFormOpen ? L.cancelar : pReports.length > 0 ? 'Mi informe' : 'Informe'}
+                        </Button>
                       )}
-                      <button onClick={() => handleRemovePlayer(p.id)} aria-label={`Desvincular a ${p.fullName}`} className="text-slate-300 hover:text-red-500 p-1">
-                        <X className="w-3 h-3" />
-                      </button>
+                      <IconButton label={`Desvincular a ${p.fullName} del partido`} onClick={() => handleRemovePlayer(p.id)} className="text-slate-600 hover:text-red-600">
+                        <X />
+                      </IconButton>
                     </div>
 
                     {/* Mini-formulario de informe rápido */}
                     {isFormOpen && (
                       <div className="mt-2 bg-blue-50 border border-blue-200 rounded-lg p-2.5 space-y-2">
-                        <textarea
+                        <Textarea
                           value={quickText}
                           onChange={e => setQuickText(e.target.value)}
                           rows={3}
                           autoFocus
+                          aria-label={`Informe de ${p.fullName}`}
                           placeholder={`Informe corto de ${p.fullName.split(' ')[0]} en este partido…`}
-                          className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none"
+                          className="resize-none"
                           onKeyDown={e => {
                             if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); saveQuickReport() }
                           }}
                         />
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="text-[11px] text-slate-500 font-medium">Conclusión:</span>
+                          <span className="text-badge text-slate-500 font-medium">{L.veredicto}:</span>
                           {CONCLUSION_OPTIONS.filter(Boolean).map(c => (
                             <button
                               key={c}
@@ -544,7 +555,7 @@ export function MatchDetailModal({
                               title={c === 'Visto'
                                 ? 'Lo he visto y no concluyo (poco rato, mal partido, no da para decidir). No cuenta como veredicto en las estadísticas.'
                                 : undefined}
-                              className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
+                              className={`px-2 py-0.5 rounded-full text-badge font-semibold border transition-colors ${
                                 quickConclusion === c
                                   ? (CONCLUSION_STYLE[c] ?? 'bg-slate-200 text-slate-700')
                                   : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
@@ -554,19 +565,14 @@ export function MatchDetailModal({
                             </button>
                           ))}
                           {!quickConclusion && (
-                            <span className="text-[10px] text-slate-400">o déjalo sin marcar</span>
+                            <span className="text-badge text-slate-500">o déjalo sin marcar</span>
                           )}
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-[10px] text-slate-400">Se vincula a este partido y aparece en la ficha del jugador · ⌘+Enter</span>
-                          <button
-                            onClick={saveQuickReport}
-                            disabled={!quickText.trim() || savingQuick}
-                            className="px-3 py-1.5 text-[11px] font-bold bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-40 inline-flex items-center gap-1.5"
-                          >
-                            {savingQuick && <Spinner />}
+                          <span className="text-badge text-slate-500">Se vincula a este partido y aparece en la ficha del jugador · Ctrl+Enter</span>
+                          <Button size="sm" variant="primary" onClick={saveQuickReport} disabled={!quickText.trim()} loading={savingQuick}>
                             {savingQuick ? 'Guardando…' : 'Guardar informe'}
-                          </button>
+                          </Button>
                         </div>
                       </div>
                     )}
@@ -574,28 +580,24 @@ export function MatchDetailModal({
                     {pReports.filter(r => r.id === informeAbierto).map(r => (
                       <div key={r.id} className="mt-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[11px] font-bold text-slate-600">{personaToName(r.persona, profiles) || r.persona}</span>
-                          <span className="text-[10.5px] text-slate-400">{fmtDate(r.fecha ?? r.createdAt)}</span>
-                          {r.titulo && <span className="text-[10.5px] text-slate-500 italic truncate">{r.titulo}</span>}
+                          <span className="text-badge font-bold text-slate-600">{personaToName(r.persona, profiles) || r.persona}</span>
+                          <span className="text-badge text-slate-500">{fmtDate(r.fecha ?? r.createdAt)}</span>
+                          {r.titulo && <span className="text-badge text-slate-500 italic truncate">{r.titulo}</span>}
                           {/* Deshacer: si un informe se enganchó aquí por error,
                               se suelta sin tener que tocar la base de datos */}
-                          <button
-                            onClick={() => {
-                              if (confirm(`¿Quitar este informe de ${match.homeTeam} – ${match.awayTeam}?\n\nEl informe NO se borra: sigue en la ficha de ${p.fullName}, solo deja de estar asignado a este partido.`)) {
-                                void onLinkReportToMatch(r, null)
-                              }
-                            }}
-                            className="ml-auto text-[10px] font-semibold text-slate-400 hover:text-red-500"
+                          <Button
+                            size="sm"
+                            variant="link"
+                            onClick={() => setConfirmQuitar({ r, p })}
+                            className="ml-auto text-slate-600 hover:text-red-600"
                             title="Quitar este informe del partido (no se borra)"
                           >
                             quitar del partido
-                          </button>
-                          <button onClick={() => setInformeAbierto(null)} className="text-slate-400 hover:text-slate-600" aria-label="Cerrar informe">
-                            <X className="w-3 h-3" />
-                          </button>
+                          </Button>
+                          <IconButton label="Cerrar informe" onClick={() => setInformeAbierto(null)}><X /></IconButton>
                         </div>
-                        <p className="text-[11.5px] text-slate-700 whitespace-pre-wrap break-words leading-relaxed">
-                          {r.texto || <span className="italic text-slate-400">Sin texto</span>}
+                        <p className="text-meta text-slate-700 whitespace-pre-wrap break-words leading-relaxed">
+                          {r.texto || <span className="italic text-slate-500">Sin texto</span>}
                         </p>
                       </div>
                     ))}
@@ -619,17 +621,17 @@ export function MatchDetailModal({
           {/* ── Otros partidos de estos equipos ── */}
           {partidosRelacionados.length > 0 && (
             <div className="border-t border-slate-100 pt-3">
-              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Otros partidos de estos equipos</span>
+              <span className="text-badge font-semibold text-slate-500 uppercase tracking-wide">Otros partidos de estos equipos</span>
               <div className="mt-1.5 flex flex-wrap gap-1.5">
                 {partidosRelacionados.map(m => (
                   <button
                     key={m.id}
                     onClick={() => onOpenMatch?.(m.id)}
-                    className="text-[11px] border border-slate-200 rounded-lg px-2 py-1 text-slate-600 hover:border-violet-300 hover:text-violet-700 transition-colors"
+                    className="text-badge border border-slate-200 rounded-lg px-2 py-1 text-slate-600 hover:border-violet-300 hover:text-violet-700 transition-colors"
                     title={`${(matchPlayersByMatchId[m.id] ?? []).length} jugadores vinculados`}
                   >
                     {m.homeTeam} vs {m.awayTeam}
-                    <span className="text-slate-400"> · {fmtDate(m.date)}</span>
+                    <span className="text-slate-500"> · {fmtDate(m.date)}</span>
                     {(matchPlayersByMatchId[m.id] ?? []).length > 0 && (
                       <span className="ml-1 text-violet-500 font-semibold">{(matchPlayersByMatchId[m.id] ?? []).length}</span>
                     )}
@@ -643,23 +645,24 @@ export function MatchDetailModal({
           <div className="space-y-2 border-t border-slate-100 pt-3">
             <div className="flex flex-wrap items-center gap-2">
               <div className="relative flex-shrink-0">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
-                <input
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" aria-hidden="true" />
+                <Input
                   value={playerSearch}
                   onChange={e => setPlayerSearch(e.target.value)}
                   placeholder="Buscar jugador..."
-                  className="pl-6 pr-3 py-1 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-violet-400/30 w-48"
+                  aria-label="Buscar jugador para vincular"
+                  className="pl-8 w-56"
                 />
               </div>
               {/* Afinado: año y posición */}
               {playerSearch.length < 2 && suggestionPool.length > 0 && (suggYears.length > 1 || suggPosGroups.length > 1) && (
                 <div className="flex flex-wrap items-center gap-1">
-                  <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">Afinar:</span>
+                  <span className="text-badge text-slate-500 font-semibold uppercase tracking-wide">Afinar:</span>
                   {suggYears.slice(0, 8).map(y => (
                     <button
                       key={y}
                       onClick={() => setSuggYearFilter(f => f === y ? null : y)}
-                      className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
+                      className={`px-2 py-0.5 rounded-full text-badge font-semibold border transition-colors ${
                         suggYearFilter === y ? 'bg-violet-100 border-violet-300 text-violet-700' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'
                       }`}
                     >
@@ -671,7 +674,7 @@ export function MatchDetailModal({
                     <button
                       key={g}
                       onClick={() => setSuggPosFilter(f => f === g ? null : g)}
-                      className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
+                      className={`px-2 py-0.5 rounded-full text-badge font-semibold border transition-colors ${
                         suggPosFilter === g ? 'bg-violet-100 border-violet-300 text-violet-700' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'
                       }`}
                     >
@@ -687,12 +690,12 @@ export function MatchDetailModal({
                 <div className="max-h-64 overflow-y-auto pr-1">
                   <div className="flex flex-wrap gap-1 items-center">
                     {playerSearch.length < 2 && teamSuggested.length > 0 && (
-                      <span className="text-[11px] text-violet-500 font-semibold uppercase tracking-wide mr-1">
+                      <span className="text-badge text-violet-500 font-semibold uppercase tracking-wide mr-1">
                         Sugeridos ({teamSuggested.length}):
                       </span>
                     )}
                     {playerSearch.length >= 2 && (
-                      <span className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide mr-1">
+                      <span className="text-badge text-slate-500 font-semibold uppercase tracking-wide mr-1">
                         {searchMatches.length > SEARCH_LIMIT
                           ? `${SEARCH_LIMIT} de ${searchMatches.length} — afina la búsqueda:`
                           : `${searchMatches.length} resultado${searchMatches.length !== 1 ? 's' : ''}:`}
@@ -709,7 +712,7 @@ export function MatchDetailModal({
                         }`}
                       >
                         <Plus className="w-3 h-3" />{p.fullName}
-                        <span className={why === 'equipo' || why === 'busqueda' ? 'text-violet-400 text-[11px]' : 'text-slate-400 text-[11px]'}>
+                        <span className={why === 'equipo' || why === 'busqueda' ? 'text-violet-400 text-badge' : 'text-slate-500 text-badge'}>
                           {[p.birthdate ? `'${p.birthdate.slice(2, 4)}` : null, p.team].filter(Boolean).join(' · ')}
                           {SUGGEST_LABEL[why]}
                         </span>
@@ -718,16 +721,67 @@ export function MatchDetailModal({
                   </div>
                 </div>
               ) : playerSearch.length >= 2 ? (
-                <span className="text-xs text-slate-400 italic">Sin resultados</span>
+                <span className="text-xs text-slate-500 italic">Sin resultados</span>
               ) : suggestionPool.length === 0 ? (
-                <span className="text-xs text-slate-400 italic">Busca un jugador para vincularlo al partido</span>
+                <span className="text-xs text-slate-500 italic">Busca un jugador para vincularlo al partido</span>
               ) : teamSuggested.length === 0 ? (
-                <span className="text-xs text-slate-400 italic">Ningún sugerido con esos filtros — <button className="underline" onClick={() => { setSuggYearFilter(null); setSuggPosFilter(null) }}>quitar afinado</button></span>
+                <span className="text-xs text-slate-500 italic">Ningún sugerido con esos filtros — <button className="underline" onClick={() => { setSuggYearFilter(null); setSuggPosFilter(null) }}>quitar afinado</button></span>
               ) : null}
             </div>
           </div>
         </div>
+  )
+
+  const confirmacion = (
+    <ConfirmModal
+      open={!!confirmQuitar}
+      title="Quitar el informe de este partido"
+      message={confirmQuitar
+        ? `El informe NO se borra: sigue en la ficha de ${confirmQuitar.p.fullName}, solo deja de estar asignado a ${match.homeTeam} – ${match.awayTeam}.`
+        : undefined}
+      confirmLabel="Quitar del partido"
+      variant="default"
+      onConfirm={async () => { if (confirmQuitar) await onLinkReportToMatch(confirmQuitar.r, null); setConfirmQuitar(null) }}
+      onCancel={() => setConfirmQuitar(null)}
+    />
+  )
+
+  if (!esPanel) {
+    return (
+      <>
+        <Dialog
+          open
+          // Mientras se confirma «quitar informe», Escape no debe cerrar también la ficha
+          onClose={() => { if (!confirmQuitar) onClose() }}
+          title={titulo}
+          description={meta}
+          size="lg"
+          dirty={dirty}
+          historyKey="ficha-partido"
+        >
+          <div className="flex items-center justify-end gap-1 -mt-1 mb-3">{acciones}</div>
+          {cuerpo}
+        </Dialog>
+        {confirmacion}
       </>
+    )
+  }
+
+  return (
+    <FichaCarcasa esPanel onClose={onClose}>
+      {/* ── Cabecera (columna fija de escritorio) ── */}
+      <div className="px-4 sm:px-5 py-3 border-b border-slate-200 flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          {meta}
+          <h3 className="mt-1">{titulo}</h3>
+        </div>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {acciones}
+          <IconButton label={L.cerrar} onClick={onClose}><X /></IconButton>
+        </div>
+      </div>
+      {cuerpo}
+      {confirmacion}
     </FichaCarcasa>
   )
 }

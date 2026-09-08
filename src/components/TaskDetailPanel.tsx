@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { X, Trash2, ChevronRight, Send } from "lucide-react";
+import { Trash2, ChevronRight, Send } from "lucide-react";
 import { TASK_LABELS, type Task, type Player, type TaskLabel } from "../types";
 import { parseDia, esVencida } from "../lib/fechas";
 import type { Profile } from "../contexts/AuthContext";
 import * as db from "../lib/db";
 import { ConfirmModal } from "./ConfirmModal";
-import { useEscapeKey } from "../hooks/useEscapeKey";
+import { Sheet, Button, IconButton, Badge, Chip, Field, Select, Textarea, Input } from "./ui";
+import { useBeforeUnload } from "../hooks/useBeforeUnload";
+import { L, PRIORITY_LABELS, TASK_STATUS_LABELS, label as label_ } from "../lib/labels";
 
 const PRIMARY = "hsl(220,72%,26%)";
 
@@ -43,9 +45,6 @@ export function TaskDetailPanel({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-
-  // ESC cierra el panel (salvo cuando el modal de confirmación está abierto)
-  useEscapeKey(onClose, !confirmDelete);
 
   const loadComments = useCallback(async () => {
     try {
@@ -140,398 +139,373 @@ export function TaskDetailPanel({
                                 { bg: "#F1EFE8", color: "#444441", label: "Baja prioridad" };
 
   const statusConfig = {
-    pendiente:    { label: "Pendiente",    active: "bg-slate-100 border-slate-300 text-slate-800" },
-    en_progreso:  { label: "En progreso",  active: "bg-blue-50 border-blue-300 text-blue-800" },
-    completada:   { label: "Completada",   active: "bg-emerald-50 border-emerald-300 text-emerald-800" },
+    pendiente:    { label: TASK_STATUS_LABELS.pendiente,   active: "bg-slate-100 border-slate-300 text-slate-800" },
+    en_progreso:  { label: TASK_STATUS_LABELS.en_progreso, active: "bg-blue-50 border-blue-300 text-blue-800" },
+    completada:   { label: TASK_STATUS_LABELS.completada,  active: "bg-emerald-50 border-emerald-300 text-emerald-800" },
   } as const;
+
+  // ── Dirty guard: cambios sin guardar en el formulario o comentario a medias ──
+  const sameWatchers = (a: string[], b: string[]) => a.length === b.length && a.every(x => b.includes(x));
+  const dirty = canEdit && (
+    title !== task.title ||
+    description !== task.description ||
+    assigneeId !== task.assigneeId ||
+    effectivePlayerId !== (task.playerId || "general") ||
+    (label || "") !== (task.label ?? "") ||
+    !sameWatchers(watchers, task.watchers ?? [])
+  ) || commentText.trim().length > 0;
+  useBeforeUnload(dirty);
 
   return (
     <>
-      {/* Backdrop */}
-      <div className="fixed inset-0 z-40 bg-black/30" onClick={onClose} />
-
-      {/* Modal — two-column layout */}
-      <div
-        className="fixed inset-0 z-50 flex items-center justify-center p-4"
-        onClick={onClose}
-      >
-        <div
-          className="bg-white rounded-2xl border border-slate-200 shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden"
-          onClick={e => e.stopPropagation()}
-        >
-          {/* ── Header ─────────────────────────────────────────── */}
-          <div className="flex items-start gap-0 flex-shrink-0 border-b border-slate-100">
-            {/* Priority bar */}
-            <div
-              className="w-1 self-stretch rounded-tl-2xl flex-shrink-0"
+      <Sheet
+        open
+        onClose={onClose}
+        historyKey="task-detail"
+        dirty={dirty}
+        onSubmit={canEdit ? (e) => { e.preventDefault(); void handleSave(); } : undefined}
+        className="sm:max-w-2xl"
+        title={
+          <span className="flex items-center gap-2 flex-wrap">
+            <span
+              aria-hidden="true"
+              className="w-1.5 h-4 rounded-full flex-shrink-0"
               style={{ background: priorityBorderColor }}
             />
-            <div className="flex-1 px-5 py-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  {/* Badges row */}
-                  <div className="flex items-center gap-2 flex-wrap mb-1.5">
-                    {task.adminOnly && (
-                      <span className="text-[11px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 border border-rose-200">
-                        Admin
-                      </span>
-                    )}
-                    <span
-                      className="text-[11px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full"
-                      style={{ background: priorityBadge.bg, color: priorityBadge.color }}
-                    >
-                      {priorityBadge.label}
-                    </span>
-                    {task.label && (
-                      <span className="text-[11px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200">
-                        {task.label}
-                      </span>
-                    )}
-                    {isOverdue && (
-                      <span className="text-[11px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200">
-                        Vencida
-                      </span>
-                    )}
-                  </div>
-                  {/* Title */}
-                  {canEdit ? (
-                    <input
-                      type="text"
-                      value={title}
-                      onChange={e => setTitle(e.target.value)}
-                      className="w-full text-base font-semibold text-slate-900 bg-transparent border-none outline-none focus:bg-slate-50 rounded px-1 -ml-1 py-0.5"
-                    />
-                  ) : (
-                    <h2 className="text-base font-semibold text-slate-900 leading-snug">{task.title}</h2>
-                  )}
-                  {/* Player link */}
-                  {player && (
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <div className="w-4 h-4 rounded-full bg-slate-100 flex items-center justify-center text-[8px] font-bold text-slate-500 flex-shrink-0">
-                        {initials(player.name)}
-                      </div>
-                      {onGoToPlayer ? (
-                        <button
-                          onClick={() => { onGoToPlayer(player.id); onClose(); }}
-                          className="text-xs text-blue-600 hover:underline flex items-center gap-0.5"
-                        >
-                          {player.name} <ChevronRight className="w-3 h-3" />
-                        </button>
-                      ) : (
-                        <span className="text-xs text-slate-400">{player.name}</span>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <button onClick={onClose} aria-label="Cerrar panel de tarea" className="text-slate-500 hover:text-slate-700 p-2 -m-1.5 sm:p-0.5 sm:m-0 flex-shrink-0 mt-0.5">
-                  <X className="w-4 h-4" />
+            {canEdit ? (
+              <input
+                type="text"
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                aria-label="Título de la tarea"
+                className="flex-1 min-w-[12rem] text-body sm:text-base font-semibold text-slate-900 bg-transparent border-none outline-none focus:bg-slate-50 rounded px-1 -ml-1 py-0.5"
+              />
+            ) : (
+              <span className="text-body sm:text-base font-semibold text-slate-900 leading-snug">{task.title}</span>
+            )}
+          </span>
+        }
+        description={
+          <span className="flex items-center gap-1.5 flex-wrap">
+            {task.adminOnly && <Badge tone="danger">Admin</Badge>}
+            <Badge style={{ background: priorityBadge.bg, color: priorityBadge.color }}>{priorityBadge.label}</Badge>
+            {task.label && <Badge tone="primary">{task.label}</Badge>}
+            {isOverdue && <Badge tone="danger">Vencida</Badge>}
+            {player && (
+              onGoToPlayer ? (
+                <button
+                  type="button"
+                  onClick={() => { onGoToPlayer(player.id); onClose(); }}
+                  className="inline-flex items-center gap-0.5 text-secondary text-blue-700 hover:underline rounded"
+                >
+                  {player.name} <ChevronRight className="w-3 h-3" aria-hidden="true" />
                 </button>
-              </div>
-            </div>
-          </div>
+              ) : (
+                <span className="text-secondary text-slate-500">{player.name}</span>
+              )
+            )}
+          </span>
+        }
+        footer={canEdit ? (
+          <>
+            {actionError && (
+              <p className="text-secondary text-red-600 w-full" role="alert">{actionError}</p>
+            )}
+            <Button variant="ghost" icon={<Trash2 />} onClick={() => setConfirmDelete(true)} className="mr-auto text-red-600 hover:bg-red-50">
+              {L.eliminar}
+            </Button>
+            <Button type="submit" variant="primary" loading={saving} className={saved ? "bg-emerald-600 hover:bg-emerald-600" : undefined}>
+              {saved ? "Guardado" : "Guardar cambios"}
+            </Button>
+          </>
+        ) : undefined}
+      >
+        {/* Dos columnas (apiladas en móvil). Los márgenes negativos anulan el padding del cuerpo del Sheet. */}
+        <div className="-mx-4 sm:-mx-5 -my-4 sm:h-full flex flex-col sm:flex-row sm:min-h-0">
 
-          {/* ── Body: two columns (stacked on mobile) ─────────── */}
-          <div className="flex flex-col sm:flex-row flex-1 min-h-0 overflow-y-auto sm:overflow-hidden">
+          {/* IZQUIERDA — campos */}
+          <div className="flex-1 min-w-0 flex flex-col border-b sm:border-b-0 sm:border-r border-slate-200 sm:min-h-0">
+            <div className="flex-1 sm:overflow-y-auto p-4 sm:p-5 space-y-5">
 
-            {/* LEFT — fields */}
-            <div className="flex-1 min-w-0 flex flex-col border-b sm:border-b-0 sm:border-r border-slate-100">
-              <div className="flex-1 sm:overflow-y-auto p-4 sm:p-5 space-y-5">
-
-                {/* Read-only notice */}
-                {!canEdit && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700">
-                    Solo puedes comentar — editar lo hace el responsable.
-                  </div>
-                )}
-
-                {/* Status */}
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Estado</p>
-                  <div className="flex gap-1.5">
-                    {(["pendiente", "en_progreso", "completada"] as const).map(s => {
-                      const cfg = statusConfig[s];
-                      const active = status === s;
-                      return (
-                        <button
-                          key={s}
-                          onClick={() => canEdit && handleStatusChange(s)}
-                          disabled={!canEdit}
-                          className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors
-                            ${active ? cfg.active : "bg-white text-slate-500 border-slate-200"}
-                            ${canEdit ? "hover:opacity-90" : "cursor-default opacity-60"}`}
-                        >
-                          {cfg.label}
-                        </button>
-                      );
-                    })}
-                  </div>
+              {/* Aviso solo lectura */}
+              {!canEdit && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-secondary text-amber-700">
+                  Solo puedes comentar — editar lo hace el {L.responsable.toLowerCase()}.
                 </div>
+              )}
 
-                {/* Description */}
+              {/* Estado */}
+              <div>
+                <p className="text-badge font-semibold uppercase tracking-wider text-slate-500 mb-2">{L.estado}</p>
+                <div className="flex gap-1.5" role="group" aria-label={L.estado}>
+                  {(["pendiente", "en_progreso", "completada"] as const).map(s => {
+                    const cfg = statusConfig[s];
+                    const active = status === s;
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => canEdit && handleStatusChange(s)}
+                        disabled={!canEdit}
+                        className={`flex-1 min-h-9 py-1.5 rounded-lg text-secondary font-medium border transition-colors
+                          ${active ? cfg.active : "bg-white text-slate-600 border-slate-300"}
+                          ${canEdit ? "hover:opacity-90" : "cursor-default opacity-60"}`}
+                      >
+                        {cfg.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Descripción */}
+              {canEdit ? (
+                <Field label="Descripción">
+                  <Textarea
+                    value={description}
+                    onChange={e => setDescription(e.target.value)}
+                    rows={4}
+                    placeholder="Detalles, contexto, enlaces…"
+                  />
+                </Field>
+              ) : (
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Descripción</p>
-                  {canEdit ? (
-                    <textarea
-                      value={description}
-                      onChange={e => setDescription(e.target.value)}
-                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-100 resize-none h-24"
-                    />
-                  ) : description ? (
-                    <p className="text-sm text-slate-700 bg-slate-50 rounded-lg px-3 py-2">{description}</p>
+                  <p className="text-badge font-semibold uppercase tracking-wider text-slate-500 mb-2">Descripción</p>
+                  {description ? (
+                    <p className="text-body text-slate-700 bg-slate-50 rounded-lg px-3 py-2 whitespace-pre-wrap">{description}</p>
                   ) : (
-                    <p className="text-xs text-slate-400 italic">Sin descripción</p>
+                    <p className="text-secondary text-slate-500 italic">Sin descripción</p>
                   )}
                 </div>
+              )}
 
-                {/* Metadata grid */}
-                <div className="grid grid-cols-2 gap-2.5">
-                  {/* Assignee */}
-                  <div className="bg-slate-50 rounded-xl p-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Responsable</p>
-                    {canEdit ? (
-                      <select
-                        value={assigneeId}
-                        onChange={e => setAssigneeId(e.target.value)}
-                        className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
-                      >
-                        <option value="">— Sin asignar —</option>
+              {/* Metadatos */}
+              <div className="grid grid-cols-2 gap-2.5">
+                {/* Responsable */}
+                <div className="bg-slate-50 rounded-xl p-3">
+                  {canEdit ? (
+                    <Field label={L.responsable}>
+                      <Select value={assigneeId} onChange={e => setAssigneeId(e.target.value)}>
+                        <option value="">— {L.sinResponsable} —</option>
                         {profiles.map(p => (
                           <option key={p.id} value={p.id}>{p.avatar} {p.name}</option>
                         ))}
-                      </select>
-                    ) : assignee ? (
-                      <div className="flex items-center gap-1.5">
-                        <div
-                          className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0"
-                          style={{ background: PRIMARY }}
-                        >
-                          {initials(assignee.name)}
+                      </Select>
+                    </Field>
+                  ) : (
+                    <>
+                      <p className="text-badge font-semibold uppercase tracking-wider text-slate-500 mb-2">{L.responsable}</p>
+                      {assignee ? (
+                        <div className="flex items-center gap-1.5">
+                          <div
+                            className="w-6 h-6 rounded-full flex items-center justify-center text-badge font-bold text-white flex-shrink-0"
+                            style={{ background: PRIMARY }}
+                            aria-hidden="true"
+                          >
+                            {initials(assignee.name)}
+                          </div>
+                          <span className="text-body font-medium text-slate-700">{assignee.name.split(" ")[0]}</span>
                         </div>
-                        <span className="text-sm font-medium text-slate-700">{assignee.name.split(" ")[0]}</span>
-                      </div>
-                    ) : (
-                      <p className="text-xs text-slate-400">Sin asignar</p>
-                    )}
-                  </div>
+                      ) : (
+                        <p className="text-secondary text-slate-500">{L.sinResponsable}</p>
+                      )}
+                    </>
+                  )}
+                </div>
 
-                  {/* Due date */}
-                  <div className="bg-slate-50 rounded-xl p-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Fecha límite</p>
-                    {task.dueDate ? (
-                      <>
-                        <p className={`text-sm font-medium ${isOverdue ? "text-red-600" : "text-slate-700"}`}>
-                          {parseDia(task.dueDate).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" })}
-                        </p>
-                        {isOverdue && <p className="text-[11px] text-red-500 mt-0.5">Vencida</p>}
-                      </>
-                    ) : (
-                      <p className="text-xs text-slate-400">Sin fecha</p>
-                    )}
-                  </div>
+                {/* Fecha límite */}
+                <div className="bg-slate-50 rounded-xl p-3">
+                  <p className="text-badge font-semibold uppercase tracking-wider text-slate-500 mb-2">Fecha límite</p>
+                  {task.dueDate ? (
+                    <>
+                      <p className={`text-body font-medium ${isOverdue ? "text-red-600" : "text-slate-700"}`}>
+                        {parseDia(task.dueDate).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" })}
+                      </p>
+                      {isOverdue && <p className="text-meta text-red-600 mt-0.5">Vencida</p>}
+                    </>
+                  ) : (
+                    <p className="text-secondary text-slate-500">Sin fecha</p>
+                  )}
+                </div>
 
-                  {/* Priority */}
-                  <div className="bg-slate-50 rounded-xl p-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Prioridad</p>
-                    <span
-                      className="text-xs font-semibold px-2 py-0.5 rounded-full"
-                      style={{ background: priorityBadge.bg, color: priorityBadge.color }}
-                    >
-                      {task.priority === "alta" ? "Alta" : task.priority === "media" ? "Media" : "Baja"}
-                    </span>
-                  </div>
+                {/* Prioridad */}
+                <div className="bg-slate-50 rounded-xl p-3">
+                  <p className="text-badge font-semibold uppercase tracking-wider text-slate-500 mb-2">{L.prioridad}</p>
+                  <Badge style={{ background: priorityBadge.bg, color: priorityBadge.color }}>
+                    {label_(PRIORITY_LABELS, task.priority)}
+                  </Badge>
+                </div>
 
-                  {/* Label / Tipo */}
-                  <div className="bg-slate-50 rounded-xl p-3 col-span-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Tipo</p>
-                    {canEdit ? (
-                      <select
-                        value={label}
-                        onChange={e => setLabel(e.target.value as TaskLabel | "")}
-                        className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
-                      >
+                {/* Creada */}
+                <div className="bg-slate-50 rounded-xl p-3">
+                  <p className="text-badge font-semibold uppercase tracking-wider text-slate-500 mb-2">Creada</p>
+                  <p className="text-body text-slate-700">
+                    {new Date(task.createdAt).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" })}
+                  </p>
+                </div>
+
+                {/* Tipo */}
+                <div className="bg-slate-50 rounded-xl p-3 col-span-2">
+                  {canEdit ? (
+                    <Field label="Tipo">
+                      <Select value={label} onChange={e => setLabel(e.target.value as TaskLabel | "")}>
                         <option value="">— Sin tipo —</option>
                         {TASK_LABELS.map(l => (
                           <option key={l} value={l}>{l}</option>
                         ))}
-                      </select>
-                    ) : task.label ? (
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200">
-                        {task.label}
-                      </span>
-                    ) : (
-                      <p className="text-xs text-slate-400">Sin tipo</p>
-                    )}
-                  </div>
+                      </Select>
+                    </Field>
+                  ) : (
+                    <>
+                      <p className="text-badge font-semibold uppercase tracking-wider text-slate-500 mb-2">Tipo</p>
+                      {task.label ? <Badge tone="primary">{task.label}</Badge> : <p className="text-secondary text-slate-500">Sin tipo</p>}
+                    </>
+                  )}
+                </div>
 
-                  {/* Player */}
-                  <div className="bg-slate-50 rounded-xl p-3 col-span-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Jugador</p>
-                    {canEdit ? (
-                      <select
-                        value={playerId}
-                        onChange={e => setPlayerId(e.target.value)}
-                        className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
-                      >
+                {/* Jugador */}
+                <div className="bg-slate-50 rounded-xl p-3 col-span-2">
+                  {canEdit ? (
+                    <Field label={L.jugador}>
+                      <Select value={playerId} onChange={e => setPlayerId(e.target.value)}>
                         <option value="">— Tarea general —</option>
                         {[...players].sort((a, b) => a.name.localeCompare(b.name)).map(p => (
                           <option key={p.id} value={p.id}>{p.name}</option>
                         ))}
-                      </select>
-                    ) : player ? (
-                      <p className="text-sm text-slate-700">{player.name}</p>
-                    ) : (
-                      <p className="text-xs text-slate-400">Tarea general</p>
-                    )}
-                  </div>
-
-                  {/* Created */}
-                  <div className="bg-slate-50 rounded-xl p-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Creada</p>
-                    <p className="text-sm text-slate-700">
-                      {new Date(task.createdAt).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" })}
-                    </p>
-                  </div>
+                      </Select>
+                    </Field>
+                  ) : (
+                    <>
+                      <p className="text-badge font-semibold uppercase tracking-wider text-slate-500 mb-2">{L.jugador}</p>
+                      {player ? <p className="text-body text-slate-700">{player.name}</p> : <p className="text-secondary text-slate-500">Tarea general</p>}
+                    </>
+                  )}
                 </div>
+              </div>
 
-                {/* Watchers */}
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Adjuntados</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {profiles.map(p => {
-                      const active = watchers.includes(p.id);
-                      return (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={() => toggleWatcher(p.id)}
-                          disabled={!canEdit}
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors
-                            ${active ? "bg-blue-50 border-blue-300 text-blue-700" : "bg-white border-slate-200 text-slate-500"}
-                            ${canEdit ? "hover:opacity-80" : "cursor-default"}`}
-                        >
-                          <div
-                            className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0"
-                            style={{ background: active ? "#185FA5" : "#94a3b8" }}
+              {/* Seguidores */}
+              <div>
+                <p className="text-badge font-semibold uppercase tracking-wider text-slate-500 mb-2">{L.seguidores}</p>
+                <div className="flex flex-wrap gap-1.5" role="group" aria-label={L.seguidores}>
+                  {profiles.map(p => {
+                    const active = watchers.includes(p.id);
+                    return (
+                      <Chip
+                        key={p.id}
+                        active={active}
+                        onClick={() => toggleWatcher(p.id)}
+                        disabled={!canEdit}
+                        icon={
+                          <span
+                            aria-hidden="true"
+                            className="w-6 h-6 -ml-1.5 rounded-full flex items-center justify-center text-badge font-bold text-white"
+                            style={{ background: active ? "rgba(255,255,255,0.3)" : "#94a3b8" }}
                           >
                             {initials(p.name)}
-                          </div>
-                          {p.name.split(" ")[0]}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              {/* Footer buttons — always visible, outside scroll area */}
-              {canEdit && (
-                <div className="flex-shrink-0 px-4 sm:px-5 pb-4 sm:pb-5 pt-3 border-t border-slate-100 bg-white">
-                  {actionError && (
-                    <p className="text-xs text-red-600 mb-2" role="alert">{actionError}</p>
-                  )}
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleSave}
-                      disabled={saving}
-                      className={`flex-1 rounded-xl text-white text-sm font-medium py-2.5 transition-colors disabled:opacity-60 ${
-                        saved ? "bg-emerald-600" : "bg-primary hover:bg-primary/90"
-                      }`}
-                    >
-                      {saving ? "Guardando…" : saved ? "Guardado ✓" : "Guardar cambios"}
-                    </button>
-                    <button
-                      onClick={() => setConfirmDelete(true)}
-                      aria-label="Eliminar tarea"
-                      className="rounded-xl border border-red-200 text-red-600 px-4 py-2.5 hover:bg-red-50 transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* RIGHT — comments */}
-            <div className="w-full sm:w-72 flex-shrink-0 flex flex-col bg-white">
-              <div className="px-4 py-3 border-b border-slate-100 flex-shrink-0">
-                <p className="text-xs font-semibold text-slate-500">
-                  Comentarios{localComments.length > 0 ? ` · ${localComments.length}` : ""}
-                </p>
-              </div>
-
-              {/* Thread */}
-              <div className="flex-1 sm:overflow-y-auto px-4 py-3 space-y-3">
-                {localComments.length === 0 ? (
-                  <p className="text-xs text-slate-400 text-center py-6">Sin comentarios</p>
-                ) : (
-                  localComments.map(comment => {
-                    const author = profiles.find(p => p.id === comment.authorId);
-                    const isMe = comment.authorId === currentProfile.id;
-                    return (
-                      <div key={comment.id} className={`flex gap-2 items-end ${isMe ? "flex-row-reverse" : ""}`}>
-                        <div
-                          className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[9px] font-bold text-white"
-                          style={{ background: PRIMARY }}
-                        >
-                          {author ? initials(author.name) : "?"}
-                        </div>
-                        <div className={`flex-1 max-w-[82%] flex flex-col ${isMe ? "items-end" : "items-start"}`}>
-                          <div
-                            className={`rounded-2xl px-3 py-2 text-xs leading-relaxed ${
-                              isMe
-                                ? "bg-blue-600 text-white rounded-br-sm"
-                                : "bg-slate-100 text-slate-700 rounded-bl-sm"
-                            }`}
-                          >
-                            {comment.content}
-                          </div>
-                          <p className="text-[11px] text-slate-400 mt-0.5 px-1">
-                            {isMe ? "Tú" : (author?.name.split(" ")[0] ?? "?")} ·{" "}
-                            {new Date(comment.createdAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}
-                          </p>
-                        </div>
-                      </div>
+                          </span>
+                        }
+                      >
+                        {p.name.split(" ")[0]}
+                      </Chip>
                     );
-                  })
-                )}
-              </div>
-
-              {/* Comment input */}
-              <div className="px-3 py-3 border-t border-slate-100 flex-shrink-0 flex gap-2 items-center sticky bottom-0 sm:static bg-white safe-area-bottom">
-                <div
-                  className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[9px] font-bold text-white"
-                  style={{ background: PRIMARY }}
-                >
-                  {initials(currentProfile.name)}
+                  })}
                 </div>
-                <input
-                  type="text"
-                  value={commentText}
-                  onChange={e => setCommentText(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter" && commentText.trim() && !sendingComment) handleSendComment(); }}
-                  placeholder="Escribe un comentario…"
-                  className="flex-1 min-w-0 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-100"
-                />
-                <button
-                  onClick={handleSendComment}
-                  disabled={!commentText.trim() || sendingComment}
-                  aria-label="Enviar comentario"
-                  className="rounded-full p-2.5 sm:p-1.5 disabled:opacity-40 transition-colors flex-shrink-0 bg-primary hover:bg-primary/90"
-                >
-                  <Send className="w-3.5 h-3.5 text-white" />
-                </button>
               </div>
             </div>
           </div>
+
+          {/* DERECHA — comentarios */}
+          <div className="w-full sm:w-72 flex-shrink-0 flex flex-col bg-white sm:min-h-0">
+            <div className="px-4 py-3 border-b border-slate-200 flex-shrink-0">
+              <p className="text-secondary font-semibold text-slate-600">
+                Comentarios{localComments.length > 0 ? ` · ${localComments.length}` : ""}
+              </p>
+            </div>
+
+            {/* Hilo */}
+            <div className="flex-1 sm:overflow-y-auto px-4 py-3 space-y-3">
+              {localComments.length === 0 ? (
+                <p className="text-secondary text-slate-500 text-center py-6">Sin comentarios</p>
+              ) : (
+                localComments.map(comment => {
+                  const author = profiles.find(p => p.id === comment.authorId);
+                  const isMe = comment.authorId === currentProfile.id;
+                  return (
+                    <div key={comment.id} className={`flex gap-2 items-end ${isMe ? "flex-row-reverse" : ""}`}>
+                      <div
+                        className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-badge font-bold text-white"
+                        style={{ background: PRIMARY }}
+                        aria-hidden="true"
+                      >
+                        {author ? initials(author.name) : "?"}
+                      </div>
+                      <div className={`flex-1 max-w-[82%] flex flex-col ${isMe ? "items-end" : "items-start"}`}>
+                        <div
+                          className={`rounded-2xl px-3 py-2 text-secondary leading-relaxed whitespace-pre-wrap break-words ${
+                            isMe
+                              ? "bg-blue-600 text-white rounded-br-sm"
+                              : "bg-slate-100 text-slate-700 rounded-bl-sm"
+                          }`}
+                        >
+                          {comment.content}
+                        </div>
+                        <p className="text-meta text-slate-500 mt-0.5 px-1">
+                          {isMe ? "Tú" : (author?.name.split(" ")[0] ?? "?")} ·{" "}
+                          {new Date(comment.createdAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Nuevo comentario */}
+            <div className="px-3 py-3 border-t border-slate-200 flex-shrink-0 flex gap-2 items-center bg-white">
+              <div
+                className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-badge font-bold text-white"
+                style={{ background: PRIMARY }}
+                aria-hidden="true"
+              >
+                {initials(currentProfile.name)}
+              </div>
+              <Input
+                type="text"
+                value={commentText}
+                onChange={e => setCommentText(e.target.value)}
+                // Enter envía el comentario (no el formulario de la tarea)
+                onKeyDown={e => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (commentText.trim() && !sendingComment) void handleSendComment();
+                  }
+                }}
+                aria-label="Nuevo comentario"
+                placeholder="Escribe un comentario…"
+                className="flex-1 min-w-0 rounded-full bg-slate-50 py-1.5 text-secondary"
+              />
+              <IconButton
+                label="Enviar comentario"
+                variant="primary"
+                onClick={() => void handleSendComment()}
+                disabled={!commentText.trim() || sendingComment}
+                loading={sendingComment}
+                className="rounded-full"
+              >
+                <Send />
+              </IconButton>
+            </div>
+          </div>
         </div>
-      </div>
+      </Sheet>
 
       {/* Confirmación de borrado */}
       <ConfirmModal
         open={confirmDelete}
         title="¿Eliminar esta tarea?"
         message="Esta acción no se puede deshacer."
-        confirmLabel="Eliminar"
+        confirmLabel={L.eliminar}
         variant="danger"
         onConfirm={async () => {
           setActionError(null);

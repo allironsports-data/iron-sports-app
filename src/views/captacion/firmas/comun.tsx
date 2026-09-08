@@ -20,7 +20,7 @@ export function FirmasStatusChip({ status, onChange, size = 'sm' }: {
       <button
         onClick={() => setOpen(o => !o)}
         className={`inline-flex items-center gap-1.5 rounded-full border font-semibold transition-colors ${cfg.bg} ${cfg.text} ${cfg.border} ${
-          size === 'sm' ? 'px-2 py-0.5 text-[11px]' : 'px-2.5 py-1 text-xs'
+          size === 'sm' ? 'px-2 py-0.5 text-badge' : 'px-2.5 py-1 text-xs'
         }`}
       >
         <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
@@ -61,14 +61,14 @@ export function FirmasManagers({ managerIds, profiles, max = 3 }: { managerIds: 
           <span
             key={p.id}
             title={p.name}
-            className={`w-5 h-5 rounded-full border border-white flex items-center justify-center text-[8.5px] font-bold ${c.bg} ${c.text}`}
+            className={`w-5 h-5 rounded-full border border-white flex items-center justify-center text-badge font-bold ${c.bg} ${c.text}`}
           >
             {(p.avatar || p.name.slice(0, 2)).slice(0, 3).toUpperCase()}
           </span>
         )
       })}
       {mgrs.length > max && (
-        <span className="w-5 h-5 rounded-full border border-white bg-slate-100 text-slate-500 flex items-center justify-center text-[8.5px] font-bold">
+        <span className="w-5 h-5 rounded-full border border-white bg-slate-100 text-slate-500 flex items-center justify-center text-badge font-bold">
           +{mgrs.length - max}
         </span>
       )}
@@ -93,7 +93,7 @@ export function FirmasLinkSearch({ scoutingPlayers, onSelect, placeholder }: {
   return (
     <div className="relative">
       <div className="relative">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
         <input
           value={q}
           onChange={e => setQ(e.target.value)}
@@ -110,7 +110,7 @@ export function FirmasLinkSearch({ scoutingPlayers, onSelect, placeholder }: {
               className="w-full text-left px-3 py-1.5 hover:bg-slate-50"
             >
               <span className="text-xs font-medium text-slate-800">{p.fullName}</span>
-              <span className="text-[11px] text-slate-400 ml-1.5">
+              <span className="text-badge text-slate-500 ml-1.5">
                 {[p.team, p.birthdate ? p.birthdate.slice(0, 4) : null].filter(Boolean).join(' · ') || '—'}
               </span>
             </button>
@@ -143,18 +143,18 @@ export function FirmasHoverCard({ entry, sp, reports, profiles, pos }: {
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="text-sm font-bold text-slate-800 truncate">{sp?.fullName ?? entry.playerName}</div>
-          <div className="text-[11px] text-slate-500 truncate">
+          <div className="text-badge text-slate-500 truncate">
             {sp
               ? [sp.position1, sp.birthdate ? sp.birthdate.slice(0, 4) : null, sp.team].filter(Boolean).join(' · ')
               : entry.zone}
           </div>
         </div>
-        <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold flex-shrink-0 ${cfg.bg} ${cfg.text} ${cfg.border}`}>
+        <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-badge font-semibold flex-shrink-0 ${cfg.bg} ${cfg.text} ${cfg.border}`}>
           <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
           {cfg.label}
         </span>
       </div>
-      <div className="mt-1.5 flex items-center gap-2 flex-wrap text-[11px] text-slate-500">
+      <div className="mt-1.5 flex items-center gap-2 flex-wrap text-badge text-slate-500">
         <span className="bg-slate-100 rounded px-1.5 py-0.5">{entry.zone}</span>
         {sp && (
           <span className="bg-slate-100 rounded px-1.5 py-0.5">
@@ -172,14 +172,14 @@ export function FirmasHoverCard({ entry, sp, reports, profiles, pos }: {
         )}
       </div>
       {lastComment && (
-        <div className="mt-2 bg-slate-50 rounded-lg px-2 py-1.5 text-[11px] text-slate-600">
+        <div className="mt-2 bg-slate-50 rounded-lg px-2 py-1.5 text-badge text-slate-600">
           {FIRMAS_ACTION_KIND_META[lastComment.kind ?? 'nota']?.icon} {lastComment.text.length > 90 ? lastComment.text.slice(0, 90) + '…' : lastComment.text}
-          <span className="text-slate-400"> · {lastComment.author?.split(' ')[0]} · {relativeDate(lastComment.date) || fmtDate(lastComment.date)}</span>
+          <span className="text-slate-500"> · {lastComment.author?.split(' ')[0]} · {relativeDate(lastComment.date) || fmtDate(lastComment.date)}</span>
         </div>
       )}
       <div className="mt-2 flex items-center justify-between">
         <FirmasManagers managerIds={entry.managers} profiles={profiles} />
-        <span className="text-[10.5px] text-slate-400">clic para abrir el panel</span>
+        <span className="text-badge text-slate-500">clic para abrir el panel</span>
       </div>
     </div>
   )

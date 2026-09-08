@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { X, Plus, Trash2, FileText, Maximize2, Minimize2, Pencil, ClipboardList, Download } from 'lucide-react'
+import { X, Plus, Trash2, FileText, Maximize2, Minimize2, Pencil, ClipboardList, Download, ArrowLeft, Star, Check, Video, MapPin, Link2 } from 'lucide-react'
 import { generarInformeScouting } from '../../lib/informeScouting'
 import type { ScoutingPlayer, ScoutingReport, ScoutingAssessment, ScoutingMatch, ScoutingMatchPlayer, FirmasEntry } from '../../types'
 import type { Profile } from '../../contexts/AuthContext'
@@ -7,7 +7,12 @@ import type { Equipo as EquipoCatalogo } from '../../lib/db'
 import { isValidName } from '../../lib/validate'
 import { ZONA_CORTA, SIN_ZONA, normEquipo, type Zona } from '../../lib/zonas'
 import type { buscarJugadoresParecidos } from '../../lib/duplicados'
-import { AssessmentChip, FormRow, InfoItem, Spinner, ReportCard } from './comun'
+import { Button, IconButton, Field, Input, Select, Textarea, Badge } from '../../components/ui'
+import { ConfirmModal } from '../../components/ConfirmModal'
+import { useBackClose } from '../../hooks/useBackClose'
+import { useBeforeUnload } from '../../hooks/useBeforeUnload'
+import { L } from '../../lib/labels'
+import { AssessmentChip, InfoItem, ReportCard } from './comun'
 import { type ShowToast, type CaptacionTab, type ConclusionOption, ASSESSMENT_CONFIG, ALL_ASSESSMENTS, POSITIONS_SCOUTING, CONCLUSION_OPTIONS, MONTHS_ES, REPORT_TEMPLATE, birthYearFromBirthdate, fmtDate } from './helpers'
 import { AddToFirmasButton } from './firmas/AddToFirmasButton'
 import { type FilaEquipo, SIN_CATEGORIA, inicioTemporada, etiquetaTemporada } from './filasEquipos'
@@ -17,13 +22,18 @@ import { type FilaEquipo, SIN_CATEGORIA, inicioTemporada, etiquetaTemporada } fr
 // TODO el estado y los handlers viven en Captacion.tsx: el borrador y la
 // cola de envío tienen que sobrevivir al cierre del panel, y el ESC de la
 // raíz necesita saber si hay un formulario abierto. Aquí solo se pinta.
+//
+// En escritorio es una columna fija a la derecha (la lista se estrecha);
+// en móvil ocupa toda la pantalla (h-dvh) y el botón «atrás» lo cierra.
 
 type PlayerFormState = Omit<ScoutingPlayer, 'id' | 'createdAt'>
 type JugadorParecido = ReturnType<typeof buscarJugadoresParecidos>[number]
 
+const LABEL_SECCION = 'text-badge font-semibold text-slate-500 uppercase tracking-wide'
+
 export function PlayerPanel({
   // carcasa
-  fullscreen, setFullscreen, isDesktop, headerHeight, closePanel, showToast, isAdmin, currentProfile, profiles,
+  fullscreen, setFullscreen, isDesktop, closePanel, showToast, isAdmin, currentProfile, profiles,
   setCaptTab, abrirJugador,
   // jugador / equipo / formulario abiertos
   panelPlayerId, panelPlayer, setPanelPlayerId, panelEquipo, setPanelEquipo, volverAEquipo, setVolverAEquipo,
@@ -48,13 +58,12 @@ export function PlayerPanel({
   fullscreen: boolean
   setFullscreen: React.Dispatch<React.SetStateAction<boolean>>
   isDesktop: boolean
-  headerHeight: number
   closePanel: () => void
   showToast: ShowToast
   isAdmin: boolean
   currentProfile: Profile
   profiles: Profile[]
-  setCaptTab: React.Dispatch<React.SetStateAction<CaptacionTab>>
+  setCaptTab: (t: CaptacionTab) => void
   abrirJugador: (id: string | null, desdeEquipo?: string) => void
   panelPlayerId: string | null
   panelPlayer: ScoutingPlayer | null
@@ -128,6 +137,11 @@ export function PlayerPanel({
 }) {
   const [exportandoInforme, setExportandoInforme] = useState(false)
 
+  // Botón «atrás» del móvil: cierra el panel (el componente solo se monta abierto)
+  useBackClose(true, closePanel, 'capt-panel')
+  // El informe a medio escribir se guarda como borrador, pero avisamos igual al recargar
+  useBeforeUnload(showAddReportForm && (reportText.trim().length > 0 || reportTitle.trim().length > 0))
+
   async function handleExportarInforme() {
     if (!panelPlayer || exportandoInforme) return
     setExportandoInforme(true)
@@ -140,55 +154,54 @@ export function PlayerPanel({
     }
   }
 
+  const titulo = panelEquipo
+    ? (filaEquipoAbierta?.nombre ?? panelEquipo)
+    : (showAddPlayer ? 'Nuevo jugador' : showEditPlayer ? `Editar: ${editTarget?.fullName ?? ''}` : panelPlayer?.fullName ?? '')
+
+  // Posición: en móvil pantalla completa; en escritorio columna derecha bajo la cabecera
+  const carcasa = fullscreen
+    ? 'fixed inset-x-0 top-0 lg:top-[var(--shell-h,0px)] h-dvh lg:h-[calc(100dvh-var(--shell-h,0px))] z-[60] lg:z-40 flex flex-col bg-white overflow-hidden'
+    : 'fixed inset-0 h-dvh z-[60] lg:inset-auto lg:right-0 lg:top-[var(--shell-h,0px)] lg:h-[calc(100dvh-var(--shell-h,0px))] lg:w-[480px] lg:z-40 bg-white shadow-2xl flex flex-col border-l border-slate-200'
+
   return (
     <>
       {!fullscreen && !isDesktop && (
-        <div
-          className="fixed inset-x-0 bottom-0 bg-black/20 z-30"
-          style={{ top: headerHeight }}
-          onClick={closePanel}
-        />
+        <div className="fixed inset-0 bg-black/20 z-50" onClick={closePanel} aria-hidden="true" />
       )}
 
-      <div
-        className={
-          fullscreen
-            ? 'fixed inset-x-0 z-40 flex flex-col bg-white overflow-hidden'
-            : 'fixed right-0 w-full sm:w-[480px] bg-white shadow-2xl z-40 flex flex-col border-l border-slate-200'
-        }
-        style={{
-          top: headerHeight,
-          height: `calc(100vh - ${headerHeight}px)`,
-        }}
-      >
-        {/* Panel header */}
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-200 bg-slate-50 flex-shrink-0">
+      <div role="dialog" aria-modal={!isDesktop || fullscreen ? true : undefined} aria-label={titulo} className={carcasa}>
+        {/* Cabecera del panel */}
+        <div className="flex items-center gap-2 px-3 sm:px-4 py-2.5 border-b border-slate-200 bg-slate-50 flex-shrink-0">
           {volverAEquipo && panelPlayer && !showEditPlayer && (
-            <button
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={<ArrowLeft />}
               onClick={() => { setPanelPlayerId(null); setPanelEquipo(volverAEquipo); setVolverAEquipo(null) }}
               title={`Volver a ${volverAEquipo}`}
-              className="flex-shrink-0 flex items-center gap-1 text-[11px] font-semibold text-slate-500 hover:text-primary border border-slate-200 rounded-lg px-2 py-1 bg-white"
+              aria-label={`Volver a ${volverAEquipo}`}
+              className="flex-shrink-0"
             >
-              ← <span className="hidden sm:inline max-w-[110px] truncate">{volverAEquipo}</span>
-            </button>
+              <span className="hidden sm:inline max-w-[110px] truncate">{volverAEquipo}</span>
+            </Button>
           )}
           <div className="flex-1 min-w-0">
             {panelEquipo && (
               <div>
-                <h2 className="text-base font-semibold text-slate-800 truncate flex items-center gap-1.5">
+                <h2 className="text-body sm:text-base font-semibold text-slate-800 truncate flex items-center gap-1.5">
                   {renombrando === null ? (
                     <>
                       <span className="truncate">{filaEquipoAbierta?.nombre ?? panelEquipo}</span>
-                      <button
+                      <IconButton
+                        label="Cambiar el nombre del equipo"
                         onClick={() => setRenombrando(filaEquipoAbierta?.nombre ?? panelEquipo)}
-                        title="Cambiar el nombre del equipo"
-                        className="text-slate-300 hover:text-primary flex-shrink-0"
+                        className="text-slate-600 hover:text-primary"
                       >
-                        <Pencil className="w-3 h-3" />
-                      </button>
+                        <Pencil />
+                      </IconButton>
                     </>
                   ) : (
-                    <input
+                    <Input
                       value={renombrando}
                       onChange={e => setRenombrando(e.target.value)}
                       onKeyDown={e => {
@@ -196,11 +209,12 @@ export function PlayerPanel({
                         if (e.key === 'Escape') setRenombrando(null)
                       }}
                       autoFocus
-                      className="text-base font-semibold border border-primary rounded-lg px-2 py-0.5 w-full focus:outline-none"
+                      aria-label="Nuevo nombre del equipo"
+                      className="font-semibold py-0.5"
                     />
                   )}
                 </h2>
-                <div className="text-xs text-slate-500 mt-0.5">
+                <div className="text-meta text-slate-500 mt-0.5">
                   {(() => {
                     const f = filaEquipoAbierta
                     if (!f) return null
@@ -212,11 +226,11 @@ export function PlayerPanel({
             )}
             {panelPlayer && !showEditPlayer && (
               <div>
-                <h2 className="text-base font-semibold text-slate-800 truncate">{panelPlayer.fullName}</h2>
+                <h2 className="text-body sm:text-base font-semibold text-slate-800 truncate">{panelPlayer.fullName}</h2>
                 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                   <AssessmentChip a={panelPlayer.assessment} />
                   {panelPlayer.categoria && (
-                    <span className="text-xs text-slate-500">{panelPlayer.categoria}</span>
+                    <span className="text-meta text-slate-500">{panelPlayer.categoria}</span>
                   )}
                   <AddToFirmasButton
                     player={panelPlayer}
@@ -230,99 +244,98 @@ export function PlayerPanel({
               </div>
             )}
             {(showAddPlayer || showEditPlayer) && (
-              <h2 className="text-base font-semibold text-slate-800">
+              <h2 className="text-body sm:text-base font-semibold text-slate-800">
                 {showAddPlayer ? 'Nuevo jugador' : `Editar: ${editTarget?.fullName ?? ''}`}
               </h2>
             )}
           </div>
-          <div className="flex items-center gap-1 flex-shrink-0">
+          <div className="flex items-center gap-0.5 flex-shrink-0">
             {panelPlayer && !showEditPlayer && (
-              <button
+              <IconButton
+                label={fullscreen ? 'Minimizar panel' : 'Pantalla completa'}
                 onClick={() => setFullscreen(f => !f)}
-                className="p-2.5 sm:p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
-                title={fullscreen ? 'Minimizar' : 'Pantalla completa'}
-                aria-label={fullscreen ? 'Minimizar panel' : 'Pantalla completa'}
+                className="hidden sm:inline-flex"
               >
-                {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-              </button>
+                {fullscreen ? <Minimize2 /> : <Maximize2 />}
+              </IconButton>
             )}
-            <button onClick={closePanel} aria-label="Cerrar panel" className="p-2.5 sm:p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
-              <X className="w-4 h-4" />
-            </button>
+            <IconButton label="Cerrar panel" onClick={closePanel}>
+              <X />
+            </IconButton>
           </div>
         </div>
 
-        {/* Panel body */}
+        {/* Cuerpo del panel */}
         <div className={`flex-1 overflow-y-auto ${fullscreen ? 'max-w-4xl mx-auto w-full' : ''} pb-14 sm:pb-0`}>
 
-          {/* ── Add / Edit player form ── */}
+          {/* ── Alta / edición de jugador ── */}
           {(showAddPlayer || showEditPlayer) && (
-            <div className="p-4 space-y-3">
-              <FormRow label="Nombre *">
-                <input
+            <form
+              className="p-4 space-y-3"
+              onSubmit={e => { e.preventDefault(); void handleSavePlayer() }}
+            >
+              <Field label="Nombre" required error={playerNameError || undefined}>
+                <Input
                   value={form.fullName}
                   onChange={e => {
                     const v = e.target.value
                     setForm(f => ({ ...f, fullName: v }))
                     if (playerNameError && isValidName(v)) setPlayerNameError('')
                   }}
-                  className="field"
                   placeholder="Nombre completo"
-                  aria-invalid={!!playerNameError}
+                  autoFocus
                 />
-                {playerNameError && (
-                  <p className="text-xs text-red-500 mt-1">{playerNameError}</p>
-                )}
-                {jugadoresParecidos.length > 0 && (
-                  <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 text-xs text-amber-800 space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold">¿Es alguno de estos?</span>
-                      <button onClick={() => setOcultarParecidos(true)} className="ml-auto text-[11px] text-amber-700 hover:underline">No, crear nuevo</button>
-                    </div>
-                    {jugadoresParecidos.map(({ player: p, tipo, mismoEquipo }) => (
-                      <div key={p.id} className="flex items-center gap-2">
-                        <span className="min-w-0 truncate">
-                          <b>{p.fullName}</b>
-                          <span className="text-amber-700/80"> · {p.team || 'sin equipo'} · {reportCountByPlayer[p.id] ?? 0} inf.</span>
-                          {tipo === 'exacto' && <span className="ml-1 text-[10px] font-bold uppercase">mismo nombre</span>}
-                          {tipo !== 'exacto' && mismoEquipo && <span className="ml-1 text-[10px] font-bold uppercase">mismo equipo</span>}
-                        </span>
-                        <button
-                          onClick={() => { setShowAddPlayer(false); setForm(emptyForm()); abrirJugador(p.id) }}
-                          className="ml-auto flex-shrink-0 px-2 py-0.5 rounded-md bg-amber-600 text-white text-[11px] font-semibold hover:bg-amber-700"
-                        >
-                          Abrir
-                        </button>
-                      </div>
-                    ))}
+              </Field>
+              {jugadoresParecidos.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 text-secondary text-amber-800 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold">¿Es alguno de estos?</span>
+                    <Button size="sm" variant="link" onClick={() => setOcultarParecidos(true)} className="ml-auto text-amber-700">No, crear nuevo</Button>
                   </div>
-                )}
-              </FormRow>
+                  {jugadoresParecidos.map(({ player: p, tipo, mismoEquipo }) => (
+                    <div key={p.id} className="flex items-center gap-2">
+                      <span className="min-w-0 truncate">
+                        <b>{p.fullName}</b>
+                        <span className="text-amber-700/80"> · {p.team || 'sin equipo'} · {reportCountByPlayer[p.id] ?? 0} inf.</span>
+                        {tipo === 'exacto' && <span className="ml-1 text-badge font-bold uppercase">mismo nombre</span>}
+                        {tipo !== 'exacto' && mismoEquipo && <span className="ml-1 text-badge font-bold uppercase">mismo equipo</span>}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        onClick={() => { setShowAddPlayer(false); setForm(emptyForm()); abrirJugador(p.id) }}
+                        className="ml-auto flex-shrink-0 bg-amber-600 hover:bg-amber-700"
+                      >
+                        Abrir
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <FormRow label="Posición 1">
-                  <select value={form.position1 ?? ''} onChange={e => setForm(f => ({ ...f, position1: e.target.value }))} className="field">
+                <Field label="Posición 1">
+                  <Select value={form.position1 ?? ''} onChange={e => setForm(f => ({ ...f, position1: e.target.value }))}>
                     <option value="">—</option>
                     {POSITIONS_SCOUTING.map(pos => <option key={pos} value={pos}>{pos}</option>)}
-                  </select>
-                </FormRow>
-                <FormRow label="Posición 2">
-                  <select value={form.position2 ?? ''} onChange={e => setForm(f => ({ ...f, position2: e.target.value }))} className="field">
+                  </Select>
+                </Field>
+                <Field label="Posición 2">
+                  <Select value={form.position2 ?? ''} onChange={e => setForm(f => ({ ...f, position2: e.target.value }))}>
                     <option value="">—</option>
                     {POSITIONS_SCOUTING.map(pos => <option key={pos} value={pos}>{pos}</option>)}
-                  </select>
-                </FormRow>
+                  </Select>
+                </Field>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <FormRow label="Fecha nac.">
-                  <input type="date" value={form.birthdate ?? ''} onChange={e => setForm(f => ({ ...f, birthdate: e.target.value }))}
-                    className="field" />
-                </FormRow>
-                <FormRow label="Pie">
-                  <select value={form.foot ?? ''} onChange={e => setForm(f => ({ ...f, foot: e.target.value }))} className="field">
+                <Field label="Fecha de nacimiento">
+                  <Input type="date" value={form.birthdate ?? ''} onChange={e => setForm(f => ({ ...f, birthdate: e.target.value }))} />
+                </Field>
+                <Field label="Pie">
+                  <Select value={form.foot ?? ''} onChange={e => setForm(f => ({ ...f, foot: e.target.value }))}>
                     <option value="">—</option>
                     <option>Derecho</option><option>Izquierdo</option><option>Ambidiestro</option>
-                  </select>
-                </FormRow>
+                  </Select>
+                </Field>
               </div>
               {/* Equipo y categoría: se sugiere el catálogo, pero se puede
                   escribir cualquier cosa (un equipo nuevo se da de alta solo). */}
@@ -334,8 +347,8 @@ export function PlayerPanel({
               <datalist id="lista-categorias">
                 {categoriasConocidas.map(c => <option key={c} value={c} />)}
               </datalist>
-              <FormRow label="Equipo">
-                <input
+              <Field label="Equipo">
+                <Input
                   list="lista-equipos"
                   value={form.team ?? ''}
                   onChange={e => {
@@ -348,61 +361,50 @@ export function PlayerPanel({
                       categoria: delCatalogo?.categoria && !f.categoria ? delCatalogo.categoria : f.categoria,
                     }))
                   }}
-                  className="field" placeholder="Escribe y elige, o pon uno nuevo" />
-              </FormRow>
+                  placeholder="Escribe y elige, o pon uno nuevo"
+                />
+              </Field>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <FormRow label="Categoría">
-                  <input
+                <Field label="Categoría">
+                  <Input
                     list="lista-categorias"
                     value={form.categoria ?? ''}
                     onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))}
-                    className="field" placeholder="Juveniles, Segunda RFEF..." />
-                </FormRow>
-                <FormRow label="Nac.">
-                  <input value={form.nationality ?? ''} onChange={e => setForm(f => ({ ...f, nationality: e.target.value }))}
-                    className="field" placeholder="Española..." />
-                </FormRow>
+                    placeholder="Juveniles, Segunda RFEF..."
+                  />
+                </Field>
+                <Field label="Nacionalidad">
+                  <Input value={form.nationality ?? ''} onChange={e => setForm(f => ({ ...f, nationality: e.target.value }))} placeholder="Española..." />
+                </Field>
               </div>
-              <FormRow label="Assessment">
-                <select value={form.assessment ?? ''} onChange={e => setForm(f => ({ ...f, assessment: (e.target.value as ScoutingAssessment) || undefined }))} className="field">
+              <Field label={L.etiquetaJugador}>
+                <Select value={form.assessment ?? ''} onChange={e => setForm(f => ({ ...f, assessment: (e.target.value as ScoutingAssessment) || undefined }))}>
                   <option value="">Sin valorar</option>
                   {ALL_ASSESSMENTS.map(a => <option key={a}>{a}</option>)}
-                </select>
-              </FormRow>
-              <FormRow label="Agencia">
-                <input value={form.agency ?? ''} onChange={e => setForm(f => ({ ...f, agency: e.target.value }))}
-                  className="field" placeholder="Representante..." />
-              </FormRow>
-              <FormRow label="Contrato club">
-                <input value={form.clubContract ?? ''} onChange={e => setForm(f => ({ ...f, clubContract: e.target.value }))}
-                  className="field" placeholder="30/06/2026" />
-              </FormRow>
-              <FormRow label="Contacto">
-                <input value={form.contacto ?? ''} onChange={e => setForm(f => ({ ...f, contacto: e.target.value }))}
-                  className="field" placeholder="Email / teléfono" />
-              </FormRow>
-              <FormRow label="Comentarios">
-                <textarea value={form.comentarios ?? ''} onChange={e => setForm(f => ({ ...f, comentarios: e.target.value }))}
-                  rows={3} className="field resize-none" placeholder="Notas generales..." />
-              </FormRow>
+                </Select>
+              </Field>
+              <Field label="Agencia">
+                <Input value={form.agency ?? ''} onChange={e => setForm(f => ({ ...f, agency: e.target.value }))} placeholder="Representante..." />
+              </Field>
+              <Field label="Contrato club">
+                <Input value={form.clubContract ?? ''} onChange={e => setForm(f => ({ ...f, clubContract: e.target.value }))} placeholder="30/06/2026" />
+              </Field>
+              <Field label="Contacto">
+                <Input value={form.contacto ?? ''} onChange={e => setForm(f => ({ ...f, contacto: e.target.value }))} placeholder="Email / teléfono" />
+              </Field>
+              <Field label="Comentarios">
+                <Textarea value={form.comentarios ?? ''} onChange={e => setForm(f => ({ ...f, comentarios: e.target.value }))} rows={3} placeholder="Notas generales..." />
+              </Field>
 
               <div className="flex gap-2 pt-2">
-                <button
-                  onClick={() => { setShowAddPlayer(false); setShowEditPlayer(false) }}
-                  className="flex-1 py-2 text-sm border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleSavePlayer}
-                  disabled={!form.fullName.trim() || savingPlayer}
-                  className="flex-1 py-2 text-sm bg-primary text-white rounded-lg font-medium hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
-                >
-                  {savingPlayer && <Spinner />}
+                <Button variant="secondary" onClick={() => { setShowAddPlayer(false); setShowEditPlayer(false) }} className="flex-1">
+                  {L.cancelar}
+                </Button>
+                <Button type="submit" variant="primary" loading={savingPlayer} disabled={!form.fullName.trim()} className="flex-1">
                   {savingPlayer ? 'Guardando…' : showEditPlayer ? 'Guardar cambios' : 'Crear jugador'}
-                </button>
+                </Button>
               </div>
-            </div>
+            </form>
           )}
 
           {/* ── Ficha del equipo ── */}
@@ -418,22 +420,30 @@ export function PlayerPanel({
                 <div className="space-y-4">
                   {/* Marcas de control */}
                   <div className="flex flex-wrap items-center gap-2">
-                    <button
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      icon={<Star className={f.relevante ? 'fill-current' : ''} />}
+                      aria-pressed={f.relevante}
                       onClick={() => void guardar({ relevante: !f.relevante })}
-                      className={`inline-flex items-center gap-1.5 text-xs font-bold rounded-lg border px-3 py-1.5 transition-colors ${
-                        f.relevante ? 'bg-amber-100 text-amber-700 border-amber-300' : 'bg-white text-slate-500 border-slate-200 hover:border-amber-400'
-                      }`}
-                    >★ {f.relevante ? 'Relevante' : 'Marcar relevante'}</button>
-                    <button
+                      className={f.relevante ? 'bg-amber-100 text-amber-700 border-amber-300 hover:bg-amber-100' : 'hover:border-amber-400'}
+                    >
+                      {f.relevante ? 'Relevante' : 'Marcar relevante'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      icon={<Check />}
+                      aria-pressed={f.cubierto}
                       onClick={() => void guardar({ cubierto: !f.cubierto })}
-                      className={`inline-flex items-center gap-1.5 text-xs font-bold rounded-lg border px-3 py-1.5 transition-colors ${
-                        f.cubierto ? 'bg-green-100 text-green-700 border-green-300' : 'bg-white text-slate-500 border-slate-200 hover:border-green-400'
-                      }`}
-                    >✓ {f.cubierto ? 'Cubierto' : 'Marcar cubierto'}</button>
+                      className={f.cubierto ? 'bg-green-100 text-green-700 border-green-300 hover:bg-green-100' : 'hover:border-green-400'}
+                    >
+                      {f.cubierto ? 'Cubierto' : 'Marcar cubierto'}
+                    </Button>
                   </div>
 
                   {/* Los números */}
-                  <div className="grid grid-cols-4 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {[
                       { n: f.jugadores, l: 'jugadores' },
                       { n: f.informes, l: 'informes' },
@@ -442,52 +452,51 @@ export function PlayerPanel({
                     ].map(x => (
                       <div key={x.l} className="bg-slate-50 rounded-lg px-2 py-1.5">
                         <div className="text-base font-bold text-slate-800 leading-none">{x.n}</div>
-                        <div className="text-[10px] text-slate-500 mt-0.5">{x.l}</div>
+                        <div className="text-meta text-slate-500 mt-0.5">{x.l}</div>
                       </div>
                     ))}
                   </div>
 
-                  {/* Categoría (la zona se cambia en 📍 Zonas, porque es del club) */}
+                  {/* Categoría (la zona se cambia en Zonas, porque es del club) */}
                   <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Categoría</label>
-                      <select
+                    <Field label="Categoría">
+                      <Select
                         value={f.categoria === SIN_CATEGORIA ? '' : f.categoria}
                         onChange={e => void guardar({ categoria: e.target.value || undefined })}
-                        className="field"
                       >
                         <option value="">— sin categoría —</option>
                         {categoriasConocidas.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Zona (del club {f.club})</label>
-                      <button onClick={() => setZonasAbierto(true)} className="field text-left hover:border-primary">
+                      </Select>
+                    </Field>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-meta font-semibold text-slate-600">Zona (del club {f.club})</span>
+                      <Button variant="secondary" icon={<MapPin />} onClick={() => setZonasAbierto(true)} className="justify-start">
                         {f.zona === SIN_ZONA ? <span className="text-amber-600">sin zona — asignar</span> : f.zona}
-                      </button>
+                      </Button>
                     </div>
                   </div>
 
                   {/* Últimos partidos */}
                   <div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1.5">Partidos suyos ({partidosEquipo.length})</p>
+                    <p className={`${LABEL_SECCION} mb-1.5`}>Partidos suyos ({partidosEquipo.length})</p>
                     {partidosEquipo.length === 0 ? (
-                      <p className="text-[11px] text-slate-400 italic">Ninguno todavía.</p>
+                      <p className="text-secondary text-slate-500 italic">Ninguno todavía.</p>
                     ) : (
                       <div className="space-y-1">
                         {partidosEquipo.slice(0, 8).map(m => (
                           <button
                             key={m.id}
+                            type="button"
                             onClick={() => { closePanel(); setCaptTab('partidos'); setDetailMatchId(m.id) }}
-                            className="w-full text-left text-[11px] bg-white border border-slate-200 rounded-lg px-2 py-1 hover:border-primary flex items-center gap-2"
+                            className="w-full text-left text-secondary bg-white border border-slate-200 rounded-lg px-2 py-2 sm:py-1 hover:border-primary flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-primary/40 outline-none"
                           >
-                            <span className="text-slate-400 w-14 flex-shrink-0">{fmtDate(m.date)}</span>
+                            <span className="text-slate-500 w-16 flex-shrink-0">{fmtDate(m.date)}</span>
                             <span className="text-slate-700 truncate">{m.homeTeam} – {m.awayTeam}</span>
-                            {m.status === 'visto' && <span className="ml-auto text-green-600">✓</span>}
+                            {m.status === 'visto' && <Check aria-label="Visto" className="ml-auto w-3.5 h-3.5 text-green-600" />}
                           </button>
                         ))}
                         {partidosEquipo.length > 8 && (
-                          <p className="text-[10.5px] text-slate-400 italic">y {partidosEquipo.length - 8} más</p>
+                          <p className="text-meta text-slate-500 italic">y {partidosEquipo.length - 8} más</p>
                         )}
                       </div>
                     )}
@@ -496,24 +505,25 @@ export function PlayerPanel({
 
                 {/* Plantilla */}
                 <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-1.5">
-                    Jugadores en la BBDD ({f.plantilla.length})
+                  <p className={`${LABEL_SECCION} mb-1.5`}>
+                    Jugadores registrados ({f.plantilla.length})
                   </p>
                   {f.plantilla.length === 0 ? (
-                    <p className="text-[11px] text-slate-400 italic">
-                      Ninguno. Usa «📋 Actualizar plantilla» para pegar la plantilla del club de golpe.
+                    <p className="text-secondary text-slate-500 italic">
+                      Ninguno. Usa «Actualizar plantilla» para pegar la plantilla del club de golpe.
                     </p>
                   ) : (
                     <div className="space-y-1">
                       {f.plantilla.map(p => (
                         <button
                           key={p.id}
+                          type="button"
                           onClick={() => abrirJugador(p.id, f.nombre)}
-                          className="w-full flex items-center gap-2 text-left bg-white border border-slate-200 rounded-lg px-2 py-1.5 hover:border-primary"
+                          className="w-full flex items-center gap-2 text-left bg-white border border-slate-200 rounded-lg px-2 py-2 sm:py-1.5 hover:border-primary focus-visible:ring-2 focus-visible:ring-primary/40 outline-none"
                         >
-                          <span className="text-xs font-semibold text-slate-700 truncate flex-1">{p.fullName}</span>
-                          <span className="text-[10px] text-slate-400 w-10 text-right">{p.position1 ?? '—'}</span>
-                          <span className="text-[10px] text-slate-400 w-8 text-right">{birthYearFromBirthdate(p.birthdate)}</span>
+                          <span className="text-secondary font-semibold text-slate-700 truncate flex-1">{p.fullName}</span>
+                          <span className="text-meta text-slate-500 w-12 text-right truncate">{p.position1 ?? '—'}</span>
+                          <span className="text-meta text-slate-500 w-8 text-right">{birthYearFromBirthdate(p.birthdate)}</span>
                           <AssessmentChip a={p.assessment} small />
                         </button>
                       ))}
@@ -524,44 +534,46 @@ export function PlayerPanel({
             )
           })()}
 
-          {/* ── Player detail ── */}
+          {/* ── Ficha del jugador ── */}
           {panelPlayer && !showEditPlayer && (
             <div className={`p-4 space-y-5 ${fullscreen ? 'grid grid-cols-1 sm:grid-cols-2 gap-6 items-start' : ''}`}>
               <div className="space-y-4">
-                {/* Info grid */}
+                {/* Datos */}
                 <div className="grid grid-cols-2 gap-2">
                   <InfoItem label="Posición" value={[panelPlayer.position1, panelPlayer.position2].filter(Boolean).join(' / ') || '—'} />
                   <InfoItem label="Año nac." value={birthYearFromBirthdate(panelPlayer.birthdate)} />
                   <InfoItem label="Equipo" value={panelPlayer.team ?? '—'} />
                   <InfoItem label="Categoría" value={panelPlayer.categoria ?? '—'} />
                   <InfoItem label="Pie" value={panelPlayer.foot ?? '—'} />
-                  <InfoItem label="Nac." value={panelPlayer.nationality ?? '—'} />
+                  <InfoItem label="Nacionalidad" value={panelPlayer.nationality ?? '—'} />
                   {panelPlayer.clubContract && <InfoItem label="Contrato" value={panelPlayer.clubContract} />}
                   {panelPlayer.agency && <InfoItem label="Agencia" value={panelPlayer.agency} />}
                 </div>
 
                 {panelPlayer.contacto && (
-                  <div className="px-3 py-2 bg-slate-50 rounded-lg text-xs text-slate-700">
+                  <div className="px-3 py-2 bg-slate-50 rounded-lg text-secondary text-slate-700">
                     <span className="font-medium text-slate-500 mr-1">Contacto:</span>
                     {panelPlayer.contacto}
                   </div>
                 )}
 
                 {panelPlayer.comentarios && (
-                  <div className="px-3 py-2.5 bg-amber-50 border border-amber-100 rounded-lg text-xs text-slate-700 leading-relaxed">
-                    <div className="text-[11px] font-semibold text-amber-600 uppercase mb-1">Comentarios</div>
+                  <div className="px-3 py-2.5 bg-amber-50 border border-amber-100 rounded-lg text-secondary text-slate-700 leading-relaxed">
+                    <div className="text-badge font-semibold text-amber-700 uppercase mb-1">Comentarios</div>
                     {panelPlayer.comentarios}
                   </div>
                 )}
 
-                {/* Quick assessment — available to all users */}
+                {/* Etiqueta rápida — para todos los usuarios */}
                 <div>
-                  <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Assessment</div>
-                  <div className="flex flex-wrap gap-1">
+                  <div className={`${LABEL_SECCION} mb-1.5`}>{L.etiquetaJugador}</div>
+                  <div className="flex flex-wrap gap-1" role="group" aria-label={L.etiquetaJugador}>
                     <button
+                      type="button"
                       onClick={() => handleQuickAssessment(panelPlayer, undefined)}
-                      className={`px-2 py-1.5 sm:py-1 text-[11px] font-medium rounded border transition-colors ${
-                        !panelPlayer.assessment ? 'bg-slate-700 text-white border-slate-700' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
+                      aria-pressed={!panelPlayer.assessment}
+                      className={`px-2.5 min-h-9 sm:min-h-0 sm:py-1 text-meta font-medium rounded border transition-colors ${
+                        !panelPlayer.assessment ? 'bg-slate-700 text-white border-slate-700' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'
                       }`}
                     >
                       Sin valorar
@@ -572,9 +584,11 @@ export function PlayerPanel({
                       return (
                         <button
                           key={a}
+                          type="button"
                           onClick={() => handleQuickAssessment(panelPlayer, a)}
-                          className={`px-2 py-1.5 sm:py-1 text-[11px] font-medium rounded border transition-colors ${
-                            active ? `${cfg.bg} ${cfg.text} ${cfg.border}` : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
+                          aria-pressed={active}
+                          className={`px-2.5 min-h-9 sm:min-h-0 sm:py-1 text-meta font-medium rounded border transition-colors ${
+                            active ? `${cfg.bg} ${cfg.text} ${cfg.border}` : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'
                           }`}
                         >
                           {a}
@@ -584,176 +598,183 @@ export function PlayerPanel({
                   </div>
                 </div>
 
-                {/* Actions */}
+                {/* Acciones */}
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => openEditPlayer(panelPlayer)}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50"
-                  >
+                  <Button variant="secondary" size="sm" icon={<Pencil />} onClick={() => openEditPlayer(panelPlayer)} className="flex-1">
                     Editar jugador
-                  </button>
-                  <button
+                  </Button>
+                  <IconButton
+                    label="Exportar informe en PDF"
+                    variant="secondary"
+                    loading={exportandoInforme}
                     onClick={handleExportarInforme}
-                    disabled={exportandoInforme}
                     title="Ficha y observaciones en PDF, listo para compartir (incluye un resumen generado por IA)"
-                    aria-label="Exportar informe"
-                    className="p-2.5 sm:p-1.5 rounded-lg text-slate-500 hover:bg-slate-50 border border-slate-200 disabled:opacity-60"
                   >
-                    {exportandoInforme
-                      ? <span className="block w-3.5 h-3.5 border-2 border-slate-300 border-t-slate-500 rounded-full animate-spin" />
-                      : <Download className="w-3.5 h-3.5" />}
-                  </button>
+                    <Download />
+                  </IconButton>
                   {isAdmin && (
-                    confirmDeletePlayer ? (
-                      <div className="flex items-center gap-1">
-                        <span className="text-xs text-red-600">¿Eliminar?</span>
-                        <button onClick={handleDeletePlayer} className="px-2 py-1 text-xs bg-red-600 text-white rounded-lg font-medium">Sí</button>
-                        <button onClick={() => setConfirmDeletePlayer(false)} className="px-2 py-1 text-xs border border-slate-200 rounded-lg text-slate-600">No</button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => setConfirmDeletePlayer(true)}
-                        aria-label="Eliminar jugador"
-                        className="p-2.5 sm:p-1.5 rounded-lg text-red-500 hover:bg-red-50 border border-red-100"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )
+                    <IconButton
+                      label="Eliminar jugador"
+                      variant="secondary"
+                      onClick={() => setConfirmDeletePlayer(true)}
+                      className="text-red-600 border-red-100 hover:bg-red-50"
+                    >
+                      <Trash2 />
+                    </IconButton>
                   )}
                 </div>
+                <ConfirmModal
+                  open={confirmDeletePlayer}
+                  title={`Eliminar a ${panelPlayer.fullName}`}
+                  message={`Se eliminará la ficha${(reportCountByPlayer[panelPlayer.id] ?? 0) > 0 ? ` y sus ${reportCountByPlayer[panelPlayer.id]} informe${reportCountByPlayer[panelPlayer.id] !== 1 ? 's' : ''}` : ''}, y dejará de aparecer en los partidos a los que estaba vinculado. Esta acción no se puede deshacer.`}
+                  confirmLabel={L.eliminar}
+                  variant="danger"
+                  onConfirm={handleDeletePlayer}
+                  onCancel={() => setConfirmDeletePlayer(false)}
+                />
               </div>
 
-              {/* Reports section */}
+              {/* Informes */}
               <div className="space-y-4">
                 <div className="border-t border-slate-100 md:hidden" />
                 <div>
-                  {/* Header informes + botón añadir */}
                   {(() => {
                     const { playerTeam, sortedMatches } = panelSortedMatches
 
                     return (
                       <>
                         <div className="flex items-center justify-between mb-2">
-                          <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
-                            <FileText className="w-4 h-4 text-slate-400" />
-                            Informes
-                            {panelReports.length > 0 && (
-                              <span className="ml-1 text-xs bg-slate-100 text-slate-600 rounded-full px-1.5 py-0.5">{panelReports.length}</span>
-                            )}
+                          <h3 className="text-body font-semibold text-slate-700 flex items-center gap-1.5">
+                            <FileText className="w-4 h-4 text-slate-500" />
+                            {L.informes}
+                            {panelReports.length > 0 && <Badge>{panelReports.length}</Badge>}
                           </h3>
-                          <button
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            icon={<Plus />}
+                            aria-expanded={showAddReportForm}
                             onClick={() => {
                               setReportTitle(''); setReportText(''); setReportConclusion(''); setReportMatchId('')
-                              // toggle: if form already open close it
+                              // toggle: si ya está abierto, se cierra
                               setShowAddReportForm(f => !f)
                             }}
-                            className="flex items-center gap-1 px-2.5 py-2 sm:py-1 text-xs font-semibold bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
                           >
-                            <Plus className="w-3 h-3" /> Añadir informe
-                          </button>
+                            Añadir informe
+                          </Button>
                         </div>
 
-                        {/* Add report form — shown at top when open */}
+                        {/* Formulario de informe nuevo — arriba cuando está abierto */}
                         {showAddReportForm && (
-                          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 space-y-2 mb-3">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-semibold text-blue-700 flex items-center gap-2">
+                          <form
+                            className="bg-blue-50 border border-blue-200 rounded-xl p-3 space-y-2 mb-3"
+                            aria-label="Nuevo informe"
+                            onSubmit={e => { e.preventDefault(); void handleAddReport() }}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-secondary font-semibold text-blue-700 flex items-center gap-2 flex-wrap">
                                 Nuevo informe
                                 {borradorRecuperado && (
-                                  <span className="inline-flex items-center gap-1 text-[10.5px] font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                                  <span className="inline-flex items-center gap-1 text-badge font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
                                     Borrador recuperado
-                                    <button onClick={descartarBorrador} className="underline hover:text-amber-900" title="Vaciar el formulario y olvidar el borrador">Descartar</button>
+                                    <button type="button" onClick={descartarBorrador} className="underline hover:text-amber-900" title="Vaciar el formulario y olvidar el borrador">Descartar</button>
                                   </span>
                                 )}
                               </span>
-                              <div className="flex items-center gap-2">
-                                <span className="text-[11px] font-mono bg-white border border-blue-200 px-1.5 py-0.5 rounded text-slate-600">
+                              <div className="flex items-center gap-1">
+                                <span className="text-badge font-mono bg-white border border-blue-200 px-1.5 py-0.5 rounded text-slate-600">
                                   {currentProfile.avatar} · {currentProfile.name.split(' ')[0]}
                                 </span>
-                                <button onClick={() => setShowAddReportForm(false)} aria-label="Cerrar formulario de informe" className="text-slate-400 hover:text-slate-600 p-2 -m-2 sm:p-0 sm:m-0"><X className="w-3.5 h-3.5" /></button>
+                                <IconButton label="Cerrar formulario de informe" onClick={() => setShowAddReportForm(false)}><X /></IconButton>
                               </div>
                             </div>
-                            <input
+                            <Input
                               value={reportTitle}
                               onChange={e => setReportTitle(e.target.value)}
                               placeholder="Título (opcional)"
-                              className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                              aria-label="Título del informe"
                             />
                             {!reportText.trim() && (
-                              <button
-                                onClick={() => setReportText(REPORT_TEMPLATE)}
-                                className="text-[11px] text-blue-600 hover:text-blue-700 font-medium"
-                              >
-                                📋 Usar plantilla (físico · técnica · táctica · mentalidad · contexto)
-                              </button>
+                              <Button size="sm" variant="link" icon={<ClipboardList />} onClick={() => setReportText(REPORT_TEMPLATE)}>
+                                Usar plantilla (físico · técnica · táctica · mentalidad · contexto)
+                              </Button>
                             )}
-                            <textarea
+                            <Textarea
                               value={reportText}
                               onChange={e => setReportText(e.target.value)}
-                              rows={4}
+                              rows={5}
                               placeholder="Texto del informe..."
+                              aria-label="Texto del informe"
                               autoFocus
-                              className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none"
                               onKeyDown={e => {
                                 if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); handleAddReport() }
                               }}
                             />
                             {/* ¿De qué partido es este informe? Un toque y queda vinculado */}
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Partido</span>
+                              <span className={LABEL_SECCION}>{L.partido}</span>
                               {reportMatchSuggestions.list.map(({ m, linked, days }) => {
                                 const sel = reportMatchId === m.id
                                 return (
                                   <button
                                     key={m.id}
+                                    type="button"
                                     onClick={() => setReportMatchId(sel ? '' : m.id)}
+                                    aria-pressed={sel}
                                     title={`${m.homeTeam} vs ${m.awayTeam} · ${fmtDate(m.date)}${linked ? ' · ya vinculado a este jugador' : ''}`}
-                                    className={`text-[11px] font-medium rounded-full px-2 py-0.5 border transition-colors ${
+                                    className={`inline-flex items-center gap-1 text-badge font-medium rounded-full px-2 min-h-9 sm:min-h-0 sm:py-0.5 border transition-colors ${
                                       sel
                                         ? 'bg-violet-600 text-white border-violet-600'
                                         : 'bg-white text-slate-600 border-slate-200 hover:border-violet-300'
                                     }`}
                                   >
-                                    {linked && '✓ '}{m.homeTeam} vs {m.awayTeam}
-                                    <span className={sel ? 'text-white/70' : 'text-slate-400'}> · {days === 0 ? 'hoy' : `hace ${days}d`}</span>
+                                    {linked && <Link2 className="w-3 h-3" aria-label="Ya vinculado" />}
+                                    {m.homeTeam} vs {m.awayTeam}
+                                    <span className={sel ? 'text-white/70' : 'text-slate-500'}> · {days === 0 ? 'hoy' : `hace ${days}d`}</span>
                                   </button>
                                 )
                               })}
                               {reportMatchSuggestions.list.length === 0 && (
-                                <span className="text-[11px] text-slate-400">Sin partidos recientes de su equipo — búscalo abajo</span>
+                                <span className="text-badge text-slate-500">Sin partidos recientes de su equipo — búscalo abajo</span>
                               )}
                             </div>
                             {!reportMatchId && (
-                              <p className="text-[10.5px] text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1">
+                              <p className="text-badge text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1">
                                 Sin partido: el informe se guarda igual, pero no aparecerá en la ficha del partido.
                               </p>
                             )}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              <select
+                              <Select
                                 value={reportConclusion}
                                 onChange={e => setReportConclusion(e.target.value as ConclusionOption)}
-                                className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                                aria-label={L.veredicto}
                               >
-                                <option value="">Sin conclusión</option>
+                                <option value="">Sin {L.veredicto.toLowerCase()}</option>
                                 {CONCLUSION_OPTIONS.filter(Boolean).map(c => <option key={c} value={c}>{c}</option>)}
-                              </select>
-                              {/* Searchable match selector */}
+                              </Select>
+                              {/* Buscador de partido */}
                               <div className="relative">
-                                <input
+                                <Input
                                   value={reportMatchId
                                     ? (() => { const m = scoutingMatches.find(x => x.id === reportMatchId); return m ? `${m.homeTeam} vs ${m.awayTeam}` : '' })()
                                     : matchSearchInput}
                                   onChange={e => { setMatchSearchInput(e.target.value); setReportMatchId('') }}
                                   onFocus={() => setMatchSearchOpen(true)}
                                   onBlur={() => setTimeout(() => setMatchSearchOpen(false), 150)}
-                                  placeholder="🏟 Partido (buscar equipo...)"
-                                  className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-violet-400/30"
+                                  placeholder="Partido (buscar equipo...)"
+                                  aria-label="Buscar partido"
+                                  role="combobox"
+                                  aria-expanded={matchSearchOpen}
+                                  aria-autocomplete="list"
                                 />
                                 {matchSearchOpen && (
-                                  <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                                  <div role="listbox" className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                                     <button
+                                      type="button"
+                                      role="option"
+                                      aria-selected={!reportMatchId}
                                       onMouseDown={() => { setReportMatchId(''); setMatchSearchInput(''); setMatchSearchOpen(false) }}
-                                      className="w-full text-left px-3 py-1.5 text-xs text-slate-400 hover:bg-slate-50 border-b border-slate-100"
+                                      className="w-full text-left px-3 py-2 sm:py-1.5 text-secondary text-slate-500 hover:bg-slate-50 border-b border-slate-100"
                                     >
                                       Sin partido vinculado
                                     </button>
@@ -769,12 +790,15 @@ export function PlayerPanel({
                                         return (
                                           <button
                                             key={m.id}
+                                            type="button"
+                                            role="option"
+                                            aria-selected={reportMatchId === m.id}
                                             onMouseDown={() => { setReportMatchId(m.id); setMatchSearchInput(''); setMatchSearchOpen(false) }}
-                                            className={`w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 flex items-center gap-2 ${isPlayerTeam ? 'bg-violet-50/60' : ''}`}
+                                            className={`w-full text-left px-3 py-2 sm:py-1.5 text-secondary hover:bg-slate-50 flex items-center gap-2 ${isPlayerTeam ? 'bg-violet-50/60' : ''}`}
                                           >
                                             {isPlayerTeam && <span className="w-1.5 h-1.5 rounded-full bg-violet-400 flex-shrink-0" />}
                                             <span className="font-medium text-slate-700">{m.homeTeam} vs {m.awayTeam}</span>
-                                            <span className="text-slate-400 ml-auto flex-shrink-0">{d}</span>
+                                            <span className="text-slate-500 ml-auto flex-shrink-0">{d}</span>
                                           </button>
                                         )
                                       })}
@@ -782,18 +806,13 @@ export function PlayerPanel({
                                 )}
                               </div>
                             </div>
-                            <div className="flex items-center justify-between">
-                              <span className="text-[11px] text-slate-400">⌘+Enter para guardar</span>
-                              <button
-                                onClick={handleAddReport}
-                                disabled={!reportText.trim() || savingReport}
-                                className="px-3 py-1.5 text-xs font-semibold bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-2"
-                              >
-                                {savingReport && <Spinner />}
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-badge text-slate-500">Ctrl/⌘+Enter para guardar</span>
+                              <Button type="submit" size="sm" variant="primary" loading={savingReport} disabled={!reportText.trim()}>
                                 {savingReport ? 'Guardando…' : 'Guardar informe'}
-                              </button>
+                              </Button>
                             </div>
-                          </div>
+                          </form>
                         )}
                       </>
                     )
@@ -801,7 +820,7 @@ export function PlayerPanel({
 
                   <div className="space-y-3">
                     {panelReports.length === 0 ? (
-                      <p className="text-xs text-slate-400 italic">Sin informes todavía.</p>
+                      <p className="text-secondary text-slate-500 italic">Sin informes todavía.</p>
                     ) : panelReports.map(r => {
                       const linkedMatch = r.matchId ? scoutingMatches.find(m => m.id === r.matchId) : undefined
                       const matchLabel = linkedMatch
@@ -838,35 +857,34 @@ export function PlayerPanel({
                     .sort((a, b) => b.date.localeCompare(a.date))
                   return (
                     <div className="border-t border-slate-100 pt-4 mt-2">
-                      <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-1.5 mb-2">
-                        <ClipboardList className="w-4 h-4 text-slate-400" />
+                      <h3 className="text-body font-semibold text-slate-700 flex items-center gap-1.5 mb-2">
+                        <ClipboardList className="w-4 h-4 text-slate-500" />
                         Partidos vistos
-                        <span className="ml-1 text-xs bg-violet-100 text-violet-700 rounded-full px-1.5 py-0.5 font-semibold">{playerMatchList.length}</span>
+                        <Badge tone="primary">{playerMatchList.length}</Badge>
                       </h3>
                       <div className="space-y-1.5">
                         {playerMatchList.map(m => {
                           const d = `${m.date.slice(8)} ${MONTHS_ES[parseInt(m.date.slice(5,7))-1]} '${m.date.slice(2,4)}`
                           return (
                             <div key={m.id} className="flex items-center gap-2 bg-slate-50 rounded-lg px-2.5 py-1.5 group">
-                              <span className="text-[11px] text-slate-400 font-mono flex-shrink-0 w-20">{d}</span>
-                              <span className="text-xs text-slate-700 font-medium flex-1 min-w-0 truncate">
-                                {m.homeTeam} <span className="text-slate-400 font-normal">vs</span> {m.awayTeam}
+                              <span className="text-badge text-slate-500 font-mono flex-shrink-0 w-20">{d}</span>
+                              <span className="text-secondary text-slate-700 font-medium flex-1 min-w-0 truncate">
+                                {m.homeTeam} <span className="text-slate-500 font-normal">vs</span> {m.awayTeam}
                               </span>
                               {m.competition && (
-                                <span className="text-[11px] bg-white border border-slate-200 text-slate-500 px-1.5 py-0.5 rounded flex-shrink-0">{m.competition}</span>
+                                <span className="text-badge bg-white border border-slate-200 text-slate-500 px-1.5 py-0.5 rounded flex-shrink-0">{m.competition}</span>
                               )}
                               {m.viewMode === 'campo'
-                                ? <span className="text-[11px] text-emerald-600 flex-shrink-0">🏟</span>
-                                : <span className="text-[11px] text-blue-500 flex-shrink-0">📹</span>
+                                ? <MapPin aria-label="En el campo" className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+                                : <Video aria-label="Por vídeo" className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
                               }
-                              <button
+                              <IconButton
+                                label="Desvincular de este partido"
                                 onClick={() => onRemoveMatchPlayer(m.id, panelPlayerId).catch(() => showToast('Error al desvincular del partido', 'error'))}
-                                className="sm:opacity-0 sm:group-hover:opacity-100 p-2 -m-1.5 sm:p-0 sm:m-0 text-slate-300 hover:text-red-400 flex-shrink-0 transition-opacity"
-                                title="Desvincular de este partido"
-                                aria-label="Desvincular de este partido"
+                                className="sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100 text-slate-600 hover:text-red-600 transition-opacity"
                               >
-                                <X className="w-3 h-3" />
-                              </button>
+                                <X />
+                              </IconButton>
                             </div>
                           )
                         })}
@@ -879,15 +897,12 @@ export function PlayerPanel({
           )}
         </div>
 
-        {/* Sticky close bar — mobile only */}
+        {/* Barra fija de cierre — solo móvil */}
         {!fullscreen && (
           <div className="sm:hidden flex-shrink-0 border-t border-slate-200 px-4 py-3 bg-white safe-area-bottom">
-            <button
-              onClick={closePanel}
-              className="w-full py-2.5 text-sm font-medium text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 active:bg-slate-100"
-            >
-              Cerrar
-            </button>
+            <Button variant="secondary" onClick={closePanel} className="w-full">
+              {L.cerrar}
+            </Button>
           </div>
         )}
       </div>

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { ClipboardList, Users, PenLine, UserSearch, Brain } from 'lucide-react'
+import { SectionTabs } from '../components/ui'
 import { ScoutStats } from './ScoutStats'
 import { ModeloLlamar } from './ModeloLlamar'
 import type { ScoutingPlayer, ScoutingReport, ScoutingMatch, FirmasEntry, FirmasStatus } from '../types'
@@ -41,6 +42,8 @@ const FIRMAS_BAR: Record<FirmasStatus, string> = { llamar: 'bg-amber-400', calie
 // Cadencia máxima por estatus (misma regla que el semáforo de la pestaña Firmar)
 const FIRMAS_AGING_DAYS: Partial<Record<FirmasStatus, number>> = { caliente: 10, templado: 50, frio: 90 }
 
+type StatsTab = 'general' | 'scouts' | 'modelo'
+
 interface Props {
   scoutingPlayers: ScoutingPlayer[]
   scoutingReports: ScoutingReport[]
@@ -50,7 +53,7 @@ interface Props {
 }
 
 export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatches, firmasEntries, profiles }: Props) {
-  const [statsTab, setStatsTab] = useState<'general' | 'scouts' | 'modelo'>('general')
+  const [statsTab, setStatsTab] = useState<StatsTab>('general')
   // ── statistics ──
   const stats = useMemo(() => {
     // Índice por id: evita un `find` lineal por cada informe
@@ -205,23 +208,18 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
   return (
     <div className="space-y-4">
       {/* Pestañas: visión general / análisis por scout */}
-      <div className="flex items-center gap-1">
-        {([
-          { id: 'general' as const, label: 'Visión general', icon: <ClipboardList className="w-3.5 h-3.5" /> },
-          { id: 'scouts' as const, label: 'Scouts', icon: <UserSearch className="w-3.5 h-3.5" /> },
-          { id: 'modelo' as const, label: 'Modelo de Llamar', icon: <Brain className="w-3.5 h-3.5" /> },
-        ]).map(t => (
-          <button
-            key={t.id}
-            onClick={() => setStatsTab(t.id)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              statsTab === t.id ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-100'
-            }`}
-          >
-            {t.icon}{t.label}
-          </button>
-        ))}
-      </div>
+      <SectionTabs<StatsTab>
+        variant="secondary"
+        label="Estadísticas de Captación"
+        value={statsTab}
+        onChange={setStatsTab}
+        items={[
+          { id: 'general', label: 'Visión general', icon: <ClipboardList /> },
+          { id: 'scouts', label: 'Scouts', icon: <UserSearch /> },
+          { id: 'modelo', label: 'Modelo de Llamar', icon: <Brain /> },
+        ]}
+        className="rounded-lg border border-slate-200"
+      />
 
       {statsTab === 'modelo' && (
         <ModeloLlamar
@@ -261,7 +259,7 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Reports by author */}
             <div className="bg-white border border-slate-200 rounded-xl p-4">
-              <h3 className="text-sm font-semibold text-slate-700 mb-3">Informes por explorador</h3>
+              <h3 className="text-sm font-semibold text-slate-700 mb-3">Informes por scout</h3>
               <div className="space-y-2">
                 {stats.personaRanked.slice(0, 8).map(([persona, count]) => {
                   const name = personaToName(persona, profiles)
@@ -317,9 +315,9 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
               </div>
             </div>
 
-            {/* Assessment distribution */}
+            {/* Distribución por etiqueta */}
             <div className="bg-white border border-slate-200 rounded-xl p-4">
-              <h3 className="text-sm font-semibold text-slate-700 mb-3">Assessment de jugadores</h3>
+              <h3 className="text-sm font-semibold text-slate-700 mb-3">Etiqueta de jugadores</h3>
               <div className="space-y-2">
                 {Object.entries(stats.byAssessment)
                   .sort((a, b) => b[1] - a[1])
@@ -352,14 +350,14 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
                   const pct = Math.round((count / maxCount) * 100)
                   return (
                     <div key={label} className="flex-1 flex flex-col items-center gap-1">
-                      <div className="text-[9px] text-slate-500 font-medium">{count || ''}</div>
+                      <div className="text-badge text-slate-500 font-medium">{count || ''}</div>
                       <div className="w-full bg-slate-100 rounded-t" style={{ height: '60px' }}>
                         <div
                           className="w-full bg-primary rounded-t transition-all"
                           style={{ height: `${pct}%`, marginTop: `${100 - pct}%` }}
                         />
                       </div>
-                      <div className="text-[9px] text-slate-400 whitespace-nowrap">{label}</div>
+                      <div className="text-badge text-slate-500 whitespace-nowrap">{label}</div>
                     </div>
                   )
                 })}
@@ -371,7 +369,7 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
             <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col">
               <h3 className="text-sm font-semibold text-slate-700 mb-3">
                 Jugadores más seguidos
-                <span className="ml-2 text-xs font-normal text-slate-400">top {stats.topPlayers.length}</span>
+                <span className="ml-2 text-xs font-normal text-slate-500">top {stats.topPlayers.length}</span>
               </h3>
               <div className="overflow-y-auto max-h-72 space-y-2 pr-1">
                 {stats.topPlayers.map(({ id, name, count }) => (
@@ -390,10 +388,10 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
           {/* ── ESTADÍSTICAS DE PARTIDOS ── */}
           <div className="mt-6">
             <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide mb-3 flex items-center gap-2">
-              <ClipboardList className="w-4 h-4 text-slate-400" /> Estadísticas de partidos
+              <ClipboardList className="w-4 h-4 text-slate-500" /> Estadísticas de partidos
             </h2>
             {scoutingMatches.length === 0 ? (
-              <p className="text-xs text-slate-400">No hay partidos registrados aún.</p>
+              <p className="text-xs text-slate-500">No hay partidos registrados aún.</p>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
 
@@ -408,7 +406,7 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
                     ].map(({ label, value, color }) => (
                       <div key={label}>
                         <div className={`text-2xl font-bold ${color}`}>{value}</div>
-                        <div className="text-xs text-slate-400 mt-0.5">{label}</div>
+                        <div className="text-xs text-slate-500 mt-0.5">{label}</div>
                       </div>
                     ))}
                   </div>
@@ -417,7 +415,7 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
                 {/* Partidos por scout */}
                 <div className="bg-white border border-slate-200 rounded-xl p-4">
                   <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-1.5">
-                    <Users className="w-3.5 h-3.5 text-slate-400" /> Partidos por explorador
+                    <Users className="w-3.5 h-3.5 text-slate-500" /> Partidos por scout
                   </h3>
                   <div className="space-y-2">
                     {matchStats.personaRanked.map(([persona, count]) => {
@@ -436,7 +434,7 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
                   {/* Pendientes por persona */}
                   {Object.keys(matchStats.pendienteByPersona).length > 0 && (
                     <div className="mt-3 pt-3 border-t border-slate-100">
-                      <div className="text-[11px] font-semibold text-amber-600 uppercase mb-2">Pendientes de ver</div>
+                      <div className="text-badge font-semibold text-amber-600 uppercase mb-2">Pendientes de ver</div>
                       {Object.entries(matchStats.pendienteByPersona).map(([persona, count]) => (
                         <StatBar
                           key={persona}
@@ -454,20 +452,20 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
                 <div className="bg-white border border-slate-200 rounded-xl p-4">
                   <h3 className="text-sm font-semibold text-slate-700 mb-3">Modo de visualización</h3>
                   <div className="space-y-2">
-                    <StatBar label="📹 Vídeo" value={matchStats.video} max={scoutingMatches.length} color="bg-blue-400" />
-                    <StatBar label="🏟️ Campo" value={matchStats.campo} max={scoutingMatches.length} color="bg-emerald-500" />
+                    <StatBar label="Vídeo" value={matchStats.video} max={scoutingMatches.length} color="bg-blue-400" />
+                    <StatBar label="Campo" value={matchStats.campo} max={scoutingMatches.length} color="bg-emerald-500" />
                   </div>
                   <div className="mt-3 flex gap-2">
                     {matchStats.video > 0 && (
                       <div className="flex-1 text-center bg-blue-50 rounded-lg py-2">
                         <div className="text-sm font-bold text-blue-700">{Math.round((matchStats.video / scoutingMatches.length) * 100)}%</div>
-                        <div className="text-[11px] text-blue-500">vídeo</div>
+                        <div className="text-badge text-blue-500">vídeo</div>
                       </div>
                     )}
                     {matchStats.campo > 0 && (
                       <div className="flex-1 text-center bg-emerald-50 rounded-lg py-2">
                         <div className="text-sm font-bold text-emerald-700">{Math.round((matchStats.campo / scoutingMatches.length) * 100)}%</div>
-                        <div className="text-[11px] text-emerald-500">campo</div>
+                        <div className="text-badge text-emerald-500">campo</div>
                       </div>
                     )}
                   </div>
@@ -515,14 +513,14 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
                       const pct = Math.round((count / maxCount) * 100)
                       return (
                         <div key={label} className="flex-1 flex flex-col items-center gap-1">
-                          <div className="text-[9px] text-slate-500 font-medium">{count || ''}</div>
+                          <div className="text-badge text-slate-500 font-medium">{count || ''}</div>
                           <div className="w-full bg-slate-100 rounded-t" style={{ height: '60px' }}>
                             <div
                               className="w-full bg-orange-400 rounded-t transition-all"
                               style={{ height: `${pct}%`, marginTop: `${100 - pct}%` }}
                             />
                           </div>
-                          <div className="text-[9px] text-slate-400 whitespace-nowrap">{label}</div>
+                          <div className="text-badge text-slate-500 whitespace-nowrap">{label}</div>
                         </div>
                       )
                     })}
@@ -535,19 +533,19 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
           </div>
         </div>
 
-      {/* ── PIPELINE DE FIRMAS ── */}
+      {/* ── FIRMAR ── */}
       <div className="mt-6">
         <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide mb-3 flex items-center gap-2">
-          <PenLine className="w-4 h-4 text-slate-400" /> Pipeline de firmas
+          <PenLine className="w-4 h-4 text-slate-500" /> Firmar
         </h2>
         {firmasEntries.length === 0 ? (
-          <p className="text-xs text-slate-400">No hay jugadores en el pipeline aún.</p>
+          <p className="text-xs text-slate-500">No hay jugadores en Firmar aún.</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="bg-white border border-slate-200 rounded-xl p-4 md:col-span-2">
               <div className="grid grid-cols-3 sm:grid-cols-6 gap-4 text-center">
                 {[
-                  { label: 'En pipeline', value: firmasStats.total - firmasStats.firmados, color: 'text-slate-800' },
+                  { label: 'En proceso', value: firmasStats.total - firmasStats.firmados, color: 'text-slate-800' },
                   { label: 'Firmados 🎉', value: firmasStats.firmados, color: 'text-green-600' },
                   { label: 'Conversión', value: `${Math.round(firmasStats.conversion * 100)}%`, color: 'text-green-600' },
                   { label: 'Vinculados', value: firmasStats.linked, color: 'text-blue-600' },
@@ -556,11 +554,11 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
                 ].map(({ label, value, color }) => (
                   <div key={label}>
                     <div className={`text-2xl font-bold ${color}`}>{value}</div>
-                    <div className="text-xs text-slate-400 mt-0.5">{label}</div>
+                    <div className="text-xs text-slate-500 mt-0.5">{label}</div>
                   </div>
                 ))}
               </div>
-              <p className="mt-2 text-[11px] text-slate-400 text-center">Desatendidos: calientes sin tocar +10 días, templados +50, fríos +90</p>
+              <p className="mt-2 text-badge text-slate-500 text-center">Desatendidos: calientes sin tocar +10 días, templados +50, fríos +90</p>
             </div>
 
             <div className="bg-white border border-slate-200 rounded-xl p-4">
@@ -582,7 +580,7 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
               <h3 className="text-sm font-semibold text-slate-700 mb-3">Por zona (activos · firmados · conversión)</h3>
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="text-[10px] uppercase text-slate-400 border-b border-slate-100">
+                  <tr className="text-badge uppercase text-slate-500 border-b border-slate-100">
                     <th className="text-left py-1 font-semibold">Zona</th>
                     <th className="text-right py-1 font-semibold">Activos</th>
                     <th className="text-right py-1 font-semibold">Firmados</th>
@@ -607,7 +605,7 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
 
             <div className="bg-white border border-slate-200 rounded-xl p-4 md:col-span-2">
               <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-1.5">
-                <Users className="w-3.5 h-3.5 text-slate-400" /> Jugadores por encargado
+                <Users className="w-3.5 h-3.5 text-slate-500" /> Jugadores por encargado
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
                 {firmasStats.managerRanked.map(([name, count, id]) => (
@@ -630,7 +628,7 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
           ].map(({ label, value, color }) => (
             <div key={label}>
               <div className={`text-2xl font-bold ${color}`}>{value}</div>
-              <div className="text-xs text-slate-400 mt-0.5">{label}</div>
+              <div className="text-xs text-slate-500 mt-0.5">{label}</div>
             </div>
           ))}
         </div>

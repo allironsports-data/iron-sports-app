@@ -1,5 +1,7 @@
 import React, { useState } from 'react'
-import { X, Trash2, Calendar, Pencil } from 'lucide-react'
+import { X, Trash2, Calendar, Pencil, MapPin } from 'lucide-react'
+import { Button, IconButton, Input, Select, Textarea, Chip } from '../../components/ui'
+import { L } from '../../lib/labels'
 import type { ScoutingReport, ScoutingAssessment } from '../../types'
 import type { Profile } from '../../contexts/AuthContext'
 import { ConfirmModal } from '../../components/ConfirmModal'
@@ -11,35 +13,22 @@ import { type ShowToast, type ConclusionOption, ASSESSMENT_CONFIG, normConclusio
 // ── Sub-components ───────────────────────────────────────────
 
 export function AssessmentChip({ a, small }: { a?: ScoutingAssessment; small?: boolean }) {
-  if (!a) return <span className="text-slate-300 text-xs">—</span>
+  if (!a) return <span className="text-slate-500 text-meta" aria-label={`Sin ${L.etiquetaJugador.toLowerCase()}`}>—</span>
   const cfg = ASSESSMENT_CONFIG[a]
   return (
-    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium border ${cfg.bg} ${cfg.text} ${cfg.border} ${small ? 'text-[11px] px-1' : ''}`}>
+    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-meta font-medium border ${cfg.bg} ${cfg.text} ${cfg.border} ${small ? 'text-badge px-1' : ''}`}>
       {cfg.label}
     </span>
-  )
-}
-
-export function FormRow({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">{label}</label>
-      {children}
-    </div>
   )
 }
 
 export function InfoItem({ label, value }: { label: string; value: string }) {
   return (
     <div className="bg-slate-50 rounded-lg px-2.5 py-2">
-      <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">{label}</div>
-      <div className="text-xs font-medium text-slate-700 mt-0.5 truncate">{value}</div>
+      <div className="text-badge font-semibold text-slate-500 uppercase tracking-wide">{label}</div>
+      <div className="text-secondary font-medium text-slate-700 mt-0.5 truncate">{value}</div>
     </div>
   )
-}
-
-export function Spinner() {
-  return <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
 }
 
 // ── Chips de filtros activos ─────────────────────────────────
@@ -48,24 +37,11 @@ export function ActiveFilterChips({ chips, onClearAll }: { chips: FilterChip[]; 
   if (chips.length === 0) return null
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Filtros:</span>
+      <span className="text-badge font-semibold text-slate-500 uppercase tracking-wide">Filtros:</span>
       {chips.map(c => (
-        <button
-          key={c.key}
-          onClick={c.onRemove}
-          aria-label={`Quitar filtro ${c.label}`}
-          className="inline-flex items-center gap-1 px-2 py-1.5 sm:py-0.5 text-xs font-medium bg-primary/10 text-primary border border-primary/20 rounded-full hover:bg-primary/20 transition-colors"
-        >
-          {c.label}
-          <X className="w-3 h-3" />
-        </button>
+        <Chip key={c.key} active onRemove={c.onRemove}>{c.label}</Chip>
       ))}
-      <button
-        onClick={onClearAll}
-        className="text-xs text-slate-500 hover:text-slate-700 underline underline-offset-2 px-1.5 py-1.5 sm:py-0.5"
-      >
-        Limpiar filtros
-      </button>
+      <Button size="sm" variant="link" onClick={onClearAll}>Limpiar filtros</Button>
     </div>
   )
 }
@@ -161,7 +137,11 @@ export function ReportCard({
 
   if (editMode) {
     return (
-      <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs space-y-2">
+      <form
+        className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-secondary space-y-2"
+        aria-label="Editar informe"
+        onSubmit={e => { e.preventDefault(); void handleSaveEdit() }}
+      >
         <ConfirmModal
           open={confirmDiscard}
           title="¿Descartar cambios?"
@@ -172,60 +152,63 @@ export function ReportCard({
           onCancel={() => setConfirmDiscard(false)}
         />
         <div className="flex items-center justify-between mb-1">
-          <span className="text-[11px] font-semibold text-blue-600 uppercase tracking-wide">Editando informe</span>
-          <button onClick={requestCloseEdit} aria-label="Cerrar edición" className="text-slate-400 hover:text-slate-600 p-2 -m-2 sm:p-0 sm:m-0"><X className="w-3.5 h-3.5" /></button>
+          <span className="text-badge font-semibold text-blue-700 uppercase tracking-wide">Editando informe</span>
+          <IconButton label="Cerrar edición" onClick={requestCloseEdit}><X /></IconButton>
         </div>
-        <input
+        <Input
           value={editTitle}
           onChange={e => setEditTitle(e.target.value)}
           placeholder="Título (opcional)"
-          className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+          aria-label="Título del informe"
         />
-        <textarea
+        <Textarea
           value={editText}
           onChange={e => setEditText(e.target.value)}
           rows={5}
-          className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none"
+          aria-label="Texto del informe"
+          onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); void handleSaveEdit() } }}
         />
-        <select
+        <Select
           value={editConclusion}
           onChange={e => setEditConclusion(e.target.value as ConclusionOption)}
-          className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+          aria-label={L.veredicto}
         >
-          <option value="">Sin conclusión</option>
+          <option value="">Sin {L.veredicto.toLowerCase()}</option>
           {CONCLUSION_OPTIONS.filter(Boolean).map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
+        </Select>
         {!editText.trim() && (
-          <p className="text-[11px] text-red-500">El informe no puede estar vacío.</p>
+          <p className="text-meta text-red-600" role="alert">El informe no puede estar vacío.</p>
         )}
         <div className="flex gap-2 pt-1">
-          <button onClick={requestCloseEdit} className="flex-1 py-1.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50">
-            Cancelar
-          </button>
-          <button
-            onClick={handleSaveEdit}
-            disabled={saving || !editText.trim()}
-            className="flex-1 py-1.5 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 disabled:opacity-40 inline-flex items-center justify-center gap-2"
-          >
-            {saving && <Spinner />}
-            {saving ? 'Guardando…' : 'Guardar'}
-          </button>
+          <Button variant="secondary" size="sm" onClick={requestCloseEdit} className="flex-1">{L.cancelar}</Button>
+          <Button type="submit" variant="primary" size="sm" loading={saving} disabled={!editText.trim()} className="flex-1">
+            {saving ? 'Guardando…' : L.guardar}
+          </Button>
         </div>
-      </div>
+      </form>
     )
   }
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-3 text-xs space-y-1.5">
+    <div className="bg-white border border-slate-200 rounded-xl p-3 text-secondary space-y-1.5">
+      <ConfirmModal
+        open={isConfirming}
+        title="Eliminar informe"
+        message={`Se eliminará este informe${playerName ? ` de ${playerName}` : ''}${authorName ? ` escrito por ${authorName}` : ''}. Esta acción no se puede deshacer.`}
+        confirmLabel={L.eliminar}
+        variant="danger"
+        onConfirm={() => onDelete(report.id)}
+        onCancel={() => onConfirmDelete(null)}
+      />
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           {playerName && (
-            <div className="text-[11px] font-semibold text-slate-800 mb-0.5">{playerName}</div>
+            <div className="text-body font-semibold text-slate-800 mb-0.5">{playerName}</div>
           )}
           {report.titulo && (
-            <div className="font-semibold text-slate-700 text-sm mb-0.5 truncate">{report.titulo}</div>
+            <div className="font-semibold text-slate-700 text-body mb-0.5 truncate">{report.titulo}</div>
           )}
-          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400">
+          <div className="flex flex-wrap items-center gap-1.5 text-badge text-slate-500">
             <span className="flex items-center gap-1">
               <Calendar className="w-3 h-3" />
               {fmtDate(report.fecha)}
@@ -239,44 +222,32 @@ export function ReportCard({
               </span>
             )}
             {normConclusion(report.conclusion) && (
-              <span className={`px-1.5 py-0.5 rounded font-medium text-[11px] ${CONCLUSION_STYLE[normConclusion(report.conclusion)!] ?? 'bg-slate-100 text-slate-600'}`}>
+              <span className={`px-1.5 py-0.5 rounded font-medium text-badge ${CONCLUSION_STYLE[normConclusion(report.conclusion)!] ?? 'bg-slate-100 text-slate-600'}`}>
                 {normConclusion(report.conclusion)}
               </span>
             )}
             {matchLabel && (
-              <span className="px-1.5 py-0.5 bg-violet-50 text-violet-700 border border-violet-200 rounded text-[11px] flex items-center gap-0.5">
-                🏟 {matchLabel}
+              <span className="px-1.5 py-0.5 bg-violet-50 text-violet-700 border border-violet-200 rounded text-badge flex items-center gap-1">
+                <MapPin className="w-3 h-3" aria-hidden="true" /> {matchLabel}
               </span>
             )}
           </div>
         </div>
         <div className="flex items-center gap-0.5 flex-shrink-0">
           {onUpdate && (
-            <button
-              onClick={() => setEditing(true)}
-              className="text-slate-300 hover:text-blue-500 p-2 sm:p-0.5 rounded"
-              title="Editar informe"
-              aria-label="Editar informe"
-            >
-              <Pencil className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
-            </button>
+            <IconButton label="Editar informe" onClick={() => setEditing(true)} className="text-slate-600 hover:text-blue-600">
+              <Pencil />
+            </IconButton>
           )}
           {currentProfile.is_admin && (
-            isConfirming ? (
-              <div className="flex items-center gap-1">
-                <button onClick={() => onDelete(report.id)} className="px-2 py-1 text-xs bg-red-600 text-white rounded font-medium">Eliminar</button>
-                <button onClick={() => onConfirmDelete(null)} className="px-2 py-1 text-xs border border-slate-200 rounded text-slate-600">No</button>
-              </div>
-            ) : (
-              <button onClick={() => onConfirmDelete(report.id)} aria-label="Eliminar informe" className="text-slate-300 hover:text-red-500 p-2 sm:p-0.5 rounded">
-                <Trash2 className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
-              </button>
-            )
+            <IconButton label="Eliminar informe" onClick={() => onConfirmDelete(report.id)} className="text-slate-600 hover:text-red-600">
+              <Trash2 />
+            </IconButton>
           )}
         </div>
       </div>
       {report.texto && (
-        <p className="text-slate-600 leading-relaxed whitespace-pre-wrap">{report.texto}</p>
+        <p className="text-body text-slate-700 leading-relaxed whitespace-pre-wrap">{report.texto}</p>
       )}
     </div>
   )

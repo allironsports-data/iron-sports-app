@@ -1,0 +1,10 @@
+// Shell de la app: cabecera única, cabecera de fichas y navegación móvil.
+export { AppShell } from './AppShell'
+export type { AppShellProps } from './AppShell'
+export { AppHeader } from './AppHeader'
+export type { AppHeaderProps } from './AppHeader'
+export { DetailHeader } from './DetailHeader'
+export type { DetailHeaderProps, Crumb } from './DetailHeader'
+export { BottomNav } from './BottomNav'
+export type { BottomNavProps } from './BottomNav'
+export { SHELL_STICKY, useShellHeight } from './shell'

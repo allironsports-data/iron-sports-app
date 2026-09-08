@@ -1,9 +1,12 @@
 import { useMemo } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
-import { Search, List, LayoutGrid, SlidersHorizontal } from 'lucide-react'
+import { Search, List, LayoutGrid, SlidersHorizontal, Clock } from 'lucide-react'
 import type { Player, DistributionEntry, ClubNegotiation } from '../../types'
 import type { Profile } from '../../contexts/AuthContext'
 import { daysSince } from '../../lib/distribution'
+import { Button, ClickableRow, Input, Select } from '../../components/ui'
+import { L } from '../../lib/labels'
+import { positionLabel } from '../../lib/positions'
 import { Avatar, FilterCheck, FilterSheet } from './shared'
 import { PRIORITY_CONFIG, STATUS_CONFIG } from './constantes'
 import type { DistributionIndexes } from './useDistributionIndexes'
@@ -95,27 +98,29 @@ export function PipelineTab({
   const pipelineFilterControls = (
     <>
       <FilterCheck
-        label={pipelineMyOnly ? `Mis negs (${deals.length})` : 'Mis negs'}
+        label={pipelineMyOnly ? `Mis negociaciones (${deals.length})` : 'Mis negociaciones'}
         checked={pipelineMyOnly}
         onClick={() => { setPipelineMyOnly(v => !v); setPipelineGestorFilter('') }}
       />
-      <select
+      <Select
         value={pipelinePosFilter}
         onChange={e => setPipelinePosFilter(e.target.value)}
-        className="text-xs rounded-lg border border-slate-200 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-200 text-slate-600"
+        aria-label="Filtrar por posición"
+        className="w-auto py-1 text-secondary"
       >
         <option value="">Todas las posiciones</option>
-        {allPositions.map(p => <option key={p} value={p}>{p}</option>)}
-      </select>
+        {allPositions.map(p => <option key={p} value={p}>{positionLabel(p)}</option>)}
+      </Select>
       {!pipelineMyOnly && allGestores.length > 0 && (
-        <select
+        <Select
           value={pipelineGestorFilter}
           onChange={e => setPipelineGestorFilter(e.target.value)}
-          className="text-xs rounded-lg border border-slate-200 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-200 text-slate-600"
+          aria-label={`Filtrar por ${L.encargado.toLowerCase()}`}
+          className="w-auto py-1 text-secondary"
         >
-          <option value="">Todos los gestores</option>
+          <option value="">Todos los {L.encargados.toLowerCase()}</option>
           {allGestores.map(g => <option key={g} value={g}>{g}</option>)}
-        </select>
+        </Select>
       )}
       <FilterCheck label="Ver cerrados" checked={showClosedDeals} onClick={() => setShowClosedDeals(v => !v)} />
     </>
@@ -127,12 +132,13 @@ export function PipelineTab({
       {/* Desktop: Filter bar inline */}
       <div className="hidden sm:flex items-center gap-2 flex-wrap px-4 py-3 bg-white border-b border-slate-100">
         <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-          <input
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" aria-hidden="true" />
+          <Input
             value={pipelineSearch}
             onChange={e => setPipelineSearch(e.target.value)}
             placeholder="Jugador…"
-            className="pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-200 w-36"
+            aria-label="Buscar jugador"
+            className="pl-8 py-1.5 w-40"
           />
         </div>
 
@@ -141,49 +147,46 @@ export function PipelineTab({
         {pipelineFilterControls}
 
         <div className="ml-auto flex items-center gap-2">
-          <span className="text-xs text-slate-400">{totalActive} activos · {totalClosed} cerrados</span>
+          <span className="text-secondary text-slate-500">{totalActive} activos · {totalClosed} cerrados</span>
           {/* Lista / Kanban toggle — oculto en móvil */}
-          <button
+          <Button
+            size="sm"
+            icon={pipelineListView ? <LayoutGrid /> : <List />}
             onClick={() => setPipelineListView(v => !v)}
+            aria-pressed={pipelineListView}
             title={pipelineListView ? 'Ver kanban' : 'Ver lista'}
-            className={`hidden sm:flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
-              pipelineListView
-                ? 'bg-slate-800 text-white border-slate-800'
-                : 'border-slate-200 text-slate-500 hover:border-slate-400'
-            }`}
+            className={`hidden sm:inline-flex ${pipelineListView ? 'bg-slate-800 text-white border-slate-800 hover:bg-slate-700' : ''}`}
           >
-            {pipelineListView
-              ? <><LayoutGrid className="w-3.5 h-3.5" /> Kanban</>
-              : <><List className="w-3.5 h-3.5" /> Lista</>}
-          </button>
+            {pipelineListView ? 'Kanban' : 'Lista'}
+          </Button>
         </div>
       </div>
 
       {/* Móvil: barra compacta búsqueda + Filtros */}
       <div className="flex sm:hidden items-center gap-2 px-4 py-3 bg-white border-b border-slate-100">
         <div className="relative flex-1">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-          <input
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" aria-hidden="true" />
+          <Input
             value={pipelineSearch}
             onChange={e => setPipelineSearch(e.target.value)}
             placeholder="Jugador…"
-            className="w-full pl-8 pr-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-200"
+            aria-label="Buscar jugador"
+            className="pl-8"
           />
         </div>
-        <button
+        <Button
+          variant={pipelineActiveFilters > 0 ? 'primary' : 'secondary'}
+          icon={<SlidersHorizontal />}
           onClick={() => setFilterSheet('pipeline')}
-          className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
-            pipelineActiveFilters > 0 ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200'
-          }`}
+          className="flex-shrink-0"
         >
-          <SlidersHorizontal className="w-4 h-4" /> Filtros
-          {pipelineActiveFilters > 0 && <span className="text-xs">({pipelineActiveFilters})</span>}
-        </button>
+          Filtros{pipelineActiveFilters > 0 && ` (${pipelineActiveFilters})`}
+        </Button>
       </div>
 
       <FilterSheet open={filterSheet === 'pipeline'} onClose={() => setFilterSheet(null)} title="Filtros de pipeline">
         {pipelineFilterControls}
-        <p className="text-xs text-slate-400">{totalActive} activos · {totalClosed} cerrados</p>
+        <p className="text-secondary text-slate-500">{totalActive} activos · {totalClosed} cerrados</p>
       </FilterSheet>
 
       {/* ── VISTA LISTA ── */}
@@ -196,9 +199,9 @@ export function PipelineTab({
             return (
               <div key={status} className="mb-6">
                 <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg mb-2 w-fit ${cfg.color}`}>
-                  <div className={`w-2 h-2 rounded-full ${cfg.dot}`} />
-                  <span className="text-xs font-semibold">{cfg.label}</span>
-                  <span className="text-xs opacity-60 font-mono">{col.length}</span>
+                  <div className={`w-2 h-2 rounded-full ${cfg.dot}`} aria-hidden="true" />
+                  <span className="text-secondary font-semibold">{cfg.label}</span>
+                  <span className="text-secondary opacity-70 font-mono">{col.length}</span>
                 </div>
                 <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
                   {col.map(({ neg, player, club, entry }, i) => {
@@ -207,29 +210,32 @@ export function PipelineTab({
                     const stale = activeStatuses.includes(neg.status) && daysSince(neg.updatedAt) > 7
                     const daysAgo = daysSince(neg.updatedAt)
                     return (
-                      <div
+                      <ClickableRow
                         key={neg.id}
                         onClick={() => setEditingNeg(neg)}
-                        className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-slate-50 transition-colors ${i > 0 ? 'border-t border-slate-100' : ''} ${stale ? 'border-l-4 border-l-orange-400' : ''}`}
+                        className={`rounded-none px-4 py-3 ${i > 0 ? 'border-t border-slate-100' : ''} ${stale ? 'border-l-4 border-l-orange-400' : ''}`}
                       >
-                        <Avatar name={player.name} photo={player.photo} size="xs" />
-                        <div className="flex-1 min-w-0">
-                          <span className="text-sm font-medium text-slate-800">{player.name}</span>
-                          <span className="text-xs text-slate-400 ml-2">{player.positions[0]}</span>
+                        <div className="flex items-center gap-3 min-w-0">
+                          <Avatar name={player.name} photo={player.photo} size="xs" />
+                          <div className="flex-1 min-w-0">
+                            <span className="text-body font-medium text-slate-800">{player.name}</span>
+                            <span className="text-secondary text-slate-500 ml-2" title={positionLabel(player.positions[0])}>{player.positions[0]}</span>
+                          </div>
+                          <div className="text-body text-slate-600 truncate w-24 sm:w-36 flex-shrink-0">{club.name}</div>
+                          {neg.aisManager && (
+                            <span className="text-badge font-mono bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded flex-shrink-0" title={L.encargado}>{neg.aisManager}</span>
+                          )}
+                          {pcfg && (
+                            <span className={`text-badge px-1.5 py-0.5 rounded font-bold flex-shrink-0 ${pcfg.bg} ${pcfg.text}`} title={`${L.prioridad} ${entry?.priority}`}>{entry?.priority}</span>
+                          )}
+                          <div className="text-right flex-shrink-0 w-20">
+                            <span className={`inline-flex items-center gap-1 text-badge ${stale ? 'text-orange-600 font-semibold' : 'text-slate-500'}`} title={stale ? `Sin cambios desde hace ${daysAgo} días` : undefined}>
+                              {stale && <Clock className="w-3 h-3" aria-hidden="true" />}
+                              {daysAgo < 999 ? `${daysAgo}d` : '—'}
+                            </span>
+                          </div>
                         </div>
-                        <div className="text-sm text-slate-600 truncate w-24 sm:w-36 flex-shrink-0">{club.name}</div>
-                        {neg.aisManager && (
-                          <span className="text-[11px] font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded flex-shrink-0">{neg.aisManager}</span>
-                        )}
-                        {pcfg && (
-                          <span className={`text-[11px] px-1.5 py-0.5 rounded font-bold flex-shrink-0 ${pcfg.bg} ${pcfg.text}`}>{entry?.priority}</span>
-                        )}
-                        <div className="text-right flex-shrink-0 w-20">
-                          <span className={`text-[11px] ${stale ? 'text-orange-500 font-semibold' : 'text-slate-400'}`}>
-                            {stale ? `⏰ ${daysAgo}d` : daysAgo < 999 ? `${daysAgo}d` : '—'}
-                          </span>
-                        </div>
-                      </div>
+                      </ClickableRow>
                     )
                   })}
                 </div>
@@ -237,7 +243,7 @@ export function PipelineTab({
             )
           })}
           {deals.filter(d => visibleStatuses.includes(d.neg.status)).length === 0 && (
-            <div className="text-center text-sm text-slate-400 py-16">No hay negociaciones</div>
+            <div className="text-center text-body text-slate-500 py-16">No hay negociaciones</div>
           )}
         </div>
       ) : (
@@ -251,9 +257,9 @@ export function PipelineTab({
                 <div key={status} className="w-60 flex-shrink-0">
                   {/* Column header */}
                   <div className={`flex items-center gap-2 px-3 py-2 rounded-lg mb-2 ${cfg.color}`}>
-                    <div className={`w-2 h-2 rounded-full ${cfg.dot}`} />
-                    <span className="text-xs font-semibold">{cfg.label}</span>
-                    <span className="ml-auto text-xs opacity-60 font-mono">{col.length}</span>
+                    <div className={`w-2 h-2 rounded-full ${cfg.dot}`} aria-hidden="true" />
+                    <span className="text-secondary font-semibold">{cfg.label}</span>
+                    <span className="ml-auto text-secondary opacity-70 font-mono">{col.length}</span>
                   </div>
                   {/* Cards */}
                   <div className="space-y-2">
@@ -262,10 +268,10 @@ export function PipelineTab({
                       const pcfg = entry ? PRIORITY_CONFIG[entry.priority] : null
                       const stale = activeStatuses.includes(neg.status) && daysSince(neg.updatedAt) > 7
                       return (
-                        <div
+                        <ClickableRow
                           key={neg.id}
                           onClick={() => setEditingNeg(neg)}
-                          className={`bg-white rounded-xl border p-3 cursor-pointer hover:shadow-md transition-all ${
+                          className={`bg-white rounded-xl border p-3 hover:shadow-md hover:bg-white transition-all block ${
                             stale ? 'border-orange-300 border-l-4 border-l-orange-400' : 'border-slate-200 hover:border-slate-300'
                           }`}
                         >
@@ -273,39 +279,39 @@ export function PipelineTab({
                           <div className="flex items-center gap-2 mb-2">
                             <Avatar name={player.name} photo={player.photo} size="xs" />
                             <div className="flex-1 min-w-0">
-                              <div className="text-xs font-semibold text-slate-800 truncate">{player.name}</div>
-                              <div className="text-[11px] text-slate-400">{player.positions[0]}</div>
+                              <div className="text-body font-semibold text-slate-800 truncate">{player.name}</div>
+                              <div className="text-meta text-slate-500" title={positionLabel(player.positions[0])}>{player.positions[0]}</div>
                             </div>
                             {pcfg && (
-                              <span className={`text-[11px] px-1.5 py-0.5 rounded font-bold flex-shrink-0 ${pcfg.bg} ${pcfg.text}`}>
+                              <span className={`text-badge px-1.5 py-0.5 rounded font-bold flex-shrink-0 ${pcfg.bg} ${pcfg.text}`} title={`${L.prioridad} ${entry?.priority}`}>
                                 {entry?.priority}
                               </span>
                             )}
                           </div>
                           {/* Club row */}
                           <div className="border-t border-slate-100 pt-2">
-                            <div className="text-sm font-medium text-slate-700 truncate">{club.name}</div>
-                            {club.league && <div className="text-xs text-slate-400">{club.league}</div>}
+                            <div className="text-body font-medium text-slate-700 truncate">{club.name}</div>
+                            {club.league && <div className="text-secondary text-slate-500">{club.league}</div>}
                           </div>
                           {/* Meta */}
                           <div className="mt-2 flex items-center gap-1.5 flex-wrap">
                             {neg.aisManager && (
-                              <span className="text-[11px] font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">
+                              <span className="text-badge font-mono bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded" title={L.encargado}>
                                 {neg.aisManager}
                               </span>
                             )}
                             {stale && (
-                              <span className="text-[11px] text-orange-500 font-semibold">⏰ {daysSince(neg.updatedAt)}d sin cambios</span>
+                              <span className="inline-flex items-center gap-1 text-badge text-orange-600 font-semibold"><Clock className="w-3 h-3" aria-hidden="true" /> {daysSince(neg.updatedAt)}d sin cambios</span>
                             )}
                             {neg.notes && !stale && (
-                              <p className="text-[11px] text-slate-400 line-clamp-2 w-full">{neg.notes}</p>
+                              <p className="text-meta text-slate-500 line-clamp-2 w-full">{neg.notes}</p>
                             )}
                           </div>
-                        </div>
+                        </ClickableRow>
                       )
                     })}
                     {col.length === 0 && (
-                      <div className="h-16 flex items-center justify-center text-xs text-slate-300 border-2 border-dashed border-slate-100 rounded-xl">
+                      <div className="h-16 flex items-center justify-center text-secondary text-slate-400 border-2 border-dashed border-slate-100 rounded-xl">
                         Vacío
                       </div>
                     )}

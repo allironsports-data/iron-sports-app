@@ -1,14 +1,15 @@
-import { useMemo, useCallback } from 'react'
+import { useMemo, useCallback, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
-import { Plus, Search, Users, Trash2, TrendingUp, AlertCircle, ChevronRight } from 'lucide-react'
+import { Plus, Search, Users, Trash2, TrendingUp, AlertCircle, ChevronRight, X } from 'lucide-react'
 import type { ClubNegotiation } from '../../types'
 import type { Profile } from '../../contexts/AuthContext'
 import { ConfirmModal } from '../../components/ConfirmModal'
 import { EmptyState } from '../../components/EmptyState'
-import { POSITIONS } from '../../lib/positions'
+import { Button, IconButton, Input, Select } from '../../components/ui'
+import { L } from '../../lib/labels'
+import { POSITIONS, positionLabel } from '../../lib/positions'
 import { TIER_CONFIG } from '../../lib/clubTiers'
 import type { Opportunity } from '../../lib/distribution'
-import { BtnSpinner } from './shared'
 import { PRIORITY_CONFIG } from './constantes'
 import type { Priority } from './constantes'
 
@@ -119,6 +120,23 @@ export function OportunidadesTab({
 
   const CAP = 200
   const shown = filteredOpportunities.slice(0, CAP)
+  // Descartar una oportunidad pide confirmación (antes era un solo clic en una papelera)
+  const [dismissKey, setDismissKey] = useState<string | null>(null)
+  const dismissOpp = oppByKey.get(dismissKey ?? '') ?? null
+
+  async function dismissOne(key: string) {
+    const o = oppByKey.get(key)
+    if (!o) return
+    setDismissingOppKey(key)
+    try {
+      await onCreateNegotiation({ playerId: o.player.id, clubId: o.club.id, needPosition: o.need.position, status: 'descartado', aisManager: o.club.aisManager || currentProfile.avatar })
+      showToast('Oportunidad descartada')
+    } catch {
+      showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
+    } finally {
+      setDismissingOppKey(null)
+    }
+  }
   return (
     <div className="max-w-5xl mx-auto">
       {/* Aviso: clubes con oportunidades pero sin encargado */}
@@ -129,82 +147,91 @@ export function OportunidadesTab({
             oppNoMgrOnly ? 'bg-red-100 border-red-300' : 'bg-red-50 border-red-200 hover:bg-red-100'
           }`}
         >
-          <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
-          <span className="text-sm font-semibold text-red-800 flex-1 min-w-0">
-            {clubsWithOppNoMgr} club{clubsWithOppNoMgr !== 1 ? 'es' : ''} con oportunidades sin encargado asignado
+          <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" aria-hidden="true" />
+          <span className="text-body font-semibold text-red-800 flex-1 min-w-0">
+            {clubsWithOppNoMgr} club{clubsWithOppNoMgr !== 1 ? 'es' : ''} con oportunidades sin {L.encargado.toLowerCase()} asignado
           </span>
-          <span className="text-xs font-medium text-red-700 flex-shrink-0">
+          <span className="text-secondary font-medium text-red-700 flex-shrink-0">
             {oppNoMgrOnly ? 'Quitar filtro' : 'Ver solo estos →'}
           </span>
         </button>
       )}
       {/* Intro + filtros */}
       <div className="mb-3">
-        <p className="text-xs text-slate-500 mb-2">
-          Cruces jugador → club con necesidad compatible (posición y edad) que <strong>aún no has ofrecido</strong>.
+        <p className="text-secondary text-slate-600 mb-2">
+          Cruces jugador → club con solicitud compatible (posición y edad) que <strong>aún no has ofrecido</strong>.
           Ordenado por prioridad del jugador y nivel del club.
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[180px]">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-            <input
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden="true" />
+            <Input
               value={oppSearch}
               onChange={e => setOppSearch(e.target.value)}
               placeholder="Buscar jugador o club…"
-              className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+              aria-label="Buscar jugador o club"
+              className="pl-8 py-1.5"
             />
           </div>
           <div className="flex items-center gap-1">
             {(['A', 'B', 'C', 'D'] as const).map(pr => (
               <button
                 key={pr}
+                type="button"
+                aria-pressed={oppPriority === pr}
                 onClick={() => setOppPriority(oppPriority === pr ? '' : pr)}
-                className={`w-8 h-8 rounded-lg text-xs font-bold transition-colors ${
-                  oppPriority === pr ? `${PRIORITY_CONFIG[pr].bg} ${PRIORITY_CONFIG[pr].text} ring-2 ring-offset-1 ring-current` : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                className={`w-9 h-9 sm:w-8 sm:h-8 rounded-lg text-secondary font-bold transition-colors ${
+                  oppPriority === pr ? `${PRIORITY_CONFIG[pr].bg} ${PRIORITY_CONFIG[pr].text} ring-2 ring-offset-1 ring-current` : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
-                title={`Prioridad ${pr}`}
+                title={`${L.prioridad} ${pr}`}
+                aria-label={`${L.prioridad} ${pr}`}
               >
                 {pr}
               </button>
             ))}
           </div>
-          <span className="text-xs text-slate-400 ml-auto">
+          <span className="text-secondary text-slate-500 ml-auto">
             {filteredOpportunities.length} oportunidad{filteredOpportunities.length !== 1 ? 'es' : ''}
           </span>
         </div>
         {/* Segunda fila de filtros */}
         <div className="flex flex-wrap items-center gap-2 mt-2">
-          <select
+          <Select
             value={oppPos}
             onChange={e => setOppPos(e.target.value)}
             aria-label="Filtrar por posición"
-            className={`px-2.5 py-1.5 border rounded-lg text-xs font-medium cursor-pointer ${oppPos ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'}`}
+            className={`w-auto py-1 text-secondary font-medium ${oppPos ? 'bg-blue-100 text-blue-700 border-blue-200' : ''}`}
           >
             <option value="">Posición: todas</option>
-            {POSITIONS.map(p => <option key={p.code} value={p.code}>{p.code} · {p.es}</option>)}
-          </select>
-          <select
+            {POSITIONS.map(p => <option key={p.code} value={p.code}>{positionLabel(p.code)}</option>)}
+          </Select>
+          <Select
             value={oppLeague}
             onChange={e => setOppLeague(e.target.value)}
             aria-label="Filtrar por liga"
-            className={`px-2.5 py-1.5 border rounded-lg text-xs font-medium cursor-pointer max-w-[160px] ${oppLeague ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'}`}
+            className={`w-auto py-1 text-secondary font-medium max-w-[160px] ${oppLeague ? 'bg-blue-100 text-blue-700 border-blue-200' : ''}`}
           >
             <option value="">Liga: todas</option>
             {oppLeagues.map(l => <option key={l} value={l}>{l}</option>)}
-          </select>
-          <button
+          </Select>
+          <Button
+            size="sm"
+            icon={<Users />}
+            aria-pressed={oppMineOnly}
             onClick={() => setOppMineOnly(v => !v)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${oppMineOnly ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'}`}
+            className={oppMineOnly ? 'bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200' : ''}
           >
-            <Users className="w-3.5 h-3.5" /> Solo mías
-          </button>
+            Solo mías
+          </Button>
           {(oppPos || oppLeague || oppMineOnly || oppPriority || oppSearch || oppNoMgrOnly) && (
-            <button
+            <Button
+              variant="link"
+              size="sm"
               onClick={() => { setOppPos(''); setOppLeague(''); setOppMineOnly(false); setOppPriority(''); setOppSearch(''); setOppNoMgrOnly(false) }}
-              className="text-xs text-blue-600 hover:text-blue-700 font-medium ml-1"
+              className="ml-1"
             >
               Limpiar
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -219,7 +246,7 @@ export function OportunidadesTab({
         <>
         {/* Barra de selección múltiple */}
         <div className="flex items-center gap-3 mb-2 flex-wrap">
-          <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer">
+          <label className="flex items-center gap-1.5 text-secondary text-slate-600 cursor-pointer">
             <input
               type="checkbox"
               className="w-4 h-4 rounded"
@@ -234,14 +261,11 @@ export function OportunidadesTab({
           </label>
           {oppSelected.size > 0 && (
             <>
-              <span className="text-xs text-slate-500">{oppSelected.size} seleccionada{oppSelected.size !== 1 ? 's' : ''}</span>
-              <button
-                onClick={() => setConfirmBulkDismiss(true)}
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-lg"
-              >
-                <Trash2 className="w-3.5 h-3.5" /> Descartar ({oppSelected.size})
-              </button>
-              <button onClick={() => setOppSelected(new Set())} className="text-xs text-slate-500 hover:text-slate-700">Limpiar selección</button>
+              <span className="text-secondary text-slate-600">{oppSelected.size} seleccionada{oppSelected.size !== 1 ? 's' : ''}</span>
+              <Button size="sm" variant="danger" icon={<Trash2 />} onClick={() => setConfirmBulkDismiss(true)}>
+                Descartar ({oppSelected.size})
+              </Button>
+              <Button variant="link" size="sm" onClick={() => setOppSelected(new Set())}>Limpiar selección</Button>
             </>
           )}
         </div>
@@ -258,30 +282,36 @@ export function OportunidadesTab({
                   className="w-4 h-4 rounded flex-shrink-0"
                   checked={oppSelected.has(key)}
                   onChange={() => toggleOppSelected(key)}
+                  aria-label={`Seleccionar ${player.name} → ${club.name}`}
                 />
                 <button
+                  type="button"
                   onClick={() => onSelectClub?.(club.id)}
-                  className="flex-1 min-w-0 flex items-center gap-2 text-left"
+                  className="flex-1 min-w-0 flex items-center gap-2 text-left rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                 >
-                  <span className={`w-6 h-6 rounded-md flex items-center justify-center text-[11px] font-bold flex-shrink-0 ${prCfg.bg} ${prCfg.text}`}>{entry.priority}</span>
+                  <span className={`w-6 h-6 rounded-md flex items-center justify-center text-badge font-bold flex-shrink-0 ${prCfg.bg} ${prCfg.text}`} title={`${L.prioridad} ${entry.priority}`}>{entry.priority}</span>
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="text-sm font-medium text-slate-800 truncate">{player.name}</span>
-                      <span className="text-[11px] text-slate-400 flex-shrink-0">{player.positions[0]}{age !== null ? ` · ${age}a` : ''}</span>
+                      <span className="text-body font-medium text-slate-800 truncate">{player.name}</span>
+                      <span className="text-meta text-slate-500 flex-shrink-0" title={positionLabel(player.positions[0])}>{player.positions[0]}{age !== null ? ` · ${age}a` : ''}</span>
                     </div>
-                    <div className="flex items-center gap-1.5 mt-0.5 text-xs text-slate-500 min-w-0">
-                      <ChevronRight className="w-3 h-3 text-slate-300 flex-shrink-0" />
-                      <span className={`text-[10px] font-bold px-1 py-0.5 rounded flex-shrink-0 ${tierCfg.bg} ${tierCfg.text}`}>{tier}</span>
+                    <div className="flex items-center gap-1.5 mt-0.5 text-secondary text-slate-600 min-w-0">
+                      <ChevronRight className="w-3 h-3 text-slate-400 flex-shrink-0" aria-hidden="true" />
+                      <span className={`text-badge font-bold px-1 py-0.5 rounded flex-shrink-0 ${tierCfg.bg} ${tierCfg.text}`} title={`${L.nivel} ${tier}`}>{tier}</span>
                       <span className="font-medium text-slate-700 truncate">{club.name}</span>
-                      {club.league && <span className="text-slate-400 truncate hidden sm:inline">· {club.league}</span>}
-                      <span className="text-[11px] bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded flex-shrink-0">
-                        {need.position}{need.ageMax ? ` ·Sub-${need.ageMax}` : ''}
+                      {club.league && <span className="text-slate-500 truncate hidden sm:inline">· {club.league}</span>}
+                      <span className="text-badge bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded flex-shrink-0" title={positionLabel(need.position)}>
+                        {need.position}{need.ageMax ? ` · Sub-${need.ageMax}` : ''}
                       </span>
                     </div>
                   </div>
                 </button>
-                <button
-                  disabled={offering || dismissingOppKey === key}
+                <Button
+                  size="sm"
+                  variant="primary"
+                  icon={<Plus />}
+                  loading={offering}
+                  disabled={dismissingOppKey === key}
                   onClick={async () => {
                     setOfferingOppKey(key)
                     try {
@@ -293,35 +323,26 @@ export function OportunidadesTab({
                       setOfferingOppKey(null)
                     }
                   }}
-                  className="flex-shrink-0 inline-flex items-center gap-1 text-xs font-medium text-white bg-primary hover:bg-primary/90 disabled:opacity-60 px-3 py-2 sm:py-1.5 rounded-lg"
+                  className="flex-shrink-0 min-h-11 sm:min-h-0"
                 >
-                  {offering ? <BtnSpinner /> : <Plus className="w-3.5 h-3.5" />}
-                  Ofrecer
-                </button>
-                <button
-                  disabled={offering || dismissingOppKey === key}
-                  onClick={async () => {
-                    setDismissingOppKey(key)
-                    try {
-                      await onCreateNegotiation({ playerId: player.id, clubId: club.id, needPosition: need.position, status: 'descartado', aisManager: club.aisManager || currentProfile.avatar })
-                      showToast('Oportunidad descartada')
-                    } catch {
-                      showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
-                    } finally {
-                      setDismissingOppKey(null)
-                    }
-                  }}
-                  title="Descartar: no encaja"
-                  aria-label="Descartar oportunidad"
-                  className="flex-shrink-0 inline-flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-60 p-2 rounded-lg"
+                  {L.ofrecer}
+                </Button>
+                {/* Descartar: separado visualmente de «Ofrecer» y con confirmación */}
+                <span className="w-px h-6 bg-slate-200 mx-1 flex-shrink-0" aria-hidden="true" />
+                <IconButton
+                  label="Descartar oportunidad"
+                  loading={dismissingOppKey === key}
+                  disabled={offering}
+                  onClick={() => setDismissKey(key)}
+                  className="text-slate-600 hover:text-red-600 hover:bg-red-50"
                 >
-                  {dismissingOppKey === key ? <span className="inline-block w-3.5 h-3.5 border-2 border-slate-300 border-t-slate-500 rounded-full animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                </button>
+                  <X />
+                </IconButton>
               </div>
             )
           })}
           {filteredOpportunities.length > CAP && (
-            <div className="px-3 py-2.5 text-center text-xs text-slate-400">
+            <div className="px-3 py-2.5 text-center text-secondary text-slate-500">
               Mostrando las primeras {CAP} de {filteredOpportunities.length}. Afina con la búsqueda o la prioridad.
             </div>
           )}
@@ -329,6 +350,18 @@ export function OportunidadesTab({
         </>
       )}
 
+      <ConfirmModal
+        open={!!dismissOpp}
+        title="¿Descartar esta oportunidad?"
+        message={dismissOpp ? `${dismissOpp.player.name} → ${dismissOpp.club.name} se marcará como descartada y desaparecerá de Oportunidades para el equipo.` : undefined}
+        confirmLabel="Descartar"
+        onConfirm={async () => {
+          const k = dismissKey
+          setDismissKey(null)
+          if (k) await dismissOne(k)
+        }}
+        onCancel={() => setDismissKey(null)}
+      />
       <ConfirmModal
         open={confirmBulkDismiss}
         title={`¿Descartar ${oppSelected.size} oportunidad${oppSelected.size !== 1 ? 'es' : ''}?`}
