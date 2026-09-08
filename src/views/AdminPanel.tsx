@@ -364,10 +364,10 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
                       title={p.captacion_only
                         ? 'Ahora solo ve Captación (Jugadores, Partidos e Informes) — clic para darle acceso completo'
                         : 'Restringir esta cuenta a Captación: solo Jugadores, Partidos e Informes'}
-                      className={`text-[11px] px-2 py-1 rounded border transition-colors ${
+                      className={`inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border transition-colors ${
                         p.captacion_only ? 'border-violet-200 text-violet-600 bg-violet-50 hover:bg-violet-100' : 'border-slate-200 text-slate-500 hover:text-slate-700'
                       }`}>
-                      {p.captacion_only ? '👁 Solo Captación' : 'Solo Captación'}
+                      {p.captacion_only && <Eye className="w-3 h-3" />} Solo Captación
                     </button>
                   </div>
                 </div>

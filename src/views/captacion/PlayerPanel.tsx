@@ -358,7 +358,7 @@ export function PlayerPanel({
                     onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))}
                     className="field" placeholder="Juveniles, Segunda RFEF..." />
                 </FormRow>
-                <FormRow label="Nac.">
+                <FormRow label="Nacionalidad">
                   <input value={form.nationality ?? ''} onChange={e => setForm(f => ({ ...f, nationality: e.target.value }))}
                     className="field" placeholder="Española..." />
                 </FormRow>
@@ -535,7 +535,7 @@ export function PlayerPanel({
                   <InfoItem label="Equipo" value={panelPlayer.team ?? '—'} />
                   <InfoItem label="Categoría" value={panelPlayer.categoria ?? '—'} />
                   <InfoItem label="Pie" value={panelPlayer.foot ?? '—'} />
-                  <InfoItem label="Nac." value={panelPlayer.nationality ?? '—'} />
+                  <InfoItem label="Nacionalidad" value={panelPlayer.nationality ?? '—'} />
                   {panelPlayer.clubContract && <InfoItem label="Contrato" value={panelPlayer.clubContract} />}
                   {panelPlayer.agency && <InfoItem label="Agencia" value={panelPlayer.agency} />}
                 </div>

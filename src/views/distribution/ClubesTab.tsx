@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
-import { Plus, Search, Star, Building2, Users, X, Check, AlertCircle, CircleDot, Flag, ChevronDown, SlidersHorizontal, CheckSquare } from 'lucide-react'
+import { Plus, Search, Star, Building2, Users, X, Check, AlertCircle, CircleDot, Flag, ChevronDown, SlidersHorizontal, CheckSquare, Globe } from 'lucide-react'
 import type { Club } from '../../types'
 import type { Profile } from '../../contexts/AuthContext'
 import { EmptyState } from '../../components/EmptyState'
@@ -306,7 +306,7 @@ export function ClubesTab({
               : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
           }`}
         >
-          🌍 {confederationFilter.length === 0 ? 'Confederación' : confederationFilter.map(c => c).join(', ')}
+          <Globe className="w-3 h-3" /> {confederationFilter.length === 0 ? 'Confederación' : confederationFilter.map(c => c).join(', ')}
           <ChevronDown className="w-3 h-3 opacity-60" />
         </button>
         {confDropdownOpen && (

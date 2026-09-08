@@ -669,7 +669,7 @@ export function FirmasTab({
                           <button
                             onClick={() => silenciar(g.kind)}
                             title="No volver a enseñarme este tipo de aviso (solo en este navegador)"
-                            className="text-[10px] text-slate-300 hover:text-slate-600 flex-shrink-0"
+                            className="text-[10px] text-slate-500 hover:text-slate-700 flex-shrink-0"
                           >silenciar</button>
                         </div>
                         {abierto && (

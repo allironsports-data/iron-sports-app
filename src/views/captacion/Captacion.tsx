@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react'
 import {
-  LogOut, FileText, Calendar, CalendarDays, TrendingUp, Eye, ClipboardList, Users, Inbox, Target, Sun, PenLine, Shield,
+  LogOut, FileText, Calendar, CalendarDays, TrendingUp, Eye, ClipboardList, Users, Inbox, Target, Sun, PenLine, Shield, Wifi,
 } from 'lucide-react'
 import logoImg from '../../assets/logo.jpeg'
 import type { ScoutingPlayer, ScoutingReport, ScoutingAssessment, ScoutingMatch, FirmasEntry } from '../../types'
@@ -1318,9 +1318,9 @@ export function Captacion({
               title={colaInformes.find(x => x.ultimoError)?.ultimoError
                 ? `Último error: ${colaInformes.find(x => x.ultimoError)!.ultimoError}. Clic para reintentar ahora.`
                 : 'Se enviarán solos cuando vuelva la conexión. Clic para reintentar ahora.'}
-              className="text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 hover:bg-amber-100 whitespace-nowrap"
+              className="flex items-center gap-1 text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 hover:bg-amber-100 whitespace-nowrap"
             >
-              📡 {colaInformes.length} informe{colaInformes.length !== 1 ? 's' : ''} pendiente{colaInformes.length !== 1 ? 's' : ''} de enviar
+              <Wifi className="w-3 h-3" /> {colaInformes.length} informe{colaInformes.length !== 1 ? 's' : ''} pendiente{colaInformes.length !== 1 ? 's' : ''} de enviar
             </button>
           )}
           <div className="flex-1" />

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef, lazy } from 'react'
+import { CalendarDays, Sun } from 'lucide-react'
 import { useAuth } from './hooks/useAuth'
 import type { Player, Task, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchOurPlayer, ScoutingMatchScout, BoulemaPeticion, MemberStatus, Postpartido, FirmasEntry, BoulemaPlayer } from './types'
 import * as db from './lib/db'
@@ -1377,7 +1378,7 @@ export default function App() {
       aria-label="Planificación"
       className="fixed bottom-[5.5rem] sm:bottom-4 right-3 sm:right-4 z-40 inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-slate-900 text-white text-xs font-semibold shadow-lg hover:bg-slate-700 print:hidden"
     >
-      🗓️ <span className="hidden sm:inline">Planificación</span>
+      <CalendarDays className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Planificación</span>
     </button>
   )
 
@@ -1547,7 +1548,7 @@ export default function App() {
           className="fixed bottom-4 right-4 z-40 inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-amber-500 text-white text-xs font-semibold shadow-lg hover:bg-amber-600"
           aria-label="Mi día"
         >
-          ☀️ Mi día
+          <Sun className="w-3.5 h-3.5" /> Mi día
         </button>
         <button
           onClick={() => setCaptacionOpenTab('planificacion')}
@@ -1555,7 +1556,7 @@ export default function App() {
           aria-label="Planificación"
           className="fixed bottom-16 right-4 z-40 inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-slate-900 text-white text-xs font-semibold shadow-lg hover:bg-slate-700"
         >
-          🗓️ Planificación
+          <CalendarDays className="w-3.5 h-3.5" /> Planificación
         </button>
         <SavingIndicator />{conflictNode}
       </>

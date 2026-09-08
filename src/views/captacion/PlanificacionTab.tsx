@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Plus, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { Plus, ChevronLeft, ChevronRight, X, Printer } from 'lucide-react'
 import type { Player, ScoutingMatch, ScoutingMatchOurPlayer, ScoutingMatchScout } from '../../types'
 import type { Profile } from '../../contexts/AuthContext'
 import { BotonCsv } from '../../components/BotonCsv'
@@ -126,9 +126,9 @@ export function PlanificacionTab({
           </button>
           <div className="flex-1" />
           <button onClick={imprimir} title="Abre la hoja lista para imprimir o guardar como PDF" className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-1.5 text-[11px] font-semibold border border-slate-200 text-slate-500 rounded-lg bg-white hover:border-primary hover:text-primary">
-            🖨️ Imprimir / PDF
+            <Printer className="w-3 h-3" /> Imprimir / PDF
           </button>
-          <BotonCsv nombre={`planificacion_${rango.desde}`} conSello={false} etiqueta="⤓ Excel" cabeceras={CABECERAS_PLANIFICACION} filas={() => planificacionACsv(filas)} />
+          <BotonCsv nombre={`planificacion_${rango.desde}`} conSello={false} etiqueta="Excel" cabeceras={CABECERAS_PLANIFICACION} filas={() => planificacionACsv(filas)} />
           <button
             onClick={openAddMatch}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
