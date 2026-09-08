@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Search, X, Plus, Pencil } from 'lucide-react'
+import { Search, X, Plus, Pencil, Maximize2 } from 'lucide-react'
 import type { ScoutingPlayer, ScoutingReport, ScoutingMatch } from '../../../types'
 import type { Profile } from '../../../contexts/AuthContext'
 import * as db from '../../../lib/db'
@@ -9,6 +9,7 @@ import { POS_GROUPS, grupoDe as posGroupOf, type PosGroup } from '../../../lib/c
 import { AssessmentChip, Spinner, FichaCarcasa } from '../comun'
 import { type ShowToast, type MatchScoutInfo, type ConclusionOption, type SuggestWhy, CONCLUSION_OPTIONS, normConclusion, CONCLUSION_STYLE, MONTHS_ES, birthYearFromBirthdate, personaToName, fmtDate, SUGGEST_ORDER, SUGGEST_LABEL, SEARCH_LIMIT, scoutColor } from '../helpers'
 import { PegarAlineacion } from './PegarAlineacion'
+import { MatchExpandedView } from './MatchExpandedView'
 
 // ── MatchDetailModal — ficha del partido ─────────────────────
 // Todo lo del partido en una ventana: scouts asignados (varios), jugadores
@@ -69,8 +70,11 @@ export function MatchDetailModal({
   const [savingQuick, setSavingQuick] = useState(false)
   const [addScoutOpen, setAddScoutOpen] = useState(false)
   const [informeAbierto, setInformeAbierto] = useState<string | null>(null)
+  // Vista ampliada (pantalla completa, solo lectura, con el texto de los informes)
+  const [ampliado, setAmpliado] = useState(false)
 
-  useEscapeKey(onClose)
+  // Con la vista ampliada abierta, Esc la cierra a ella (tiene su propio listener), no la ficha
+  useEscapeKey(onClose, !ampliado)
 
   const day = match.date.slice(8)
   const mon = MONTHS_ES[parseInt(match.date.slice(5, 7)) - 1]
@@ -256,6 +260,21 @@ export function MatchDetailModal({
   return (
     <FichaCarcasa esPanel={esPanel} onClose={onClose}>
       <>
+        {ampliado && (
+          <MatchExpandedView
+            match={match}
+            scouts={scouts}
+            profiles={profiles}
+            currentProfile={currentProfile}
+            linkedPlayers={linkedPlayers}
+            scoutingReports={scoutingReports}
+            allMatches={allMatches}
+            nuestros={nuestros}
+            onClose={() => setAmpliado(false)}
+            onOpenPlayer={onOpenPlayer}
+            onOpenEquipo={(n) => { setAmpliado(false); onOpenEquipo(n) }}
+          />
+        )}
         {/* ── Cabecera ── */}
         <div className="px-4 sm:px-5 py-3 border-b border-slate-200 flex items-start gap-3">
           <div className="min-w-0 flex-1">
@@ -292,6 +311,9 @@ export function MatchDetailModal({
               title="Estado del partido"
             >
               {isVisto ? '✓ Visto' : 'Pendiente'}
+            </button>
+            <button onClick={() => setAmpliado(true)} className="p-1.5 text-slate-400 hover:text-primary rounded-lg" title="Vista ampliada: informes completos, dos equipos y resumen por scout" aria-label="Vista ampliada del partido">
+              <Maximize2 className="w-4 h-4" />
             </button>
             <button onClick={() => { onEdit(match); onClose() }} className="p-1.5 text-slate-400 hover:text-blue-500 rounded-lg" title="Editar partido" aria-label="Editar partido">
               <Pencil className="w-4 h-4" />
