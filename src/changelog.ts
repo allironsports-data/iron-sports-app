@@ -21,7 +21,10 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-09-08',
     items: [
+      'Ficha de partido: nuevo botón «Vista ampliada» (icono ⤢ junto al lápiz) que abre el partido a pantalla completa con los dos equipos en columnas, el texto completo de cada informe, resumen por scout y filtros por veredicto o scout',
+      'Vista ampliada de partido: ya se puede añadir el propio informe a un jugador que ya tiene informe de otro scout, y editar o borrar los informes existentes desde ahí',
       'Carga inicial más rápida: las tablas grandes (informes, partidos, alineaciones, jugadores de captación…) se leen en paralelo en vez de página a página, así que «Sincronizando datos…» dura mucho menos',
+      'Conclusiones · Llamar: nuevo botón «Ver por zonas» que abre a pantalla completa todos los jugadores en «Llamar» agrupados por zona geográfica, ordenados por prioridad (más informes «Llamar» primero, en empate el más reciente), para repartir las llamadas de un vistazo',
     ],
     adminItems: [
       'En la consola del navegador aparece «[carga] fase 2 … ms» con el tiempo de cada tabla, ordenado de mayor a menor, para localizar la lenta',

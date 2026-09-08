@@ -1,9 +1,11 @@
 import React, { useState, useMemo } from 'react'
-import { X } from 'lucide-react'
+import { X, Maximize2 } from 'lucide-react'
 import type { ScoutingPlayer, ScoutingReport, ScoutingAssessment } from '../../types'
 import { ZONAS, SIN_ZONA, zonaDe, type Zona } from '../../lib/zonas'
 import { PITCH_SLOTS, POS_GROUPS, slotDe as pitchSlotOf, grupoDe as posGroupOf } from '../../lib/campo'
 import { AssessmentChip } from './comun'
+import { LlamarZonasView } from './LlamarZonasView'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { SELECT_CLS, normConclusion, CONCLUSION_STYLE, birthYearFromBirthdate, fmtDate, relativeDate } from './helpers'
 // ── ConclusionesTab ──────────────────────────────────────────
 // Punto de conclusiones: candidatos a Llamar, mapa por generación ×
@@ -31,6 +33,8 @@ export function ConclusionesTab({ players, reports, threshold, onThresholdChange
   const [expandedSlots, setExpandedSlots] = useState<Set<string>>(new Set())
   const [showStale, setShowStale] = useState(false)
   const [zonaFilter, setZonaFilter] = useState<string>('all')
+  const [zonasVistaAbierta, setZonasVistaAbierta] = useState(false)
+  useEscapeKey(() => setZonasVistaAbierta(false), zonasVistaAbierta)
 
   // Informes por jugador (desc por fecha)
   const reportsByPlayer = useMemo(() => {
@@ -232,6 +236,13 @@ export function ConclusionesTab({ players, reports, threshold, onThresholdChange
           )}
           <span className="text-[11px] text-slate-400 hidden sm:inline">jugadores con {threshold}+ informes «Llamar», sea cual sea su etiqueta</span>
           <div className="ml-auto flex items-center gap-1.5">
+            <button
+              onClick={() => setZonasVistaAbierta(true)}
+              className="flex items-center gap-1 text-[11px] font-semibold text-slate-600 border border-slate-200 rounded-lg px-2 py-1 hover:bg-slate-50 hover:border-slate-300 transition-colors"
+              title="Ver a todos los jugadores en «Llamar» agrupados por zona, a pantalla completa"
+            >
+              <Maximize2 className="w-3 h-3" /> Ver por zonas
+            </button>
             <span className="text-[11px] text-slate-400">Umbral</span>
             <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
               {[2, 3, 4].map(n => (
@@ -568,6 +579,16 @@ export function ConclusionesTab({ players, reports, threshold, onThresholdChange
           </div>
         )}
       </div>
+
+      {zonasVistaAbierta && (
+        <LlamarZonasView
+          players={players}
+          reports={reports}
+          clubZonas={clubZonas}
+          onOpenPlayer={onOpenPlayer}
+          onClose={() => setZonasVistaAbierta(false)}
+        />
+      )}
     </div>
   )
 }
