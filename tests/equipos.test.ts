@@ -75,4 +75,28 @@ describe('avisoEquipoPartido — al añadir un jugador a un partido', () => {
     expect(avisoEquipoPartido('Real Madrid Juv A', 'Real Sociedad Juv A', 'Elche Juv A'))
       .toEqual({ sugerido: null })
   })
+
+  // No hay nada atado a unos clubes concretos: la regla es siempre
+  // «compara el equipo de la ficha con los dos que juegan». Estos casos
+  // son de un partido real distinto (Real Madrid C – Albacete B).
+  it('vale para cualquier partido y cualquier club', () => {
+    const L = 'Real Madrid C', V = 'Albacete B'
+    expect(avisoEquipoPartido('Real Madrid C', L, V)).toBeNull()
+    expect(avisoEquipoPartido('Albacete B', L, V)).toBeNull()
+    expect(avisoEquipoPartido('Real Madrid Juv A', L, V)).toEqual({ sugerido: L })
+    expect(avisoEquipoPartido('Real Madrid Juv B', L, V)).toEqual({ sugerido: L })
+    expect(avisoEquipoPartido('Real Madrid B', L, V)).toEqual({ sugerido: L })
+    expect(avisoEquipoPartido('Real Madrid', L, V)).toEqual({ sugerido: L })
+    expect(avisoEquipoPartido('Albacete Juv A', L, V)).toEqual({ sugerido: V })
+    expect(avisoEquipoPartido('Levante Juv A', L, V)).toEqual({ sugerido: null })
+  })
+
+  it('también con clubes de fuera y nombres largos', () => {
+    expect(avisoEquipoPartido('AFC Ajax B', 'AFC Ajax', 'PSV Eindhoven')).toEqual({ sugerido: 'AFC Ajax' })
+    expect(avisoEquipoPartido('PSV Eindhoven', 'AFC Ajax', 'PSV Eindhoven')).toBeNull()
+    expect(avisoEquipoPartido('Deportivo Alavés B', 'CD Mirandés', 'Deportivo Alavés'))
+      .toEqual({ sugerido: 'Deportivo Alavés' })
+    expect(avisoEquipoPartido('SD Amorebieta', 'CD Mirandés', 'Deportivo Alavés'))
+      .toEqual({ sugerido: null })
+  })
 })

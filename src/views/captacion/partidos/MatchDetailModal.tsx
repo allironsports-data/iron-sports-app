@@ -15,6 +15,53 @@ import { MatchExpandedView } from './MatchExpandedView'
 // Todo lo del partido en una ventana: scouts asignados (varios), jugadores
 // vistos con los informes de cada scout, y buscador/sugeridos para añadir más.
 
+// ── Aviso de equipo que no cuadra con el partido ─────────────────────
+// Sale en dos sitios: al vincular un jugador nuevo (justo bajo el buscador)
+// y al repasar los que ya estaban vinculados («Revisar equipos»).
+function FilaAvisoEquipo({
+  player, sugerido, local, visitante, onCorregir, onDescartar,
+}: {
+  player: ScoutingPlayer
+  sugerido: string | null
+  local: string
+  visitante: string
+  onCorregir: (equipo: string) => void
+  onDescartar: () => void
+}) {
+  // El del mismo club primero (es el candidato evidente); si no hay, los dos igual.
+  const opciones = sugerido
+    ? [sugerido, sugerido === local ? visitante : local]
+    : [local, visitante]
+  return (
+    <div className="flex flex-wrap items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+      <AlertTriangle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+      <span className="text-xs text-amber-900 flex-1 min-w-[200px]">
+        <span className="font-semibold">{player.fullName}</span>
+        {player.team?.trim()
+          ? <> figura en <span className="font-semibold">{player.team}</span>, que no juega este partido.</>
+          : <> no tiene equipo en su ficha.</>}
+        {' '}¿Lo cambio?
+      </span>
+      {opciones.map((eq, i) => (
+        <button
+          key={eq}
+          onClick={() => onCorregir(eq)}
+          className={`text-xs font-semibold rounded-lg px-2.5 py-1 transition-colors ${
+            i === 0
+              ? 'bg-amber-600 text-white hover:bg-amber-700'
+              : 'bg-white border border-amber-300 text-amber-800 hover:bg-amber-100'
+          }`}
+        >
+          {eq}
+        </button>
+      ))}
+      <button onClick={onDescartar} className="text-xs text-amber-700 hover:text-amber-900 underline px-1">
+        Dejarlo así
+      </button>
+    </div>
+  )
+}
+
 export function MatchDetailModal({
   match, scouts, profiles, currentProfile, isAdmin,
   scoutingPlayers, linkedPlayerIds, scoutingReports, allMatches, matchPlayersByMatchId,
@@ -73,10 +120,16 @@ export function MatchDetailModal({
   const [savingQuick, setSavingQuick] = useState(false)
   const [addScoutOpen, setAddScoutOpen] = useState(false)
   const [informeAbierto, setInformeAbierto] = useState<string | null>(null)
-  // Jugadores recién añadidos cuyo equipo de ficha no es ninguno de los dos
-  // que juegan este partido: se ofrece corregirlo aquí mismo.
-  const [avisosEquipo, setAvisosEquipo] = useState<{ player: ScoutingPlayer; sugerido: string | null }[]>([])
-  useEffect(() => { setAvisosEquipo([]) }, [match.id])
+  // Equipos que no cuadran con el partido: «dejarlo así» los silencia, y los
+  // recién vinculados avisan solos sin tener que abrir el repaso.
+  const [equiposDescartados, setEquiposDescartados] = useState<Set<string>>(new Set())
+  const [equiposReciénAñadidos, setEquiposReciénAñadidos] = useState<Set<string>>(new Set())
+  const [revisandoEquipos, setRevisandoEquipos] = useState(false)
+  useEffect(() => {
+    setEquiposDescartados(new Set())
+    setEquiposReciénAñadidos(new Set())
+    setRevisandoEquipos(false)
+  }, [match.id])
   // Vista ampliada (pantalla completa, solo lectura, con el texto de los informes)
   const [ampliado, setAmpliado] = useState(false)
 
@@ -149,6 +202,24 @@ export function MatchDetailModal({
     ].filter(g => g.jugadores.length > 0)
   }, [linkedPlayers, match.homeTeam, match.awayTeam])
 
+  // Jugadores vinculados cuyo equipo de ficha NO es ninguno de los dos que
+  // juegan. Ojo: la lista de arriba los agrupa por CLUB, así que un «Juv B»
+  // en un partido del «Juv A» sale colocado como si todo estuviera bien.
+  const desajustes = useMemo(() => {
+    const m = new Map<string, string | null>()
+    for (const p of linkedPlayers) {
+      const a = avisoEquipoPartido(p.team, match.homeTeam, match.awayTeam)
+      if (a) m.set(p.id, a.sugerido)
+    }
+    return m
+  }, [linkedPlayers, match.homeTeam, match.awayTeam])
+
+  /** Los que hay que repasar: con desajuste y sin descartar */
+  const porRevisar = useMemo(
+    () => linkedPlayers.filter(p => desajustes.has(p.id) && !equiposDescartados.has(p.id)),
+    [linkedPlayers, desajustes, equiposDescartados],
+  )
+
   // Otros partidos de estos mismos equipos, para saltar de uno a otro
   const partidosRelacionados = useMemo(() => allMatches
     .filter(m => m.id !== match.id &&
@@ -160,7 +231,7 @@ export function MatchDetailModal({
   async function handleAddPlayer(playerId: string) {
     try {
       await onAddMatchPlayer(match.id, playerId)
-      avisarSiEquipoNoCuadra(playerId)
+      setEquiposReciénAñadidos(prev => new Set(prev).add(playerId))
     } catch (e) {
       const err = e as { code?: string; message?: string }
       showToast?.(
@@ -171,23 +242,11 @@ export function MatchDetailModal({
     }
   }
 
-  /** Avisa si el equipo de la ficha no es ninguno de los dos que juegan. */
-  function avisarSiEquipoNoCuadra(playerId: string) {
-    const p = scoutingPlayers.find(x => x.id === playerId)
-    if (!p) return
-    const aviso = avisoEquipoPartido(p.team, match.homeTeam, match.awayTeam)
-    if (!aviso) return
-    setAvisosEquipo(prev => prev.some(a => a.player.id === p.id)
-      ? prev
-      : [...prev, { player: p, sugerido: aviso.sugerido }])
-  }
-
   function descartarAviso(playerId: string) {
-    setAvisosEquipo(prev => prev.filter(a => a.player.id !== playerId))
+    setEquiposDescartados(prev => new Set(prev).add(playerId))
   }
 
   async function corregirEquipo(p: ScoutingPlayer, equipo: string) {
-    descartarAviso(p.id)
     try {
       await onFixPlayerTeam(p, equipo)
     } catch {
@@ -472,6 +531,26 @@ export function MatchDetailModal({
             <span className="text-[11px] font-semibold text-violet-600 uppercase tracking-wide">
               Vistos en este partido · {linkedPlayers.length} jugador{linkedPlayers.length !== 1 ? 'es' : ''} · {linkedWithReport} con informe
             </span>
+
+            {/* Repaso de equipos que no cuadran con este partido */}
+            {porRevisar.length > 0 && (
+              <div className="mt-1.5 flex flex-wrap items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+                <span className="text-xs text-amber-900 flex-1 min-w-[180px]">
+                  <span className="font-semibold">{porRevisar.length}</span>
+                  {porRevisar.length === 1
+                    ? ' jugador tiene en su ficha un equipo que no juega este partido'
+                    : ' jugadores tienen en su ficha un equipo que no juega este partido'}
+                </span>
+                <button
+                  onClick={() => setRevisandoEquipos(v => !v)}
+                  className="text-xs font-semibold rounded-lg px-2.5 py-1 bg-amber-600 text-white hover:bg-amber-700 transition-colors"
+                >
+                  {revisandoEquipos ? 'Ocultar' : 'Revisar'}
+                </button>
+              </div>
+            )}
+
             <div className="mt-1.5 space-y-1.5">
               {linkedPlayers.length === 0 && (
                 <p className="text-xs text-slate-400 italic">Aún no hay jugadores vinculados a este partido.</p>
@@ -658,6 +737,20 @@ export function MatchDetailModal({
                       </div>
                     ))}
                   </div>
+                  {/* Su equipo no cuadra: al repasar, o si lo acabo de vincular */}
+                  {desajustes.has(p.id) && !equiposDescartados.has(p.id)
+                    && (revisandoEquipos || equiposReciénAñadidos.has(p.id)) && (
+                    <div className="mt-1">
+                      <FilaAvisoEquipo
+                        player={p}
+                        sugerido={desajustes.get(p.id) ?? null}
+                        local={match.homeTeam}
+                        visitante={match.awayTeam}
+                        onCorregir={eq => void corregirEquipo(p, eq)}
+                        onDescartar={() => descartarAviso(p.id)}
+                      />
+                    </div>
+                  )}
                   </div>
                 )
               }))}
@@ -739,45 +832,6 @@ export function MatchDetailModal({
                 </div>
               )}
             </div>
-
-            {/* ── Aviso: el equipo de la ficha no es ninguno de los dos ── */}
-            {avisosEquipo.map(({ player, sugerido }) => {
-              // El sugerido primero; el otro después. Sin duplicados.
-              const opciones = sugerido
-                ? [sugerido, sugerido === match.homeTeam ? match.awayTeam : match.homeTeam]
-                : [match.homeTeam, match.awayTeam]
-              return (
-                <div key={player.id} className="flex flex-wrap items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
-                  <span className="text-xs text-amber-900 flex-1 min-w-[200px]">
-                    <span className="font-semibold">{player.fullName}</span>
-                    {player.team?.trim()
-                      ? <> figura en <span className="font-semibold">{player.team}</span>, que no juega este partido.</>
-                      : <> no tiene equipo en su ficha.</>}
-                    {' '}¿Lo cambio?
-                  </span>
-                  {opciones.map((eq, i) => (
-                    <button
-                      key={eq}
-                      onClick={() => void corregirEquipo(player, eq)}
-                      className={`text-xs font-semibold rounded-lg px-2.5 py-1 transition-colors ${
-                        i === 0
-                          ? 'bg-amber-600 text-white hover:bg-amber-700'
-                          : 'bg-white border border-amber-300 text-amber-800 hover:bg-amber-100'
-                      }`}
-                    >
-                      {eq}
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => descartarAviso(player.id)}
-                    className="text-xs text-amber-700 hover:text-amber-900 underline px-1"
-                  >
-                    Dejarlo así
-                  </button>
-                </div>
-              )
-            })}
 
             <div>
               {searchResults.length > 0 ? (
