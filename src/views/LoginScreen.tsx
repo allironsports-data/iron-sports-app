@@ -5,6 +5,24 @@ interface Props {
   onLogin: (email: string, password: string) => Promise<string | null>
 }
 
+/**
+ * Antes cualquier fallo (credenciales, sin red, error de Supabase…) mostraba
+ * siempre «Email o contraseña incorrectos», que confundía al que se había
+ * quedado sin cobertura en el campo con el que se había equivocado de clave.
+ */
+function mensajeError(raw: string): string {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return 'Sin conexión a internet. Revisa tu conexión e inténtalo de nuevo.'
+  }
+  if (/invalid login credentials|invalid email or password/i.test(raw)) {
+    return 'Email o contraseña incorrectos'
+  }
+  if (/failed to fetch|network|ecconn|timeout|fetch/i.test(raw)) {
+    return 'No se ha podido conectar. Revisa tu conexión e inténtalo de nuevo.'
+  }
+  return 'No se ha podido iniciar sesión. Inténtalo de nuevo.'
+}
+
 export function LoginScreen({ onLogin }: Props) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -16,7 +34,7 @@ export function LoginScreen({ onLogin }: Props) {
     setError('')
     setLoading(true)
     const err = await onLogin(email, password)
-    if (err) setError('Email o contraseña incorrectos')
+    if (err) setError(mensajeError(err))
     setLoading(false)
   }
 
@@ -48,6 +66,7 @@ export function LoginScreen({ onLogin }: Props) {
             onChange={(e) => setEmail(e.target.value)}
             required
             autoComplete="email"
+            autoFocus
             className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-primary"
           />
 
@@ -60,7 +79,7 @@ export function LoginScreen({ onLogin }: Props) {
             onChange={(e) => setPassword(e.target.value)}
             required
             autoComplete="current-password"
-            className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm mb-6 focus:outline-none focus:ring-2"
+            className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm mb-6 focus:outline-none focus:ring-2 focus:ring-primary"
           />
 
           {error && (

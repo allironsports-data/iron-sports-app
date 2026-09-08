@@ -86,9 +86,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user, fetchProfile])
 
   const signIn = async (email: string, password: string): Promise<string | null> => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) return error.message
-    return null
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) return error.message
+      return null
+    } catch (err) {
+      // Fallo de red (fetch falla antes de llegar a Supabase): sin esto la
+      // pantalla de login se quedaba "Entrando..." para siempre y el error
+      // real no llegaba a LoginScreen para poder distinguirlo del de credenciales.
+      return err instanceof Error ? err.message : 'network error'
+    }
   }
 
   const signOut = async () => {
