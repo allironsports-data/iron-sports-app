@@ -19,6 +19,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-09-08',
+    items: [
+      'Carga inicial más rápida: las tablas grandes (informes, partidos, alineaciones, jugadores de captación…) se leen en paralelo en vez de página a página, así que «Sincronizando datos…» dura mucho menos',
+    ],
+    adminItems: [
+      'En la consola del navegador aparece «[carga] fase 2 … ms» con el tiempo de cada tabla, ordenado de mayor a menor, para localizar la lenta',
+    ],
+  },
+  {
     date: '2026-09-05',
     items: [
       'Home de Mantenimiento: quitado el aviso «X partidos para ver hoy» — solo miraba el campo antiguo de un scout por partido y por eso se le veían solo los de Ibai, aunque hubiera más gente asignada',

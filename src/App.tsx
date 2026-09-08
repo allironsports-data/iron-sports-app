@@ -372,18 +372,27 @@ export default function App() {
       // última, y con un pequeño retraso para no parpadear en cargas rápidas.
       const fallos: string[] = []
       let restantes = 16
-      const terminaUna = () => {
+      // Tiempo de cada tabla (ms), para ver en consola cuál es la lenta.
+      const tiempos: Record<string, number> = {}
+      const inicioFase2 = performance.now()
+      const terminaUna = (nombre: string, inicio: number) => {
+        tiempos[nombre] = Math.round(performance.now() - inicio)
         restantes--
-        if (restantes === 0 && !cancelled) { setCargasFallidas(fallos); setPhase2Loading(false) }
+        if (restantes === 0) {
+          const ordenados = Object.fromEntries(Object.entries(tiempos).sort((a, b) => b[1] - a[1]))
+          console.info('[carga] fase 2 %d ms', Math.round(performance.now() - inicioFase2), ordenados)
+          if (!cancelled) { setCargasFallidas(fallos); setPhase2Loading(false) }
+        }
       }
       function opc<T>(nombre: string, p: Promise<T>, vacio: T, aplicar: (v: T) => void) {
+        const inicio = performance.now()
         p.then(v => { if (!cancelled) aplicar(v) })
           .catch((err: unknown) => {
             console.error(`[carga] ${nombre}:`, err)
             fallos.push(nombre)
             if (!cancelled) aplicar(vacio)
           })
-          .finally(terminaUna)
+          .finally(() => terminaUna(nombre, inicio))
       }
       opc('Clubes', db.fetchClubs(), [], v => setClubs(v as Club[]))
       opc('Distribución', db.fetchDistributionEntries(), [], v => setDistEntries(v as DistributionEntry[]))

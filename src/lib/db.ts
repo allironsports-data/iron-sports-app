@@ -133,14 +133,10 @@ function esTablaInexistente(error: unknown): boolean {
   return (error as { code?: string } | null)?.code === '42P01'
 }
 
-// Para los fetchers de tablas opcionales: si la tabla no existe se devuelve
-// [] (la app funciona sin ella); cualquier otro fallo se propaga para que
-// App.tsx avise de la carga incompleta en vez de mostrar una lista corta.
-function fallaOTablaVacia<T>(tabla: string, error: unknown, leidas: number): T[] {
-  if (esTablaInexistente(error)) return []
-  logFetchError(tabla, error, leidas)
-  throw error
-}
+// Para los fetchers de tablas opcionales: si la tabla no existe (42P01) el
+// catch devuelve [] (la app funciona sin ella); cualquier otro fallo se
+// propaga para que App.tsx avise de la carga incompleta en vez de mostrar
+// una lista corta. leerTodo ya deja el fallo en consola.
 
 // ⚠ Supabase corta en 1000 filas SIN avisar. Cualquier lectura de una tabla
 // que pueda crecer tiene que ir paginada. Esto lo hace en una línea:
@@ -163,24 +159,70 @@ function fallaOTablaVacia<T>(tabla: string, error: unknown, leidas: number): T[]
 // salta. La repetida se quita al final (`dedupePorId`); la saltada la traerá
 // el siguiente refetch. La solución de fondo sería paginar por cursor.
 const PAGINA = 1000
+// Tope de seguridad: 200 páginas = 200.000 filas. Si se llega ahí es que
+// algo va mal (un bucle), no que haya tantos datos.
+const MAX_PAGINAS = 200
+// Páginas que se piden a la vez cuando no se conoce el total.
+const PAGINAS_POR_RONDA = 4
+
+// Las páginas se piden EN PARALELO: la 0 primero; si viene llena, las
+// siguientes en rondas de 4 hasta que alguna llega corta. Con `contar`
+// (un `select('*', { count: 'exact', head: true })`) se sabe el total y se
+// lanzan todas las páginas restantes de golpe.
 export async function leerTodo<T>(
   tabla: string,
   consulta: (desde: number, hasta: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
+  opciones?: { contar?: () => PromiseLike<{ count: number | null; error: unknown }> },
 ): Promise<T[]> {
-  const todo: T[] = []
-  let desde = 0
-  // Tope de seguridad: 200 páginas = 200.000 filas. Si se llega ahí es que
-  // algo va mal (un bucle), no que haya tantos datos.
-  for (let i = 0; i < 200; i++) {
-    const { data, error } = await consulta(desde, desde + PAGINA - 1)
-    if (error) { logFetchError(tabla, error, todo.length); throw error }
+  // paginas[i] = filas de la página i (se rellena según van llegando; el
+  // índice conserva el orden aunque lleguen desordenadas)
+  const paginas: T[][] = []
+  const leidas = () => paginas.reduce((n, p) => n + (p?.length ?? 0), 0)
+  const terminar = () => dedupePorId(paginas.flat() as { id?: unknown }[]) as T[]
+
+  /** pide la página `i` y devuelve cuántas filas trajo */
+  const pedir = async (i: number): Promise<number> => {
+    const { data, error } = await consulta(i * PAGINA, i * PAGINA + PAGINA - 1)
+    if (error) { logFetchError(tabla, error, leidas()); throw error }
     const pagina = data ?? []
-    todo.push(...pagina)
-    if (pagina.length < PAGINA) return dedupePorId(todo as { id?: unknown }[]) as T[]
-    desde += PAGINA
+    paginas[i] = pagina
+    return pagina.length
   }
-  logFetchError(tabla, new Error('demasiadas páginas'), todo.length)
-  return dedupePorId(todo as { id?: unknown }[]) as T[]
+
+  // Página 0 (y el recuento, si lo hay) a la vez.
+  const [n0, recuento] = await Promise.all([
+    pedir(0),
+    opciones?.contar ? opciones.contar() : Promise.resolve(null),
+  ])
+  if (n0 < PAGINA) return terminar()
+
+  let siguiente = 1
+  let corta = false
+
+  // Con el total conocido: todas las páginas que faltan de golpe.
+  const total = recuento && !recuento.error && typeof recuento.count === 'number' ? recuento.count : null
+  if (total !== null) {
+    const nPaginas = Math.min(Math.ceil(total / PAGINA), MAX_PAGINAS)
+    const indices: number[] = []
+    for (let i = 1; i < nPaginas; i++) indices.push(i)
+    const tamanos = await Promise.all(indices.map(pedir))
+    siguiente = nPaginas
+    // si la última llegó corta hemos acabado; si vino llena (han insertado
+    // entre el recuento y la lectura) seguimos por rondas
+    corta = tamanos.length === 0 || tamanos[tamanos.length - 1] < PAGINA
+  }
+
+  // Sin total (o si ha crecido): rondas de PAGINAS_POR_RONDA en paralelo.
+  while (!corta && siguiente < MAX_PAGINAS) {
+    const indices: number[] = []
+    for (let i = siguiente; i < Math.min(siguiente + PAGINAS_POR_RONDA, MAX_PAGINAS); i++) indices.push(i)
+    const tamanos = await Promise.all(indices.map(pedir))
+    siguiente += indices.length
+    corta = tamanos.some(n => n < PAGINA)
+  }
+
+  if (!corta) logFetchError(tabla, new Error('demasiadas páginas'), leidas())
+  return terminar()
 }
 
 // ── Conflictos al editar (dos personas sobre la misma ficha) ─────────
@@ -258,19 +300,11 @@ async function actualizarConControl<T>(
 // ⚠ Supabase corta en 1000 filas SIN avisar: todo fetch de una tabla que
 // pueda crecer va paginado (igual que fetchClubs o fetchScoutingPlayers)
 export async function fetchPlayers(): Promise<Player[]> {
-  const all: Player[] = []
-  const pageSize = 1000
-  let from = 0
-  while (true) {
-    const { data, error } = await supabase.from('players').select('*').order('name')
-      .order('id').range(from, from + pageSize - 1)
-    if (error) throw error
-    const page = (data ?? []).map(dbToPlayer)
-    all.push(...page)
-    if (page.length < pageSize) break
-    from += pageSize
-  }
-  return dedupePorId(all)
+  const filas = await leerTodo<Record<string, unknown>>('players', (desde, hasta) =>
+    supabase.from('players').select('*').order('name')
+      .order('id').range(desde, hasta),
+  { contar: () => supabase.from('players').select('*', { count: 'exact', head: true }) })
+  return filas.map(dbToPlayer)
 }
 
 export async function createPlayer(p: Player): Promise<Player> {
@@ -343,23 +377,21 @@ function dbToTask(row: Record<string, unknown>): Task {
 }
 
 export async function fetchTasks(playerId?: string): Promise<Task[]> {
-  const all: Task[] = []
-  const pageSize = 1000
-  let from = 0
-  while (true) {
-    // Sin paginar, al pasar de 1000 tareas desaparecían las más antiguas
-    // (van ordenadas por fecha de creación descendente)
+  // Sin paginar, al pasar de 1000 tareas desaparecían las más antiguas
+  // (van ordenadas por fecha de creación descendente)
+  const filas = await leerTodo<Record<string, unknown>>('tasks', (desde, hasta) => {
     let q = supabase.from('tasks').select('*').order('created_at', { ascending: false })
-      .order('id').range(from, from + pageSize - 1)
+      .order('id').range(desde, hasta)
     if (playerId) q = q.eq('player_id', playerId)
-    const { data, error } = await q
-    if (error) throw error
-    const page = (data ?? []).map(dbToTask)
-    all.push(...page)
-    if (page.length < pageSize) break
-    from += pageSize
-  }
-  return dedupePorId(all)
+    return q
+  }, {
+    contar: () => {
+      let q = supabase.from('tasks').select('*', { count: 'exact', head: true })
+      if (playerId) q = q.eq('player_id', playerId)
+      return q
+    },
+  })
+  return filas.map(dbToTask)
 }
 
 export async function createTask(t: Task): Promise<Task> {
@@ -652,20 +684,12 @@ function dbToClub(row: Record<string, unknown>): Club {
 }
 
 export async function fetchClubs(): Promise<Club[]> {
-  const all: Club[] = []
-  const pageSize = 1000
-  let from = 0
-  while (true) {
-    const { data, error } = await supabase
+  const filas = await leerTodo<Record<string, unknown>>('clubs', (desde, hasta) =>
+    supabase
       .from('clubs').select('*').order('name')
-      .order('id').range(from, from + pageSize - 1)
-    if (error) throw error
-    const page = (data ?? []).map(dbToClub)
-    all.push(...page)
-    if (page.length < pageSize) break
-    from += pageSize
-  }
-  return dedupePorId(all)
+      .order('id').range(desde, hasta),
+  { contar: () => supabase.from('clubs').select('*', { count: 'exact', head: true }) })
+  return filas.map(dbToClub)
 }
 
 export async function createClub(c: Omit<Club, 'id' | 'createdAt'>): Promise<Club> {
@@ -724,22 +748,20 @@ function dbToDistEntry(row: Record<string, unknown>): DistributionEntry {
 }
 
 export async function fetchDistributionEntries(season?: string): Promise<DistributionEntry[]> {
-  const all: DistributionEntry[] = []
-  const pageSize = 1000
-  let from = 0
-  while (true) {
+  const filas = await leerTodo<Record<string, unknown>>('distribution_entries', (desde, hasta) => {
     let q = supabase.from('distribution_entries').select('*').eq('active', true)
       .order('priority')
-      .order('id').range(from, from + pageSize - 1)
+      .order('id').range(desde, hasta)
     if (season) q = q.eq('season', season)
-    const { data, error } = await q
-    if (error) throw error
-    const page = (data ?? []).map(dbToDistEntry)
-    all.push(...page)
-    if (page.length < pageSize) break
-    from += pageSize
-  }
-  return dedupePorId(all)
+    return q
+  }, {
+    contar: () => {
+      let q = supabase.from('distribution_entries').select('*', { count: 'exact', head: true }).eq('active', true)
+      if (season) q = q.eq('season', season)
+      return q
+    },
+  })
+  return filas.map(dbToDistEntry)
 }
 
 export async function createDistributionEntry(e: Omit<DistributionEntry, 'id' | 'createdAt'>): Promise<DistributionEntry> {
@@ -793,23 +815,22 @@ function dbToNegotiation(row: Record<string, unknown>): ClubNegotiation {
 
 export async function fetchNegotiations(playerId?: string, clubId?: string): Promise<ClubNegotiation[]> {
   // Paginado: sin esto Supabase corta en 1000 filas y desaparecían ofrecimientos
-  const all: ClubNegotiation[] = []
-  const pageSize = 1000
-  let from = 0
-  while (true) {
+  const filas = await leerTodo<Record<string, unknown>>('club_negotiations', (desde, hasta) => {
     let q = supabase.from('club_negotiations').select('*')
       .order('updated_at', { ascending: false })
-      .order('id').range(from, from + pageSize - 1)
+      .order('id').range(desde, hasta)
     if (playerId) q = q.eq('player_id', playerId)
     if (clubId) q = q.eq('club_id', clubId)
-    const { data, error } = await q
-    if (error) throw error
-    const page = (data ?? []).map(dbToNegotiation)
-    all.push(...page)
-    if (page.length < pageSize) break
-    from += pageSize
-  }
-  return dedupePorId(all)
+    return q
+  }, {
+    contar: () => {
+      let q = supabase.from('club_negotiations').select('*', { count: 'exact', head: true })
+      if (playerId) q = q.eq('player_id', playerId)
+      if (clubId) q = q.eq('club_id', clubId)
+      return q
+    },
+  })
+  return filas.map(dbToNegotiation)
 }
 
 export async function createNegotiation(n: Omit<ClubNegotiation, 'id' | 'createdAt' | 'updatedAt'>): Promise<ClubNegotiation> {
@@ -887,39 +908,29 @@ function dbToScoutingReport(row: Record<string, unknown>): ScoutingReport {
 }
 
 export async function fetchScoutingPlayers(): Promise<ScoutingPlayer[]> {
-  const all: ScoutingPlayer[] = []
-  const pageSize = 1000
-  let from = 0
-  while (true) {
-    const { data, error } = await supabase
+  const filas = await leerTodo<Record<string, unknown>>('scouting_players', (desde, hasta) =>
+    supabase
       .from('scouting_players').select('*').order('full_name')
-      .order('id').range(from, from + pageSize - 1)
-    if (error) throw error
-    const page = (data ?? []).map(dbToScoutingPlayer)
-    all.push(...page)
-    if (page.length < pageSize) break
-    from += pageSize
-  }
-  return dedupePorId(all)
+      .order('id').range(desde, hasta),
+  { contar: () => supabase.from('scouting_players').select('*', { count: 'exact', head: true }) })
+  return filas.map(dbToScoutingPlayer)
 }
 
 export async function fetchScoutingReports(playerId?: string): Promise<ScoutingReport[]> {
-  const all: ScoutingReport[] = []
-  const pageSize = 1000
-  let from = 0
-  while (true) {
+  const filas = await leerTodo<Record<string, unknown>>('scouting_reports', (desde, hasta) => {
     let q = supabase.from('scouting_reports').select('*')
       .order('fecha', { ascending: false })
-      .order('id').range(from, from + pageSize - 1)
+      .order('id').range(desde, hasta)
     if (playerId) q = q.eq('player_id', playerId)
-    const { data, error } = await q
-    if (error) throw error
-    const page = (data ?? []).map(dbToScoutingReport)
-    all.push(...page)
-    if (page.length < pageSize) break
-    from += pageSize
-  }
-  return dedupePorId(all)
+    return q
+  }, {
+    contar: () => {
+      let q = supabase.from('scouting_reports').select('*', { count: 'exact', head: true })
+      if (playerId) q = q.eq('player_id', playerId)
+      return q
+    },
+  })
+  return filas.map(dbToScoutingReport)
 }
 
 export async function createScoutingPlayer(p: Omit<ScoutingPlayer, 'id' | 'createdAt'>): Promise<ScoutingPlayer> {
@@ -1023,21 +1034,13 @@ export async function fetchMatchPlayers(): Promise<ScoutingMatchPlayer[]> {
   // Paginado: Supabase devuelve como máximo 1000 filas por petición y aquí hay
   // varios miles. Sin esto, muchos partidos aparecían sin sus jugadores.
   try {
-    const all: ScoutingMatchPlayer[] = []
-    const pageSize = 1000
-    let from = 0
-    while (true) {
-      const { data, error } = await supabase.from('scouting_match_players')
+    const filas = await leerTodo<Record<string, unknown>>('scouting_match_players', (desde, hasta) =>
+      supabase.from('scouting_match_players')
         .select('*')
         .order('created_at', { ascending: true })
-        .order('id').range(from, from + pageSize - 1)
-      if (error) return fallaOTablaVacia<ScoutingMatchPlayer>('scouting_match_players', error, all.length)
-      const page = (data ?? []).map(dbToMatchPlayer)
-      all.push(...page)
-      if (page.length < pageSize) break
-      from += pageSize
-    }
-    return dedupePorId(all)
+        .order('id').range(desde, hasta),
+    { contar: () => supabase.from('scouting_match_players').select('*', { count: 'exact', head: true }) })
+    return filas.map(dbToMatchPlayer)
   } catch (e) {
     // el fallo de página ya se ha registrado arriba; solo evitamos relanzar «tabla inexistente»
     if (esTablaInexistente(e)) return []
@@ -1132,21 +1135,13 @@ function dbToMatchScout(row: Record<string, unknown>): ScoutingMatchScout {
 export async function fetchMatchScouts(): Promise<ScoutingMatchScout[]> {
   // Paginado por el mismo motivo: hay una fila por scout y partido.
   try {
-    const all: ScoutingMatchScout[] = []
-    const pageSize = 1000
-    let from = 0
-    while (true) {
-      const { data, error } = await supabase.from('scouting_match_scouts')
+    const filas = await leerTodo<Record<string, unknown>>('scouting_match_scouts', (desde, hasta) =>
+      supabase.from('scouting_match_scouts')
         .select('*')
         .order('created_at', { ascending: true })
-        .order('id').range(from, from + pageSize - 1)
-      if (error) return fallaOTablaVacia<ScoutingMatchScout>('scouting_match_scouts', error, all.length)
-      const page = (data ?? []).map(dbToMatchScout)
-      all.push(...page)
-      if (page.length < pageSize) break
-      from += pageSize
-    }
-    return dedupePorId(all)
+        .order('id').range(desde, hasta),
+    { contar: () => supabase.from('scouting_match_scouts').select('*', { count: 'exact', head: true }) })
+    return filas.map(dbToMatchScout)
   } catch (e) {
     // el fallo de página ya se ha registrado arriba; solo evitamos relanzar «tabla inexistente»
     if (esTablaInexistente(e)) return []
@@ -1268,22 +1263,14 @@ function dbToScoutingMatch(row: Record<string, unknown>): ScoutingMatch {
 
 export async function fetchScoutingMatches(): Promise<ScoutingMatch[]> {
   try {
-    const PAGE = 1000
-    const all: ScoutingMatch[] = []
-    let from = 0
-    while (true) {
-      const { data, error } = await supabase
+    const filas = await leerTodo<Record<string, unknown>>('scouting_matches', (desde, hasta) =>
+      supabase
         .from('scouting_matches')
         .select('*')
         .order('date', { ascending: false })
-        .order('id').range(from, from + PAGE - 1)
-      if (error) return fallaOTablaVacia<ScoutingMatch>('scouting_matches', error, all.length)
-      const rows = (data ?? []).map(dbToScoutingMatch)
-      all.push(...rows)
-      if (rows.length < PAGE) break   // last page
-      from += PAGE
-    }
-    return dedupePorId(all)
+        .order('id').range(desde, hasta),
+    { contar: () => supabase.from('scouting_matches').select('*', { count: 'exact', head: true }) })
+    return filas.map(dbToScoutingMatch)
   } catch (e) {
     // el fallo de página ya se ha registrado arriba; solo evitamos relanzar «tabla inexistente»
     if (esTablaInexistente(e)) return []
@@ -1357,20 +1344,12 @@ function dbToFirmasEntry(row: Record<string, unknown>): FirmasEntry {
 export async function fetchFirmasEntries(): Promise<FirmasEntry[]> {
   // try/catch: la tabla puede no existir aún (migración pendiente) — la app no debe romper
   try {
-    const all: FirmasEntry[] = []
-    const pageSize = 1000
-    let from = 0
-    while (true) {
-      const { data, error } = await supabase
+    const filas = await leerTodo<Record<string, unknown>>('captacion_firmas', (desde, hasta) =>
+      supabase
         .from('captacion_firmas').select('*').order('sort_pos')
-        .order('id').range(from, from + pageSize - 1)
-      if (error) return fallaOTablaVacia<FirmasEntry>('captacion_firmas', error, all.length)
-      const page = (data ?? []).map(dbToFirmasEntry)
-      all.push(...page)
-      if (page.length < pageSize) break
-      from += pageSize
-    }
-    return dedupePorId(all)
+        .order('id').range(desde, hasta),
+    { contar: () => supabase.from('captacion_firmas').select('*', { count: 'exact', head: true }) })
+    return filas.map(dbToFirmasEntry)
   } catch (e) {
     // el fallo de página ya se ha registrado arriba; solo evitamos relanzar «tabla inexistente»
     if (esTablaInexistente(e)) return []
@@ -1523,20 +1502,12 @@ function dbToBoulemaPlayer(row: Record<string, unknown>): BoulemaPlayer {
 
 export async function fetchBoulemaPlayers(): Promise<BoulemaPlayer[]> {
   // la tabla puede no existir aún (migración pendiente)
-  const all: BoulemaPlayer[] = []
-  const pageSize = 1000
-  let from = 0
   try {
-    while (true) {
-      const { data, error } = await supabase.from('boulema_players').select('*').order('full_name')
-        .order('id').range(from, from + pageSize - 1)
-      if (error) return fallaOTablaVacia<BoulemaPlayer>('boulema_players', error, all.length)
-      const page = (data ?? []).map(dbToBoulemaPlayer)
-      all.push(...page)
-      if (page.length < pageSize) break
-      from += pageSize
-    }
-    return dedupePorId(all)
+    const filas = await leerTodo<Record<string, unknown>>('boulema_players', (desde, hasta) =>
+      supabase.from('boulema_players').select('*').order('full_name')
+        .order('id').range(desde, hasta),
+    { contar: () => supabase.from('boulema_players').select('*', { count: 'exact', head: true }) })
+    return filas.map(dbToBoulemaPlayer)
   } catch (e) {
     // el fallo de página ya se ha registrado arriba; solo evitamos relanzar «tabla inexistente»
     if (esTablaInexistente(e)) return []
@@ -1855,18 +1826,11 @@ function dbToEquipo(row: Record<string, unknown>): Equipo {
 
 export async function fetchEquipos(): Promise<Equipo[]> {
   try {
-    const all: Equipo[] = []
-    const PAGE = 1000
-    let from = 0
-    while (true) {
-      const { data, error } = await supabase.from('scouting_equipos').select('*')
-        .order('nombre').range(from, from + PAGE - 1)
-      if (error) return fallaOTablaVacia<Equipo>('scouting_equipos', error, all.length)
-      const page = (data ?? []).map(r => dbToEquipo(r as Record<string, unknown>))
-      all.push(...page)
-      if (page.length < PAGE) break
-      from += PAGE
-    }
+    const filas = await leerTodo<Record<string, unknown>>('scouting_equipos', (desde, hasta) =>
+      supabase.from('scouting_equipos').select('*')
+        .order('nombre').range(desde, hasta),
+    { contar: () => supabase.from('scouting_equipos').select('*', { count: 'exact', head: true }) })
+    const all = filas.map(r => dbToEquipo(r))
     // la clave aquí es `nombre`, no `id`: deduplicamos por índice para no tocar las filas
     return dedupePorId(all.map((e, i) => ({ id: e.nombre, i }))).map(({ i }) => all[i])
   } catch (e) {
