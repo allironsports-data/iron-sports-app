@@ -6,7 +6,7 @@
 -- de información que hacen falta para decidir:
 --
 --   personalidad → cómo es y de dónde viene (entorno, familia, actitud)
---   contractual  → contrato con su club, salario, cláusula, comisiones
+--   contractual  → cuánto contrato le queda con su club y qué cobra
 --   mercado      → qué dicen otros clubes y scouts sobre él
 --
 -- Va en tabla APARTE a propósito. scouting_reports significa «informe de
@@ -37,8 +37,6 @@ create table if not exists public.scouting_infos (
   fin_contrato text,                    -- texto libre, igual que scouting_players.club_contract
   salario      text,
   clausula     text,
-  comision     text,
-  agente       text,
   fiabilidad   text check (fiabilidad in ('alta', 'media', 'baja')),
 
   -- mercado

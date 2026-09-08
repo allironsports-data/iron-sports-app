@@ -121,7 +121,6 @@ function InfoForm({
 
   const vacio = !b.texto?.trim()
     && !b.finContrato?.trim() && !b.salario?.trim() && !b.clausula?.trim()
-    && !b.comision?.trim() && !b.agente?.trim()
     && !b.club?.trim() && !b.quien?.trim() && !b.fuente?.trim()
 
   return (
@@ -153,9 +152,7 @@ function InfoForm({
           <div className="grid grid-cols-2 gap-2">
             <input value={b.finContrato ?? ''} onChange={set('finContrato')} placeholder="Fin de contrato (30/06/2027)" className={INPUT} />
             <input value={b.salario ?? ''} onChange={set('salario')} placeholder="Salario" className={INPUT} />
-            <input value={b.clausula ?? ''} onChange={set('clausula')} placeholder="Cláusula" className={INPUT} />
-            <input value={b.comision ?? ''} onChange={set('comision')} placeholder="Comisión" className={INPUT} />
-            <input value={b.agente ?? ''} onChange={set('agente')} placeholder="Agente / agencia actual" className={INPUT} />
+            <input value={b.clausula ?? ''} onChange={set('clausula')} placeholder="Cláusula de rescisión" className={INPUT} />
             <select value={b.fiabilidad ?? ''} onChange={set('fiabilidad')} className={INPUT}>
               <option value="">Fiabilidad del dato</option>
               <option value="alta">Fiabilidad alta</option>
@@ -277,8 +274,6 @@ function InfoCard({
           <Dato label="Hasta" valor={info.finContrato} />
           <Dato label="Salario" valor={info.salario} />
           <Dato label="Cláusula" valor={info.clausula} />
-          <Dato label="Comisión" valor={info.comision} />
-          <Dato label="Agente" valor={info.agente} />
           {info.fiabilidad && <Dato label="Fiabilidad" valor={info.fiabilidad} />}
         </div>
       )}

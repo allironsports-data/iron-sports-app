@@ -69,8 +69,6 @@ function infosDe(infos: ScoutingInfo[]) {
     i.finContrato && `Fin de contrato: ${i.finContrato}`,
     i.salario && `Salario: ${i.salario}`,
     i.clausula && `Cláusula: ${i.clausula}`,
-    i.comision && `Comisión: ${i.comision}`,
-    i.agente && `Agente: ${i.agente}`,
     i.fiabilidad && `Fiabilidad del dato: ${i.fiabilidad}`,
   ].filter(Boolean).join(' · ')
 

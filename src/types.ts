@@ -329,8 +329,6 @@ export interface ScoutingInfo {
   finContrato?: string
   salario?: string
   clausula?: string
-  comision?: string
-  agente?: string
   fiabilidad?: 'alta' | 'media' | 'baja'
   // mercado
   club?: string
