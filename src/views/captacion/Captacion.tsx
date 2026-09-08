@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react'
 import {
-  LogOut, FileText, Calendar, CalendarDays, TrendingUp, Eye, ClipboardList, Users, Inbox, Target, Sun, PenLine, Shield, Wifi,
+  LogOut, FileText, Calendar, CalendarDays, TrendingUp, Eye, ClipboardList, Users, Inbox, Target, PenLine, Shield, Wifi,
 } from 'lucide-react'
 import logoImg from '../../assets/logo.jpeg'
 import type { ScoutingPlayer, ScoutingReport, ScoutingAssessment, ScoutingMatch, FirmasEntry } from '../../types'
@@ -16,12 +16,11 @@ import { isValidName } from '../../lib/validate'
 import { clubBase, normEquipo } from '../../lib/zonas'
 import { teamMatchKind } from '../../lib/equipos'
 import { generarInformeMensual } from '../../lib/informeMensual'
-import { type CaptacionTab, type ConclusionOption, type MatchScoutInfo, ALL_ASSESSMENTS, PRETEMPORADA_MIN_BIRTH_YEAR, normConclusion, personaToName, todayISO, isAfterToday } from './helpers'
+import { type CaptacionTab, type ConclusionOption, type MatchScoutInfo, normConclusion, personaToName, todayISO, isAfterToday } from './helpers'
 import type { Props } from './types'
 import { JugadoresTab, PAGE_SIZE, type JugadoresView } from './JugadoresTab'
 import { InformesTab } from './InformesTab'
 import { PartidosTab, MATCH_PAGE_SIZE, type MatchesView, type MatchModeFilter, type MatchStatusFilter } from './PartidosTab'
-import { PretemporadaTab, type PreSortKey, type PreAssessFilter } from './PretemporadaTab'
 import { PlanificacionTab } from './PlanificacionTab'
 import { construirPlanificacion } from '../../lib/planificacion'
 import { PlayerPanel } from './PlayerPanel'
@@ -284,15 +283,6 @@ export function Captacion({
   }), [])
   const [reportPersonaFilter, setReportPersonaFilter] = useState('all')
 
-  // ── pretemporada filters ──
-  const [preSearch, setPreSearch] = useState('')
-  const [preAssessFilter, setPreAssessFilter] = useState<PreAssessFilter>('all')
-  const [preClubFilter, setPreClubFilter] = useState('all')
-  const [prePosFilter, setPrePosFilter] = useState('all')
-  const [preCatFilter, setPreCatFilter] = useState('all')
-  const [preSortKey, setPreSortKey] = useState<PreSortKey>('assess')
-  const [preSortDir, setPreSortDir] = useState<1 | -1>(1)
-
   // ── pagination ──
   const [page, setPage] = useState(0)
 
@@ -539,101 +529,6 @@ export function Captacion({
     }
     return map
   }, [matchPlayersByMatchId, scoutingPlayers, scoutingReports])
-
-  // ── pretemporada: jugadores vistos en partidos de Pretemporada, nacidos >= PRETEMPORADA_MIN_BIRTH_YEAR ──
-  const pretemporadaData = useMemo(() => {
-    // Cuenta como pretemporada: la competición "Pretemporada", los torneos
-    // veraniegos tipo "Best Cup" y, en general, cualquier partido jugado en
-    // julio o agosto (la ventana 1-jul → 1-sep de cada año).
-    const esPretemporada = (m: ScoutingMatch) => {
-      const comp = (m.competition ?? '').trim().toLowerCase()
-      if (comp === 'pretemporada' || comp === 'best cup') return true
-      const mes = parseInt(m.date.slice(5, 7), 10)
-      return mes === 7 || mes === 8
-    }
-    const preMatches = scoutingMatches.filter(esPretemporada)
-    const preMatchIds = new Set(preMatches.map(m => m.id))
-    const matchById = new Map(preMatches.map(m => [m.id, m]))
-
-    // playerId -> Set<matchId> (de partidos de pretemporada)
-    const matchIdsByPlayer: Record<string, Set<string>> = {}
-    for (const mp of matchPlayers) {
-      if (!preMatchIds.has(mp.matchId)) continue
-      if (!matchIdsByPlayer[mp.playerId]) matchIdsByPlayer[mp.playerId] = new Set()
-      matchIdsByPlayer[mp.playerId].add(mp.matchId)
-    }
-    for (const r of scoutingReports) {
-      if (!r.matchId || !preMatchIds.has(r.matchId)) continue
-      if (!matchIdsByPlayer[r.playerId]) matchIdsByPlayer[r.playerId] = new Set()
-      matchIdsByPlayer[r.playerId].add(r.matchId)
-    }
-
-    let sinFechaCount = 0
-    const players: { player: ScoutingPlayer; matches: ScoutingMatch[] }[] = []
-    for (const p of scoutingPlayers) {
-      const matchIds = matchIdsByPlayer[p.id]
-      if (!matchIds || matchIds.size === 0) continue
-      if (!p.birthdate) { sinFechaCount++; continue }
-      const birthYear = parseInt(p.birthdate.slice(0, 4))
-      if (isNaN(birthYear) || birthYear < PRETEMPORADA_MIN_BIRTH_YEAR) continue
-      const matches = Array.from(matchIds).map(id => matchById.get(id)).filter(Boolean) as ScoutingMatch[]
-      players.push({ player: p, matches })
-    }
-
-    return { players, sinFechaCount, matchCount: preMatches.length }
-  }, [scoutingMatches, matchPlayers, scoutingReports, scoutingPlayers])
-
-  // Opciones de club/categoría presentes en los datos de pretemporada (para los selectores)
-  const preClubOptions = useMemo(() => {
-    const set = new Set<string>()
-    pretemporadaData.players.forEach(({ player }) => set.add(player.team?.trim() || 'Sin equipo'))
-    return Array.from(set).sort((a, b) => a === 'Sin equipo' ? 1 : b === 'Sin equipo' ? -1 : a.localeCompare(b))
-  }, [pretemporadaData])
-
-  const preCatOptions = useMemo(() => {
-    const set = new Set<string>()
-    pretemporadaData.players.forEach(({ player }) => { if (player.categoria) set.add(player.categoria) })
-    return Array.from(set).sort((a, b) => a.localeCompare(b, 'es'))
-  }, [pretemporadaData])
-
-  const pretemporadaFiltered = useMemo(() => {
-    const q = preSearch.toLowerCase().trim()
-    const filtered = pretemporadaData.players.filter(({ player }) => {
-      if (preAssessFilter === 'sin' && player.assessment) return false
-      if (preAssessFilter !== 'all' && preAssessFilter !== 'sin' && player.assessment !== preAssessFilter) return false
-      if (preClubFilter !== 'all' && (player.team?.trim() || 'Sin equipo') !== preClubFilter) return false
-      if (prePosFilter !== 'all' && player.position1 !== prePosFilter && player.position2 !== prePosFilter) return false
-      if (preCatFilter !== 'all' && player.categoria !== preCatFilter) return false
-      if (q && !player.fullName.toLowerCase().includes(q) && !(player.team?.toLowerCase().includes(q))) return false
-      return true
-    })
-
-    const sorted = [...filtered].sort((a, b) => {
-      let av: string | number, bv: string | number
-      switch (preSortKey) {
-        case 'assess':
-          av = a.player.assessment ? ALL_ASSESSMENTS.indexOf(a.player.assessment) : ALL_ASSESSMENTS.length
-          bv = b.player.assessment ? ALL_ASSESSMENTS.indexOf(b.player.assessment) : ALL_ASSESSMENTS.length
-          break
-        case 'club': av = a.player.team ?? ''; bv = b.player.team ?? ''; break
-        case 'pos': av = a.player.position1 ?? ''; bv = b.player.position1 ?? ''; break
-        case 'year': av = a.player.birthdate?.slice(0, 4) ?? ''; bv = b.player.birthdate?.slice(0, 4) ?? ''; break
-        case 'cat': av = a.player.categoria ?? ''; bv = b.player.categoria ?? ''; break
-        case 'matches': av = a.matches.length; bv = b.matches.length; break
-        default: av = a.player.fullName; bv = b.player.fullName
-      }
-      if (av < bv) return -1 * preSortDir
-      if (av > bv) return 1 * preSortDir
-      return a.player.fullName.localeCompare(b.player.fullName)
-    })
-
-    return sorted
-  }, [pretemporadaData, preSearch, preAssessFilter, preClubFilter, prePosFilter, preCatFilter, preSortKey, preSortDir])
-
-  function setPreSort(key: typeof preSortKey) {
-    if (preSortKey === key) setPreSortDir(d => (d === 1 ? -1 : 1))
-    else { setPreSortKey(key); setPreSortDir(1) }
-  }
 
   // ── recent reports ──
   const reportPersonas = useMemo(() => {
@@ -1381,7 +1276,6 @@ export function Captacion({
             { id: 'informes' as CaptacionTab, label: 'Informes recientes', labelMobile: 'Informes', icon: <FileText className="w-3.5 h-3.5" /> },
             { id: 'partidos' as CaptacionTab, label: 'Partidos', labelMobile: 'Partidos', icon: <ClipboardList className="w-3.5 h-3.5" /> },
             { id: 'planificacion' as CaptacionTab, label: 'Planificación', labelMobile: 'Planif.', icon: <CalendarDays className="w-3.5 h-3.5" /> },
-            { id: 'pretemporada' as CaptacionTab, label: 'Pretemporada', labelMobile: 'Pretemp.', icon: <Sun className="w-3.5 h-3.5" /> },
           ]).filter(t => !restricted || RESTRICTED_TABS.includes(t.id)).map(t => (
             <button
               key={t.id}
@@ -1591,24 +1485,6 @@ export function Captacion({
           setDetailMatchId={setDetailMatchId}
           renderFichaPartido={renderFichaPartido}
           isDesktop={isDesktop}
-        />
-      )}
-
-      {/* ── PRETEMPORADA TAB ──────────────────────────────────── */}
-      {captTab === 'pretemporada' && (
-        <PretemporadaTab
-          pretemporadaData={pretemporadaData}
-          pretemporadaFiltered={pretemporadaFiltered}
-          preSearch={preSearch} setPreSearch={setPreSearch}
-          preClubFilter={preClubFilter} setPreClubFilter={setPreClubFilter}
-          preClubOptions={preClubOptions}
-          prePosFilter={prePosFilter} setPrePosFilter={setPrePosFilter}
-          preCatOptions={preCatOptions}
-          preCatFilter={preCatFilter} setPreCatFilter={setPreCatFilter}
-          preAssessFilter={preAssessFilter} setPreAssessFilter={setPreAssessFilter}
-          preSortKey={preSortKey} preSortDir={preSortDir} setPreSort={setPreSort}
-          setCaptTab={setCaptTab}
-          abrirJugador={abrirJugador}
         />
       )}
 

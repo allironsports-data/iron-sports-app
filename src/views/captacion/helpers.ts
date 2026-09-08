@@ -9,7 +9,7 @@ export type ShowToast = (message: string, variant?: 'success' | 'error' | 'info'
 
 // ── Constants ────────────────────────────────────────────────
 
-export type CaptacionTab = 'jugadores' | 'firmar' | 'conclusiones' | 'contratos' | 'equipos' | 'informes' | 'partidos' | 'planificacion' | 'pretemporada'
+export type CaptacionTab = 'jugadores' | 'firmar' | 'conclusiones' | 'contratos' | 'equipos' | 'informes' | 'partidos' | 'planificacion'
 
 export const ASSESSMENT_CONFIG: Record<ScoutingAssessment, { label: string; bg: string; text: string; border: string }> = {
   Llamar:     { label: 'Llamar',     bg: 'bg-amber-100',   text: 'text-amber-700',   border: 'border-amber-200' },
@@ -27,9 +27,6 @@ export const ASSESSMENT_DOT: Record<ScoutingAssessment, string> = {
   Llamar: 'bg-amber-500', Seguir: 'bg-blue-500', Decidir: 'bg-orange-500',
   Basque: 'bg-violet-500', Visto: 'bg-slate-400', Descartado: 'bg-red-500',
 }
-
-// Pretemporada: solo interesan jugadores nacidos en este año o después
-export const PRETEMPORADA_MIN_BIRTH_YEAR = 2002
 
 // Estilo compartido para los selectores de filtro (look sobrio: sin globos/chips)
 export const SELECT_CLS = "text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 text-slate-700 hover:border-slate-300 transition-colors"
