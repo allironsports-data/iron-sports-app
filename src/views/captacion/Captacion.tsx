@@ -1010,6 +1010,8 @@ export function Captacion({
         onAddMatchPlayer={onAddMatchPlayer}
         onRemoveMatchPlayer={onRemoveMatchPlayer}
         onAddReport={onAddReport}
+        onUpdateReport={handleUpdateReport}
+        onDeleteReport={handleDeleteReport}
         onLinkReportToMatch={handleLinkReportToMatch}
         onOpenEquipo={(nombre) => { setDetailMatchId(null); setCaptTab('equipos'); abrirJugador(null); setPanelEquipo(nombre.trim()) }}
         onCreateAndLinkPlayer={handleCreateAndLinkPlayer}

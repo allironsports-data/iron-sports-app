@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Minimize2, ExternalLink, Search } from 'lucide-react'
+import { X, Minimize2, ExternalLink, Search, Plus } from 'lucide-react'
 import type { ScoutingPlayer, ScoutingReport, ScoutingMatch } from '../../../types'
 import type { Profile } from '../../../contexts/AuthContext'
 import { useEscapeKey } from '../../../hooks/useEscapeKey'
 import { teamMatchKind } from '../../../lib/equipos'
-import { AssessmentChip } from '../comun'
-import { type MatchScoutInfo, CONCLUSION_STYLE, MONTHS_ES, birthYearFromBirthdate, personaToName, fmtDate, normConclusion, scoutColor } from '../helpers'
+import * as db from '../../../lib/db'
+import { AssessmentChip, ReportCard } from '../comun'
+import { type MatchScoutInfo, type ShowToast, type ConclusionOption, CONCLUSION_OPTIONS, CONCLUSION_STYLE, MONTHS_ES, birthYearFromBirthdate, personaToName, fmtDate, normConclusion, scoutColor } from '../helpers'
 
 // ── MatchExpandedView — vista ampliada del partido ───────────
 // Se abre desde la ficha del partido («Ampliar»). Es SOLO lectura: ocupa
@@ -19,7 +20,7 @@ type FiltroVeredicto = '' | 'Llamar' | 'Seguir' | 'Descartar' | 'Visto' | 'sin'
 
 export function MatchExpandedView({
   match, scouts, profiles, currentProfile, linkedPlayers, scoutingReports, allMatches,
-  nuestros, onClose, onOpenPlayer, onOpenEquipo,
+  nuestros, onAddReport, onUpdateReport, onDeleteReport, showToast, onClose, onOpenPlayer, onOpenEquipo,
 }: {
   match: ScoutingMatch
   scouts: MatchScoutInfo[]
@@ -29,15 +30,48 @@ export function MatchExpandedView({
   scoutingReports: ScoutingReport[]
   allMatches: ScoutingMatch[]
   nuestros?: string[]
+  onAddReport: (r: ScoutingReport) => void
+  onUpdateReport?: (r: ScoutingReport) => Promise<void>
+  onDeleteReport?: (id: string) => Promise<void>
+  showToast?: ShowToast
   onClose: () => void
   onOpenPlayer?: (id: string) => void
   onOpenEquipo: (nombre: string) => void
 }) {
   const [filtroScout, setFiltroScout] = useState('')
+  // Informe rápido (mismo formulario que en la ficha del partido)
+  const [formPara, setFormPara] = useState<string | null>(null)
+  const [texto, setTexto] = useState('')
+  const [veredicto, setVeredicto] = useState<ConclusionOption>('')
+  const [guardando, setGuardando] = useState(false)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+
+  async function guardarInforme() {
+    if (!formPara || !texto.trim() || guardando) return
+    setGuardando(true)
+    try {
+      const saved = await db.createScoutingReport({
+        playerId: formPara,
+        fecha: new Date().toISOString(),
+        texto: texto.trim(),
+        persona: currentProfile.avatar,
+        conclusion: veredicto || undefined,
+        matchId: match.id,
+        authorId: currentProfile.id,
+      })
+      onAddReport(saved)
+      setFormPara(null); setTexto(''); setVeredicto('')
+      showToast?.('Informe guardado — visible en la ficha del jugador')
+    } catch {
+      showToast?.('Error al guardar el informe', 'error')
+    } finally {
+      setGuardando(false)
+    }
+  }
   const [filtroVeredicto, setFiltroVeredicto] = useState<FiltroVeredicto>('')
   const [busqueda, setBusqueda] = useState('')
 
-  useEscapeKey(onClose)
+  useEscapeKey(() => { if (formPara) setFormPara(null); else onClose() })
 
   const day = match.date.slice(8)
   const mon = MONTHS_ES[parseInt(match.date.slice(5, 7)) - 1]
@@ -331,6 +365,8 @@ export function MatchExpandedView({
                   {col.jugadores.map(p => {
                     const infs = informesPorJugador[p.id] ?? []
                     const v = veredictoDe(p)
+                    const mio = infs.some(({ r, suelto }) => !suelto &&
+                      ((r.authorId && r.authorId === currentProfile.id) || r.persona === currentProfile.avatar))
                     return (
                       <article key={p.id} className={`bg-white border rounded-lg px-3 py-2.5 ${v === 'Llamar' ? 'border-amber-300' : v === 'Seguir' ? 'border-blue-200' : 'border-slate-200'}`}>
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -353,29 +389,75 @@ export function MatchExpandedView({
                             {[p.nationality, p.agency && `Agencia: ${p.agency}`, p.clubContract && `Contrato: ${p.clubContract}`].filter(Boolean).join(' · ')}
                           </div>
                         )}
-                        {infs.length === 0 ? (
+                        {infs.length === 0 && formPara !== p.id && (
                           <p className="mt-1.5 text-[11px] text-slate-400 italic">Sin informe en este partido.</p>
-                        ) : (
+                        )}
+                        {infs.length > 0 && (
                           <div className="mt-2 space-y-1.5">
-                            {infs.map(({ r, suelto }) => {
-                              const c = scoutColor(r.persona ?? '')
-                              const mio = (r.authorId && r.authorId === currentProfile.id) || r.persona === currentProfile.avatar
-                              return (
-                                <div key={r.id} className={`rounded-md px-2.5 py-2 border ${suelto ? 'border-dashed border-slate-300 bg-white' : mio ? 'bg-emerald-50/50 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
-                                  <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-                                    <span className={`font-mono font-bold px-1.5 rounded ${c.bg} ${c.text}`}>{r.persona ?? '—'}</span>
-                                    <span className="text-slate-500">{personaToName(r.persona, profiles)}</span>
-                                    <span className="text-slate-400">· {fmtDate(r.fecha ?? r.createdAt)}</span>
-                                    {chipVeredicto(normConclusion(r.conclusion))}
-                                    {suelto && <span className="text-slate-400 italic">sin vincular a este partido</span>}
-                                    {r.titulo && <span className="font-semibold text-slate-700">· {r.titulo}</span>}
-                                  </div>
-                                  {r.texto
-                                    ? <p className="mt-1 text-xs text-slate-700 whitespace-pre-wrap break-words leading-relaxed">{r.texto}</p>
-                                    : <p className="mt-1 text-[11px] text-slate-400 italic">Sin texto.</p>}
-                                </div>
-                              )
-                            })}
+                            {infs.map(({ r, suelto }) => (
+                              <div key={r.id} className={suelto ? 'opacity-80' : ''}>
+                                <ReportCard
+                                  report={r}
+                                  profiles={profiles}
+                                  currentProfile={currentProfile}
+                                  confirmDeleteId={confirmDeleteId}
+                                  onConfirmDelete={setConfirmDeleteId}
+                                  onDelete={onDeleteReport ?? (async () => {})}
+                                  onUpdate={onUpdateReport}
+                                  matchLabel={suelto ? 'sin vincular a este partido' : undefined}
+                                  showToast={showToast}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {/* Cada scout escribe SU informe: el botón solo desaparece si ya escribí yo */}
+                        {!mio && formPara !== p.id && (
+                          <button
+                            onClick={() => { setFormPara(p.id); setTexto(''); setVeredicto('') }}
+                            className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold border border-primary text-primary bg-white hover:bg-blue-50 px-2.5 py-1 rounded-lg transition-colors"
+                          >
+                            <Plus className="w-3 h-3" /> {infs.length > 0 ? 'Mi informe' : 'Informe'}
+                          </button>
+                        )}
+                        {formPara === p.id && (
+                          <div className="mt-2 bg-blue-50 border border-blue-200 rounded-lg p-2.5 space-y-2">
+                            <textarea
+                              value={texto}
+                              onChange={e => setTexto(e.target.value)}
+                              rows={4}
+                              autoFocus
+                              placeholder={`Informe de ${p.fullName.split(' ')[0]} en este partido…`}
+                              className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-y"
+                              onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); void guardarInforme() } }}
+                            />
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="text-[11px] text-slate-500 font-medium">Veredicto:</span>
+                              {CONCLUSION_OPTIONS.filter(Boolean).map(c => (
+                                <button
+                                  key={c}
+                                  onClick={() => setVeredicto(veredicto === c ? '' : c)}
+                                  className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
+                                    veredicto === c ? (CONCLUSION_STYLE[c] ?? 'bg-slate-200 text-slate-700') : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
+                                  }`}
+                                >
+                                  {c}
+                                </button>
+                              ))}
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10.5px] text-slate-400">⌘/Ctrl + Enter para guardar</span>
+                              <div className="flex gap-1.5">
+                                <button onClick={() => setFormPara(null)} className="text-[11px] font-medium px-2.5 py-1 rounded-lg text-slate-500 hover:bg-white">Cancelar</button>
+                                <button
+                                  onClick={() => void guardarInforme()}
+                                  disabled={!texto.trim() || guardando}
+                                  className="text-[11px] font-bold px-3 py-1 rounded-lg bg-primary text-white disabled:opacity-50"
+                                >
+                                  {guardando ? 'Guardando…' : 'Guardar informe'}
+                                </button>
+                              </div>
+                            </div>
                           </div>
                         )}
                       </article>

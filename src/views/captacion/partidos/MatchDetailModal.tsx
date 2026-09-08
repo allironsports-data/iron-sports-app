@@ -20,7 +20,7 @@ export function MatchDetailModal({
   scoutingPlayers, linkedPlayerIds, scoutingReports, allMatches, matchPlayersByMatchId,
   onClose, onEdit, onToggleStatus,
   onAddScout, onRemoveScout, onSetScoutStatus, onSetScoutMode,
-  onAddMatchPlayer, onRemoveMatchPlayer, onAddReport, onLinkReportToMatch, onCreateAndLinkPlayer, onOpenEquipo,
+  onAddMatchPlayer, onRemoveMatchPlayer, onAddReport, onUpdateReport, onDeleteReport, onLinkReportToMatch, onCreateAndLinkPlayer, onOpenEquipo,
   onFixPlayerTeam, onOpenPlayer, onOpenMatch, showToast,
   variant = 'modal', nuestros,
 }: {
@@ -44,6 +44,9 @@ export function MatchDetailModal({
   onAddMatchPlayer: (matchId: string, playerId: string) => Promise<void>
   onRemoveMatchPlayer: (matchId: string, playerId: string) => Promise<void>
   onAddReport: (r: ScoutingReport) => void
+  /** Editar / borrar informes desde la vista ampliada (guardan en BBDD y avisan a App) */
+  onUpdateReport?: (r: ScoutingReport) => Promise<void>
+  onDeleteReport?: (id: string) => Promise<void>
   /** matchId = null → suelta el informe del partido (sin borrarlo) */
   onLinkReportToMatch: (r: ScoutingReport, matchId: string | null) => Promise<void>
   /** Abrir la ficha de un equipo desde el nombre del partido */
@@ -270,6 +273,10 @@ export function MatchDetailModal({
             scoutingReports={scoutingReports}
             allMatches={allMatches}
             nuestros={nuestros}
+            onAddReport={onAddReport}
+            onUpdateReport={onUpdateReport}
+            onDeleteReport={onDeleteReport}
+            showToast={showToast}
             onClose={() => setAmpliado(false)}
             onOpenPlayer={onOpenPlayer}
             onOpenEquipo={(n) => { setAmpliado(false); onOpenEquipo(n) }}
