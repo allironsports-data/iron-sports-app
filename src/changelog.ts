@@ -28,6 +28,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Login: el campo de email tiene el foco al abrir, y el mensaje de error ya distingue credenciales incorrectas de un fallo de conexión (antes ambos decían «Email o contraseña incorrectos»)',
       'Mensajes técnicos de "falta ejecutar el SQL/la migración" (Partidos, Firmar, asignar scout a un partido, Historial) ya no se muestran a todo el mundo: los scouts ven un mensaje normal, el aviso técnico solo lo ve un admin',
       'Diez retoques pequeños: emojis sueltos en botones (CSV, Imprimir/PDF, cola pendiente, Solo Captación, Confederación, Planificación, Mi día) cambiados por iconos, corregido "Año nasc." → "Año nac.", "Nac." ambiguo → "Nacionalidad", y el botón "silenciar" de avisos en Firmar con más contraste',
+      'Campogramas (Conclusiones → Llamar/Seguir/Decidir, y Fin de contrato) con botón «Descargar imagen» para bajarlos como PNG y compartirlos fuera de la app',
     ],
     adminItems: [
       'En la consola del navegador aparece «[carga] fase 2 … ms» con el tiempo de cada tabla, ordenado de mayor a menor, para localizar la lenta',

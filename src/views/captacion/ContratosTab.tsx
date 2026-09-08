@@ -1,10 +1,12 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useRef } from 'react'
 import { Search, Pencil } from 'lucide-react'
 import type { ScoutingPlayer, ScoutingAssessment, FirmasEntry } from '../../types'
 import { ZONAS, SIN_ZONA, zonaDe, type Zona } from '../../lib/zonas'
 import { PITCH_SLOTS, SLOT_LABELS, SLOT_ORDER, slotDe as pitchSlotOf } from '../../lib/campo'
 import { norm as normSearch } from '../../lib/texto'
 import { BotonCsv } from '../../components/BotonCsv'
+import { BotonDescargarImagen } from '../../components/BotonDescargarImagen'
+import { nombreArchivoSeguro } from '../../lib/exportImagen'
 import { SELECT_CLS, birthYearFromBirthdate } from './helpers'
 import { FIRMAS_CONFIG } from './firmas/helpers'
 // ── ContratosTab ─────────────────────────────────────────────
@@ -92,6 +94,7 @@ export function ContratosTab({ players, firmasEntries, isAdmin, onOpenPlayer, on
   const [ligaFilter, setLigaFilter] = useState<Set<string>>(new Set(LIGAS as string[]))
   const [expandedSlots, setExpandedSlots] = useState<Set<string>>(new Set())
   const [editingId, setEditingId] = useState<string | null>(null)
+  const campogramaRef = useRef<HTMLDivElement>(null)
   const [editValue, setEditValue] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -353,6 +356,13 @@ export function ContratosTab({ players, firmasEntries, isAdmin, onOpenPlayer, on
             className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${view === 'campo' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >⚽ Campograma</button>
         </div>
+        {view === 'campo' && (
+          <BotonDescargarImagen
+            targetRef={campogramaRef}
+            etiqueta="Descargar imagen"
+            nombreArchivo={() => `campograma_fin_contrato${assessFilter !== 'all' ? '_' + nombreArchivoSeguro(assessFilter) : ''}`}
+          />
+        )}
         <select value={assessFilter} onChange={e => setAssessFilter(e.target.value as 'all' | ScoutingAssessment)} className={SELECT_CLS}>
           <option value="all">Todos los estados</option>
           {(['Llamar', 'Basque', 'Seguir', 'Decidir', 'Visto', 'Descartado'] as ScoutingAssessment[]).map(a => <option key={a} value={a}>{a}</option>)}
@@ -427,7 +437,7 @@ export function ContratosTab({ players, firmasEntries, isAdmin, onOpenPlayer, on
         </div>
       ) : (
         <div className="bg-white border border-slate-200 rounded-xl p-4">
-          <div className="relative w-full max-w-[560px] mx-auto rounded-xl overflow-hidden"
+          <div ref={campogramaRef} className="relative w-full max-w-[560px] mx-auto rounded-xl overflow-hidden"
             style={{ aspectRatio: '100 / 130', background: 'linear-gradient(180deg,#15803d 0%,#166534 100%)', boxShadow: 'inset 0 0 40px rgba(0,0,0,.18)' }}>
             <svg viewBox="0 0 100 130" preserveAspectRatio="none" className="absolute inset-0 w-full h-full" aria-hidden>
               <rect x="1" y="1" width="98" height="128" rx="2" fill="none" stroke="#ffffff55" strokeWidth=".7" />

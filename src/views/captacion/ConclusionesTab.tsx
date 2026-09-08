@@ -1,10 +1,12 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useRef } from 'react'
 import { X, Maximize2 } from 'lucide-react'
 import type { ScoutingPlayer, ScoutingReport, ScoutingAssessment } from '../../types'
 import { ZONAS, SIN_ZONA, zonaDe, type Zona } from '../../lib/zonas'
 import { PITCH_SLOTS, POS_GROUPS, slotDe as pitchSlotOf, grupoDe as posGroupOf } from '../../lib/campo'
 import { AssessmentChip } from './comun'
 import { LlamarZonasView } from './LlamarZonasView'
+import { BotonDescargarImagen } from '../../components/BotonDescargarImagen'
+import { nombreArchivoSeguro } from '../../lib/exportImagen'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { SELECT_CLS, normConclusion, CONCLUSION_STYLE, birthYearFromBirthdate, fmtDate, relativeDate } from './helpers'
 // ── ConclusionesTab ──────────────────────────────────────────
@@ -31,6 +33,7 @@ export function ConclusionesTab({ players, reports, threshold, onThresholdChange
   const [selectedCell, setSelectedCell] = useState<{ row: string; col: string } | null>(null)
   const [genFilter, setGenFilter] = useState<string>('all')
   const [expandedSlots, setExpandedSlots] = useState<Set<string>>(new Set())
+  const campogramaRef = useRef<HTMLDivElement>(null)
   const [showStale, setShowStale] = useState(false)
   const [zonaFilter, setZonaFilter] = useState<string>('all')
   const [zonasVistaAbierta, setZonasVistaAbierta] = useState(false)
@@ -473,16 +476,23 @@ export function ConclusionesTab({ players, reports, threshold, onThresholdChange
         ) : (
           <div className="p-4">
             {/* Filtro de generación */}
-            <div className="flex items-center gap-1.5 mb-3">
+            <div className="flex items-center gap-1.5 mb-3 flex-wrap">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Generación</span>
               <select value={genFilter} onChange={e => setGenFilter(e.target.value)} className={SELECT_CLS}>
                 <option value="all">Todas</option>
                 {pitchGens.map(g => <option key={g} value={g}>{g}</option>)}
               </select>
+              <div className="ml-auto">
+                <BotonDescargarImagen
+                  targetRef={campogramaRef}
+                  etiqueta="Descargar imagen"
+                  nombreArchivo={() => `campograma_${nombreArchivoSeguro(mapAssessment)}${genFilter !== 'all' ? '_' + genFilter : ''}`}
+                />
+              </div>
             </div>
 
             {/* Campo */}
-            <div className="relative w-full max-w-[560px] mx-auto rounded-xl overflow-hidden"
+            <div ref={campogramaRef} className="relative w-full max-w-[560px] mx-auto rounded-xl overflow-hidden"
               style={{ aspectRatio: '100 / 130', background: 'linear-gradient(180deg,#15803d 0%,#166534 100%)', boxShadow: 'inset 0 0 40px rgba(0,0,0,.18)' }}>
               <svg viewBox="0 0 100 130" preserveAspectRatio="none" className="absolute inset-0 w-full h-full" aria-hidden>
                 <rect x="1" y="1" width="98" height="128" rx="2" fill="none" stroke="#ffffff55" strokeWidth=".7" />
