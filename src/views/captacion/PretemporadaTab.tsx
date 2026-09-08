@@ -1,5 +1,5 @@
 import React from 'react'
-import { Search, X, Sun, ChevronDown, ChevronUp } from 'lucide-react'
+import { Search, X, Sun } from 'lucide-react'
 import type { ScoutingPlayer, ScoutingAssessment, ScoutingMatch } from '../../types'
 import { EmptyState } from '../../components/EmptyState'
 import { type CaptacionTab, ASSESSMENT_CONFIG, ALL_ASSESSMENTS, ASSESSMENT_DOT, PRETEMPORADA_MIN_BIRTH_YEAR, SELECT_CLS, POSITIONS_SCOUTING } from './helpers'
@@ -34,7 +34,7 @@ export function PretemporadaTab({
   preSortKey: PreSortKey
   preSortDir: 1 | -1
   setPreSort: (key: PreSortKey) => void
-  setCaptTab: (t: CaptacionTab) => void
+  setCaptTab: React.Dispatch<React.SetStateAction<CaptacionTab>>
   abrirJugador: (id: string | null, desdeEquipo?: string) => void
 }) {
   const preCols: { k: typeof preSortKey; l: string }[] = [
@@ -55,7 +55,7 @@ export function PretemporadaTab({
   <div className="flex-1 w-full px-3 sm:px-6 py-4 space-y-3">
     <div>
       <h2 className="text-sm font-semibold text-slate-800">Pretemporada</h2>
-      <p className="text-secondary text-slate-500">
+      <p className="text-xs text-slate-400">
         Jugadores nacidos en {PRETEMPORADA_MIN_BIRTH_YEAR} o después, vistos en {pretemporadaData.matchCount} partido{pretemporadaData.matchCount !== 1 ? 's' : ''} de pretemporada
       </p>
     </div>
@@ -86,7 +86,7 @@ export function PretemporadaTab({
           ].map(([l, n]) => (
             <div key={l as string} className="flex-1 px-4 py-2">
               <div className="text-lg font-bold text-slate-800 leading-tight">{n}</div>
-              <div className="text-badge text-slate-500">{l}</div>
+              <div className="text-[11px] text-slate-400">{l}</div>
             </div>
           ))}
         </div>
@@ -94,7 +94,7 @@ export function PretemporadaTab({
         {/* Filtros: todos selectores */}
         <div className="bg-white border border-slate-200 rounded-lg px-3 py-2.5 flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[160px] max-w-xs">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
             <input
               value={preSearch}
               onChange={e => setPreSearch(e.target.value)}
@@ -102,7 +102,7 @@ export function PretemporadaTab({
               className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
             />
             {preSearch && (
-              <button type="button" onClick={() => setPreSearch('')} aria-label="Limpiar búsqueda" className="absolute right-0 top-1/2 -translate-y-1/2 min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 sm:w-8 sm:h-8 inline-flex items-center justify-center text-slate-600 hover:text-slate-900">
+              <button onClick={() => setPreSearch('')} aria-label="Limpiar búsqueda" className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
                 <X className="w-3 h-3" />
               </button>
             )}
@@ -136,7 +136,7 @@ export function PretemporadaTab({
           >
             Limpiar filtros
           </button>
-          <span className="text-xs text-slate-500 ml-auto">
+          <span className="text-xs text-slate-400 ml-auto">
             {pretemporadaFiltered.length} de {pretemporadaData.players.length}
           </span>
         </div>
@@ -150,15 +150,13 @@ export function PretemporadaTab({
                   {preCols.map(c => (
                     <th
                       key={c.k}
-                      aria-sort={preSortKey === c.k ? (preSortDir === -1 ? 'descending' : 'ascending') : 'none'}
-                      className={`text-left px-1 py-1 text-meta font-semibold uppercase tracking-wide whitespace-nowrap ${preSortKey === c.k ? 'text-slate-700' : 'text-slate-500'}`}
+                      onClick={() => setPreSort(c.k)}
+                      className={`text-left px-3 py-2 text-[10.5px] font-bold uppercase tracking-wide cursor-pointer select-none whitespace-nowrap hover:text-slate-700 ${preSortKey === c.k ? 'text-slate-700' : 'text-slate-400'}`}
                     >
-                      <button type="button" onClick={() => setPreSort(c.k)} className="inline-flex items-center gap-1 px-2 py-1 rounded hover:text-slate-900 hover:bg-slate-100">
-                        {c.l}
-                        {preSortKey === c.k && preSortDir === -1
-                          ? <ChevronDown className="w-3 h-3" aria-hidden="true" />
-                          : <ChevronUp className={`w-3 h-3 ${preSortKey === c.k ? '' : 'opacity-30'}`} aria-hidden="true" />}
-                      </button>
+                      {c.l}
+                      <span className={`ml-1 text-[9px] ${preSortKey === c.k ? 'opacity-100' : 'opacity-30'}`}>
+                        {preSortKey === c.k && preSortDir === -1 ? '▼' : '▲'}
+                      </span>
                     </th>
                   ))}
                 </tr>
@@ -166,19 +164,15 @@ export function PretemporadaTab({
               <tbody className="divide-y divide-slate-100">
                 {pretemporadaFiltered.length === 0 ? (
                   <tr>
-                    <td colSpan={preCols.length} className="text-center py-10 text-slate-500 text-sm">
+                    <td colSpan={preCols.length} className="text-center py-10 text-slate-400 text-sm">
                       No hay jugadores que coincidan con los filtros
                     </td>
                   </tr>
                 ) : pretemporadaFiltered.map(({ player, matches }) => (
                   <tr
                     key={player.id}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`Abrir ficha de ${player.fullName}`}
                     onClick={() => { setCaptTab('jugadores'); abrirJugador(player.id) }}
-                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCaptTab('jugadores'); abrirJugador(player.id) } }}
-                    className="cursor-pointer hover:bg-slate-50/60 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
+                    className="cursor-pointer hover:bg-slate-50/60 transition-colors"
                   >
                     <td className="px-3 py-2 font-medium text-slate-800">{player.fullName}</td>
                     <td className="px-3 py-2 text-slate-500">{player.team || '—'}</td>
@@ -193,7 +187,7 @@ export function PretemporadaTab({
                           {player.assessment}
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500">
+                        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-400">
                           <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
                           Sin valorar
                         </span>

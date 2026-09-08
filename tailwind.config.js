@@ -42,14 +42,6 @@ module.exports = {
           foreground: "hsl(var(--card-foreground))",
         },
       },
-      // Escala tipográfica oficial: cuerpo 14, secundario 13, meta 12, badge 11.
-      // Nada por debajo de 11px salvo gráficos (ver regla eslint no-restricted-syntax).
-      fontSize: {
-        body: ['14px', '1.5'],
-        secondary: ['13px', '1.45'],
-        meta: ['12px', '1.4'],
-        badge: ['11px', '1.3'],
-      },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",

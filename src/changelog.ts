@@ -19,23 +19,6 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    date: '2026-09-08',
-    items: [
-      'Cabecera única en toda la app: el logo, el buscador, la campana de avisos, tu nombre y las secciones (Mantenimiento · Distribución · Captación · Boulema · Mi día) están siempre arriba, iguales en todos los módulos; la campana de avisos ya funciona desde cualquier pantalla, no solo desde Mantenimiento',
-      'Textos más grandes y con más contraste: nombres, títulos y celdas principales a 14px, secundarios a 12-13px; nada por debajo de 11px. Botones de solo icono más grandes en el móvil (44px)',
-      'El botón «atrás» del móvil y del navegador funciona en todas partes: cierra paneles laterales, fichas y ventanas, y vuelve a la pestaña anterior (cada pestaña tiene su enlace: #/captacion/partidos, #/distribucion/clubes, #/equipo…). Las fichas de jugador, club y miembro llevan «← Volver» con miga de pan',
-      'Ventanas (crear, editar, confirmar) unificadas: Enter guarda, Escape cierra, se pueden cerrar tocando fuera o con la ✕, y si hay cambios sin guardar la app pregunta antes de cerrar o de cambiar de pestaña. En el móvil salen como hoja desde abajo',
-      'Teclado y accesibilidad: las filas de las listas se pueden recorrer con Tab y abrir con Enter o Espacio; todos los botones de icono tienen nombre para lectores de pantalla; el foco se queda dentro de las ventanas abiertas',
-      'Vocabulario unificado en toda la app: Encargado (antes «Gestor AIS»/«manager»), Responsable, Seguidores, Solicitud (antes «Necesidad»/«Petición» en Distribución), Nivel (antes «Tier»), Etiqueta (antes «Assessment»), Veredicto (antes «Conclusión» del informe), Scout (antes «explorador»/«Persona asignada») y Firmar (antes «Pipeline»). Los estados y prioridades salen con su nombre legible',
-      'Un solo buscador global (⌘K / Ctrl+K, o la lupa de la cabecera y de la barra inferior): jugadores, clubes, fichas de Captación, tarjetas de Firmar y tareas (que se abren directamente en su detalle)',
-    ],
-    adminItems: [
-      'Capa base nueva: src/components/ui (Button, IconButton, Chip, Badge, SectionTabs, Field/Input/Select/Textarea, Dialog, Sheet, ClickableRow), src/components/shell (AppShell/AppHeader, DetailHeader, BottomNav, variable CSS --shell-h), src/lib/rutas.ts (parseHash/buildHash), src/lib/labels.ts (glosario), hooks useBackClose/useBeforeUnload',
-      'App.tsx: AppShell envuelve las vistas de sección; las sub-pestañas se sincronizan con el hash (estado subTabs); Distribución en pantalla partida ya scrollea con la página y el club va sticky bajo la cabecera',
-      'Lint: la regla de tipografía mínima (text-[≤10px]) pasa de aviso a error',
-    ],
-  },
-  {
     date: '2026-09-05',
     items: [
       'Home de Mantenimiento: quitado el aviso «X partidos para ver hoy» — solo miraba el campo antiguo de un scout por partido y por eso se le veían solo los de Ibai, aunque hubiera más gente asignada',

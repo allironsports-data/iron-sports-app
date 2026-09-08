@@ -1,10 +1,8 @@
-import { Users, AlertCircle, ChevronRight, Clock } from 'lucide-react'
+import { Users, AlertCircle, ChevronRight } from 'lucide-react'
 import type { Club, DistributionEntry, ClubNegotiation } from '../../types'
 import type { Profile } from '../../contexts/AuthContext'
 import { EmptyState } from '../../components/EmptyState'
-import { Badge, ClickableRow } from '../../components/ui'
-import { L, NEG_STATUS_LABELS } from '../../lib/labels'
-import { normalizePosition, positionLabel } from '../../lib/positions'
+import { normalizePosition } from '../../lib/positions'
 import { norm } from '../../lib/texto'
 import { contractBadge, topStatus as topStatusOf, daysSince, STALE_DAYS, ACTIVE_NEG_STATUSES } from '../../lib/distribution'
 import { Avatar } from './shared'
@@ -76,41 +74,39 @@ export function EncargadosTab({
     const badge = contractBadge(player.clubContract?.endDate)
 
     return (
-      <ClickableRow
+      <div
         key={entry.id}
         onClick={() => onSelectPlayer?.(player.id)}
-        className="rounded-none px-4 py-3 border-b border-slate-100 last:border-0"
+        className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0"
       >
-        <div className="flex items-center gap-3 min-w-0">
-          <Avatar name={player.name} photo={player.photo} />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="font-medium text-slate-800 text-body">{player.name}</span>
-              <span className="text-secondary text-slate-500" title={positionLabel(player.positions[0])}>{player.positions[0]}</span>
-            </div>
-            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-              <span className={`text-badge font-bold px-1.5 py-0.5 rounded-full ${PRIORITY_BADGE[entry.priority]}`} title={`${L.prioridad} ${entry.priority}`}>
-                {entry.priority}
-              </span>
-              {entry.condition && (
-                <Badge>{entry.condition}</Badge>
-              )}
-              {badge && (
-                <span className={`text-badge px-1.5 py-0.5 rounded-full border ${badge.cls}`}>{badge.label}</span>
-              )}
-              {topStatus && (
-                <span className={`text-badge px-1.5 py-0.5 rounded-full ${STATUS_COLORS_E[topStatus] ?? ''}`}>
-                  {NEG_STATUS_LABELS[topStatus]}
-                </span>
-              )}
-              {activeNegs.length > 0 && (
-                <span className="text-secondary text-slate-500">{activeNegs.length} club{activeNegs.length !== 1 ? 'es' : ''}</span>
-              )}
-            </div>
+        <Avatar name={player.name} photo={player.photo} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-slate-800 text-sm">{player.name}</span>
+            <span className="text-xs text-slate-400">{player.positions[0]}</span>
           </div>
-          <ChevronRight className="w-4 h-4 text-slate-400 flex-shrink-0" aria-hidden="true" />
+          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+            <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${PRIORITY_BADGE[entry.priority]}`}>
+              {entry.priority}
+            </span>
+            {entry.condition && (
+              <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full">{entry.condition}</span>
+            )}
+            {badge && (
+              <span className={`text-xs px-1.5 py-0.5 rounded-full border ${badge.cls}`}>{badge.label}</span>
+            )}
+            {topStatus && (
+              <span className={`text-xs px-1.5 py-0.5 rounded-full ${STATUS_COLORS_E[topStatus] ?? ''}`}>
+                {topStatus.charAt(0).toUpperCase() + topStatus.slice(1)}
+              </span>
+            )}
+            {activeNegs.length > 0 && (
+              <span className="text-xs text-slate-400">{activeNegs.length} club{activeNegs.length !== 1 ? 's' : ''}</span>
+            )}
+          </div>
         </div>
-      </ClickableRow>
+        <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
+      </div>
     )
   }
 
@@ -123,17 +119,17 @@ export function EncargadosTab({
     <div key={avatar} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
       {/* Section header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 bg-slate-50">
-        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-meta font-bold flex-shrink-0 ${
+        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
           muted
-            ? 'bg-slate-200 text-slate-600'
+            ? 'bg-slate-200 text-slate-400'
             : 'bg-primary text-white'
         }`}>
           {avatar === '__sin__' ? '?' : avatar}
         </div>
         <div className="flex-1 min-w-0">
-          <p className={`text-body font-semibold ${muted ? 'text-slate-600' : 'text-slate-800'}`}>{name}</p>
+          <p className={`text-sm font-semibold ${muted ? 'text-slate-400' : 'text-slate-800'}`}>{name}</p>
         </div>
-        <span className="text-secondary text-slate-500 flex-shrink-0">
+        <span className="text-xs text-slate-400 flex-shrink-0">
           {entries.length} jugador{entries.length !== 1 ? 'es' : ''}
         </span>
       </div>
@@ -188,13 +184,13 @@ export function EncargadosTab({
       {/* Salud de datos (solo admin) */}
       {currentProfile.is_admin && (
         <div>
-          <h3 className="text-body font-semibold text-slate-700 mb-2">Salud de datos</h3>
+          <h3 className="text-sm font-semibold text-slate-700 mb-2">Salud de datos</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <HealthCard id="sin" open={healthOpen} onToggle={setHealthOpen} label="Clubes sin encargado" count={clubsSinEnc.length} tone="border-amber-200 bg-amber-50"
               onAction={() => goToClubs('__sin__')} actionLabel="Repartir →" />
             <HealthCard id="dup" open={healthOpen} onToggle={setHealthOpen} label="Clubes posiblemente duplicados" count={dupGroups.length} tone="border-orange-200 bg-orange-50" />
-            <HealthCard id="pos" open={healthOpen} onToggle={setHealthOpen} label="Solicitudes con posición no estándar" count={badNeeds.length} tone="border-red-200 bg-red-50" />
-            <HealthCard id="old" open={healthOpen} onToggle={setHealthOpen} label={`Solicitudes antiguas (>${OLD_DAYS}d)`} count={oldNeeds.length} tone="border-slate-200 bg-slate-50" />
+            <HealthCard id="pos" open={healthOpen} onToggle={setHealthOpen} label="Necesidades con posición no estándar" count={badNeeds.length} tone="border-red-200 bg-red-50" />
+            <HealthCard id="old" open={healthOpen} onToggle={setHealthOpen} label={`Necesidades antiguas (>${OLD_DAYS}d)`} count={oldNeeds.length} tone="border-slate-200 bg-slate-50" />
           </div>
 
           {/* Detalle desplegable */}
@@ -202,11 +198,11 @@ export function EncargadosTab({
             <div className="mt-2 bg-white border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-[40vh] overflow-y-auto">
               {dupGroups.map((g, i) => (
                 <div key={i} className="px-3 py-2">
-                  <p className="text-secondary font-semibold text-slate-700 mb-1">{g[0].name} ({g.length})</p>
+                  <p className="text-xs font-semibold text-slate-700 mb-1">{g[0].name} ({g.length})</p>
                   <div className="flex flex-wrap gap-1.5">
                     {g.map(c => (
-                      <button key={c.id} type="button" onClick={() => onSelectClub?.(c.id)}
-                        className="text-badge bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1 rounded-full">
+                      <button key={c.id} onClick={() => onSelectClub?.(c.id)}
+                        className="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">
                         {c.league ?? 'sin liga'}{c.aisManager ? ` · ${c.aisManager}` : ''}
                       </button>
                     ))}
@@ -218,10 +214,10 @@ export function EncargadosTab({
           {healthOpen === 'pos' && badNeeds.length > 0 && (
             <div className="mt-2 bg-white border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-[40vh] overflow-y-auto">
               {badNeeds.slice(0, 100).map((b, i) => (
-                <button key={i} type="button" onClick={() => onSelectClub?.(b.club.id)}
+                <button key={i} onClick={() => onSelectClub?.(b.club.id)}
                   className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-50">
-                  <span className="text-body text-slate-700 truncate flex-1">{b.club.name}</span>
-                  <span className="text-badge bg-red-50 text-red-600 border border-red-200 px-1.5 py-0.5 rounded flex-shrink-0">“{b.pos}”</span>
+                  <span className="text-sm text-slate-700 truncate flex-1">{b.club.name}</span>
+                  <span className="text-[11px] bg-red-50 text-red-600 border border-red-200 px-1.5 py-0.5 rounded flex-shrink-0">“{b.pos}”</span>
                 </button>
               ))}
             </div>
@@ -229,17 +225,17 @@ export function EncargadosTab({
           {healthOpen === 'old' && oldNeeds.length > 0 && (
             <div className="mt-2 bg-white border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-[40vh] overflow-y-auto">
               {oldNeeds.slice(0, 100).map((o, i) => (
-                <button key={i} type="button" onClick={() => onSelectClub?.(o.club.id)}
+                <button key={i} onClick={() => onSelectClub?.(o.club.id)}
                   className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-50">
-                  <span className="text-body text-slate-700 truncate flex-1">{o.club.name}</span>
-                  <span className="text-badge text-slate-500 flex-shrink-0">{o.pos} · {Math.floor(o.days / 30)}m</span>
+                  <span className="text-sm text-slate-700 truncate flex-1">{o.club.name}</span>
+                  <span className="text-[11px] text-slate-400 flex-shrink-0">{o.pos} · {Math.floor(o.days / 30)}m</span>
                 </button>
               ))}
             </div>
           )}
           {healthOpen === 'sin' && (
-            <p className="mt-2 text-secondary text-slate-600">
-              Pulsa «Repartir →» para ir a la lista de clubes filtrada por «{L.sinEncargado}» y asignarlos desde el desplegable de cada fila.
+            <p className="mt-2 text-xs text-slate-500">
+              Pulsa “Repartir →” para ir a la lista de clubes filtrada por “Sin encargado” y asignarlos desde el círculo de siglas de cada tarjeta.
             </p>
           )}
         </div>
@@ -248,40 +244,37 @@ export function EncargadosTab({
       {/* Resumen por encargado (clubes) */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <h3 className="text-body font-semibold text-slate-700">Resumen por {L.encargado.toLowerCase()} · {L.clubes}</h3>
+          <h3 className="text-sm font-semibold text-slate-700">Resumen por encargado · Clubes</h3>
           {totalStale > 0 && (
-            <span className="text-secondary text-orange-700 font-medium flex items-center gap-1">
-              <AlertCircle className="w-3.5 h-3.5" aria-hidden="true" /> {totalStale} propuesta{totalStale !== 1 ? 's' : ''} sin mover &gt;{STALE_DAYS}d
+            <span className="text-xs text-orange-600 font-medium flex items-center gap-1">
+              <AlertCircle className="w-3.5 h-3.5" /> {totalStale} propuesta{totalStale !== 1 ? 's' : ''} sin mover &gt;{STALE_DAYS}d
             </span>
           )}
         </div>
         <div className="hidden sm:block bg-white border border-slate-200 rounded-xl overflow-hidden overflow-x-auto">
           <table className="w-full text-sm min-w-[460px]">
             <thead>
-              <tr className="bg-slate-50 text-left text-meta text-slate-600 uppercase tracking-wider">
-                <th className="px-4 py-2 font-semibold">{L.encargado}</th>
-                <th className="px-3 py-2 font-semibold text-right">{L.clubes}</th>
+              <tr className="bg-slate-50 text-left text-xs text-slate-500 uppercase tracking-wider">
+                <th className="px-4 py-2 font-semibold">Encargado</th>
+                <th className="px-3 py-2 font-semibold text-right">Clubes</th>
                 <th className="px-3 py-2 font-semibold text-right">Propuestas activas</th>
                 <th className="px-4 py-2 font-semibold text-right">Sin mover &gt;{STALE_DAYS}d</th>
               </tr>
             </thead>
             <tbody>
               {clubStats.length === 0 && (
-                <tr><td colSpan={4} className="px-4 py-6 text-center text-slate-500 text-secondary">Aún no hay clubes con {L.encargado.toLowerCase()} asignado.</td></tr>
+                <tr><td colSpan={4} className="px-4 py-6 text-center text-slate-400 text-xs">Aún no hay clubes con encargado asignado.</td></tr>
               )}
               {clubStats.map(s => (
                 <tr
                   key={s.profile.id}
-                  tabIndex={0}
-                  role="button"
                   onClick={() => goToClubs(s.profile.avatar)}
-                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); goToClubs(s.profile.avatar) } }}
-                  className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
+                  className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors"
                   title={`Ver los clubes de ${s.profile.name}`}
                 >
                   <td className="px-4 py-2.5">
                     <div className="flex items-center gap-2">
-                      <span className="w-7 h-7 rounded-full bg-primary text-white text-badge font-bold flex items-center justify-center flex-shrink-0">{s.profile.avatar}</span>
+                      <span className="w-7 h-7 rounded-full bg-primary text-white text-[11px] font-bold flex items-center justify-center flex-shrink-0">{s.profile.avatar}</span>
                       <span className="font-medium text-slate-700 truncate">{s.profile.name}</span>
                     </div>
                   </td>
@@ -289,29 +282,26 @@ export function EncargadosTab({
                   <td className="px-3 py-2.5 text-right text-slate-600">{s.active}</td>
                   <td className="px-4 py-2.5 text-right">
                     {s.stale > 0
-                      ? <span className="inline-flex items-center gap-1 text-orange-700 font-semibold"><Clock className="w-3.5 h-3.5" aria-hidden="true" /> {s.stale}</span>
-                      : <span className="text-slate-400">0</span>}
+                      ? <span className="inline-flex items-center gap-1 text-orange-600 font-semibold">⏰ {s.stale}</span>
+                      : <span className="text-slate-300">0</span>}
                   </td>
                 </tr>
               ))}
               {sinEncargadoClubs > 0 && (
                 <tr
-                  tabIndex={0}
-                  role="button"
                   onClick={() => goToClubs('__sin__')}
-                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); goToClubs('__sin__') } }}
-                  className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
+                  className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors"
                   title="Ver clubes sin encargado"
                 >
                   <td className="px-4 py-2.5">
                     <div className="flex items-center gap-2">
-                      <span className="w-7 h-7 rounded-full bg-slate-200 text-slate-600 text-badge font-bold flex items-center justify-center flex-shrink-0">?</span>
-                      <span className="font-medium text-slate-600">{L.sinEncargado}</span>
+                      <span className="w-7 h-7 rounded-full bg-slate-200 text-slate-400 text-[11px] font-bold flex items-center justify-center flex-shrink-0">?</span>
+                      <span className="font-medium text-slate-400">Sin encargado</span>
                     </div>
                   </td>
-                  <td className="px-3 py-2.5 text-right font-semibold text-slate-600">{sinEncargadoClubs}</td>
-                  <td className="px-3 py-2.5 text-right text-slate-400">—</td>
-                  <td className="px-4 py-2.5 text-right text-slate-400">—</td>
+                  <td className="px-3 py-2.5 text-right font-semibold text-slate-400">{sinEncargadoClubs}</td>
+                  <td className="px-3 py-2.5 text-right text-slate-300">—</td>
+                  <td className="px-4 py-2.5 text-right text-slate-300">—</td>
                 </tr>
               )}
             </tbody>
@@ -321,54 +311,50 @@ export function EncargadosTab({
         {/* Móvil: tarjetas por encargado */}
         <div className="sm:hidden space-y-2">
           {clubStats.length === 0 && (
-            <div className="bg-white border border-slate-200 rounded-xl p-4 text-center text-slate-500 text-secondary">Aún no hay clubes con {L.encargado.toLowerCase()} asignado.</div>
+            <div className="bg-white border border-slate-200 rounded-xl p-4 text-center text-slate-400 text-xs">Aún no hay clubes con encargado asignado.</div>
           )}
           {clubStats.map(s => (
-            <ClickableRow
+            <div
               key={s.profile.id}
               onClick={() => goToClubs(s.profile.avatar)}
-              className="bg-white border border-slate-200 rounded-xl p-3"
+              className="bg-white border border-slate-200 rounded-xl p-3 flex items-center gap-3 cursor-pointer active:bg-slate-50"
             >
-              <div className="flex items-center gap-3 min-w-0">
-                <span className="w-9 h-9 rounded-full bg-primary text-white text-meta font-bold flex items-center justify-center flex-shrink-0">{s.profile.avatar}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-slate-700 truncate">{s.profile.name}</div>
-                  <div className="text-secondary text-slate-600 mt-0.5">
-                    Clubes: {s.clubs} · Activas: {s.active} · {s.stale > 0 ? <span className="text-orange-700 font-medium">Paradas: {s.stale}</span> : <>Paradas: 0</>}
-                  </div>
+              <span className="w-9 h-9 rounded-full bg-primary text-white text-xs font-bold flex items-center justify-center flex-shrink-0">{s.profile.avatar}</span>
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-slate-700 truncate">{s.profile.name}</div>
+                <div className="text-xs text-slate-500 mt-0.5">
+                  Clubes: {s.clubs} · Activas: {s.active} · {s.stale > 0 ? <span className="text-orange-600 font-medium">Paradas: {s.stale}</span> : <>Paradas: 0</>}
                 </div>
-                <ChevronRight className="w-4 h-4 text-slate-400 flex-shrink-0" aria-hidden="true" />
               </div>
-            </ClickableRow>
+              <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
+            </div>
           ))}
           {sinEncargadoClubs > 0 && (
-            <ClickableRow
+            <div
               onClick={() => goToClubs('__sin__')}
-              className="bg-white border border-slate-200 rounded-xl p-3"
+              className="bg-white border border-slate-200 rounded-xl p-3 flex items-center gap-3 cursor-pointer active:bg-slate-50"
             >
-              <div className="flex items-center gap-3 min-w-0">
-                <span className="w-9 h-9 rounded-full bg-slate-200 text-slate-600 text-meta font-bold flex items-center justify-center flex-shrink-0">?</span>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-slate-600">{L.sinEncargado}</div>
-                  <div className="text-secondary text-slate-500 mt-0.5">Clubes: {sinEncargadoClubs} · Activas: — · Paradas: —</div>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-400 flex-shrink-0" aria-hidden="true" />
+              <span className="w-9 h-9 rounded-full bg-slate-200 text-slate-400 text-xs font-bold flex items-center justify-center flex-shrink-0">?</span>
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-slate-400">Sin encargado</div>
+                <div className="text-xs text-slate-400 mt-0.5">Clubes: {sinEncargadoClubs} · Activas: — · Paradas: —</div>
               </div>
-            </ClickableRow>
+              <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
+            </div>
           )}
         </div>
 
-        <p className="text-meta text-slate-500 mt-1.5">Pulsa una fila para ver los clubes de esa persona.</p>
+        <p className="text-[11px] text-slate-400 mt-1.5">Pulsa una fila para ver los clubes de esa persona.</p>
       </div>
 
       {/* Jugadores por encargado */}
       <div>
-        <h3 className="text-body font-semibold text-slate-700 mb-2">Jugadores por {L.encargado.toLowerCase()}</h3>
+        <h3 className="text-sm font-semibold text-slate-700 mb-2">Jugadores por encargado</h3>
         {managerProfiles.length === 0 && !grouped['__sin__'] && (
           <EmptyState
             icon={<Users className="w-10 h-10" />}
-            title={`No hay jugadores con ${L.encargado.toLowerCase()} asignado`}
-            subtitle={`Asigna un ${L.encargado.toLowerCase()} a cada jugador desde la pestaña Jugadores.`}
+            title="No hay jugadores con encargado asignado"
+            subtitle="Asigna un encargado a cada jugador desde la pestaña Jugadores."
           />
         )}
 
@@ -378,7 +364,7 @@ export function EncargadosTab({
           )}
 
           {grouped['__sin__'] &&
-            renderSection('__sin__', L.sinEncargado, grouped['__sin__'], true)
+            renderSection('__sin__', 'Sin encargado', grouped['__sin__'], true)
           }
         </div>
       </div>

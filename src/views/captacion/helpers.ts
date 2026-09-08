@@ -10,8 +10,6 @@ export type ShowToast = (message: string, variant?: 'success' | 'error' | 'info'
 // ── Constants ────────────────────────────────────────────────
 
 export type CaptacionTab = 'jugadores' | 'firmar' | 'conclusiones' | 'contratos' | 'equipos' | 'informes' | 'partidos' | 'planificacion' | 'pretemporada'
-/** Orden actual de las sub-pestañas (el orden visible NO se cambia aquí) */
-export const ALL_TABS: CaptacionTab[] = ['firmar', 'conclusiones', 'contratos', 'jugadores', 'equipos', 'informes', 'partidos', 'planificacion', 'pretemporada']
 
 export const ASSESSMENT_CONFIG: Record<ScoutingAssessment, { label: string; bg: string; text: string; border: string }> = {
   Llamar:     { label: 'Llamar',     bg: 'bg-amber-100',   text: 'text-amber-700',   border: 'border-amber-200' },
@@ -34,7 +32,7 @@ export const ASSESSMENT_DOT: Record<ScoutingAssessment, string> = {
 export const PRETEMPORADA_MIN_BIRTH_YEAR = 2002
 
 // Estilo compartido para los selectores de filtro (look sobrio: sin globos/chips)
-export const SELECT_CLS = "w-auto text-secondary border border-slate-200 rounded-lg px-2.5 py-1.5 min-h-9 sm:min-h-0 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 text-slate-700 hover:border-slate-300 transition-colors"
+export const SELECT_CLS = "text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 text-slate-700 hover:border-slate-300 transition-colors"
 
 export const POSITIONS_SCOUTING = [
   'Portero',

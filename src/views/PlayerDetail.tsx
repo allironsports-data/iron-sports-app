@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, memo } from "react";
-import type { FormEvent } from "react";
+import logoImg from '../assets/logo.jpeg';
 import type {
   Player, Task,
   PerformanceNote, PlayerLink, VideoSession,
@@ -17,14 +17,12 @@ import { ManagerSelect } from '../components/ManagerSelect';
 import { useToastContext } from "../hooks/useToastContext";
 import { HistorialCambios } from "../components/HistorialCambios";
 import { ConfirmModal } from "../components/ConfirmModal";
-import { Badge, Button, Dialog, Field, IconButton, Input, SectionTabs, Select, Textarea } from "../components/ui";
-import { DetailHeader } from "../components/shell";
-import { L, NEG_STATUS_LABELS, PRIORITY_LABELS } from "../lib/labels";
+import { useEscapeKey } from "../hooks/useEscapeKey";
 import { isValidUrl, normalizeUrl, isValidName, isValidBirthDate } from "../lib/validate";
 import { hoyISO, parseDia, esVencida } from "../lib/fechas";
 import {
-  ClipboardList, FileText,
-  TrendingUp, User, Plus, X, Calendar, AlertCircle, AlertTriangle, Handshake, Flame,
+  ArrowLeft, LogOut, ClipboardList, FileText,
+  TrendingUp, User, Plus, X, Calendar, AlertCircle,
   Clock, CheckCircle2, Trash2, Edit3, ChevronRight, Users,
   Paperclip, Download, ExternalLink, Link2,
   Video, BarChart2, BookOpen, Pencil, ChevronDown,
@@ -87,9 +85,9 @@ interface Props {
   onUpdateTask: (task: Task) => void | Promise<void>;
   onDeleteTask: (taskId: string) => void | Promise<void>;
   onUpdatePlayer: (player: Player) => void | Promise<void>;
+  onLogout: () => void;
   onDeletePlayer?: (id: string) => void;
-  /** Sección desde la que se abrió la ficha (miga de pan). Por defecto «Jugadores». */
-  origen?: 'jugadores' | 'distribucion' | 'captacion';
+  onAdmin?: () => void;
   // Distribution props (optional — passed when data is loaded)
   distributionEntry?: DistributionEntry;
   playerNegotiations?: ClubNegotiation[];
@@ -106,18 +104,12 @@ interface Props {
 
 type TabId = "resumen" | "tareas" | "contrato" | "rendimiento" | "info" | "actividad" | "distribucion";
 
-type NavGroup = { label: string; items: { id: TabId; label: string; icon: React.ReactNode; count?: number; alert?: boolean }[] };
-
-const ORIGEN_LABEL: Record<NonNullable<Props['origen']>, string> = {
-  jugadores: L.jugadores,
-  distribucion: L.distribucion,
-  captacion: L.captacion,
-};
+type NavGroup = { label: string; items: { id: TabId; label: string; icon: React.ReactNode; count?: number }[] };
 
 export function PlayerDetail({
   player, players = [], tasks, allTasks, profiles, currentProfile,
-  onBack, onAddTask, onUpdateTask, onDeleteTask, onUpdatePlayer,
-  onDeletePlayer, origen = 'jugadores',
+  onBack, onAddTask, onUpdateTask, onDeleteTask, onUpdatePlayer, onLogout,
+  onDeletePlayer, onAdmin,
   distributionEntry, playerNegotiations = [], clubs = [],
   onUpdateEntry, onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation,
   onSelectClub,
@@ -136,9 +128,6 @@ export function PlayerDetail({
   const { showToast } = useToastContext();
 
   const pendingCount   = tasks.filter((t) => t.status !== "completada").length;
-  // Contador en rojo solo si hay tareas vencidas (lo barato de saber aquí)
-  const hoyTabs = hoyISO();
-  const hayVencidas = tasks.some((t) => t.status !== "completada" && esVencida(t.dueDate, hoyTabs));
   const rendimCount    = ((player.videoSessions?.length ?? 0) + postpartidos.length) || undefined;
   const distribCount   = playerNegotiations.length || undefined;
 
@@ -147,7 +136,7 @@ export function PlayerDetail({
       label: "Gestión",
       items: [
         { id: "resumen",      label: "Resumen",      icon: <Activity className="w-3.5 h-3.5" /> },
-        { id: "tareas",       label: "Tareas",       icon: <ClipboardList className="w-3.5 h-3.5" />, count: pendingCount || undefined, alert: hayVencidas },
+        { id: "tareas",       label: "Tareas",       icon: <ClipboardList className="w-3.5 h-3.5" />, count: pendingCount || undefined },
         { id: "contrato",     label: "Contrato",     icon: <FileText className="w-3.5 h-3.5" /> },
         { id: "distribucion", label: "Distribución", icon: <BarChart2 className="w-3.5 h-3.5" />, count: distribCount },
       ],
@@ -189,56 +178,91 @@ export function PlayerDetail({
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* ── Cabecera de ficha: atrás + miga + acciones ── */}
-      <DetailHeader
-        onBack={onBack}
-        crumbs={[{ label: ORIGEN_LABEL[origen], onClick: onBack }, { label: player.name }]}
-        title={player.name}
-        subtitle={`${player.positions.map(p => positionLabel(p)).join(" / ")} · ${calcAge(player.birthDate)} años`}
-        actions={
-          <>
-            {contractBadgeLabel && (
-              <span className={`hidden sm:inline-flex text-badge font-semibold px-2 py-0.5 rounded-full border ${contractBadgeCls}`} title="Fin de contrato con el club">
-                {contractBadgeLabel}
-              </span>
+      {/* ── Compact header ──────────────────────────────── */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-20">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-12 flex items-center justify-between">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+            <button onClick={onBack} aria-label="Volver" className="p-2 -ml-2 sm:p-0 sm:ml-0 text-slate-400 hover:text-slate-600 transition-colors flex-shrink-0">
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <div className="w-6 h-6 rounded overflow-hidden bg-white flex-shrink-0">
+              <img src={logoImg} className="w-full h-full object-contain" alt="AIS" />
+            </div>
+            <button onClick={onBack} className="text-xs text-slate-400 hover:text-slate-600 transition-colors hidden sm:inline">Jugadores</button>
+            <span className="text-xs text-slate-300 hidden sm:inline">/</span>
+            <span className="text-sm font-semibold text-slate-800 truncate min-w-0">{player.name}</span>
+          </div>
+          <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+            {onAdmin && (
+              <button onClick={onAdmin} aria-label="Admin" className="p-2 sm:p-1.5 text-slate-400 hover:text-slate-600 transition-colors" title="Admin">
+                <Users className="w-4 h-4" />
+              </button>
             )}
-            <IconButton label="Exportar informe (PDF)" onClick={() => generarInformeJugador(player)}>
-              <Download />
-            </IconButton>
-            <IconButton label="Editar jugador" onClick={() => setShowEditPlayer(true)}>
-              <Edit3 />
-            </IconButton>
-            {onDeletePlayer && currentProfile.is_admin && (
-              <IconButton label="Eliminar jugador" onClick={() => setShowDeleteConfirm(true)} className="text-red-600 hover:bg-red-50">
-                <Trash2 />
-              </IconButton>
-            )}
-          </>
-        }
-      />
-
-      {/* ── Pestañas de la ficha (7, en todos los tamaños) ── */}
-      <div className="sticky top-[var(--shell-h)] z-20 bg-white border-b border-slate-200">
-        <div className="max-w-6xl mx-auto px-1 sm:px-4">
-          <SectionTabs<TabId>
-            variant="secondary"
-            label="Secciones de la ficha"
-            items={allTabItems.map(it => ({ id: it.id, label: it.label, icon: it.icon, count: it.count, alert: it.alert }))}
-            value={activeTab}
-            onChange={setActiveTab}
-            className="bg-white"
-          />
+            <button onClick={onLogout} aria-label="Cerrar sesión" title="Cerrar sesión" className="p-2 sm:p-0 -mr-2 sm:mr-0 text-slate-400 hover:text-slate-600 transition-colors">
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
         </div>
-      </div>
+      </header>
 
-      {/* Móvil: tira con datos básicos del jugador */}
-      <div className="sm:hidden bg-white border-b border-slate-100 px-4 py-2 flex items-center gap-3">
-        <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center text-body font-bold text-slate-500 flex-shrink-0" aria-hidden="true">
+      {/* ── Mobile: player info strip ───────────────────── */}
+      <div className="sm:hidden bg-white border-b border-slate-100 px-4 py-3 flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-sm font-bold text-slate-400 flex-shrink-0">
           {avatarText}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-secondary text-slate-600 truncate">{player.nationality}{contractBadgeLabel ? ` · Contrato ${contractBadgeLabel}` : ''}</p>
-          <ClubsDisplay clubs={player.clubs} />
+          <p className="text-sm font-semibold text-slate-900 truncate">{player.name}</p>
+          <p className="text-xs text-slate-500 truncate">{player.positions.join(" / ")} · {calcAge(player.birthDate)} años</p>
+        </div>
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          {contractBadgeLabel && (
+            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${contractBadgeCls}`}>
+              {contractBadgeLabel}
+            </span>
+          )}
+          <button
+            onClick={() => generarInformeJugador(player)}
+            aria-label="Exportar informe"
+            title="Ficha deportiva, contrato e informes en PDF"
+            className="p-2 text-slate-400 hover:text-slate-600 border border-slate-200 rounded-lg"
+          >
+            <Download className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => setShowEditPlayer(true)}
+            aria-label="Editar jugador"
+            className="p-2 text-slate-400 hover:text-slate-600 border border-slate-200 rounded-lg"
+          >
+            <Edit3 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* ── Mobile: horizontal tab bar ──────────────────── */}
+      <div className="sm:hidden sticky top-12 z-10 bg-white border-b border-slate-200 shadow-sm">
+        <div className="flex overflow-x-auto scrollbar-none">
+          {allTabItems.map((item) => {
+            const active = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`flex-shrink-0 flex flex-col items-center gap-0.5 px-4 py-2.5 text-[11px] font-medium border-b-2 transition-colors relative ${
+                  active
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-slate-500'
+                }`}
+              >
+                <span className={active ? 'text-blue-500' : 'text-slate-400'}>{item.icon}</span>
+                <span>{item.label}</span>
+                {item.count !== undefined && (
+                  <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                    {item.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -246,19 +270,19 @@ export function PlayerDetail({
         <div className="flex gap-5 items-start">
 
           {/* ── Sidebar — desktop only ───────────────────── */}
-          <aside className="hidden sm:block w-52 flex-shrink-0 sticky top-[calc(var(--shell-h)+56px)]">
+          <aside className="hidden sm:block w-52 flex-shrink-0 sticky top-16">
             <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
 
               {/* Player card inside sidebar */}
-              <div className="p-4 text-center">
-                <div className="w-14 h-14 rounded-xl bg-slate-100 flex items-center justify-center text-lg font-bold text-slate-500 mx-auto mb-2" aria-hidden="true">
+              <div className="p-4 border-b border-slate-100 text-center">
+                <div className="w-14 h-14 rounded-xl bg-slate-100 flex items-center justify-center text-lg font-bold text-slate-400 mx-auto mb-2">
                   {avatarText}
                 </div>
-                <p className="text-body font-semibold text-slate-900 leading-tight">{player.name}</p>
-                <p className="text-secondary text-slate-600 mt-0.5" title={player.positions.map(p => positionLabel(p)).join(" / ")}>
+                <p className="text-sm font-semibold text-slate-900 leading-tight">{player.name}</p>
+                <p className="text-xs text-slate-500 mt-0.5">
                   {player.positions.join(" / ")} · {calcAge(player.birthDate)} años
                 </p>
-                <p className="text-secondary text-slate-500">{player.nationality}</p>
+                <p className="text-xs text-slate-400">{player.nationality}</p>
 
                 {/* Club */}
                 <div className="mt-2">
@@ -267,30 +291,81 @@ export function PlayerDetail({
 
                 {/* Contract badge */}
                 {contractBadgeLabel && (
-                  <span className={`inline-flex items-center mt-2 text-badge font-semibold px-2 py-0.5 rounded-full border ${contractBadgeCls}`}>
+                  <span className={`inline-flex items-center mt-2 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${contractBadgeCls}`}>
                     Contrato · {contractBadgeLabel}
                   </span>
                 )}
 
-                {/* Encargados */}
+                {/* Managers */}
                 {managers.length > 0 && (
                   <div className="flex flex-wrap gap-1 justify-center mt-2">
                     {managers.map((m) => (
-                      <Badge key={m.id} pill={false} title={L.encargado}>{m.name}</Badge>
+                      <span key={m.id} className="text-[11px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">{m.name}</span>
                     ))}
                   </div>
                 )}
 
-                <Button
-                  size="sm"
-                  icon={<Download />}
+                {/* Edit / Delete */}
+                <div className="flex gap-1.5 mt-3 justify-center">
+                  <button
+                    onClick={() => setShowEditPlayer(true)}
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-slate-500 border border-slate-200 hover:bg-slate-50 transition-colors"
+                  >
+                    <Edit3 className="w-3 h-3" />
+                    Editar
+                  </button>
+                  {onDeletePlayer && currentProfile.is_admin && (
+                    <button
+                      onClick={() => setShowDeleteConfirm(true)}
+                      aria-label="Eliminar jugador"
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-red-500 border border-red-200 hover:bg-red-50 transition-colors"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+                <button
                   onClick={() => generarInformeJugador(player)}
                   title="Ficha deportiva, contrato e informes en PDF, listo para compartir"
-                  className="mt-3 w-full"
+                  className="flex items-center justify-center gap-1.5 mt-1.5 w-full px-2 py-1.5 rounded-lg text-xs font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors"
                 >
+                  <Download className="w-3.5 h-3.5" />
                   Exportar informe
-                </Button>
+                </button>
               </div>
+
+              {/* Nav groups */}
+              <nav className="p-2">
+                {navGroups.map((group, gi) => (
+                  <div key={gi} className={gi > 0 ? "mt-3" : ""}>
+                    <p className="text-[9px] font-semibold uppercase tracking-widest text-slate-400 px-2 mb-1">{group.label}</p>
+                    {group.items.map((item) => {
+                      const active = activeTab === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => setActiveTab(item.id)}
+                          className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm transition-colors text-left ${
+                            active
+                              ? "bg-blue-50 text-blue-700 font-medium"
+                              : "text-slate-600 hover:bg-slate-50"
+                          }`}
+                        >
+                          <span className={active ? "text-blue-500" : "text-slate-400"}>{item.icon}</span>
+                          <span className="flex-1 truncate">{item.label}</span>
+                          {item.count !== undefined && (
+                            <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-full ${
+                              active ? "bg-blue-100 text-blue-600" : "bg-slate-100 text-slate-500"
+                            }`}>
+                              {item.count}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
+              </nav>
             </div>
           </aside>
 
@@ -395,23 +470,23 @@ export function PlayerDetail({
 
 /* ---- Club display pills ---- */
 function ClubsDisplay({ clubs }: { clubs: Player["clubs"] }) {
-  if (clubs.length === 0) return <span className="text-secondary text-slate-500">Sin club</span>;
+  if (clubs.length === 0) return <span className="text-xs text-slate-400">Sin club</span>;
   const owner = clubs.find((c) => c.type === "propietario");
   const loan = clubs.find((c) => c.type === "cedido_en");
   if (owner && loan) {
     return (
       <div className="flex items-center gap-1.5 flex-wrap">
-        <span className="px-2 py-0.5 rounded text-secondary font-medium bg-amber-50 text-amber-700 border border-amber-100">
+        <span className="px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-700 border border-amber-100">
           Cedido en {loan.name}
         </span>
-        <span className="text-secondary text-slate-500">prop. {owner.name}</span>
+        <span className="text-xs text-slate-400">prop. {owner.name}</span>
       </div>
     );
   }
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
       {clubs.map((c, i) => (
-        <span key={i} className="px-2 py-0.5 rounded text-secondary font-medium bg-slate-100 text-slate-600">
+        <span key={i} className="px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600">
           {c.name}
           {c.type === "compartido" && clubs.length > 1 && i === 0 && " ·"}
         </span>
@@ -424,7 +499,7 @@ function ClubsDisplay({ clubs }: { clubs: Player["clubs"] }) {
 function taskStatusIcon(s: Task["status"]) {
   if (s === "completada") return <CheckCircle2 className="w-4 h-4 text-emerald-500" />;
   if (s === "en_progreso") return <Clock className="w-4 h-4 text-blue-500" />;
-  return <AlertCircle className="w-4 h-4 text-slate-500" />;
+  return <AlertCircle className="w-4 h-4 text-slate-300" />;
 }
 
 const TaskCard = memo(function TaskCard({
@@ -449,11 +524,8 @@ const TaskCard = memo(function TaskCard({
 
   return (
     <div
-      role="button"
-      tabIndex={0}
       onClick={() => onSelect(task)}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(task); } }}
-      className={`bg-white border rounded-xl overflow-hidden cursor-pointer transition-all hover:shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+      className={`bg-white border rounded-xl overflow-hidden cursor-pointer transition-all hover:shadow-sm ${
         isSelected
           ? "border-blue-400 ring-1 ring-blue-200"
           : task.status === "completada"
@@ -467,11 +539,8 @@ const TaskCard = memo(function TaskCard({
       <div className="p-3">
         <div className="flex items-start gap-3">
           <button
-            type="button"
             onClick={(e) => { e.stopPropagation(); onCycleStatus(task); }}
-            aria-label="Cambiar estado de la tarea"
-            title="Cambiar estado"
-            className="mt-0.5 flex-shrink-0 min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 -m-2 sm:m-0 p-2 sm:p-0 inline-flex items-center justify-center"
+            className="mt-0.5 flex-shrink-0"
           >
             {taskStatusIcon(task.status)}
           </button>
@@ -481,22 +550,22 @@ const TaskCard = memo(function TaskCard({
                 {task.title}
               </span>
               {task.adminOnly && (
-                <span className="text-badge font-bold uppercase tracking-wide text-rose-600 border border-rose-200 bg-rose-50 rounded px-1 py-px">admin</span>
+                <span className="text-[9px] font-bold uppercase tracking-wide text-rose-500 border border-rose-200 bg-rose-50 rounded px-1 py-px">admin</span>
               )}
             </div>
-            {task.description && <p className="text-secondary text-slate-500 mt-0.5 line-clamp-1">{task.description}</p>}
+            {task.description && <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{task.description}</p>}
             <div className="flex items-center gap-3 mt-1.5 flex-wrap">
               {assignee && (
                 <span className="inline-flex items-center gap-1 text-xs text-slate-500">
-                  <span className="w-6 h-6 rounded-full bg-slate-100 text-badge font-semibold flex items-center justify-center">{assignee.avatar}</span>
+                  <span className="w-4 h-4 rounded-full bg-slate-100 text-[9px] font-semibold flex items-center justify-center">{assignee.avatar}</span>
                   {assignee.name.split(" ")[0]}
                 </span>
               )}
               {(task.watchers ?? []).map((wId) => {
                 const w = profiles.find((m) => m.id === wId);
                 return w ? (
-                  <span key={wId} className="inline-flex items-center gap-1 text-secondary text-slate-500">
-                    <span className="w-6 h-6 rounded-full bg-blue-50 text-badge font-semibold flex items-center justify-center text-blue-700">{w.avatar}</span>
+                  <span key={wId} className="inline-flex items-center gap-1 text-xs text-slate-400">
+                    <span className="w-4 h-4 rounded-full bg-blue-50 text-[9px] font-semibold flex items-center justify-center text-blue-600">{w.avatar}</span>
                     {w.name.split(" ")[0]}
                   </span>
                 ) : null;
@@ -505,20 +574,20 @@ const TaskCard = memo(function TaskCard({
                 <span className={`inline-flex items-center gap-1 text-xs ${isOverdue ? "text-red-500 font-medium" : "text-slate-400"}`}>
                   <Calendar className="w-3 h-3" />
                   {parseDia(task.dueDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
-                  {isOverdue && <AlertTriangle className="w-3 h-3" aria-label="Vencida" />}
+                  {isOverdue && " ⚠"}
                 </span>
               )}
-              {dependency && <span className="text-secondary text-slate-500 truncate">Dep: {dependency.title}</span>}
+              {dependency && <span className="text-xs text-slate-400 truncate">Dep: {dependency.title}</span>}
             </div>
           </div>
           {canEdit && (
             <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-              <IconButton label="Ver detalles de la tarea" onClick={() => onSelect(task)}>
-                <Edit3 />
-              </IconButton>
-              <IconButton label="Eliminar tarea" onClick={() => onRequestDelete(task)} className="hover:text-red-600 hover:bg-red-50">
-                <Trash2 />
-              </IconButton>
+              <button onClick={() => onSelect(task)} aria-label="Ver detalles de la tarea" className="p-2 -m-1 sm:p-1 sm:m-0 text-slate-300 hover:text-blue-500 transition-colors" title="Ver detalles">
+                <Edit3 className="w-3.5 h-3.5" />
+              </button>
+              <button onClick={() => onRequestDelete(task)} aria-label="Eliminar tarea" title="Eliminar tarea" className="p-2 -m-1 sm:p-1 sm:m-0 text-slate-300 hover:text-red-400 transition-colors">
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
             </div>
           )}
         </div>
@@ -589,11 +658,14 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
               <AlertCircle className="w-3 h-3" /> {overdueTasks.length} vencida{overdueTasks.length !== 1 ? 's' : ''}
             </span>
           )}
-          <span className="text-secondary text-slate-500">{pendingCount + inProgressCount} activa{pendingCount + inProgressCount !== 1 ? 's' : ''} · {completedCount} completada{completedCount !== 1 ? 's' : ''}</span>
+          <span className="text-xs text-slate-400">{pendingCount + inProgressCount} activa{pendingCount + inProgressCount !== 1 ? 's' : ''} · {completedCount} completada{completedCount !== 1 ? 's' : ''}</span>
         </div>
-        <Button variant="primary" size="sm" icon={<Plus />} onClick={() => setShowAdd(true)} className="flex-shrink-0">
-          Nueva tarea
-        </Button>
+        <button
+          onClick={() => setShowAdd(true)}
+          className="inline-flex items-center gap-1 rounded-lg text-white text-xs font-medium px-2.5 py-1.5 transition-colors flex-shrink-0 bg-primary hover:bg-primary/90"
+        >
+          <Plus className="w-3.5 h-3.5" /> Nueva tarea
+        </button>
       </div>
 
       {/* ── Kanban: 2 columnas principales ── */}
@@ -604,20 +676,20 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
           <div className="flex items-center gap-2 px-2.5 py-1.5 bg-slate-100 rounded-lg">
             <AlertCircle className="w-3.5 h-3.5 text-slate-400" />
             <span className="text-xs font-semibold text-slate-600 flex-1">Pendiente</span>
-            <span className="text-badge font-mono text-slate-500">{pendingFiltered.length}</span>
+            <span className="text-[11px] font-mono text-slate-400">{pendingFiltered.length}</span>
           </div>
           <div className="space-y-2">
             {pendingFiltered.map(t => <TaskCard key={t.id} task={t} {...cardProps} />)}
             {pendingFiltered.length === 0 && (
               <div className="h-12 border-2 border-dashed border-slate-100 rounded-xl flex items-center justify-center">
-                <span className="text-secondary text-slate-500">Sin tareas pendientes</span>
+                <span className="text-xs text-slate-300">Sin tareas pendientes</span>
               </div>
             )}
           </div>
           {/* Quick-add */}
           <button
             onClick={() => setShowAdd(true)}
-            className="flex items-center gap-1.5 px-3 py-2 text-secondary text-slate-500 hover:text-slate-600 hover:bg-slate-50 rounded-lg border border-dashed border-slate-200 transition-colors w-full"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg border border-dashed border-slate-200 transition-colors w-full"
           >
             <Plus className="w-3 h-3" /> Añadir tarea
           </button>
@@ -628,20 +700,20 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
           <div className="flex items-center gap-2 px-2.5 py-1.5 bg-blue-50 rounded-lg">
             <Clock className="w-3.5 h-3.5 text-blue-400" />
             <span className="text-xs font-semibold text-blue-700 flex-1">En progreso</span>
-            <span className="text-badge font-mono text-blue-600">{inProgressFiltered.length}</span>
+            <span className="text-[11px] font-mono text-blue-400">{inProgressFiltered.length}</span>
           </div>
           <div className="space-y-2">
             {inProgressFiltered.map(t => <TaskCard key={t.id} task={t} {...cardProps} />)}
             {inProgressFiltered.length === 0 && (
               <div className="h-12 border-2 border-dashed border-blue-50 rounded-xl flex items-center justify-center">
-                <span className="text-secondary text-slate-500">Sin tareas en curso</span>
+                <span className="text-xs text-slate-300">Sin tareas en curso</span>
               </div>
             )}
           </div>
           {/* Quick-add */}
           <button
             onClick={() => setShowAdd(true)}
-            className="flex items-center gap-1.5 px-3 py-2 text-secondary text-slate-500 hover:text-slate-600 hover:bg-slate-50 rounded-lg border border-dashed border-slate-200 transition-colors w-full"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg border border-dashed border-slate-200 transition-colors w-full"
           >
             <Plus className="w-3 h-3" /> Añadir tarea
           </button>
@@ -656,7 +728,7 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
         >
           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
           <span className="text-xs font-semibold text-emerald-700 flex-1">Completadas</span>
-          <span className="text-badge font-mono text-emerald-600 mr-1">{completedCount}</span>
+          <span className="text-[11px] font-mono text-emerald-500 mr-1">{completedCount}</span>
           <ChevronDown className={`w-3.5 h-3.5 text-emerald-400 transition-transform ${showCompleted ? 'rotate-180' : ''}`} />
         </button>
         {showCompleted && (
@@ -726,88 +798,93 @@ function AddTaskModal({ profiles, tasks, playerId, player, isAdmin, onClose, onA
   const [adminOnly, setAdminOnly] = useState(false);
   const [showMore, setShowMore] = useState(false);
 
-  const playerManagers = player.managedBy.map((id) => profiles.find((m) => m.id === id)).filter(Boolean) as Profile[];
-  const dirty = !!(title.trim() || desc.trim());
+  useEscapeKey(onClose);
 
-  function onSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!title || !assignee) return;
-    const watchers = [...player.managedBy];
-    if (extraWatcher && !watchers.includes(extraWatcher)) watchers.push(extraWatcher);
-    onAdd({ id: "t" + Date.now(), playerId, title, description: desc, assigneeId: assignee,
-      watchers,
-      dependsOnId: depends || undefined, status: "pendiente", priority, dueDate: dueDate || undefined,
-      createdAt: new Date().toISOString(), comments: [], adminOnly });
-  }
+  const playerManagers = player.managedBy.map((id) => profiles.find((m) => m.id === id)).filter(Boolean) as Profile[];
 
   return (
-    <Dialog
-      open
-      onClose={onClose}
-      title="Nueva tarea"
-      onSubmit={onSubmit}
-      dirty={dirty}
-      historyKey="player-add-task"
-      footer={<>
-        <Button onClick={onClose} className="mr-auto">{L.cancelar}</Button>
-        <Button type="submit" variant="primary" disabled={!title || !assignee}>Crear tarea</Button>
-      </>}
-    >
-      <div className="space-y-3">
-        <Field label="Título" required>
-          <Input value={title} onChange={(e) => setTitle(e.target.value)} required autoFocus />
-        </Field>
-        <Field label={L.responsable} required>
-          <Select value={assignee} onChange={(e) => setAssignee(e.target.value)} required>
-            <option value="">—</option>
-            {profiles.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </Select>
-        </Field>
-
-        {/* Más opciones — plegado por defecto */}
-        <Button variant="ghost" size="sm" icon={<ChevronDown className={`transition-transform ${showMore ? 'rotate-180' : ''}`} />} onClick={() => setShowMore(v => !v)} aria-expanded={showMore} className="-ml-2">
-          Más opciones {!showMore && '(descripción, prioridad, fecha…)'}
-        </Button>
-
-        {showMore && (<>
-          <Field label="Descripción">
-            <Textarea value={desc} onChange={(e) => setDesc(e.target.value)} rows={2} />
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Fecha límite (opcional)">
-              <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-            </Field>
-            <Field label={L.prioridad}>
-              <Select value={priority} onChange={(e) => setPriority(e.target.value as "alta" | "media" | "baja")}>
-                {(Object.keys(PRIORITY_LABELS) as Array<keyof typeof PRIORITY_LABELS>).map(k => <option key={k} value={k}>{PRIORITY_LABELS[k]}</option>)}
-              </Select>
-            </Field>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-0 sm:p-4">
+      <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-md max-h-[92vh] overflow-y-auto safe-area-bottom">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white">
+          <h2 className="text-sm font-semibold text-slate-800">Nueva tarea</h2>
+          <button onClick={onClose} aria-label="Cerrar" className="p-2 -m-2 sm:p-1 sm:-m-1 text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+        </div>
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          const watchers = [...player.managedBy];
+          if (extraWatcher && !watchers.includes(extraWatcher)) watchers.push(extraWatcher);
+          onAdd({ id: "t" + Date.now(), playerId, title, description: desc, assigneeId: assignee,
+            watchers,
+            dependsOnId: depends || undefined, status: "pendiente", priority, dueDate: dueDate || undefined,
+            createdAt: new Date().toISOString(), comments: [], adminOnly });
+        }} className="p-4 space-y-3 pb-8">
+          <TF label="Título" value={title} onChange={setTitle} required />
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Responsable</label>
+            <select value={assignee} onChange={(e) => setAssignee(e.target.value)} required
+              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
+              <option value="">—</option>
+              {profiles.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
           </div>
-          {/* Encargados avisados automáticamente */}
-          <div className="bg-slate-50 rounded-md p-2.5">
-            <p className="text-secondary font-medium text-slate-600 mb-1">Se notificará automáticamente a:</p>
-            <div className="flex items-center gap-2 flex-wrap">
-              {playerManagers.length > 0 ? playerManagers.map((m) => (
-                <span key={m.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-slate-200 text-secondary text-slate-600">
-                  {m.avatar} {m.name}
-                </span>
-              )) : <span className="text-secondary text-slate-500">Sin {L.encargados.toLowerCase()} asignados</span>}
+
+          {/* Más opciones — plegado por defecto */}
+          <button
+            type="button"
+            onClick={() => setShowMore(v => !v)}
+            className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 font-medium"
+          >
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showMore ? 'rotate-180' : ''}`} />
+            Más opciones {!showMore && '(descripción, prioridad, fecha…)'}
+          </button>
+
+          {showMore && (<>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Descripción</label>
+            <textarea value={desc} onChange={(e) => setDesc(e.target.value)} rows={2}
+              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 resize-none" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <TF label="Fecha límite (opcional)" value={dueDate} onChange={setDueDate} type="date" />
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Prioridad</label>
+              <select value={priority} onChange={(e) => setPriority(e.target.value as "alta" | "media" | "baja")}
+                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
+                <option value="alta">Alta</option>
+                <option value="media">Media</option>
+                <option value="baja">Baja</option>
+              </select>
             </div>
           </div>
-          <Field label="Notificar también a (opcional)">
-            <Select value={extraWatcher} onChange={(e) => setExtraWatcher(e.target.value)}>
+          {/* Auto-notified managers */}
+          <div className="bg-slate-50 rounded-md p-2.5">
+            <p className="text-xs font-medium text-slate-500 mb-1">Se notificará automáticamente a:</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              {playerManagers.length > 0 ? playerManagers.map((m) => (
+                <span key={m.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-slate-200 text-xs text-slate-600">
+                  {m.avatar} {m.name}
+                </span>
+              )) : <span className="text-xs text-slate-400">Sin managers asignados</span>}
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Notificar también a (opcional)</label>
+            <select value={extraWatcher} onChange={(e) => setExtraWatcher(e.target.value)}
+              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
               <option value="">— Nadie más —</option>
               {profiles.filter((m) => !player.managedBy.includes(m.id)).map((m) => (
                 <option key={m.id} value={m.id}>{m.name}</option>
               ))}
-            </Select>
-          </Field>
-          <Field label="Depende de">
-            <Select value={depends} onChange={(e) => setDepends(e.target.value)}>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Depende de</label>
+            <select value={depends} onChange={(e) => setDepends(e.target.value)}
+              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
               <option value="">Ninguna</option>
               {tasks.filter((t) => t.status !== "completada").map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
-            </Select>
-          </Field>
+            </select>
+          </div>
           {isAdmin && (
             <label className="flex items-center gap-2.5 cursor-pointer select-none py-1">
               <input
@@ -816,13 +893,24 @@ function AddTaskModal({ profiles, tasks, playerId, player, isAdmin, onClose, onA
                 onChange={(e) => setAdminOnly(e.target.checked)}
                 className="w-4 h-4 rounded accent-blue-600 cursor-pointer"
               />
-              <span className="text-body text-slate-700 font-medium">Solo para admins</span>
-              {adminOnly && <Badge tone="warning" pill={false} className="ml-auto uppercase tracking-wide">Admin</Badge>}
+              <span className="text-sm text-slate-700 font-medium">Solo para admins</span>
+              {adminOnly && (
+                <span className="ml-auto text-[11px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 border border-amber-200 rounded px-1.5 py-0.5">
+                  Admin
+                </span>
+              )}
             </label>
           )}
-        </>)}
+          </>)}
+          <div className="pt-2">
+            <button type="submit" disabled={!title || !assignee}
+              className="w-full rounded-md text-white text-sm font-medium py-2 disabled:opacity-40 transition-colors bg-primary hover:bg-primary/90">
+              Crear tarea
+            </button>
+          </div>
+        </form>
       </div>
-    </Dialog>
+    </div>
   );
 }
 
@@ -868,7 +956,7 @@ function ContractTab({ player, onUpdate, isAdmin }: { player: Player; onUpdate: 
               <TF label="Fin" value={repr.end} onChange={(v) => setRepr({ ...repr, end: v })} type="date" />
             </div>
             <div>
-              <label className="block text-meta font-semibold text-slate-600 mb-1">Notas</label>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Notas</label>
               <textarea value={repr.notes || ""} onChange={(e) => setRepr({ ...repr, notes: e.target.value })} rows={2}
                 className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 resize-none" />
             </div>
@@ -888,7 +976,7 @@ function ContractTab({ player, onUpdate, isAdmin }: { player: Player; onUpdate: 
             <DF label="Fin" value={player.representationContract.end ? new Date(player.representationContract.end).toLocaleDateString("es-ES") : "—"} />
             {player.representationContract.notes && (
               <div className="col-span-full">
-                <p className="text-secondary text-slate-500 mb-0.5">Notas</p>
+                <p className="text-xs text-slate-400 mb-0.5">Notas</p>
                 <p className="text-sm text-slate-700">{player.representationContract.notes}</p>
               </div>
             )}
@@ -958,7 +1046,7 @@ function ContractTab({ player, onUpdate, isAdmin }: { player: Player; onUpdate: 
             </div>
             <TF label="Bonus" value={club.bonuses || ""} onChange={(v) => setClub({ ...club, bonuses: v })} />
             <div>
-              <label className="block text-meta font-semibold text-slate-600 mb-1">Notas</label>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Notas</label>
               <textarea value={club.notes || ""} onChange={(e) => setClub({ ...club, notes: e.target.value })} rows={2}
                 className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 resize-none" />
             </div>
@@ -980,7 +1068,7 @@ function ContractTab({ player, onUpdate, isAdmin }: { player: Player; onUpdate: 
             <DF label="Bonus" value={player.clubContract.bonuses || "—"} />
             {player.clubContract.notes && (
               <div className="col-span-full">
-                <p className="text-secondary text-slate-500 mb-0.5">Notas / Documentos</p>
+                <p className="text-xs text-slate-400 mb-0.5">Notas / Documentos</p>
                 <div className="text-sm text-slate-700 whitespace-pre-line">
                   {player.clubContract.notes.split("\n").map((line, i) => {
                     const pdfMatch = line.match(/\[PDF: (.+?)\]\((.+?)\)/);
@@ -1017,7 +1105,7 @@ function ContractTab({ player, onUpdate, isAdmin }: { player: Player; onUpdate: 
                 {c.type === "cedido_en" ? "Cedido en" : c.type === "propietario" ? "Propietario" : "Equipo"}
               </span>
               <span className="text-sm font-medium text-slate-800">{c.name}</span>
-              {c.league && <span className="text-secondary text-slate-500">{c.league}</span>}
+              {c.league && <span className="text-xs text-slate-400">{c.league}</span>}
             </div>
           ))}
         </div>
@@ -1032,8 +1120,8 @@ function ContractTab({ player, onUpdate, isAdmin }: { player: Player; onUpdate: 
               <div key={i} className="flex items-center gap-3">
                 <div className="w-1.5 h-1.5 rounded-full bg-slate-300 flex-shrink-0" />
                 <span className="text-sm text-slate-700 font-medium flex-1">{h.club}</span>
-                <span className="text-secondary text-slate-500">{h.period}</span>
-                <span className="text-secondary text-slate-500">{h.type}</span>
+                <span className="text-xs text-slate-400">{h.period}</span>
+                <span className="text-xs text-slate-400">{h.type}</span>
               </div>
             ))}
           </div>
@@ -1084,7 +1172,7 @@ function PerformanceTab({ player, profiles, onUpdate, postpartidos = [], scoutin
               section === s.id ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"
             }`}>
             {s.icon}{s.label}
-            {(s.count ?? 0) > 0 && <span className={`text-badge rounded-full px-1.5 py-0.5 ${section === s.id ? "bg-slate-100 text-slate-600" : "bg-slate-200 text-slate-500"}`}>{s.count}</span>}
+            {(s.count ?? 0) > 0 && <span className={`text-[11px] rounded-full px-1.5 py-0.5 ${section === s.id ? "bg-slate-100 text-slate-600" : "bg-slate-200 text-slate-500"}`}>{s.count}</span>}
           </button>
         ))}
       </div>
@@ -1099,15 +1187,15 @@ function PerformanceTab({ player, profiles, onUpdate, postpartidos = [], scoutin
               <Plus className="w-3.5 h-3.5" />Nuevo informe
             </button>
           </div>
-          {notes.length === 0 && <div className="text-center py-10 text-body text-slate-500 bg-white border border-slate-200 rounded-lg">Sin informes aún</div>}
+          {notes.length === 0 && <div className="text-center py-10 text-sm text-slate-400 bg-white border border-slate-200 rounded-lg">Sin informes aún</div>}
           {notes.map(note => {
             const author = profiles.find(m => m.id === note.authorId);
             return (
               <div key={note.id} className="bg-white border border-slate-200 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-2 gap-3">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="px-1.5 py-0.5 rounded text-badge font-medium bg-blue-50 text-blue-600">{note.category}</span>
-                    <span className="text-secondary text-slate-500">{new Date(note.date).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}</span>
+                    <span className="px-1.5 py-0.5 rounded text-[11px] font-medium bg-blue-50 text-blue-600">{note.category}</span>
+                    <span className="text-xs text-slate-400">{new Date(note.date).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}</span>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <div className="w-20 h-1.5 rounded-full bg-slate-100 overflow-hidden">
@@ -1121,7 +1209,7 @@ function PerformanceTab({ player, profiles, onUpdate, postpartidos = [], scoutin
                     </div>
                     <span className={`text-sm font-bold tabular-nums ${
                       note.rating >= 8 ? 'text-green-600' : note.rating >= 6 ? 'text-amber-600' : note.rating >= 4 ? 'text-orange-500' : 'text-red-500'
-                    }`}>{note.rating}<span className="text-meta font-normal text-slate-400">/10</span></span>
+                    }`}>{note.rating}<span className="text-[11px] font-normal text-slate-400">/10</span></span>
                   </div>
                 </div>
                 {note.title && <p className="text-sm font-semibold text-slate-800 mb-1">{note.title}</p>}
@@ -1129,16 +1217,20 @@ function PerformanceTab({ player, profiles, onUpdate, postpartidos = [], scoutin
                 {author && (
                   <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
-                      <span className="w-6 h-6 rounded-full bg-slate-100 text-badge font-semibold flex items-center justify-center">{author.avatar}</span>
-                      <span className="text-secondary text-slate-500">{author.name}</span>
+                      <span className="w-5 h-5 rounded-full bg-slate-100 text-[9px] font-semibold flex items-center justify-center">{author.avatar}</span>
+                      <span className="text-xs text-slate-400">{author.name}</span>
                     </div>
                     <div className="flex items-center gap-1">
-                      <IconButton label="Editar informe" onClick={() => setEditingNote(note)}>
-                        <Pencil />
-                      </IconButton>
-                      <IconButton label="Eliminar informe" onClick={() => setNoteToDelete(note)} className="hover:text-red-600 hover:bg-red-50">
-                        <Trash2 />
-                      </IconButton>
+                      <button onClick={() => setEditingNote(note)}
+                        aria-label="Editar informe"
+                        className="p-2 sm:p-1 text-slate-300 hover:text-blue-500">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => setNoteToDelete(note)}
+                        aria-label="Eliminar informe"
+                        className="p-2 sm:p-1 text-slate-300 hover:text-red-500">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
                 )}
@@ -1159,7 +1251,7 @@ function PerformanceTab({ player, profiles, onUpdate, postpartidos = [], scoutin
             </button>
           </div>
           {videos.length === 0 && (
-            <div className="text-center py-10 text-body text-slate-500 bg-white border border-slate-200 rounded-lg">
+            <div className="text-center py-10 text-sm text-slate-400 bg-white border border-slate-200 rounded-lg">
               Sin sesiones registradas
             </div>
           )}
@@ -1172,7 +1264,7 @@ function PerformanceTab({ player, profiles, onUpdate, postpartidos = [], scoutin
                       <Video className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
                       <p className="text-sm font-medium text-slate-800 truncate">{v.description}</p>
                     </div>
-                    <p className="text-secondary text-slate-500">
+                    <p className="text-xs text-slate-400">
                       {new Date(v.date).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}
                       {v.duration ? ` · ${v.duration} min` : ""}
                     </p>
@@ -1181,9 +1273,11 @@ function PerformanceTab({ player, profiles, onUpdate, postpartidos = [], scoutin
                       <ExternalLink className="w-3 h-3" /> Ver vídeo
                     </a>
                   </div>
-                  <IconButton label="Eliminar sesión de vídeo" onClick={() => setVideoToDelete(v)} className="hover:text-red-600 hover:bg-red-50">
-                    <Trash2 />
-                  </IconButton>
+                  <button onClick={() => setVideoToDelete(v)}
+                    aria-label="Eliminar sesión de vídeo"
+                    className="p-2 sm:p-1 text-slate-300 hover:text-red-500 flex-shrink-0">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
             ))}
@@ -1196,10 +1290,10 @@ function PerformanceTab({ player, profiles, onUpdate, postpartidos = [], scoutin
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-slate-800">Postpartidos</h3>
-            <p className="text-meta text-slate-500">Se crean desde Mantenimiento → Postpartidos</p>
+            <p className="text-[11px] text-slate-400">Se crean desde Mantenimiento → Postpartidos</p>
           </div>
           {postpartidos.length === 0 && (
-            <div className="text-center py-10 text-body text-slate-500 bg-white border border-slate-200 rounded-lg">
+            <div className="text-center py-10 text-sm text-slate-400 bg-white border border-slate-200 rounded-lg">
               Sin postpartidos para este jugador
             </div>
           )}
@@ -1224,13 +1318,13 @@ function PerformanceTab({ player, profiles, onUpdate, postpartidos = [], scoutin
                           <p className="text-sm font-medium text-slate-800 truncate">
                             {match ? `${match.homeTeam} vs ${match.awayTeam}` : 'Partido eliminado'}
                           </p>
-                          <span className={`text-badge font-semibold px-2 py-0.5 rounded-full ${
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
                             isDone ? 'bg-emerald-100 text-emerald-700' : task?.status === 'en_progreso' ? 'bg-blue-50 text-blue-600' : 'bg-amber-50 text-amber-600'
                           }`}>
-                            {isDone ? 'Completado' : task?.status === 'en_progreso' ? 'En progreso' : 'Pendiente'}
+                            {isDone ? '✓ Completado' : task?.status === 'en_progreso' ? 'En progreso' : 'Pendiente'}
                           </span>
                         </div>
-                        <p className="text-secondary text-slate-500">
+                        <p className="text-xs text-slate-400">
                           {match && new Date(match.date + 'T12:00:00').toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}
                           {match?.competition ? ` · ${match.competition}` : ''}
                           {assignee ? ` · por ${assignee.name}` : ''}
@@ -1329,42 +1423,37 @@ function AddVideoSessionModal({ onClose, onSave }: {
   const [duration, setDuration] = useState("");
   const [urlError, setUrlError] = useState(false);
 
-  function onSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!isValidUrl(videoUrl)) { setUrlError(true); return; }
-    onSave({ id: "vs" + Date.now(), date, videoUrl: normalizeUrl(videoUrl), description, duration: duration ? parseInt(duration) : undefined });
-  }
+  useEscapeKey(onClose);
 
   return (
-    <Dialog
-      open
-      onClose={onClose}
-      title="Nueva sesión de videoanálisis"
-      onSubmit={onSubmit}
-      dirty={!!(videoUrl.trim() || description.trim())}
-      size="sm"
-      historyKey="player-add-video"
-      footer={<>
-        <Button onClick={onClose} className="mr-auto">{L.cancelar}</Button>
-        <Button type="submit" variant="primary" disabled={!videoUrl || !description}>Guardar sesión</Button>
-      </>}
-    >
-      <div className="space-y-3">
-        <Field label="Fecha" required>
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
-        </Field>
-        <Field label="Enlace al vídeo (Streamable, YouTube, etc.)" required error={urlError ? 'URL no válida' : undefined}>
-          <Input value={videoUrl} onChange={(e) => { setVideoUrl(e.target.value); setUrlError(false); }} required />
-        </Field>
-        <Field label="Duración (minutos, opcional)">
-          <Input type="number" value={duration} onChange={(e) => setDuration(e.target.value)} />
-        </Field>
-        <Field label="Descripción de la sesión" required>
-          <Textarea value={description} onChange={(e) => setDescription(e.target.value)} required rows={3}
-            placeholder="Ej: Revisión de movimientos defensivos, posicionamiento en bloque medio..." />
-        </Field>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-0 sm:p-4">
+      <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-sm max-h-[90vh] overflow-y-auto safe-area-bottom">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+          <h2 className="text-sm font-semibold text-slate-800">Nueva sesión de vídeoanalisis</h2>
+          <button onClick={onClose} aria-label="Cerrar" className="p-2 -m-2 sm:p-1 sm:-m-1 text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+        </div>
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          if (!isValidUrl(videoUrl)) { setUrlError(true); return; }
+          onSave({ id: "vs" + Date.now(), date, videoUrl: normalizeUrl(videoUrl), description, duration: duration ? parseInt(duration) : undefined });
+        }} className="p-4 space-y-3 pb-8">
+          <TF label="Fecha" value={date} onChange={setDate} type="date" required />
+          <div>
+            <TF label="Enlace al vídeo (Streamable, YouTube, etc.)" value={videoUrl} onChange={(v) => { setVideoUrl(v); setUrlError(false); }} required />
+            {urlError && <p className="text-xs text-red-500 mt-1">URL no válida</p>}
+          </div>
+          <TF label="Duración (minutos, opcional)" value={duration} onChange={setDuration} type="number" />
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Descripción de la sesión</label>
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} required rows={3}
+              placeholder="Ej: Revisión de movimientos defensivos, posicionamiento en bloque medio..."
+              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 resize-none" />
+          </div>
+          <button type="submit" disabled={!videoUrl || !description}
+            className="w-full rounded-md text-white text-sm font-medium py-2.5 disabled:opacity-40 bg-primary hover:bg-primary/90 transition-colors">Guardar sesión</button>
+        </form>
       </div>
-    </Dialog>
+    </div>
   );
 }
 
@@ -1381,7 +1470,9 @@ function AddPerformanceModal({ profiles, onClose, onAdd, initialNote }: {
   const [error, setError] = useState<string | null>(null);
   const isEdit = !!initialNote;
 
-  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+  useEscapeKey(onClose, !saving);
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     setError(null);
@@ -1393,54 +1484,55 @@ function AddPerformanceModal({ profiles, onClose, onAdd, initialNote }: {
     }
   }
 
-  const dirty = content !== (initialNote?.content ?? '') || title !== (initialNote?.title ?? '');
-
   return (
-    <Dialog
-      open
-      onClose={onClose}
-      title={isEdit ? 'Editar informe' : 'Nuevo informe'}
-      onSubmit={handleSubmit}
-      dirty={dirty}
-      historyKey="player-informe"
-      footer={<>
-        {error && <p className="text-secondary text-red-600 mr-auto" role="alert">{error}</p>}
-        <Button onClick={onClose} className={error ? '' : 'mr-auto'}>{L.cancelar}</Button>
-        <Button type="submit" variant="primary" disabled={!author || !content} loading={saving}>{isEdit ? 'Guardar cambios' : 'Guardar informe'}</Button>
-      </>}
-    >
-      <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Fecha">
-            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          </Field>
-          <Field label="Autor" required>
-            <Select value={author} onChange={(e) => setAuthor(e.target.value)} required>
-              <option value="">—</option>
-              {profiles.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </Select>
-          </Field>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+      <div className="bg-white rounded-lg border border-slate-200 shadow-lg w-full max-w-md max-h-[90vh] overflow-y-auto [scrollbar-gutter:stable] overscroll-contain">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+          <h2 className="text-sm font-semibold text-slate-800">{isEdit ? 'Editar informe' : 'Nuevo informe'}</h2>
+          <button onClick={onClose} aria-label="Cerrar" className="p-2 -m-2 sm:p-1 sm:-m-1 text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Categoría">
-            <Select value={category} onChange={(e) => setCategory(e.target.value)}>
-              <option>Partido</option><option>Entrenamiento</option>
-              <option>Informe mensual</option><option>Informe scouting</option>
-              <option>Médico</option><option>Otro</option>
-            </Select>
-          </Field>
-          <Field label={`Valoración (${rating}/10)`}>
-            <input type="range" min={1} max={10} value={rating} onChange={(e) => setRating(parseInt(e.target.value))} className="w-full mt-2" />
-          </Field>
-        </div>
-        <Field label="Título / Partido (opcional)">
-          <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ej: Alavés vs Athletic, 02/05/2026" />
-        </Field>
-        <Field label="Informe / Observaciones" required hint="Ctrl+Enter o ⌘+Enter guarda">
-          <Textarea value={content} onChange={(e) => setContent(e.target.value)} required rows={8} />
-        </Field>
+        <form onSubmit={handleSubmit} className="p-4 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <TF label="Fecha" value={date} onChange={setDate} type="date" />
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Autor</label>
+              <select value={author} onChange={(e) => setAuthor(e.target.value)} required
+                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
+                <option value="">—</option>
+                {profiles.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Categoría</label>
+              <select value={category} onChange={(e) => setCategory(e.target.value)}
+                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
+                <option>Partido</option><option>Entrenamiento</option>
+                <option>Informe mensual</option><option>Informe scouting</option>
+                <option>Médico</option><option>Otro</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Valoración ({rating}/10)</label>
+              <input type="range" min={1} max={10} value={rating} onChange={(e) => setRating(parseInt(e.target.value))} className="w-full mt-2" />
+            </div>
+          </div>
+          <TF label="Título / Partido (opcional)" value={title} onChange={setTitle} placeholder="Ej: Alavés vs Athletic, 02/05/2026" />
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Informe / Observaciones</label>
+            <textarea value={content} onChange={(e) => setContent(e.target.value)} required rows={8}
+              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 resize-y" />
+          </div>
+          {error && <p className="text-xs text-red-500 text-center">{error}</p>}
+          <button type="submit" disabled={!author || !content || saving}
+            className="w-full rounded-md text-white text-sm font-medium py-2 disabled:opacity-40 bg-primary hover:bg-primary/90 inline-flex items-center justify-center gap-2 transition-colors">
+            {saving && <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
+            {saving ? 'Guardando…' : isEdit ? 'Guardar cambios' : 'Guardar informe'}
+          </button>
+        </form>
       </div>
-    </Dialog>
+    </div>
   );
 }
 
@@ -1491,12 +1583,12 @@ function InfoTab({ player, onUpdate }: { player: Player; onUpdate: (p: Player) =
         </div>
         <TF label="Teléfono" value={info.phone ?? ''} onChange={(v) => setInfo({ ...info, phone: v })} />
         <div>
-          <label className="block text-meta font-semibold text-slate-600 mb-1">Familia</label>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Familia</label>
           <textarea value={info.family} onChange={(e) => setInfo({ ...info, family: e.target.value })} rows={3}
             className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 resize-none" />
         </div>
         <div>
-          <label className="block text-meta font-semibold text-slate-600 mb-1">Personalidad</label>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Personalidad</label>
           <textarea value={info.personality} onChange={(e) => setInfo({ ...info, personality: e.target.value })} rows={3}
             className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 resize-none" />
         </div>
@@ -1537,7 +1629,7 @@ function InfoTab({ player, onUpdate }: { player: Player; onUpdate: (p: Player) =
               <Download className="w-3 h-3" /> Ver pasaporte
             </button>
             <button onClick={() => passportRef.current?.click()}
-              className="text-secondary text-slate-500 hover:text-slate-600">
+              className="text-xs text-slate-400 hover:text-slate-600">
               (reemplazar)
             </button>
           </div>
@@ -1647,7 +1739,7 @@ function LinksSection({ player, onUpdate, onError }: {
               className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 hover:underline font-medium">
               <ExternalLink className="w-3.5 h-3.5" /> Ver perfil en Transfermarkt
             </a>
-            <button onClick={() => setEditingTm(true)} className="text-secondary text-slate-500 hover:text-slate-600">(editar)</button>
+            <button onClick={() => setEditingTm(true)} className="text-xs text-slate-400 hover:text-slate-600">(editar)</button>
           </div>
         ) : (
           <button onClick={() => setEditingTm(true)}
@@ -1692,7 +1784,7 @@ function LinksSection({ player, onUpdate, onError }: {
         )}
 
         {(player.links ?? []).length === 0 && !showAddLink && (
-          <p className="text-secondary text-slate-500 italic">Sin enlaces añadidos</p>
+          <p className="text-xs text-slate-400 italic">Sin enlaces añadidos</p>
         )}
         <div className="space-y-1.5">
           {(player.links ?? []).map((link) => (
@@ -1702,9 +1794,11 @@ function LinksSection({ player, onUpdate, onError }: {
                 <ExternalLink className="w-3.5 h-3.5 flex-shrink-0" />
                 {link.label}
               </a>
-              <IconButton label={`Eliminar enlace ${link.label}`} onClick={() => removeLink(link.id)} className="hover:text-red-600 hover:bg-red-50">
-                <X />
-              </IconButton>
+              <button onClick={() => removeLink(link.id)}
+                aria-label={`Eliminar enlace ${link.label}`}
+                className="p-2 sm:p-1 text-slate-300 hover:text-red-500 flex-shrink-0">
+                <X className="w-3.5 h-3.5" />
+              </button>
             </div>
           ))}
         </div>
@@ -1717,7 +1811,7 @@ function LinksSection({ player, onUpdate, onError }: {
 function DF({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-secondary text-slate-500 mb-0.5">{label}</p>
+      <p className="text-xs text-slate-400 mb-0.5">{label}</p>
       <p className="text-sm text-slate-800 font-medium">{value}</p>
     </div>
   );
@@ -1734,29 +1828,35 @@ function TF({ label, value, onChange, type = "text", required = false, placehold
   label: string; value: string; onChange: (v: string) => void; type?: string; required?: boolean; placeholder?: string;
 }) {
   return (
-    <Field label={label} required={required}>
-      <Input type={type} value={value} onChange={(e) => onChange(e.target.value)} required={required} placeholder={placeholder} />
-    </Field>
+    <div>
+      <label className="block text-xs font-medium text-slate-600 mb-1">{label}</label>
+      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} required={required} placeholder={placeholder}
+        className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2" />
+    </div>
   );
 }
 
 /* ---- Edit Player Modal ---- */
-function EF({ label, value, onChange, type = "text", error }: { label: string; value: string; onChange: (v: string) => void; type?: string; error?: string }) {
+function EF({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (v: string) => void; type?: string }) {
   return (
-    <Field label={label} error={error}>
-      <Input type={type} value={value} onChange={(e) => onChange(e.target.value)} />
-    </Field>
+    <div>
+      <label className="block text-xs font-medium text-slate-600 mb-1">{label}</label>
+      <input type={type} value={value} onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2" />
+    </div>
   );
 }
 
 function ESel({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: Profile[] }) {
   return (
-    <Field label={label}>
-      <Select value={value} onChange={(e) => onChange(e.target.value)}>
+    <div>
+      <label className="block text-xs font-medium text-slate-600 mb-1">{label}</label>
+      <select value={value} onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
         <option value="">—</option>
         {options.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-      </Select>
-    </Field>
+      </select>
+    </div>
   );
 }
 
@@ -1788,18 +1888,9 @@ function EditPlayerModal({ player, profiles, onClose, onSave }: {
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<{ name?: string; birthDate?: string }>({});
 
-  // Cambios respecto al jugador cargado: cerrar pregunta antes
-  const dirty = name !== player.name || birthDate !== (player.birthDate ?? "") || pos1 !== (player.positions[0] ?? "")
-    || pos2 !== (player.positions[1] ?? "") || nationality !== player.nationality || partner !== (player.partner ?? "")
-    || managed1 !== (player.managedBy[0] ?? "") || managed2 !== (player.managedBy[1] ?? "")
-    || reprStart !== (player.representationContract.start ?? "") || reprEnd !== (player.representationContract.end ?? "")
-    || clubEnd !== (player.clubContract.endDate ?? "") || optYears !== (player.clubContract.optionalYears?.toString() ?? "")
-    || releaseClause !== (player.clubContract.releaseClause ?? "") || commission !== (player.clubContract.agentCommission ?? "")
-    || phone !== (player.info.phone ?? "") || club1 !== (player.clubs[0]?.name ?? "") || club2 !== (player.clubs[1]?.name ?? "");
+  useEscapeKey(onClose, !saving);
 
-  const handleSave = async (e?: FormEvent<HTMLFormElement>) => {
-    e?.preventDefault();
-    if (saving) return;
+  const handleSave = async () => {
     // Misma validación que AddPlayerModal (Dashboard): sin ella se podía
     // guardar un nombre vacío o una fecha de nacimiento futura.
     const nextErrors: { name?: string; birthDate?: string } = {};
@@ -1844,85 +1935,100 @@ function EditPlayerModal({ player, profiles, onClose, onSave }: {
     }
   };
 
-  const Seccion = ({ titulo }: { titulo: string }) => (
-    <p className="text-meta font-semibold text-slate-600 uppercase tracking-wide mb-2">{titulo}</p>
-  );
-
   return (
-    <Dialog
-      open
-      onClose={onClose}
-      title="Editar jugador"
-      onSubmit={handleSave}
-      dirty={dirty}
-      historyKey="player-edit"
-      footer={<>
-        <Button onClick={onClose} disabled={saving} className="mr-auto">{L.cancelar}</Button>
-        <Button type="submit" variant="primary" loading={saving}>Guardar cambios</Button>
-      </>}
-    >
-      <div className="space-y-3">
-        <EF label="Nombre completo" value={name} onChange={setName} error={errors.name} />
-        <div className="grid grid-cols-2 gap-3">
-          <EF label="Fecha de nacimiento" value={birthDate} onChange={setBirthDate} type="date" error={errors.birthDate} />
-          <EF label="Nacionalidad" value={nationality} onChange={setNationality} />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+      <div className="bg-white rounded-lg border border-slate-200 shadow-lg w-full max-w-lg max-h-[90vh] overflow-y-auto [scrollbar-gutter:stable] overscroll-contain">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white z-10">
+          <h2 className="text-sm font-semibold text-slate-800">Editar jugador</h2>
+          <button onClick={onClose} aria-label="Cerrar" className="p-2 -m-2 sm:p-1 sm:-m-1 text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Posición principal">
-            <Select value={pos1} onChange={(e) => setPos1(e.target.value)}>
-              <option value="">Seleccionar…</option>
-              {POSITIONS.map((p) => <option key={p.code} value={p.code}>{positionLabel(p.code)}</option>)}
-            </Select>
-          </Field>
-          <Field label="Posición secundaria">
-            <Select value={pos2} onChange={(e) => setPos2(e.target.value)}>
-              <option value="">Seleccionar…</option>
-              {POSITIONS.map((p) => <option key={p.code} value={p.code}>{positionLabel(p.code)}</option>)}
-            </Select>
-          </Field>
-        </div>
-        <EF label="Teléfono" value={phone} onChange={setPhone} type="tel" />
-
-        <div className="pt-1 border-t border-slate-100">
-          <Seccion titulo="Club(s)" />
-          <div className="flex items-center gap-2 mb-2">
-            <input type="checkbox" id="editIsLoan" checked={isLoan} onChange={(e) => setIsLoan(e.target.checked)} className="w-4 h-4 rounded" />
-            <label htmlFor="editIsLoan" className="text-body text-slate-700">Jugador cedido</label>
+        <div className="p-4 space-y-3">
+          <div>
+            <EF label="Nombre completo" value={name} onChange={setName} />
+            {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <EF label={isLoan ? "Club propietario" : "Club principal"} value={club1} onChange={setClub1} />
-            <EF label={isLoan ? "Club donde juega" : "Segundo equipo (opcional)"} value={club2} onChange={setClub2} />
+            <div>
+              <EF label="Fecha de nacimiento" value={birthDate} onChange={setBirthDate} type="date" />
+              {errors.birthDate && <p className="text-xs text-red-500 mt-1">{errors.birthDate}</p>}
+            </div>
+            <EF label="Nacionalidad" value={nationality} onChange={setNationality} />
           </div>
-        </div>
-
-        <div className="pt-1 border-t border-slate-100">
-          <Seccion titulo="Contrato de representación" />
           <div className="grid grid-cols-2 gap-3">
-            <EF label="Inicio" value={reprStart} onChange={setReprStart} type="date" />
-            <EF label="Fin" value={reprEnd} onChange={setReprEnd} type="date" />
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Posición principal</label>
+              <select value={pos1} onChange={(e) => setPos1(e.target.value)}
+                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
+                <option value="">Seleccionar…</option>
+                {POSITIONS.map((p) => <option key={p.code} value={p.code}>{positionLabel(p.code)}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Posición secundaria</label>
+              <select value={pos2} onChange={(e) => setPos2(e.target.value)}
+                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
+                <option value="">Seleccionar…</option>
+                {POSITIONS.map((p) => <option key={p.code} value={p.code}>{positionLabel(p.code)}</option>)}
+              </select>
+            </div>
           </div>
-        </div>
+          <EF label="Teléfono" value={phone} onChange={setPhone} type="tel" />
 
-        <div className="pt-1 border-t border-slate-100">
-          <Seccion titulo="Contrato con club" />
-          <div className="grid grid-cols-2 gap-3">
-            <EF label="Fin de contrato" value={clubEnd} onChange={setClubEnd} type="date" />
-            <EF label="Años opcionales" value={optYears} onChange={setOptYears} type="number" />
-            <EF label="Cláusula de rescisión" value={releaseClause} onChange={setReleaseClause} />
-            <EF label="Comisión agente" value={commission} onChange={setCommission} />
+          <div className="pt-1 border-t border-slate-100">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Club(s)</p>
+            <div className="flex items-center gap-2 mb-2">
+              <input type="checkbox" id="editIsLoan" checked={isLoan} onChange={(e) => setIsLoan(e.target.checked)} className="rounded" />
+              <label htmlFor="editIsLoan" className="text-xs text-slate-600">Jugador cedido</label>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <EF label={isLoan ? "Club propietario" : "Club principal"} value={club1} onChange={setClub1} />
+              <EF label={isLoan ? "Club donde juega" : "Segundo equipo (opcional)"} value={club2} onChange={setClub2} />
+            </div>
           </div>
-        </div>
 
-        <div className="pt-1 border-t border-slate-100">
-          <Seccion titulo={L.equipo} />
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <ESel label={`${L.encargado} 1`} value={managed1} onChange={setManaged1} options={profiles} />
-            <ESel label={`${L.encargado} 2`} value={managed2} onChange={setManaged2} options={profiles} />
-            <EF label="Partner" value={partner} onChange={setPartner} />
+          <div className="pt-1 border-t border-slate-100">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Contrato de representación</p>
+            <div className="grid grid-cols-2 gap-3">
+              <EF label="Inicio" value={reprStart} onChange={setReprStart} type="date" />
+              <EF label="Fin" value={reprEnd} onChange={setReprEnd} type="date" />
+            </div>
+          </div>
+
+          <div className="pt-1 border-t border-slate-100">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Contrato con club</p>
+            <div className="grid grid-cols-2 gap-3">
+              <EF label="Fin de contrato" value={clubEnd} onChange={setClubEnd} type="date" />
+              <EF label="Años opcionales" value={optYears} onChange={setOptYears} type="number" />
+              <EF label="Cláusula de rescisión" value={releaseClause} onChange={setReleaseClause} />
+              <EF label="Comisión agente" value={commission} onChange={setCommission} />
+            </div>
+          </div>
+
+          <div className="pt-1 border-t border-slate-100">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Equipo</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <ESel label="Encargado 1" value={managed1} onChange={setManaged1} options={profiles} />
+              <ESel label="Encargado 2" value={managed2} onChange={setManaged2} options={profiles} />
+              <EF label="Partner" value={partner} onChange={setPartner} />
+            </div>
+          </div>
+
+          <div className="pt-2 flex gap-2">
+            <button onClick={onClose} disabled={saving} className="flex-1 rounded-md border border-slate-200 text-slate-600 text-sm py-2 disabled:opacity-50">Cancelar</button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex-1 rounded-md text-white text-sm font-medium py-2 transition-colors bg-primary hover:bg-primary/90 disabled:opacity-60 inline-flex items-center justify-center gap-2"
+            >
+              {saving && <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
+              {saving ? 'Guardando…' : 'Guardar cambios'}
+            </button>
           </div>
         </div>
+        {/* Indicador de scroll: gradiente fijo al pie del modal */}
+        <div className="sticky bottom-0 h-6 -mt-6 bg-gradient-to-t from-white to-transparent pointer-events-none" aria-hidden="true" />
       </div>
-    </Dialog>
+    </div>
   );
 }
 
@@ -2070,6 +2176,9 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
   // Single (non-group) delete confirmation
   const [deletePending, setDeletePending] = useState<PlayerActivity | null>(null);
 
+  useEscapeKey(() => setShowForm(false), showForm && !saving);
+  useEscapeKey(() => setGroupEditPending(null), !!groupEditPending);
+  useEscapeKey(() => setGroupDeletePending(null), !!groupDeletePending);
 
   useEffect(() => {
     setLoading(true);
@@ -2236,10 +2345,10 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
         </button>
       </div>
 
-      {loading && <div className="text-secondary text-slate-500 py-6 text-center">Cargando…</div>}
+      {loading && <div className="text-xs text-slate-400 py-6 text-center">Cargando…</div>}
 
       {!loading && events.length === 0 && (
-        <div className="text-center py-16 text-body text-slate-500">
+        <div className="text-center py-16 text-sm text-slate-400">
           <Clock className="w-8 h-8 mx-auto mb-3 opacity-30" />
           Sin actividad registrada aún
         </div>
@@ -2249,7 +2358,7 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
         <div className="space-y-6">
           {Object.entries(grouped).map(([month, evts]) => (
             <div key={month}>
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3 px-1">{month}</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3 px-1">{month}</p>
               <div className="relative">
                 <div className="absolute left-3.5 top-0 bottom-0 w-px bg-slate-200" />
                 <div className="space-y-1">
@@ -2280,24 +2389,24 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
                           <div className="flex items-start justify-between gap-2">
                             <p className="text-sm font-medium text-slate-700 leading-snug">{evt.title}</p>
                             <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
-                              <span className="text-meta text-slate-500">
+                              <span className="text-[11px] text-slate-400">
                                 {parseDia(evt.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
                               </span>
                               {evt.type === 'activity' && evt.activityRef && (
                                 <>
-                                  <IconButton label="Editar evento" onClick={() => openEdit(evt.activityRef!)}>
-                                    <Edit3 />
-                                  </IconButton>
-                                  <IconButton label="Eliminar evento" onClick={() => handleDelete(evt.activityRef!)} className="hover:text-red-600 hover:bg-red-50">
-                                    <Trash2 />
-                                  </IconButton>
+                                  <button onClick={() => openEdit(evt.activityRef!)} aria-label="Editar evento" className="p-2 sm:p-0.5 text-slate-300 hover:text-blue-500 rounded transition-colors">
+                                    <Edit3 className="w-3 h-3" />
+                                  </button>
+                                  <button onClick={() => handleDelete(evt.activityRef!)} aria-label="Eliminar evento" className="p-2 sm:p-0.5 text-slate-300 hover:text-red-500 rounded transition-colors">
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
                                 </>
                               )}
                             </div>
                           </div>
                           {(evt.subtitle || evt.extra) && (
                             <div className="flex items-start gap-2 mt-0.5 flex-wrap">
-                              {evt.subtitle && <span className="text-secondary text-slate-500">{evt.subtitle}</span>}
+                              {evt.subtitle && <span className="text-xs text-slate-400">{evt.subtitle}</span>}
                               {evt.extra && <p className="text-xs text-slate-500 leading-snug whitespace-pre-wrap">{evt.extra}</p>}
                             </div>
                           )}
@@ -2306,16 +2415,16 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
                             <div className="flex items-center gap-1.5 mt-1.5 pt-1.5 border-t border-slate-50 flex-wrap">
                               {/* Group peers (linked players) */}
                               {groupPeers.map(p => (
-                                <span key={p.id} className="inline-flex items-center gap-1 text-badge bg-blue-50 text-blue-600 border border-blue-100 px-1.5 py-0.5 rounded-full font-medium">
+                                <span key={p.id} className="inline-flex items-center gap-1 text-[11px] bg-blue-50 text-blue-600 border border-blue-100 px-1.5 py-0.5 rounded-full font-medium">
                                   <Users className="w-2.5 h-2.5" />
                                   {p.name.split(' ')[0]}
                                 </span>
                               ))}
                               {/* Staff participants */}
                               {participantProfiles.map(p => (
-                                <span key={p.id} className="inline-flex items-center gap-1 text-badge bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full font-medium">
-                                  <span className="w-6 h-6 -my-1 rounded-full flex items-center justify-center text-badge font-bold text-white flex-shrink-0"
-                                    style={{ background: PRIMARY }} aria-hidden="true">
+                                <span key={p.id} className="inline-flex items-center gap-1 text-[11px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full font-medium">
+                                  <span className="w-3 h-3 rounded-full flex items-center justify-center text-[7px] font-bold text-white flex-shrink-0"
+                                    style={{ background: PRIMARY }}>
                                     {p.avatar}
                                   </span>
                                   {p.name.split(' ')[0]}
@@ -2323,8 +2432,8 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
                               ))}
                               {/* Author */}
                               {author && (
-                                <span className="inline-flex items-center gap-1 text-meta text-slate-500 ml-auto">
-                                  <span className="w-6 h-6 -my-1 rounded-full bg-slate-100 text-badge font-semibold flex items-center justify-center text-slate-600 flex-shrink-0" aria-hidden="true">
+                                <span className="inline-flex items-center gap-1 text-[11px] text-slate-400 ml-auto">
+                                  <span className="w-4 h-4 rounded-full bg-slate-100 text-[9px] font-semibold flex items-center justify-center text-slate-500 flex-shrink-0">
                                     {author.avatar}
                                   </span>
                                   {author.name.split(' ')[0]}
@@ -2343,99 +2452,185 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
         </div>
       )}
 
-      <Dialog
-        open={showForm}
-        onClose={() => setShowForm(false)}
-        title={editing ? 'Editar evento' : 'Nuevo evento de actividad'}
-        onSubmit={(e) => { e.preventDefault(); void handleSave(); }}
-        dirty={!!fNotes.trim() || (!!editing && fNotes !== (editing.notes ?? ''))}
-        historyKey="player-evento"
-        footer={<>
-          <Button onClick={() => setShowForm(false)} className="mr-auto">{L.cancelar}</Button>
-          <Button type="submit" variant="primary" loading={saving} disabled={!fDate || (fType === 'custom' && !fCustomType.trim())}>{L.guardar}</Button>
-        </>}
-      >
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Fecha" required>
-              <Input type="date" value={fDate} onChange={e => setFDate(e.target.value)} />
-            </Field>
-            <Field label="Tipo">
-              <Select value={fType} onChange={e => setFType(e.target.value)}>
-                {ACTIVITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                <option value="custom">Personalizado…</option>
-              </Select>
-            </Field>
-          </div>
-          {fType === 'custom' && (
-            <Field label="Tipo personalizado" required>
-              <Input type="text" value={fCustomType} onChange={e => setFCustomType(e.target.value)}
-                placeholder="Ej: Reunión con padre, Contrato preliminar…" />
-            </Field>
-          )}
-          <Field label="Notas (opcional)" hint="Ctrl+Enter o ⌘+Enter guarda">
-            <Textarea value={fNotes} onChange={e => setFNotes(e.target.value)}
-              placeholder="Detalles del evento…"
-              rows={7}
-              className="min-h-[140px]" />
-          </Field>
+      {showForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <h4 className="text-sm font-semibold text-slate-800">
+              {editing ? 'Editar evento' : 'Nuevo evento de actividad'}
+            </h4>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Fecha</label>
+                <input type="date" value={fDate} onChange={e => setFDate(e.target.value)}
+                  className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Tipo</label>
+                <select value={fType} onChange={e => setFType(e.target.value)}
+                  className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200">
+                  {ACTIVITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  <option value="custom">Personalizado…</option>
+                </select>
+              </div>
+            </div>
+            {fType === 'custom' && (
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Tipo personalizado</label>
+                <input type="text" value={fCustomType} onChange={e => setFCustomType(e.target.value)}
+                  placeholder="Ej: Reunión con padre, Contrato preliminar…"
+                  className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200" />
+              </div>
+            )}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Notas <span className="text-slate-400">(opcional)</span></label>
+              <textarea value={fNotes} onChange={e => setFNotes(e.target.value)}
+                placeholder="Detalles del evento…"
+                rows={7}
+                className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 resize-y min-h-[140px] focus:outline-none focus:ring-1 focus:ring-blue-200" />
+            </div>
 
-          {/* Other players — combobox, only when creating */}
-          {!editing && players.filter(p => p.id !== player.id).length > 0 && (
-            <div className="space-y-2">
-              <p className="text-meta font-semibold text-slate-600 flex items-center gap-1.5">
-                <Users className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
-                También con… <span className="text-slate-500 font-normal">(opcional)</span>
-              </p>
+            {/* Other players — combobox, only when creating */}
+            {!editing && players.filter(p => p.id !== player.id).length > 0 && (
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-slate-600 flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-slate-400" />
+                  También con… <span className="text-slate-400 font-normal">(opcional)</span>
+                </label>
 
-              {/* Selected tags */}
-              {fLinkedPlayers.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {fLinkedPlayers.map(id => {
-                    const p = players.find(x => x.id === id);
-                    if (!p) return null;
-                    return (
-                      <span key={id} className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full text-secondary font-medium bg-blue-50 border border-blue-200 text-blue-700">
-                        {p.name.split(' ')[0]}
-                        <IconButton
-                          label={`Quitar a ${p.name}`}
-                          onClick={() => setFLinkedPlayers(prev => prev.filter(x => x !== id))}
-                          className="min-h-0 min-w-0 h-5 w-5 sm:h-5 sm:w-5 text-blue-600 hover:text-blue-800 [&>svg]:w-3 [&>svg]:h-3"
-                        ><X /></IconButton>
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
+                {/* Selected tags */}
+                {fLinkedPlayers.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {fLinkedPlayers.map(id => {
+                      const p = players.find(x => x.id === id);
+                      if (!p) return null;
+                      return (
+                        <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 border border-blue-200 text-blue-700">
+                          <span className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[7px] font-bold text-white flex-shrink-0"
+                            style={{ background: '#185FA5' }}>
+                            {p.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                          </span>
+                          {p.name.split(' ')[0]}
+                          <button
+                            type="button"
+                            onClick={() => setFLinkedPlayers(prev => prev.filter(x => x !== id))}
+                            className="ml-0.5 text-blue-400 hover:text-blue-700 leading-none"
+                          >×</button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
 
-              {/* Search combobox */}
-              {(() => {
-                const suggestions = players
-                  .filter(p => p.id !== player.id && !fLinkedPlayers.includes(p.id))
-                  .filter(p => p.name.toLowerCase().includes(fLinkedQ.toLowerCase()))
-                  .sort((a, b) => a.name.localeCompare(b.name));
-                const showDrop = fLinkedQ.length > 0 && suggestions.length > 0;
-                return (
+                {/* Search combobox */}
+                {(() => {
+                  const suggestions = players
+                    .filter(p => p.id !== player.id && !fLinkedPlayers.includes(p.id))
+                    .filter(p => p.name.toLowerCase().includes(fLinkedQ.toLowerCase()))
+                    .sort((a, b) => a.name.localeCompare(b.name));
+                  const showDrop = fLinkedQ.length > 0 && suggestions.length > 0;
+                  return (
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={fLinkedQ}
+                        onChange={e => setFLinkedQ(e.target.value)}
+                        placeholder="Buscar jugador…"
+                        className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200"
+                      />
+                      {showDrop && (
+                        <div className="absolute left-0 top-full mt-1 z-10 w-full bg-white border border-slate-200 rounded-xl shadow-lg py-1 max-h-40 overflow-y-auto">
+                          {suggestions.map(p => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onMouseDown={e => { e.preventDefault(); toggleLinkedPlayer(p.id); setFLinkedQ(''); }}
+                              className="w-full text-left flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 transition-colors"
+                            >
+                              <span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0"
+                                style={{ background: '#94a3b8' }}>
+                                {p.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                              </span>
+                              {p.name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {fLinkedPlayers.length > 0 && (
+                  <p className="text-[11px] text-blue-600">
+                    Este evento aparecerá en el timeline de {fLinkedPlayers.length + 1} jugadores.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Staff participants — combobox */}
+            {(() => {
+              const otherProfiles = profiles.filter(p => p.id !== currentProfile.id);
+              const filteredProfs = otherProfiles.filter(p =>
+                !fParticipants.includes(p.id) &&
+                p.name.toLowerCase().includes(fParticipantQ.toLowerCase())
+              );
+              const showDrop = fParticipantQ.length > 0 && filteredProfs.length > 0;
+              return (
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-slate-600 flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-slate-400" />
+                    También estaba… <span className="text-slate-400 font-normal">(opcional)</span>
+                  </label>
+
+                  {/* Selected tags */}
+                  {fParticipants.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {fParticipants.map(pid => {
+                        const prof = profiles.find(p => p.id === pid);
+                        if (!prof) return null;
+                        return (
+                          <span key={pid} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 border border-slate-200 text-slate-700">
+                            <span className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0"
+                              style={{ background: PRIMARY }}>
+                              {prof.avatar}
+                            </span>
+                            {prof.name.split(' ')[0]}
+                            <button
+                              type="button"
+                              onClick={() => setFParticipants(prev => prev.filter(id => id !== pid))}
+                              className="ml-0.5 text-slate-400 hover:text-slate-700 leading-none"
+                            >×</button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Search input */}
                   <div className="relative">
-                    <Input
+                    <input
                       type="text"
-                      value={fLinkedQ}
-                      onChange={e => setFLinkedQ(e.target.value)}
-                      placeholder="Buscar jugador…"
-                      aria-label="Buscar jugador para vincular"
-                      autoComplete="off"
+                      value={fParticipantQ}
+                      onChange={e => setFParticipantQ(e.target.value)}
+                      placeholder="Buscar compañero…"
+                      className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200"
                     />
                     {showDrop && (
                       <div className="absolute left-0 top-full mt-1 z-10 w-full bg-white border border-slate-200 rounded-xl shadow-lg py-1 max-h-40 overflow-y-auto">
-                        {suggestions.map(p => (
+                        {filteredProfs.map(p => (
                           <button
                             key={p.id}
                             type="button"
-                            onMouseDown={e => { e.preventDefault(); toggleLinkedPlayer(p.id); setFLinkedQ(''); }}
-                            className="w-full text-left flex items-center gap-2 px-3 py-2 text-body text-slate-700 hover:bg-slate-50 transition-colors"
+                            onMouseDown={e => {
+                              e.preventDefault();
+                              setFParticipants(prev => [...prev, p.id]);
+                              setFParticipantQ('');
+                            }}
+                            className="w-full text-left flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 transition-colors"
                           >
-                            <span className="w-6 h-6 rounded-full flex items-center justify-center text-badge font-bold text-white flex-shrink-0 bg-slate-400" aria-hidden="true">
-                              {p.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                            <span className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0"
+                              style={{ background: PRIMARY }}>
+                              {p.avatar}
                             </span>
                             {p.name}
                           </button>
@@ -2443,138 +2638,101 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
                       </div>
                     )}
                   </div>
-                );
-              })()}
-
-              {fLinkedPlayers.length > 0 && (
-                <p className="text-meta text-blue-700">
-                  Este evento aparecerá en el timeline de {fLinkedPlayers.length + 1} jugadores.
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* Staff participants — combobox */}
-          {(() => {
-            const otherProfiles = profiles.filter(p => p.id !== currentProfile.id);
-            const filteredProfs = otherProfiles.filter(p =>
-              !fParticipants.includes(p.id) &&
-              p.name.toLowerCase().includes(fParticipantQ.toLowerCase())
-            );
-            const showDrop = fParticipantQ.length > 0 && filteredProfs.length > 0;
-            return (
-              <div className="space-y-2">
-                <p className="text-meta font-semibold text-slate-600 flex items-center gap-1.5">
-                  <Users className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
-                  También estaba… <span className="text-slate-500 font-normal">(opcional)</span>
-                </p>
-
-                {/* Selected tags */}
-                {fParticipants.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {fParticipants.map(pid => {
-                      const prof = profiles.find(p => p.id === pid);
-                      if (!prof) return null;
-                      return (
-                        <span key={pid} className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full text-secondary font-medium bg-slate-100 border border-slate-200 text-slate-700">
-                          <span className="w-5 h-5 rounded-full flex items-center justify-center text-badge font-bold text-white flex-shrink-0"
-                            style={{ background: PRIMARY }} aria-hidden="true">
-                            {prof.avatar}
-                          </span>
-                          {prof.name.split(' ')[0]}
-                          <IconButton
-                            label={`Quitar a ${prof.name}`}
-                            onClick={() => setFParticipants(prev => prev.filter(id => id !== pid))}
-                            className="min-h-0 min-w-0 h-5 w-5 sm:h-5 sm:w-5 text-slate-500 hover:text-slate-800 [&>svg]:w-3 [&>svg]:h-3"
-                          ><X /></IconButton>
-                        </span>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Search input */}
-                <div className="relative">
-                  <Input
-                    type="text"
-                    value={fParticipantQ}
-                    onChange={e => setFParticipantQ(e.target.value)}
-                    placeholder="Buscar compañero…"
-                    aria-label="Buscar compañero"
-                    autoComplete="off"
-                  />
-                  {showDrop && (
-                    <div className="absolute left-0 top-full mt-1 z-10 w-full bg-white border border-slate-200 rounded-xl shadow-lg py-1 max-h-40 overflow-y-auto">
-                      {filteredProfs.map(p => (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onMouseDown={e => {
-                            e.preventDefault();
-                            setFParticipants(prev => [...prev, p.id]);
-                            setFParticipantQ('');
-                          }}
-                          className="w-full text-left flex items-center gap-2 px-3 py-2 text-body text-slate-700 hover:bg-slate-50 transition-colors"
-                        >
-                          <span className="w-6 h-6 rounded-full flex items-center justify-center text-badge font-bold text-white flex-shrink-0"
-                            style={{ background: PRIMARY }} aria-hidden="true">
-                            {p.avatar}
-                          </span>
-                          {p.name}
-                        </button>
-                      ))}
-                    </div>
-                  )}
                 </div>
-              </div>
-            );
-          })()}
+              );
+            })()}
 
-          {/* Edit mode: show existing group info read-only */}
-          {editing && editing.groupId && (editing.linkedPlayerIds?.length ?? 0) > 1 && (
-            <div className="flex items-center gap-1.5 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
-              <Users className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" aria-hidden="true" />
-              <p className="text-secondary text-blue-700">
-                Evento compartido con {(editing.linkedPlayerIds!.length - 1)} jugador{editing.linkedPlayerIds!.length > 2 ? 'es' : ''} más
-              </p>
+            {/* Edit mode: show existing group info read-only */}
+            {editing && editing.groupId && (editing.linkedPlayerIds?.length ?? 0) > 1 && (
+              <div className="flex items-center gap-1.5 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+                <Users className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+                <p className="text-xs text-blue-700">
+                  Evento compartido con {(editing.linkedPlayerIds!.length - 1)} jugador{editing.linkedPlayerIds!.length > 2 ? 'es' : ''} más
+                </p>
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setShowForm(false)}
+                className="flex-1 py-2 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
+                Cancelar
+              </button>
+              <button onClick={handleSave}
+                disabled={saving || !fDate || (fType === 'custom' && !fCustomType.trim())}
+                className="flex-1 py-2 text-xs rounded-lg text-white disabled:opacity-50 transition-colors bg-primary hover:bg-primary/90 inline-flex items-center justify-center gap-2">
+                {saving && <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
+                {saving ? 'Guardando…' : 'Guardar'}
+              </button>
             </div>
-          )}
+          </div>
         </div>
-      </Dialog>
+      )}
 
       {/* Group edit confirmation */}
-      <Dialog
-        open={!!groupEditPending}
-        onClose={() => setGroupEditPending(null)}
-        title="¿Editar solo este jugador o todos?"
-        description={groupEditPending ? `Este evento es compartido con ${(groupEditPending.linkedPlayerIds?.length ?? 1) - 1} jugador${((groupEditPending.linkedPlayerIds?.length ?? 1) - 1) > 1 ? 'es' : ''} más.` : undefined}
-        size="sm"
-        mobile="center"
-        historyKey="player-evento-grupo-editar"
-        footer={<Button variant="ghost" onClick={() => setGroupEditPending(null)}>{L.cancelar}</Button>}
-      >
-        <div className="flex flex-col gap-2">
-          <Button onClick={() => confirmGroupEdit(false)} className="w-full">Solo este jugador</Button>
-          <Button variant="primary" onClick={() => confirmGroupEdit(true)} className="w-full">Todos los jugadores del evento</Button>
+      {groupEditPending && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Users className="w-4 h-4 text-blue-600" />
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-slate-800">¿Editar solo este jugador o todos?</h4>
+                <p className="text-xs text-slate-500 mt-1">
+                  Este evento es compartido con {(groupEditPending.linkedPlayerIds?.length ?? 1) - 1} jugador{((groupEditPending.linkedPlayerIds?.length ?? 1) - 1) > 1 ? 'es' : ''} más.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <button onClick={() => confirmGroupEdit(false)}
+                className="w-full py-2.5 text-xs border border-slate-200 rounded-xl text-slate-700 hover:bg-slate-50 transition-colors font-medium">
+                Solo este jugador
+              </button>
+              <button onClick={() => confirmGroupEdit(true)}
+                className="w-full py-2.5 text-xs rounded-xl text-white transition-colors font-medium bg-primary hover:bg-primary/90">
+                Todos los jugadores del evento
+              </button>
+              <button onClick={() => setGroupEditPending(null)}
+                className="w-full py-2 text-xs text-slate-400 hover:text-slate-600 transition-colors">
+                Cancelar
+              </button>
+            </div>
+          </div>
         </div>
-      </Dialog>
+      )}
 
       {/* Group delete confirmation */}
-      <Dialog
-        open={!!groupDeletePending}
-        onClose={() => setGroupDeletePending(null)}
-        title="¿Eliminar solo de este jugador o de todos?"
-        description={groupDeletePending ? `Este evento es compartido con ${(groupDeletePending.linkedPlayerIds?.length ?? 1) - 1} jugador${((groupDeletePending.linkedPlayerIds?.length ?? 1) - 1) > 1 ? 'es' : ''} más.` : undefined}
-        size="sm"
-        mobile="center"
-        historyKey="player-evento-grupo-borrar"
-        footer={<Button variant="ghost" onClick={() => setGroupDeletePending(null)}>{L.cancelar}</Button>}
-      >
-        <div className="flex flex-col gap-2">
-          <Button onClick={() => confirmGroupDelete(false)} className="w-full">Solo de este jugador</Button>
-          <Button variant="danger" onClick={() => confirmGroupDelete(true)} className="w-full">De todos los jugadores del evento</Button>
+      {groupDeletePending && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Trash2 className="w-4 h-4 text-red-500" />
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-slate-800">¿Eliminar solo de este jugador o de todos?</h4>
+                <p className="text-xs text-slate-500 mt-1">
+                  Este evento es compartido con {(groupDeletePending.linkedPlayerIds?.length ?? 1) - 1} jugador{((groupDeletePending.linkedPlayerIds?.length ?? 1) - 1) > 1 ? 'es' : ''} más.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <button onClick={() => confirmGroupDelete(false)}
+                className="w-full py-2.5 text-xs border border-slate-200 rounded-xl text-slate-700 hover:bg-slate-50 transition-colors font-medium">
+                Solo de este jugador
+              </button>
+              <button onClick={() => confirmGroupDelete(true)}
+                className="w-full py-2.5 text-xs border border-red-200 text-red-600 rounded-xl hover:bg-red-50 transition-colors font-medium">
+                De todos los jugadores del evento
+              </button>
+              <button onClick={() => setGroupDeletePending(null)}
+                className="w-full py-2 text-xs text-slate-400 hover:text-slate-600 transition-colors">
+                Cancelar
+              </button>
+            </div>
+          </div>
         </div>
-      </Dialog>
+      )}
 
       {/* Single delete confirmation */}
       <ConfirmModal
@@ -2609,6 +2767,7 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
   const [saving, setSaving]           = useState(false);
   const { showToast } = useToastContext();
 
+  useEscapeKey(() => setShowForm(false), showForm && !saving);
 
   useEffect(() => {
     fetchPlayerActivities(player.id).then(setActivities).catch(() => {});
@@ -2671,7 +2830,7 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
   const negStatusCount: Record<string, number> = {};
   activeNegs.forEach(n => { negStatusCount[n.status] = (negStatusCount[n.status] ?? 0) + 1; });
   const negSummary = Object.entries(negStatusCount)
-    .map(([s, c]) => `${c} ${(NEG_STATUS_LABELS[s as ClubNegotiation['status']] ?? s).toLowerCase()}`).join(', ');
+    .map(([s, c]) => `${c} ${s}`).join(', ');
 
   const PRIORITY_COLORS: Record<string, string> = {
     A: 'bg-red-100 text-red-700 border-red-200',
@@ -2687,9 +2846,19 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
         <h3 className="text-sm font-semibold text-slate-800">Resumen</h3>
         <div className="flex items-center gap-2">
           {onAddTask && (
-            <Button size="sm" icon={<Plus />} onClick={() => setShowAddTask(true)}>Añadir tarea</Button>
+            <button
+              onClick={() => setShowAddTask(true)}
+              className="inline-flex items-center gap-1 rounded-md text-xs font-medium px-2.5 py-1.5 border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />Añadir tarea
+            </button>
           )}
-          <Button size="sm" variant="primary" icon={<Plus />} onClick={openNew}>Añadir evento</Button>
+          <button
+            onClick={openNew}
+            className="inline-flex items-center gap-1 rounded-md text-white text-xs font-medium px-2.5 py-1.5 bg-primary hover:bg-primary/90 transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />Añadir evento
+          </button>
         </div>
       </div>
 
@@ -2702,16 +2871,16 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
         const urgentTasks   = pendingTasks.filter(t => t.priority === 'alta' && !esVencida(t.dueDate, hoy));
         const clubAlert     = clubDays !== null && clubDays <= 180;
         const reprAlert     = reprDays !== null && reprDays <= 540; // 18 meses
-        const alerts: { key: string; icon: React.ReactNode; text: string; sub?: string; tab?: TabId; cls: string }[] = [];
+        const alerts: { key: string; icon: string; text: string; sub?: string; tab?: TabId; cls: string }[] = [];
 
         if (overdueTasks.length > 0)
-          alerts.push({ key: 'overdue', icon: <AlertTriangle className="w-4 h-4" aria-hidden="true" />, text: `${overdueTasks.length} tarea${overdueTasks.length > 1 ? 's' : ''} vencida${overdueTasks.length > 1 ? 's' : ''}`, sub: overdueTasks.map(t => t.title).slice(0,2).join(', ') + (overdueTasks.length > 2 ? '…' : ''), tab: 'tareas', cls: 'bg-red-50 border-red-200 text-red-700' });
+          alerts.push({ key: 'overdue', icon: '⚠️', text: `${overdueTasks.length} tarea${overdueTasks.length > 1 ? 's' : ''} vencida${overdueTasks.length > 1 ? 's' : ''}`, sub: overdueTasks.map(t => t.title).slice(0,2).join(', ') + (overdueTasks.length > 2 ? '…' : ''), tab: 'tareas', cls: 'bg-red-50 border-red-200 text-red-700' });
         if (clubAlert)
-          alerts.push({ key: 'club', icon: <FileText className="w-4 h-4" aria-hidden="true" />, text: `Contrato club vence en ${clubDays}d`, sub: fmtDate(clubEnd!), tab: 'contrato', cls: clubDays! <= 90 ? 'bg-red-50 border-red-200 text-red-700' : 'bg-amber-50 border-amber-200 text-amber-700' });
+          alerts.push({ key: 'club', icon: '📋', text: `Contrato club vence en ${clubDays}d`, sub: fmtDate(clubEnd!), tab: 'contrato', cls: clubDays! <= 90 ? 'bg-red-50 border-red-200 text-red-700' : 'bg-amber-50 border-amber-200 text-amber-700' });
         if (reprAlert)
-          alerts.push({ key: 'repr', icon: <Handshake className="w-4 h-4" aria-hidden="true" />, text: `Contrato representación vence en ${reprDays}d`, sub: fmtDate(reprEnd!), tab: 'contrato', cls: reprDays! <= 90 ? 'bg-red-50 border-red-200 text-red-700' : 'bg-amber-50 border-amber-200 text-amber-700' });
+          alerts.push({ key: 'repr', icon: '🤝', text: `Contrato representación vence en ${reprDays}d`, sub: fmtDate(reprEnd!), tab: 'contrato', cls: reprDays! <= 90 ? 'bg-red-50 border-red-200 text-red-700' : 'bg-amber-50 border-amber-200 text-amber-700' });
         if (urgentTasks.length > 0)
-          alerts.push({ key: 'urgent', icon: <Flame className="w-4 h-4" aria-hidden="true" />, text: `${urgentTasks.length} tarea${urgentTasks.length > 1 ? 's' : ''} urgente${urgentTasks.length > 1 ? 's' : ''} pendiente${urgentTasks.length > 1 ? 's' : ''}`, sub: urgentTasks.map(t => t.title).slice(0,2).join(', ') + (urgentTasks.length > 2 ? '…' : ''), tab: 'tareas', cls: 'bg-orange-50 border-orange-200 text-orange-700' });
+          alerts.push({ key: 'urgent', icon: '🔥', text: `${urgentTasks.length} tarea${urgentTasks.length > 1 ? 's' : ''} urgente${urgentTasks.length > 1 ? 's' : ''} pendiente${urgentTasks.length > 1 ? 's' : ''}`, sub: urgentTasks.map(t => t.title).slice(0,2).join(', ') + (urgentTasks.length > 2 ? '…' : ''), tab: 'tareas', cls: 'bg-orange-50 border-orange-200 text-orange-700' });
 
         if (alerts.length === 0) return null;
         return (
@@ -2719,16 +2888,15 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
             {alerts.map(a => (
               <button
                 key={a.key}
-                type="button"
                 onClick={() => a.tab && onNavigate(a.tab)}
                 className={`w-full flex items-start gap-2.5 px-3 py-2.5 rounded-xl border text-left transition-opacity hover:opacity-80 ${a.cls}`}
               >
-                <span className="mt-0.5 flex-shrink-0">{a.icon}</span>
+                <span className="text-sm leading-none mt-0.5 flex-shrink-0">{a.icon}</span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-body font-semibold leading-snug">{a.text}</p>
-                  {a.sub && <p className="text-meta opacity-80 truncate mt-0.5">{a.sub}</p>}
+                  <p className="text-xs font-semibold leading-snug">{a.text}</p>
+                  {a.sub && <p className="text-[11px] opacity-70 truncate mt-0.5">{a.sub}</p>}
                 </div>
-                <ChevronRight className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 opacity-60" aria-hidden="true" />
+                <ChevronRight className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 opacity-50" />
               </button>
             ))}
           </div>
@@ -2742,8 +2910,8 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
           {/* Club contract */}
           {clubEnd && (
             <div className="flex items-center gap-1.5">
-              <span className="text-meta font-medium text-slate-500 uppercase tracking-wide">Cto. club</span>
-              <span className={`text-badge font-semibold px-2 py-0.5 rounded-full border ${clubBadge}`}>
+              <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">Cto. club</span>
+              <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${clubBadge}`}>
                 {fmtDate(clubEnd)}{clubDays !== null && clubDays <= 180 ? ` · ${clubDays}d` : ''}
               </span>
             </div>
@@ -2752,8 +2920,8 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
           {/* Representation contract */}
           {reprEnd && (
             <div className="flex items-center gap-1.5">
-              <span className="text-meta font-medium text-slate-500 uppercase tracking-wide">Cto. repr.</span>
-              <span className={`text-badge font-semibold px-2 py-0.5 rounded-full border ${reprBadge}`}>
+              <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">Cto. repr.</span>
+              <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${reprBadge}`}>
                 {fmtDate(reprEnd)}{reprDays !== null && reprDays <= 180 ? ` · ${reprDays}d` : ''}
               </span>
             </div>
@@ -2762,8 +2930,8 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
           {/* Release clause */}
           {player.clubContract?.releaseClause && (
             <div className="flex items-center gap-1.5">
-              <span className="text-meta font-medium text-slate-500 uppercase tracking-wide">Cláusula</span>
-              <span className="text-meta font-semibold text-slate-600">{player.clubContract.releaseClause}</span>
+              <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">Cláusula</span>
+              <span className="text-[11px] font-semibold text-slate-600">{player.clubContract.releaseClause}</span>
             </div>
           )}
 
@@ -2775,8 +2943,8 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
           {/* Distribution priority */}
           {distributionEntry?.priority && (
             <div className="flex items-center gap-1.5">
-              <span className="text-meta font-medium text-slate-500 uppercase tracking-wide">Prioridad dist.</span>
-              <span className={`text-badge font-semibold px-2 py-0.5 rounded-full border ${PRIORITY_COLORS[distributionEntry.priority] ?? 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+              <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">Prioridad dist.</span>
+              <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${PRIORITY_COLORS[distributionEntry.priority] ?? 'bg-slate-100 text-slate-500 border-slate-200'}`}>
                 {distributionEntry.priority}
               </span>
             </div>
@@ -2785,17 +2953,17 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
           {/* Distribution condition */}
           {distributionEntry?.condition && (
             <div className="flex items-center gap-1.5">
-              <span className="text-meta font-medium text-slate-500 uppercase tracking-wide">Condición</span>
-              <span className="text-meta font-semibold text-slate-600">{distributionEntry.condition}</span>
+              <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">Condición</span>
+              <span className="text-[11px] font-semibold text-slate-600">{distributionEntry.condition}</span>
             </div>
           )}
 
           {/* Active negotiations */}
           {activeNegs.length > 0 && (
             <div className="flex items-center gap-1.5">
-              <span className="text-meta font-medium text-slate-500 uppercase tracking-wide">Negociaciones</span>
+              <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">Negociaciones</span>
               <button onClick={() => onNavigate('distribucion')}
-                className="text-meta font-semibold text-blue-600 hover:underline">
+                className="text-[11px] font-semibold text-blue-600 hover:underline">
                 {activeNegs.length} activa{activeNegs.length > 1 ? 's' : ''}{negSummary ? ` (${negSummary})` : ''}
               </button>
             </div>
@@ -2803,7 +2971,7 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
 
           {/* No contract/distrib info at all */}
           {!clubEnd && !reprEnd && !distributionEntry && (
-            <span className="text-secondary text-slate-500">Sin datos de contrato ni distribución</span>
+            <span className="text-xs text-slate-400">Sin datos de contrato ni distribución</span>
           )}
         </div>
       </div>
@@ -2818,14 +2986,14 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
               <ClipboardList className="w-3.5 h-3.5 text-slate-400" />
               Tareas pendientes
               {pendingTasks.length > 0 && (
-                <span className="bg-blue-100 text-blue-600 text-badge font-semibold px-1.5 py-0.5 rounded-full">{pendingTasks.length}</span>
+                <span className="bg-blue-100 text-blue-600 text-[11px] font-semibold px-1.5 py-0.5 rounded-full">{pendingTasks.length}</span>
               )}
             </h4>
-            <button onClick={() => onNavigate('tareas')} className="text-meta text-blue-600 hover:underline">Ver todas →</button>
+            <button onClick={() => onNavigate('tareas')} className="text-[11px] text-blue-600 hover:underline">Ver todas →</button>
           </div>
 
           {pendingTasks.length === 0 ? (
-            <p className="text-secondary text-slate-500 text-center py-4">Sin tareas pendientes</p>
+            <p className="text-xs text-slate-400 text-center py-4">Sin tareas pendientes</p>
           ) : (
             <div className="space-y-2.5">
               {pendingTasks.slice(0, 5).map(t => {
@@ -2834,16 +3002,16 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
                   <div key={t.id} className="flex items-start gap-2">
                     <div className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${
                       t.priority === 'alta' ? 'bg-red-400' : t.priority === 'media' ? 'bg-amber-400' : 'bg-slate-300'
-                    }`} title={`${L.prioridad} ${PRIORITY_LABELS[t.priority]}`} />
+                    }`} />
                     <div className="min-w-0 flex-1">
                       <p className="text-xs text-slate-700 leading-snug truncate">{t.title}</p>
-                      {assignee && <p className="text-meta text-slate-500">{assignee.name.split(' ')[0]}</p>}
+                      {assignee && <p className="text-[11px] text-slate-400">{assignee.name.split(' ')[0]}</p>}
                     </div>
                   </div>
                 );
               })}
               {pendingTasks.length > 5 && (
-                <button onClick={() => onNavigate('tareas')} className="text-meta text-slate-500 hover:text-blue-500 transition-colors">
+                <button onClick={() => onNavigate('tareas')} className="text-[11px] text-slate-400 hover:text-blue-500 transition-colors">
                   +{pendingTasks.length - 5} más…
                 </button>
               )}
@@ -2858,11 +3026,11 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
               <Clock className="w-3.5 h-3.5 text-slate-400" />
               Actividad reciente
             </h4>
-            <button onClick={() => onNavigate('actividad')} className="text-meta text-blue-600 hover:underline">Ver toda →</button>
+            <button onClick={() => onNavigate('actividad')} className="text-[11px] text-blue-600 hover:underline">Ver toda →</button>
           </div>
 
           {recentEvents.length === 0 ? (
-            <p className="text-secondary text-slate-500 text-center py-4">Sin actividad aún</p>
+            <p className="text-xs text-slate-400 text-center py-4">Sin actividad aún</p>
           ) : (
             <div className="space-y-2.5">
               {recentEvents.map(evt => {
@@ -2872,7 +3040,7 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
                     <span className="text-sm leading-none mt-0.5 flex-shrink-0">{icon}</span>
                     <div className="min-w-0 flex-1">
                       <p className="text-xs text-slate-700 leading-snug truncate">{evt.title}</p>
-                      <p className="text-meta text-slate-500">
+                      <p className="text-[11px] text-slate-400">
                         {parseDia(evt.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
                         {evt.extra && ` · ${evt.extra.slice(0, 40)}${evt.extra.length > 40 ? '…' : ''}`}
                       </p>
@@ -2893,7 +3061,7 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
               <BarChart2 className="w-3.5 h-3.5 text-slate-400" />
               Distribución
             </h4>
-            <button onClick={() => onNavigate('distribucion')} className="text-meta text-blue-600 hover:underline">Ver detalle →</button>
+            <button onClick={() => onNavigate('distribucion')} className="text-[11px] text-blue-600 hover:underline">Ver detalle →</button>
           </div>
 
           {/* Entry summary */}
@@ -2901,33 +3069,33 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
             <div className="flex flex-wrap gap-3 mb-3 pb-3 border-b border-slate-100">
               {distributionEntry.priority && (
                 <div className="flex items-center gap-1.5">
-                  <span className="text-meta text-slate-500">Prioridad</span>
-                  <span className={`text-badge font-bold px-2 py-0.5 rounded-full border ${PRIORITY_COLORS[distributionEntry.priority] ?? 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                  <span className="text-[11px] text-slate-400">Prioridad</span>
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${PRIORITY_COLORS[distributionEntry.priority] ?? 'bg-slate-100 text-slate-500 border-slate-200'}`}>
                     {distributionEntry.priority}
                   </span>
                 </div>
               )}
               {distributionEntry.condition && (
                 <div className="flex items-center gap-1.5">
-                  <span className="text-meta text-slate-500">Condición</span>
-                  <span className="text-meta font-semibold text-slate-600">{distributionEntry.condition}</span>
+                  <span className="text-[11px] text-slate-400">Condición</span>
+                  <span className="text-[11px] font-semibold text-slate-600">{distributionEntry.condition}</span>
                 </div>
               )}
               {distributionEntry.season && (
                 <div className="flex items-center gap-1.5">
-                  <span className="text-meta text-slate-500">Temporada</span>
-                  <span className="text-meta font-semibold text-slate-600">{distributionEntry.season}</span>
+                  <span className="text-[11px] text-slate-400">Temporada</span>
+                  <span className="text-[11px] font-semibold text-slate-600">{distributionEntry.season}</span>
                 </div>
               )}
               {distributionEntry.transferFee && (
                 <div className="flex items-center gap-1.5">
-                  <span className="text-meta text-slate-500">Traspaso</span>
-                  <span className="text-meta font-semibold text-slate-600">{distributionEntry.transferFee}</span>
+                  <span className="text-[11px] text-slate-400">Traspaso</span>
+                  <span className="text-[11px] font-semibold text-slate-600">{distributionEntry.transferFee}</span>
                 </div>
               )}
             </div>
           ) : (
-            <p className="text-secondary text-slate-500 mb-3 pb-3 border-b border-slate-100">Sin ficha de distribución activa</p>
+            <p className="text-xs text-slate-400 mb-3 pb-3 border-b border-slate-100">Sin ficha de distribución activa</p>
           )}
 
           {/* Negotiations list — solo temporada activa; los "cerrado" quedan como
@@ -2936,7 +3104,7 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
             const activeSeasonClubIds = new Set(clubs.filter(c => c.season === SEASONS[0]).map(c => c.id));
             const visibleNegs = playerNegotiations.filter(n => n.status !== 'cerrado' && activeSeasonClubIds.has(n.clubId));
             if (visibleNegs.length === 0) {
-              return <p className="text-secondary text-slate-500">Sin negociaciones{playerNegotiations.length > 0 ? ' activas' : ''}</p>;
+              return <p className="text-xs text-slate-400">Sin negociaciones{playerNegotiations.length > 0 ? ' activas' : ''}</p>;
             }
             return (
             <div className="space-y-2">
@@ -2955,19 +3123,23 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
                     cerrado:    'bg-green-100 text-green-700',
                     descartado: 'bg-red-100 text-red-600',
                   };
+                  const NEG_LABELS: Record<string, string> = {
+                    pendiente: 'Pendiente', ofrecido: 'Ofrecido', interesado: 'Interesado',
+                    negociando: 'Negociando', cerrado: 'Cerrado', descartado: 'Descartado',
+                  };
                   // Find club name
                   return (
                     <div key={neg.id} className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
-                        <span className={`text-badge font-semibold px-1.5 py-0.5 rounded flex-shrink-0 ${NEG_COLORS[neg.status] ?? 'bg-slate-100 text-slate-500'}`}>
-                          {NEG_STATUS_LABELS[neg.status] ?? neg.status}
+                        <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded flex-shrink-0 ${NEG_COLORS[neg.status] ?? 'bg-slate-100 text-slate-500'}`}>
+                          {NEG_LABELS[neg.status] ?? neg.status}
                         </span>
                         <span className="text-xs text-slate-700 truncate">
                           {clubs.find(c => c.id === neg.clubId)?.name ?? '—'}
                         </span>
                       </div>
                       {neg.aisManager && (
-                        <span className="text-meta text-slate-500 flex-shrink-0">{neg.aisManager}</span>
+                        <span className="text-[11px] text-slate-400 flex-shrink-0">{neg.aisManager}</span>
                       )}
                     </div>
                   );
@@ -2979,40 +3151,55 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
       )}
 
       {/* Add event modal */}
-      <Dialog
-        open={showForm}
-        onClose={() => setShowForm(false)}
-        title="Nuevo evento de actividad"
-        onSubmit={(e) => { e.preventDefault(); void handleSave(); }}
-        dirty={!!fNotes.trim()}
-        historyKey="player-resumen-evento"
-        footer={<>
-          <Button onClick={() => setShowForm(false)} className="mr-auto">{L.cancelar}</Button>
-          <Button type="submit" variant="primary" loading={saving} disabled={!fDate || (fType === 'custom' && !fCustomType.trim())}>{L.guardar}</Button>
-        </>}
-      >
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Fecha" required>
-              <Input type="date" value={fDate} onChange={e => setFDate(e.target.value)} />
-            </Field>
-            <Field label="Tipo">
-              <Select value={fType} onChange={e => setFType(e.target.value)}>
-                {ACTIVITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                <option value="custom">Personalizado…</option>
-              </Select>
-            </Field>
+      {showForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <h4 className="text-sm font-semibold text-slate-800">Nuevo evento de actividad</h4>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Fecha</label>
+                <input type="date" value={fDate} onChange={e => setFDate(e.target.value)}
+                  className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Tipo</label>
+                <select value={fType} onChange={e => setFType(e.target.value)}
+                  className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200">
+                  {ACTIVITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  <option value="custom">Personalizado…</option>
+                </select>
+              </div>
+            </div>
+            {fType === 'custom' && (
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Tipo personalizado</label>
+                <input type="text" value={fCustomType} onChange={e => setFCustomType(e.target.value)}
+                  placeholder="Ej: Reunión con padre…"
+                  className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200" />
+              </div>
+            )}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Notas <span className="text-slate-400">(opcional)</span></label>
+              <textarea value={fNotes} onChange={e => setFNotes(e.target.value)}
+                placeholder="Detalles del evento…"
+                rows={7}
+                className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 resize-y min-h-[140px] focus:outline-none focus:ring-1 focus:ring-blue-200" />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setShowForm(false)}
+                className="flex-1 py-2 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
+                Cancelar
+              </button>
+              <button onClick={handleSave}
+                disabled={saving || !fDate || (fType === 'custom' && !fCustomType.trim())}
+                className="flex-1 py-2 text-xs rounded-lg text-white disabled:opacity-50 transition-colors bg-primary hover:bg-primary/90 inline-flex items-center justify-center gap-2">
+                {saving && <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
+                {saving ? 'Guardando…' : 'Guardar'}
+              </button>
+            </div>
           </div>
-          {fType === 'custom' && (
-            <Field label="Tipo personalizado" required>
-              <Input type="text" value={fCustomType} onChange={e => setFCustomType(e.target.value)} placeholder="Ej: Reunión con padre…" />
-            </Field>
-          )}
-          <Field label="Notas (opcional)" hint="Ctrl+Enter o ⌘+Enter guarda">
-            <Textarea value={fNotes} onChange={e => setFNotes(e.target.value)} placeholder="Detalles del evento…" rows={7} className="min-h-[140px]" />
-          </Field>
         </div>
-      </Dialog>
+      )}
 
       {/* Add task modal */}
       {showAddTask && onAddTask && (
@@ -3105,8 +3292,8 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, p
     return (
       <div className="text-center py-12">
         <BarChart2 className="w-10 h-10 text-slate-200 mx-auto mb-3" />
-        <p className="text-slate-600 text-body">Este jugador no está en distribución activa.</p>
-        <p className="text-slate-500 text-secondary mt-1">Añádelo desde la sección Distribución.</p>
+        <p className="text-slate-400 text-sm">Este jugador no está en distribución activa.</p>
+        <p className="text-slate-400 text-xs mt-1">Añádelo desde la sección Distribución.</p>
       </div>
     )
   }
@@ -3117,45 +3304,42 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, p
     <div className="space-y-4">
       <div className="bg-white rounded-xl border border-slate-200 p-4">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-meta font-semibold text-slate-600 uppercase tracking-wider">Estado de distribución</span>
-          <IconButton label="Editar estado de distribución" onClick={() => { setEditPriority(entry.priority); setEditCondition(entry.condition ?? ''); setEditFee(entry.transferFee ?? ''); setEditNotes(entry.notes ?? ''); setEditingEntry(true) }}>
-            <Edit3 />
-          </IconButton>
+          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Estado de distribución</span>
+          <button onClick={() => { setEditPriority(entry.priority); setEditCondition(entry.condition ?? ''); setEditFee(entry.transferFee ?? ''); setEditNotes(entry.notes ?? ''); setEditingEntry(true) }} className="p-2 sm:p-1 text-slate-400 hover:text-slate-600">
+            <Edit3 className="w-3.5 h-3.5" />
+          </button>
         </div>
         {!editingEntry ? (
           <div className="flex items-center gap-3 flex-wrap">
-            <span className={`px-3 py-1.5 rounded-full text-body font-bold ${pcfg.bg} ${pcfg.text}`}>{L.prioridad} {entry.priority}</span>
-            {entry.condition && <span className="text-body bg-slate-100 text-slate-600 px-3 py-1.5 rounded-full">{entry.condition}</span>}
-            {entry.transferFee && <span className="text-body bg-slate-100 text-slate-600 px-3 py-1.5 rounded-full">{entry.transferFee}</span>}
-            {entry.notes && <p className="text-secondary text-slate-600 w-full mt-1">{entry.notes}</p>}
+            <span className={`px-3 py-1.5 rounded-full text-sm font-bold ${pcfg.bg} ${pcfg.text}`}>Prioridad {entry.priority}</span>
+            {entry.condition && <span className="text-sm bg-slate-100 text-slate-600 px-3 py-1.5 rounded-full">{entry.condition}</span>}
+            {entry.transferFee && <span className="text-sm bg-slate-100 text-slate-500 px-3 py-1.5 rounded-full">{entry.transferFee}</span>}
+            {entry.notes && <p className="text-xs text-slate-500 w-full mt-1">{entry.notes}</p>}
           </div>
         ) : (
-          <form onSubmit={e => { e.preventDefault(); void saveEntry() }} className="space-y-3">
-            <div className="flex gap-2" role="radiogroup" aria-label={L.prioridad}>
+          <div className="space-y-3">
+            <div className="flex gap-2">
               {(['A', 'B', 'C', 'D'] as const).map(p => {
                 const cfg = PRIORITY_CONFIG_D[p]
-                return <button key={p} type="button" role="radio" aria-checked={editPriority === p} onClick={() => setEditPriority(p)} className={`flex-1 py-2 rounded-lg text-body font-bold border-2 transition-all ${editPriority === p ? `${cfg.bg} ${cfg.text} border-current` : 'bg-white text-slate-500 border-slate-200'}`}>{p}</button>
+                return <button key={p} onClick={() => setEditPriority(p)} className={`flex-1 py-2 rounded-lg text-sm font-bold border-2 transition-all ${editPriority === p ? `${cfg.bg} ${cfg.text} border-current` : 'bg-white text-slate-400 border-slate-200'}`}>{p}</button>
               })}
             </div>
-            <Field label="Condición">
-              <Select value={editCondition} onChange={e => setEditCondition(e.target.value)}>
-                <option value="">Sin especificar</option>
-                {CONDITIONS_D.map(c => <option key={c}>{c}</option>)}
-              </Select>
-            </Field>
+            <select value={editCondition} onChange={e => setEditCondition(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
+              <option value="">Sin especificar</option>
+              {CONDITIONS_D.map(c => <option key={c}>{c}</option>)}
+            </select>
             {(editCondition.includes('Traspaso') || editCondition.includes('traspaso')) && (
-              <Field label="Importe">
-                <Input value={editFee} onChange={e => setEditFee(e.target.value)} placeholder="400k, 2M…" />
-              </Field>
+              <input value={editFee} onChange={e => setEditFee(e.target.value)} placeholder="Importe: 400k, 2M…" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
             )}
-            <Field label="Notas">
-              <Textarea value={editNotes} onChange={e => setEditNotes(e.target.value)} rows={2} placeholder="Notas…" />
-            </Field>
-            <div className="flex gap-2 justify-end">
-              <Button onClick={() => setEditingEntry(false)} className="mr-auto">{L.cancelar}</Button>
-              <Button type="submit" variant="primary" loading={savingEntry}>{L.guardar}</Button>
+            <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)} rows={2} placeholder="Notas…" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none" />
+            <div className="flex gap-2">
+              <button onClick={() => setEditingEntry(false)} className="flex-1 py-1.5 text-sm border border-slate-200 rounded-lg text-slate-500">Cancelar</button>
+              <button onClick={saveEntry} disabled={savingEntry} className="flex-1 py-1.5 text-sm bg-primary hover:bg-primary/90 text-white rounded-lg disabled:opacity-60 inline-flex items-center justify-center gap-2">
+                {savingEntry && <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
+                {savingEntry ? 'Guardando…' : 'Guardar'}
+              </button>
             </div>
-          </form>
+          </div>
         )}
       </div>
 
@@ -3163,47 +3347,45 @@ function DistributionTab({ player, entry, negotiations, clubs, currentProfile, p
         {/* Selector de temporada de Distribución */}
         <div className="flex items-center justify-end mb-3">
           <div className={`relative flex items-center rounded-md ${ARCHIVED_SEASONS.has(season) ? 'bg-amber-50' : 'bg-slate-100'}`}>
-            <Select
+            <select
               value={season}
               onChange={e => setSeason(e.target.value)}
-              aria-label="Temporada"
               title={ARCHIVED_SEASONS.has(season) ? 'Temporada archivada: consultable, pero ya no es la temporada activa' : 'Temporada activa'}
-              className={`appearance-none border-0 bg-transparent w-auto pl-2 pr-6 py-1 text-meta font-medium rounded-md ${
-                ARCHIVED_SEASONS.has(season) ? 'text-amber-700' : 'text-slate-600'
+              className={`appearance-none bg-transparent pl-2 pr-5 py-1 text-xs font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/30 ${
+                ARCHIVED_SEASONS.has(season) ? 'text-amber-700' : 'text-slate-500'
               }`}
             >
               {SEASONS.map(s => (
                 <option key={s} value={s}>{s}{ARCHIVED_SEASONS.has(s) ? ' · archivada' : ''}</option>
               ))}
-            </Select>
-            <ChevronDown className="w-3 h-3 absolute right-1.5 pointer-events-none text-slate-500" aria-hidden="true" />
+            </select>
+            <ChevronDown className="w-3 h-3 absolute right-1.5 pointer-events-none text-slate-400" />
           </div>
         </div>
 
         {/* Add negotiation form */}
         {showAddNeg && (
-          <form onSubmit={e => { e.preventDefault(); void saveNeg() }} className="bg-slate-50 rounded-lg p-3 mb-3 space-y-2">
-            <Field label={L.club} required>
-              <Select value={negClubId} onChange={e => setNegClubId(e.target.value)}>
-                <option value="">Seleccionar club…</option>
-                {seasonClubs.map(c => <option key={c.id} value={c.id}>{c.name}{c.league ? ` (${c.league})` : ''}</option>)}
-              </Select>
-            </Field>
-            <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={L.estado}>
+          <div className="bg-slate-50 rounded-lg p-3 mb-3 space-y-2">
+            <select value={negClubId} onChange={e => setNegClubId(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
+              <option value="">Seleccionar club…</option>
+              {seasonClubs.map(c => <option key={c.id} value={c.id}>{c.name}{c.league ? ` (${c.league})` : ''}</option>)}
+            </select>
+            <div className="flex flex-wrap gap-1.5">
               {NEG_STATUSES_D.map(s => {
                 const cfg = STATUS_CONFIG_D[s]
-                return <button key={s} type="button" role="radio" aria-checked={negStatus === s} onClick={() => setNegStatus(s)} className={`px-2.5 min-h-9 sm:min-h-7 rounded-full text-secondary font-medium ${negStatus === s ? cfg.color + ' ring-1 ring-current' : 'bg-white border border-slate-200 text-slate-600'}`}>{NEG_STATUS_LABELS[s]}</button>
+                return <button key={s} onClick={() => setNegStatus(s)} className={`px-2.5 py-1 rounded-full text-xs font-medium ${negStatus === s ? cfg.color + ' ring-1 ring-current' : 'bg-white border border-slate-200 text-slate-500'}`}>{cfg.label}</button>
               })}
             </div>
-            <Field label={L.encargado}>
-              {() => <ManagerSelect value={negAis || undefined} onChange={(v) => setNegAis(v ?? '')} profiles={profiles} />}
-            </Field>
-            <Input value={negNotes} onChange={e => setNegNotes(e.target.value)} placeholder="Notas (opcional)" aria-label="Notas" />
-            <div className="flex gap-2 justify-end">
-              <Button size="sm" onClick={() => setShowAddNeg(false)} className="mr-auto">{L.cancelar}</Button>
-              <Button size="sm" type="submit" variant="primary" disabled={!negClubId} loading={savingNeg}>{L.guardar}</Button>
+            <div className="w-full"><ManagerSelect value={negAis || undefined} onChange={(v) => setNegAis(v ?? '')} profiles={profiles} /></div>
+            <input value={negNotes} onChange={e => setNegNotes(e.target.value)} placeholder="Notas (opcional)" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+            <div className="flex gap-2">
+              <button onClick={() => setShowAddNeg(false)} className="flex-1 py-1.5 text-xs border border-slate-200 rounded-lg text-slate-500">Cancelar</button>
+              <button onClick={saveNeg} disabled={!negClubId || savingNeg} className="flex-1 py-1.5 text-xs bg-primary hover:bg-primary/90 text-white rounded-lg disabled:opacity-60 inline-flex items-center justify-center gap-2">
+                {savingNeg && <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
+                {savingNeg ? 'Guardando…' : 'Guardar'}
+              </button>
             </div>
-          </form>
+          </div>
         )}
 
         <PlayerClubList

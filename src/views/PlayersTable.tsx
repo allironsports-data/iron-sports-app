@@ -1,12 +1,9 @@
 import { useState, useRef, useEffect } from "react";
 import type { Player } from "../types";
 import type { Profile } from "../contexts/AuthContext";
-import { Save, X, Check, Search, Trash2 } from "lucide-react";
+import { ArrowLeft, LogOut, Save, X, Check, Search, Shield, Trash2 } from "lucide-react";
 import { ConfirmModal } from "../components/ConfirmModal";
-import { DetailHeader } from "../components/shell";
-import { Button, IconButton, Input } from "../components/ui";
-import { useBeforeUnload } from "../hooks/useBeforeUnload";
-import { L } from "../lib/labels";
+import logoImg from '../assets/logo.jpeg';
 import { useDebounce } from "../hooks/useDebounce";
 import { useToast } from "../hooks/useToast";
 import { ToastStack } from "../components/ToastStack";
@@ -17,6 +14,8 @@ interface Props {
   profiles: Profile[];
   onUpdatePlayer: (player: Player) => void;
   onBack: () => void;
+  onLogout: () => void;
+  onAdmin?: () => void;
   /** Borrado desde la tabla (solo admin). Aquí se ven TODOS los jugadores,
    *  incluidos los «solo Distribución» que no salen en Mantenimiento. */
   onDeletePlayer?: (id: string) => void | Promise<void>;
@@ -38,7 +37,7 @@ type ColumnDef = {
   options?: string[];
 };
 
-export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onDeletePlayer }: Props) {
+export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onLogout, onAdmin, onDeletePlayer }: Props) {
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 300);
   const [editing, setEditing] = useState<EditingCell | null>(null);
@@ -50,8 +49,6 @@ export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onDele
   const { toasts, showToast, dismissToast } = useToast();
   const [toDelete, setToDelete] = useState<Player | null>(null);
   const [deleting, setDeleting] = useState(false);
-  // «Volver» con cambios pendientes pregunta antes
-  const [confirmBack, setConfirmBack] = useState(false);
 
   const confirmDelete = async () => {
     if (!toDelete || !onDeletePlayer) return;
@@ -171,7 +168,7 @@ export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onDele
       setValue: (p, v) => ({ ...p, clubContract: { ...p.clubContract, agentCommission: v } }),
     },
     {
-      key: "manager", label: L.encargado, width: "min-w-[130px]", type: "select",
+      key: "manager", label: "Encargado", width: "min-w-[130px]", type: "select",
       options: profiles.map(pr => pr.name),
       getValue: (p) => {
         const mgr = profiles.find(pr => pr.id === p.managedBy[0]);
@@ -279,58 +276,76 @@ export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onDele
   const discardAll = () => setPendingChanges(new Map());
 
   const hasChanges = pendingChanges.size > 0;
-  useBeforeUnload(hasChanges);
-  const handleBack = () => { if (hasChanges) setConfirmBack(true); else onBack(); };
 
   return (
-    <div className="min-h-dvh bg-slate-50">
-      <DetailHeader
-        onBack={handleBack}
-        title="Tabla de jugadores"
-        subtitle="Edición rápida — haz clic en cualquier celda"
-        actions={
-          <div className="flex items-center gap-2 flex-wrap justify-end">
-            {hasChanges && (
-              <>
-                <span className="text-secondary text-amber-700 font-medium whitespace-nowrap">{pendingChanges.size} cambio{pendingChanges.size > 1 ? 's' : ''}</span>
-                <Button size="sm" icon={<X />} onClick={discardAll}>Descartar</Button>
-                <Button size="sm" variant="primary" icon={<Save />} onClick={saveAll}>Guardar todo</Button>
-              </>
-            )}
-            {savedFeedback && (
-              <span
-                role="status"
-                className="inline-flex items-center gap-1.5 text-secondary font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-1 animate-in fade-in duration-200"
-              >
-                <Check className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" />{savedFeedback}
-              </span>
-            )}
+    <div className="min-h-screen bg-slate-50">
+      {/* Header */}
+      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
+        <div className="mx-auto max-w-7xl flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
+          <button onClick={onBack} aria-label="Volver" className="p-2 sm:p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex-shrink-0">
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <img src={logoImg} alt="" className="h-8 w-auto rounded flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <h1 className="text-base font-bold text-slate-800 truncate">Tabla de jugadores</h1>
+            <p className="text-xs text-slate-400 truncate">Edición rápida — haz clic en cualquier celda</p>
           </div>
-        }
-      />
 
-      {/* Buscador */}
-      <div className="mx-auto max-w-7xl px-4 pt-4">
-        <div className="relative w-full sm:w-64">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" aria-hidden="true" />
-          <Input
-            value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar jugador, club…"
-            aria-label={L.buscar}
-            className="pl-9"
-          />
+          {/* Search */}
+          <div className="relative order-last sm:order-none w-full sm:w-auto">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+            <input
+              value={search} onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar..."
+              className="pl-8 pr-3 py-2 sm:py-1.5 text-xs rounded-md border border-slate-200 focus:outline-none focus:ring-2 w-full sm:w-44"
+            />
+          </div>
+
+          {/* Save/discard */}
+          {hasChanges && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-amber-600 font-medium">{pendingChanges.size} cambio{pendingChanges.size > 1 ? 's' : ''}</span>
+              <button onClick={discardAll}
+                className="inline-flex items-center gap-1 text-xs px-2.5 py-2 sm:py-1.5 rounded-md border border-slate-200 text-slate-500 hover:text-slate-700">
+                <X className="w-3 h-3" />Descartar
+              </button>
+              <button onClick={saveAll}
+                className="inline-flex items-center gap-1 text-xs px-3 py-2 sm:py-1.5 rounded-md text-white font-medium bg-primary hover:bg-primary/90 transition-colors">
+                <Save className="w-3 h-3" />Guardar todo
+              </button>
+            </div>
+          )}
+          {savedFeedback && (
+            <span
+              role="status"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-1 animate-in fade-in duration-200"
+            >
+              <Check className="w-3.5 h-3.5 text-emerald-600" />{savedFeedback}
+            </span>
+          )}
+
+          <div className="flex items-center gap-2">
+            {onAdmin && (
+              <button onClick={onAdmin} aria-label="Admin" className="p-2 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600" title="Admin">
+                <Shield className="w-4 h-4" />
+              </button>
+            )}
+            <button onClick={onLogout} aria-label="Cerrar sesión" className="p-2 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600" title="Cerrar sesión">
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
         </div>
-      </div>
+      </header>
 
       {/* Table */}
       <main className="mx-auto max-w-7xl px-4 py-4">
         <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1480px] text-secondary">
+            <table className="w-full min-w-[1480px] text-xs">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">
                   {columns.map((col) => (
-                    <th key={col.key} className={`text-left px-3 py-2.5 text-meta uppercase tracking-wide font-semibold text-slate-600 ${col.width} whitespace-nowrap`}>
+                    <th key={col.key} className={`text-left px-3 py-2.5 font-semibold text-slate-600 ${col.width} whitespace-nowrap`}>
                       {col.label}
                     </th>
                   ))}
@@ -356,7 +371,7 @@ export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onDele
                         let cellColor = "";
                         if ((col.key === "reprEnd" || col.key === "clubEnd") && value) {
                           const d = Math.ceil((new Date(value).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-                          if (d < 0) cellColor = "text-slate-500";
+                          if (d < 0) cellColor = "text-slate-400";
                           else if (d < 183) cellColor = "text-red-600 font-semibold";
                           else if (d < 365) cellColor = "text-amber-600 font-semibold";
                         }
@@ -371,8 +386,7 @@ export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onDele
                                   onChange={(e) => setEditValue(e.target.value)}
                                   onBlur={confirmEdit}
                                   onKeyDown={handleKeyDown}
-                                  aria-label={col.label}
-                                  className="w-full rounded border border-blue-300 px-1.5 py-1 text-secondary focus:outline-none focus:ring-2 focus:ring-blue-200"
+                                  className="w-full rounded border border-blue-300 px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-200"
                                 >
                                   <option value="">—</option>
                                   {(col.options || []).map(opt => (
@@ -388,8 +402,7 @@ export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onDele
                                   onBlur={confirmEdit}
                                   onKeyDown={handleKeyDown}
                                   aria-invalid={editInvalid}
-                                  aria-label={col.label}
-                                  className={`w-full rounded border px-1.5 py-1 text-secondary focus:outline-none focus:ring-2 ${
+                                  className={`w-full rounded border px-1.5 py-1 text-xs focus:outline-none focus:ring-2 ${
                                     editInvalid
                                       ? "border-red-400 ring-1 ring-red-200 focus:ring-red-200"
                                       : "border-blue-300 focus:ring-blue-200"
@@ -397,16 +410,15 @@ export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onDele
                                 />
                               )
                             ) : (
-                              <button
-                                type="button"
+                              <div
                                 onClick={() => startEdit(player.id, col.key)}
-                                className={`w-full text-left cursor-pointer hover:bg-blue-50 rounded px-1.5 py-1 -mx-1.5 -my-1 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${cellColor} ${
+                                className={`cursor-pointer hover:bg-blue-50 rounded px-1.5 py-1 -mx-1.5 -my-1 transition-colors ${cellColor} ${
                                   col.key === "name" ? "font-medium text-slate-800" : "text-slate-600"
                                 }`}
                                 title="Clic para editar"
                               >
                                 {displayValue}
-                              </button>
+                              </div>
                             )}
                           </td>
                         );
@@ -414,17 +426,18 @@ export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onDele
                       {onDeletePlayer && (
                         <td className="px-2 py-1 whitespace-nowrap text-right">
                           {player.hiddenFromManagement && (
-                            <span className="mr-1 px-1.5 py-0.5 rounded bg-slate-100 text-badge text-slate-600" title="No aparece en Mantenimiento: es un jugador solo de Distribución (intermediar)">
+                            <span className="mr-1 px-1.5 py-0.5 rounded bg-slate-100 text-[10px] text-slate-500" title="No aparece en Mantenimiento: es un jugador solo de Distribución (intermediar)">
                               solo Distribución
                             </span>
                           )}
-                          <IconButton
-                            label={`Eliminar a ${player.name}`}
+                          <button
                             onClick={() => setToDelete(player)}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            aria-label={`Eliminar a ${player.name}`}
+                            title="Eliminar jugador"
+                            className="p-1.5 rounded text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
                           >
-                            <Trash2 />
-                          </IconButton>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </td>
                       )}
                     </tr>
@@ -433,25 +446,13 @@ export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onDele
               </tbody>
             </table>
           </div>
-          <div className="px-3 py-2 bg-slate-50 border-t border-slate-100 text-meta text-slate-500">
+          <div className="px-3 py-2 bg-slate-50 border-t border-slate-100 text-[11px] text-slate-400">
             {filtered.length} jugador{filtered.length !== 1 ? 'es' : ''} · Haz clic en cualquier celda para editar · Tab para avanzar · Enter para confirmar · Esc para cancelar
           </div>
         </div>
       </main>
 
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
-
-      {/* Volver con cambios sin guardar */}
-      <ConfirmModal
-        open={confirmBack}
-        title={`Tienes ${pendingChanges.size} cambio${pendingChanges.size > 1 ? 's' : ''} sin guardar`}
-        message="Si sales ahora se perderán. ¿Quieres descartarlos?"
-        confirmLabel="Descartar y volver"
-        cancelLabel="Seguir editando"
-        variant="danger"
-        onConfirm={() => { setConfirmBack(false); discardAll(); onBack(); }}
-        onCancel={() => setConfirmBack(false)}
-      />
 
       <ConfirmModal
         open={!!toDelete}

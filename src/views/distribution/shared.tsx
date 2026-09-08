@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
-import { Check, ChevronDown } from 'lucide-react'
-import { Button, Dialog } from '../../components/ui'
+import { X, Check, ChevronDown } from 'lucide-react'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 // ── Piezas compartidas entre las pestañas, paneles y modales de Distribución ──
 
@@ -13,9 +13,8 @@ export function BtnSpinner() {
 // cada pasada y React desmontaba/montaba el DOM (pérdida de foco, parpadeos).
 
 export function Avatar({ name, photo, size = 'sm' }: { name: string; photo?: string; size?: 'xs' | 'sm' | 'md' }) {
-  // Mínimo w-6 con text-badge (11px): los avatares más pequeños no se leían.
-  const cls = size === 'xs' ? 'w-6 h-6 text-badge' : size === 'sm' ? 'w-8 h-8 text-meta' : 'w-10 h-10 text-body'
-  if (photo) return <img src={photo} alt="" className={`${cls} rounded-full object-cover flex-shrink-0`} />
+  const cls = size === 'xs' ? 'w-6 h-6 text-[11px]' : size === 'sm' ? 'w-8 h-8 text-xs' : 'w-10 h-10 text-sm'
+  if (photo) return <img src={photo} className={`${cls} rounded-full object-cover flex-shrink-0`} />
   const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
   return (
     <div className={`${cls} rounded-full bg-slate-200 flex items-center justify-center font-semibold text-slate-600 flex-shrink-0`}>
@@ -24,25 +23,36 @@ export function Avatar({ name, photo, size = 'sm' }: { name: string; photo?: str
   )
 }
 
-/** Hoja inferior reutilizable para filtros en móvil (Dialog en modo sheet). */
+/** Bottom-sheet reutilizable para filtros en móvil. */
 export function FilterSheet({ open, onClose, title, children }: {
   open: boolean
   onClose: () => void
   title: string
   children: React.ReactNode
 }) {
+  useEscapeKey(onClose, open)
+  if (!open) return null
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      title={title}
-      historyKey="dist-filtros"
-      footer={<Button variant="primary" className="w-full" onClick={onClose}>Ver resultados</Button>}
-    >
-      <div className="flex flex-col gap-3">
-        {children}
+    <div className="fixed inset-0 z-[120] flex items-end sm:hidden">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-white w-full rounded-t-2xl max-h-[85vh] overflow-y-auto p-4 safe-area-bottom animate-in slide-in-from-bottom">
+        <div className="sticky -top-4 -mx-4 px-4 pt-1 pb-3 bg-white flex items-center justify-between border-b border-slate-100 mb-3 z-10">
+          <h3 className="text-sm font-semibold text-slate-700">{title}</h3>
+          <button onClick={onClose} aria-label="Cerrar filtros" className="p-2 rounded-lg hover:bg-slate-100 text-slate-400">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="flex flex-col gap-3">
+          {children}
+        </div>
+        <button
+          onClick={onClose}
+          className="mt-4 w-full py-3 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary/90 transition-colors"
+        >
+          Ver resultados
+        </button>
       </div>
-    </Dialog>
+    </div>
   )
 }
 
@@ -51,10 +61,8 @@ export function FilterSheet({ open, onClose, title, children }: {
 export function FilterCheck({ label, checked, onClick }: { label: React.ReactNode; checked: boolean; onClick: () => void }) {
   return (
     <button
-      type="button"
       onClick={onClick}
-      aria-pressed={checked}
-      className="flex items-center gap-1.5 px-3 min-h-9 sm:min-h-8 text-secondary font-medium rounded-lg border border-slate-300 bg-white hover:border-slate-400 transition-colors text-slate-600"
+      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 bg-white hover:border-slate-300 transition-colors text-slate-600"
     >
       <span className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${checked ? 'bg-slate-800 border-slate-800' : 'border-slate-300'}`}>
         {checked && <Check className="w-2.5 h-2.5 text-white" />}
@@ -82,14 +90,11 @@ export function MultiSelect({ label, options, selected, onChange }: {
   return (
     <div className="relative">
       <button
-        type="button"
         onClick={() => setOpen(o => !o)}
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        className={`flex items-center gap-1.5 pl-3 pr-2 min-h-9 sm:min-h-8 text-secondary font-medium rounded-lg border transition-colors ${
+        className={`flex items-center gap-1.5 pl-3 pr-2 py-1.5 text-sm rounded-lg border transition-colors ${
           isActive
             ? 'bg-primary text-white border-primary'
-            : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400'
+            : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
         }`}
       >
         <span>{label}{isActive ? ` (${selected.length})` : ''}</span>
@@ -108,7 +113,7 @@ export function MultiSelect({ label, options, selected, onChange }: {
                   onClick={e => e.stopPropagation()}
                   className="w-3.5 h-3.5 rounded"
                 />
-                <span className="text-body text-slate-700">{opt}</span>
+                <span className="text-sm text-slate-700">{opt}</span>
               </label>
             ))}
           </div>

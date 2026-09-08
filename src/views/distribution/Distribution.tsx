@@ -1,13 +1,12 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import {
-  ChevronRight, Check, Trash2,
-  AlertCircle, ChevronDown,
+  ChevronRight, Check, Trash2, LogOut,
+  TrendingUp, AlertCircle, ChevronDown, Eye, Inbox,
 } from 'lucide-react'
+import logoImg from '../../assets/logo.jpeg'
 import type { Player, Club, ClubNeed, DistributionEntry, ClubNegotiation } from '../../types'
 import type { Profile } from '../../contexts/AuthContext'
 import { ConfirmModal } from '../../components/ConfirmModal'
-import { Badge, ClickableRow, IconButton, SectionTabs, Select } from '../../components/ui'
-import { L } from '../../lib/labels'
 import { ToastStack } from '../../components/ToastStack'
 import { useToast } from '../../hooks/useToast'
 import { POSITION_CODES, needMatchesPlayer, normalizePosition } from '../../lib/positions'
@@ -38,9 +37,7 @@ import {
 // SEASONS / ARCHIVED_SEASONS viven en ./constantes (compartidas con la
 // pestaña Distribución de la ficha del jugador).
 
-export type DistributionTabId = 'jugadores' | 'clubes' | 'solicitudes' | 'oportunidades' | 'pipeline' | 'encargados'
-type TabId = DistributionTabId
-const TAB_IDS: readonly TabId[] = ['jugadores', 'clubes', 'solicitudes', 'oportunidades', 'pipeline', 'encargados']
+type TabId = 'jugadores' | 'clubes' | 'solicitudes' | 'oportunidades' | 'pipeline' | 'encargados'
 
 // ── props ─────────────────────────────────────────────────────
 
@@ -51,9 +48,12 @@ export interface Props {
   negotiations: ClubNegotiation[]
   currentProfile: Profile
   profiles: Profile[]
-  /** Sub-pestaña controlada desde fuera (App la sincroniza con #/distribucion/sub) */
-  tab?: DistributionTabId
-  onTabChange?: (tab: DistributionTabId) => void
+  onBack: () => void          // go to Tareas
+  onGoToJugadores?: () => void
+  onGoToCaptacion?: () => void
+  onGoToBoulema?: () => void
+  onLogout: () => void
+  onAdmin?: () => void
   onSelectPlayer?: (id: string) => void
   onSelectClub?: (id: string) => void
   onCreateClub: (c: Omit<Club, 'id' | 'createdAt'>) => Promise<Club>
@@ -76,7 +76,7 @@ export interface Props {
 
 export function Distribution({
   players, clubs: clubsAll, entries, negotiations: negotiationsAll, currentProfile, profiles,
-  tab: tabProp, onTabChange, onSelectPlayer, onSelectClub,
+  onBack, onGoToCaptacion, onGoToBoulema, onLogout, onAdmin, onSelectPlayer, onSelectClub,
   onCreateClub, onUpdateClub, onDeleteClub,
   onCreateEntry, onUpdateEntry, onDeleteEntry,
   onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation,
@@ -106,16 +106,12 @@ export function Distribution({
     if (club && club.season !== season) setSeason(club.season)
   }, [activeClubId, clubsAll, season])
 
-  // Pestaña: si App la pasa (ruta #/distribucion/sub) manda la prop; si no,
-  // se usa la persistida en sessionStorage.
-  const [tabInterno, setTabInterno] = useState<TabId>(
+  const [tab, setTab] = useState<TabId>(
     () => {
-      const saved = sessionStorage.getItem('nav_dist_tab')
-      return saved && (TAB_IDS as readonly string[]).includes(saved) ? (saved as TabId) : 'jugadores'
+      const saved = sessionStorage.getItem('nav_dist_tab') as TabId | 'panel' | null
+      return saved && saved !== 'panel' ? saved : 'jugadores'
     }
   )
-  const tab: TabId = tabProp && (TAB_IDS as readonly string[]).includes(tabProp) ? tabProp : tabInterno
-  const setTab = useCallback((t: TabId) => { setTabInterno(t); onTabChange?.(t) }, [onTabChange])
   // Oportunidades tab
   const [oppSearch, setOppSearch] = useState('')
   const [oppPriority, setOppPriority] = useState<Priority | ''>('')
@@ -548,52 +544,119 @@ export function Distribution({
   }, [filteredEntries, playersById])
 
 
-  const seasonSelector = (
-    <div className={`relative flex items-center rounded-md mx-2 ${ARCHIVED_SEASONS.has(season) ? 'bg-amber-50' : 'bg-slate-100'}`}>
-      <Select
-        value={season}
-        onChange={e => setSeason(e.target.value)}
-        aria-label="Temporada"
-        title={ARCHIVED_SEASONS.has(season) ? 'Temporada archivada: consultable, pero ya no es la temporada activa' : 'Temporada activa'}
-        className={`appearance-none border-0 bg-transparent w-auto pl-2 pr-6 py-1 text-meta font-medium rounded-md ${
-          ARCHIVED_SEASONS.has(season) ? 'text-amber-700' : 'text-slate-600'
-        }`}
-      >
-        {SEASONS.map(s => (
-          <option key={s} value={s}>{s}{ARCHIVED_SEASONS.has(s) ? ' · archivada' : ''}</option>
-        ))}
-      </Select>
-      <ChevronDown className="w-3 h-3 absolute right-1.5 pointer-events-none text-slate-500" aria-hidden="true" />
-    </div>
-  )
-
   return (
-    <div className="min-h-full bg-slate-50 flex flex-col">
-      {/* Sub-pestañas (nivel 2). La barra superior y el nivel 1 los pinta AppShell. */}
-      <div className="sticky top-[var(--shell-h)] z-20 bg-white border-b border-slate-200 -mt-4 -mx-3 sm:-mx-6 mb-4">
-        <div className="max-w-6xl mx-auto px-3 sm:px-6">
-          <SectionTabs<TabId>
-            variant="secondary"
-            label="Secciones de Distribución"
-            value={tab}
-            onChange={switchTab}
-            items={[
-              { id: 'jugadores', label: L.jugadores, count: seasonEntries.length },
-              { id: 'clubes', label: L.clubes, count: clubs.length },
-              { id: 'solicitudes', label: L.solicitudes, count: clubNeeds.length },
-              { id: 'oportunidades', label: L.oportunidades, count: opportunities.length },
-              { id: 'pipeline', label: 'Pipeline', count: myActiveNegCount },
-              { id: 'encargados', label: L.encargados },
-            ]}
-            trailing={seasonSelector}
-            className="bg-white"
-          />
+    <div className="h-screen bg-slate-50 flex flex-col overflow-hidden">
+      {/* Header */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-10 flex-shrink-0">
+        {/* Top bar */}
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 h-11 sm:h-14 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg overflow-hidden bg-white flex-shrink-0">
+              <img src={logoImg} className="w-full h-full object-contain p-0.5" alt="AIS" />
+            </div>
+            <span className="hidden sm:block font-black text-sm tracking-tight text-slate-900 uppercase">All Iron Sports</span>
+          </div>
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <div className={`relative flex items-center rounded-md ${ARCHIVED_SEASONS.has(season) ? 'bg-amber-50' : 'bg-slate-100'}`}>
+              <select
+                value={season}
+                onChange={e => setSeason(e.target.value)}
+                title={ARCHIVED_SEASONS.has(season) ? 'Temporada archivada: consultable, pero ya no es la temporada activa' : 'Temporada activa'}
+                className={`appearance-none bg-transparent pl-2 pr-5 py-1 text-xs font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/30 ${
+                  ARCHIVED_SEASONS.has(season) ? 'text-amber-700' : 'text-slate-500'
+                }`}
+              >
+                {SEASONS.map(s => (
+                  <option key={s} value={s}>{s}{ARCHIVED_SEASONS.has(s) ? ' · archivada' : ''}</option>
+                ))}
+              </select>
+              <ChevronDown className="w-3 h-3 absolute right-1.5 pointer-events-none text-slate-400" />
+            </div>
+            {currentProfile.is_admin && onAdmin && (
+              <button onClick={onAdmin} className="p-1 sm:p-1.5 text-slate-400 hover:text-slate-600 transition-colors text-xs hidden sm:block">Admin</button>
+            )}
+            <button onClick={onLogout} aria-label="Cerrar sesión" className="text-slate-400 hover:text-slate-600 transition-colors p-2 sm:p-1">
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
         </div>
-      </div>
+
+        {/* Level 1: main sections */}
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 hidden sm:flex items-center border-t border-slate-100 overflow-x-auto scrollbar-none">
+          <button
+            onClick={onBack}
+            className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
+          >
+            Mantenimiento
+          </button>
+          <button className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 border-primary text-primary transition-colors">
+            <TrendingUp className="w-3.5 h-3.5" />
+            Distribución
+          </button>
+          <button
+            onClick={onGoToCaptacion}
+            className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
+          >
+            <Eye className="w-3.5 h-3.5" />
+            Captación
+          </button>
+          <button
+            onClick={onGoToBoulema}
+            className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
+          >
+            <Inbox className="w-3.5 h-3.5" />
+            Boulema
+          </button>
+        </div>
+
+        {/* Sub-tabs — inside header so they stay sticky */}
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 flex gap-1 border-t border-slate-100 overflow-x-auto scrollbar-none">
+          {(['jugadores', 'clubes', 'solicitudes', 'oportunidades', 'pipeline', 'encargados'] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => switchTab(t)}
+              className={`flex-shrink-0 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                tab === t
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              {t === 'jugadores' ? (
+                <>Jugadores ({seasonEntries.length})</>
+              ) : t === 'clubes' ? (
+                <>Clubes ({clubs.length})</>
+              ) : t === 'solicitudes' ? (
+                <>Solicitudes{clubNeeds.length > 0 ? ` (${clubNeeds.length})` : ''}</>
+              ) : t === 'oportunidades' ? (
+                <span className="flex items-center gap-1.5">
+                  Oportunidades
+                  {opportunities.length > 0 && (
+                    <span className={`text-[11px] px-1.5 py-0.5 rounded-full font-bold leading-none ${
+                      tab === t ? 'bg-primary text-white' : 'bg-emerald-100 text-emerald-700'
+                    }`}>{opportunities.length}</span>
+                  )}
+                </span>
+              ) : t === 'encargados' ? (
+                <>Encargados</>
+              ) : (
+                <span className="flex items-center gap-1.5">
+                  Pipeline
+                  {myActiveNegCount > 0 && (
+                    <span className={`text-[11px] px-1.5 py-0.5 rounded-full font-bold leading-none ${
+                      tab === t ? 'bg-primary text-white' : 'bg-slate-200 text-slate-600'
+                    }`}>{myActiveNegCount}</span>
+                  )}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      </header>
+
 
       {/* Content */}
-      <div className="flex-1">
-        <div className="p-4 pb-20 sm:pb-4">
+      <div className="flex flex-1 overflow-hidden">
+        <div className={`flex-1 overflow-y-auto p-4 pb-20 sm:pb-4 ${hasPanel ? 'hidden sm:block' : ''}`}>
 
           {/* ── BANDEJA DE PENDIENTES (propuestas que requieren tu atención) ── */}
           {myPending.length > 0 && (
@@ -611,35 +674,35 @@ export function Distribution({
               {showPendingInbox && (
                 <div className="border-t border-amber-200 divide-y divide-amber-100 max-h-[50vh] overflow-y-auto">
                   {myPending.map(({ neg, club, player }) => (
-                    <ClickableRow
+                    <div
                       key={neg.id}
                       onClick={() => { if (club) onSelectClub?.(club.id) }}
-                      className="rounded-none px-4 py-2 bg-white hover:bg-amber-50"
-                      actions={
-                        <IconButton
-                          label="Descartar propuesta"
-                          onClick={async () => {
-                            try {
-                              await onUpdateNegotiation({ ...neg, status: 'descartado' })
-                              showToast(`${player?.name ?? 'Propuesta'} → ${club?.name ?? 'club'} descartada`, 'info')
-                            } catch {
-                              showToast('No se pudo descartar. Inténtalo de nuevo.', 'error')
-                            }
-                          }}
-                          className="text-slate-600 hover:text-red-600 hover:bg-red-50"
-                        >
-                          <Trash2 />
-                        </IconButton>
-                      }
+                      className="w-full flex items-center gap-2 px-4 py-2.5 text-left bg-white hover:bg-amber-50 transition-colors cursor-pointer"
                     >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-body font-medium text-slate-800 truncate">{player?.name ?? 'Jugador'}</span>
-                        <ChevronRight className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" aria-hidden="true" />
-                        <span className="text-body text-slate-600 truncate">{club?.name ?? 'Club'}</span>
-                        {neg.needPosition && <Badge>{neg.needPosition}</Badge>}
-                        <Badge className="ml-auto bg-purple-100 text-purple-700">Pendiente</Badge>
-                      </div>
-                    </ClickableRow>
+                      <span className="text-sm font-medium text-slate-800 truncate">{player?.name ?? 'Jugador'}</span>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />
+                      <span className="text-sm text-slate-600 truncate">{club?.name ?? 'Club'}</span>
+                      {neg.needPosition && (
+                        <span className="text-[11px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded flex-shrink-0">{neg.needPosition}</span>
+                      )}
+                      <span className="ml-auto text-[11px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full flex-shrink-0">Pendiente</span>
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation()
+                          try {
+                            await onUpdateNegotiation({ ...neg, status: 'descartado' })
+                            showToast(`${player?.name ?? 'Propuesta'} → ${club?.name ?? 'club'} descartada`, 'info')
+                          } catch {
+                            showToast('No se pudo descartar. Inténtalo de nuevo.', 'error')
+                          }
+                        }}
+                        title="Descartar propuesta"
+                        aria-label="Descartar propuesta"
+                        className="p-1.5 rounded-lg text-slate-300 hover:text-red-600 hover:bg-red-50 flex-shrink-0 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}
@@ -765,9 +828,12 @@ export function Distribution({
         </div>
 
         {/* ── SIDE PANEL ── */}
-        {/* Paneles como Sheet (lateral en escritorio, hoja inferior en móvil) */}
         {hasPanel && (
-          <>
+          <div className={`w-full flex-shrink-0 border-l border-slate-200 bg-white fixed sm:static inset-0 sm:inset-auto z-30 transition-[width] duration-200 ${
+            panelExpanded && selectedEntry ? 'overflow-y-auto sm:overflow-hidden' : 'overflow-y-auto'
+          } ${
+            panelExpanded ? 'sm:w-[560px] lg:w-[55%] xl:w-[60%]' : 'sm:w-[380px]'
+          }`}>
             {selectedEntry && (
               <PlayerPanel
                 selectedEntry={selectedEntry} playersById={playersById} negotiations={negotiations}
@@ -801,7 +867,7 @@ export function Distribution({
                 onRequestDeleteClub={setConfirmDeleteClubId} showToast={showToast}
               />
             )}
-          </>
+          </div>
         )}
       </div>
 
@@ -986,7 +1052,7 @@ export function Distribution({
                 clubIds.map(clubId => onCreateNegotiation({ playerId: bulkAssignPlayerId, clubId, status: 'pendiente', aisManager: clubs.find(c => c.id === clubId)?.aisManager || currentProfile.avatar }))
               )
               setBulkAssignPlayerId(null)
-              showToast(`${clubIds.length} club${clubIds.length !== 1 ? 'es' : ''} asignado${clubIds.length !== 1 ? 's' : ''}`)
+              showToast(`${clubIds.length} club${clubIds.length !== 1 ? 's' : ''} asignado${clubIds.length !== 1 ? 's' : ''}`)
             } catch {
               showToast('No se pudo guardar. Inténtalo de nuevo.', 'error')
             }
@@ -1016,11 +1082,11 @@ export function Distribution({
                   }
                   setOpenManagerDropId(null); setManagerDropPos(null)
                 }}
-                className={`w-full flex items-center gap-2 px-3 py-2 text-secondary text-left hover:bg-slate-50 transition-colors ${
+                className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-slate-50 transition-colors ${
                   entry.aisManager === p.avatar ? 'font-semibold text-blue-700' : 'text-slate-700'
                 }`}
               >
-                <span className="w-6 h-6 rounded-full bg-slate-100 text-badge font-bold flex items-center justify-center flex-shrink-0">
+                <span className="w-5 h-5 rounded-full bg-slate-100 text-[9px] font-bold flex items-center justify-center flex-shrink-0">
                   {p.avatar}
                 </span>
                 {p.name.split(' ')[0]}
@@ -1038,7 +1104,7 @@ export function Distribution({
                     }
                     setOpenManagerDropId(null); setManagerDropPos(null)
                   }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-secondary text-red-600 hover:bg-red-50 transition-colors"
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-500 hover:bg-red-50 transition-colors"
                 >
                   Quitar encargado
                 </button>
@@ -1061,7 +1127,7 @@ export function Distribution({
             onClick={e => e.stopPropagation()}
           >
             {club && (
-              <p className="px-3 pt-1.5 pb-1 text-meta font-semibold uppercase tracking-wider text-slate-500 truncate">
+              <p className="px-3 pt-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400 truncate">
                 {club.name}
               </p>
             )}
@@ -1076,11 +1142,11 @@ export function Distribution({
                   }
                   setOpenStatusDropId(null); setStatusDropPos(null)
                 }}
-                className={`w-full flex items-center gap-2 px-3 py-2 text-secondary text-left hover:bg-slate-50 transition-colors ${
+                className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-slate-50 transition-colors ${
                   neg.status === s ? 'font-semibold text-slate-800' : 'text-slate-600'
                 }`}
               >
-                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_CONFIG[s].dot}`} aria-hidden="true" />
+                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_CONFIG[s].dot}`} />
                 {STATUS_CONFIG[s].label}
                 {neg.status === s && <Check className="w-3.5 h-3.5 ml-auto text-blue-600" />}
               </button>
@@ -1115,7 +1181,7 @@ export function Distribution({
             style={{ top: pos.top, right: bulkClubManagerPos.right, maxHeight: pos.maxHeight }}
             onClick={e => e.stopPropagation()}
           >
-            <p className="px-3 pt-1.5 pb-1 text-meta font-semibold uppercase tracking-wider text-slate-500">
+            <p className="px-3 pt-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
               Asignar a {ids.length} club{ids.length !== 1 ? 'es' : ''}
             </p>
             {profiles.map(p => (
@@ -1123,9 +1189,9 @@ export function Distribution({
                 key={p.id}
                 disabled={bulkClubAssigning}
                 onClick={() => assignBulk(p.avatar)}
-                className="w-full flex items-center gap-2 px-3 py-2 text-secondary text-left text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50"
+                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50"
               >
-                <span className="w-6 h-6 rounded-full bg-slate-100 text-badge font-bold flex items-center justify-center flex-shrink-0">
+                <span className="w-5 h-5 rounded-full bg-slate-100 text-[9px] font-bold flex items-center justify-center flex-shrink-0">
                   {p.avatar}
                 </span>
                 {p.name.split(' ')[0]}
@@ -1135,7 +1201,7 @@ export function Distribution({
             <button
               disabled={bulkClubAssigning}
               onClick={() => assignBulk(undefined)}
-              className="w-full flex items-center gap-2 px-3 py-2 text-secondary text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
             >
               Quitar encargado
             </button>

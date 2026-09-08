@@ -1,8 +1,8 @@
 import { useState, useMemo, useCallback } from 'react'
-import { Search, Plus, ChevronRight, Star, Check, MapPin, ClipboardList, History, CalendarDays } from 'lucide-react'
+import { Search, X, Plus, ChevronRight } from 'lucide-react'
 import type { ScoutingPlayer } from '../../types'
 import type { Equipo as EquipoCatalogo } from '../../lib/db'
-import { Dialog, Button, Input, Select } from '../../components/ui'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { ZONAS, ZONA_CORTA, SIN_ZONA, zonaDe, clubBase, normEquipo, type Zona } from '../../lib/zonas'
 import { norm as normSearch } from '../../lib/texto'
 import { BotonCsv } from '../../components/BotonCsv'
@@ -26,8 +26,9 @@ export function ZonasPanel({ players, clubZonas, onSetClubZona, onClose, showToa
   // Selección múltiple: 40 clubes extranjeros de uno en uno no tiene sentido
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [aplicando, setAplicando] = useState(false)
+  useEscapeKey(onClose)
 
-  // Un club por cada equipo distinto de la app, con cuántos jugadores tiene
+  // Un club por cada equipo distinto de la BBDD, con cuántos jugadores tiene
   const clubes = useMemo(() => {
     const m = new Map<string, { club: string; nombre: string; n: number }>()
     for (const p of players) {
@@ -83,34 +84,33 @@ export function ZonasPanel({ players, clubZonas, onSetClubZona, onClose, showToa
   }
 
   return (
-    <Dialog
-      open
-      onClose={onClose}
-      title="Zonas de los clubes"
-      description={`${clubes.length} clubes · ${sinZona} sin zona`}
-      size="lg"
-      historyKey="zonas-clubes"
-      className="sm:max-h-[90dvh]"
-    >
-      <div className="-mx-4 sm:-mx-5 -my-4">
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center p-4 overflow-y-auto" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl mt-8 mb-8" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+          <h3 className="text-sm font-bold text-slate-800">📍 Zonas de los clubes</h3>
+          <span className="text-[11px] text-slate-400">{clubes.length} clubes · {sinZona} sin zona</span>
+          <button onClick={onClose} className="ml-auto text-slate-400 hover:text-slate-600" aria-label="Cerrar">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
         <div className="px-5 py-3 border-b border-slate-100 space-y-2">
-          <p className="text-badge text-slate-500">
+          <p className="text-[11px] text-slate-500">
             La zona es del club, no del jugador: al cambiar «Villarreal» cambian con él el filial y todos
             los juveniles. Se guarda en la base de datos y lo ve todo el equipo.
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative flex-1 min-w-[160px]">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" aria-hidden="true" />
-              <Input
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+              <input
                 value={q}
                 onChange={e => setQ(e.target.value)}
                 placeholder="Buscar club…"
-                aria-label="Buscar club"
                 autoFocus
-                className="pl-8"
+                className="w-full pl-8 pr-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30"
               />
             </div>
-            <label className="flex items-center gap-1.5 text-badge font-semibold text-slate-600 cursor-pointer">
+            <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 cursor-pointer">
               <input type="checkbox" checked={soloSinZona} onChange={e => setSoloSinZona(e.target.checked)} className="accent-blue-600" />
               Solo los que no tienen zona
             </label>
@@ -119,7 +119,7 @@ export function ZonasPanel({ players, clubZonas, onSetClubZona, onClose, showToa
 
         {/* Acciones en bloque */}
         <div className="px-5 py-2 border-b border-slate-100 flex flex-wrap items-center gap-2 bg-slate-50/60">
-          <label className="flex items-center gap-1.5 text-badge font-semibold text-slate-600 cursor-pointer">
+          <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 cursor-pointer">
             <input
               type="checkbox"
               className="accent-blue-600"
@@ -134,25 +134,27 @@ export function ZonasPanel({ players, clubZonas, onSetClubZona, onClose, showToa
           </label>
           {sel.size > 0 && (
             <>
-              <span className="text-badge font-bold text-primary">{sel.size} seleccionado{sel.size !== 1 ? 's' : ''}</span>
+              <span className="text-[11px] font-bold text-primary">{sel.size} seleccionado{sel.size !== 1 ? 's' : ''}</span>
               <select
                 defaultValue=""
                 disabled={aplicando}
                 onChange={e => { const v = e.target.value; e.target.value = ''; void aplicarASeleccion(v) }}
-                className="text-badge border border-primary rounded-lg px-2 py-1 bg-white text-primary font-semibold focus:outline-none"
+                className="text-[11px] border border-primary rounded-lg px-2 py-1 bg-white text-primary font-semibold focus:outline-none"
               >
                 <option value="" disabled>Asignar zona a los {sel.size}…</option>
                 {ZONAS.map(z => <option key={z} value={z}>{z}</option>)}
               </select>
-              <Button size="sm" variant="link" onClick={() => setSel(new Set())}>quitar selección</Button>
+              <button onClick={() => setSel(new Set())} className="text-[11px] text-slate-500 hover:text-slate-700 underline">
+                quitar selección
+              </button>
             </>
           )}
-          {aplicando && <span className="text-badge text-slate-500">guardando…</span>}
+          {aplicando && <span className="text-[11px] text-slate-500">guardando…</span>}
         </div>
 
-        <div className="divide-y divide-slate-50">
+        <div className="max-h-[55vh] overflow-y-auto divide-y divide-slate-50">
           {visibles.length === 0 && (
-            <p className="text-secondary text-slate-500 italic px-5 py-6 text-center">No hay clubes que coincidan.</p>
+            <p className="text-xs text-slate-400 italic px-5 py-6 text-center">No hay clubes que coincidan.</p>
           )}
           {visibles.slice(0, 200).map(c => {
             const zona = zonaDe(c.nombre, clubZonas)
@@ -171,33 +173,34 @@ export function ZonasPanel({ players, clubZonas, onSetClubZona, onClose, showToa
                   aria-label={`Seleccionar ${c.nombre}`}
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="text-secondary font-semibold text-slate-700 truncate">
+                  <div className="text-xs font-semibold text-slate-700 truncate">
                     {c.nombre}
-                    {aMano && <span className="ml-1.5 text-badge font-bold text-blue-600 uppercase">a mano</span>}
+                    {aMano && <span className="ml-1.5 text-[9px] font-bold text-blue-600 uppercase">a mano</span>}
                   </div>
-                  <div className="text-badge text-slate-500">{c.n} jugador{c.n !== 1 ? 'es' : ''}</div>
+                  <div className="text-[10px] text-slate-400">{c.n} jugador{c.n !== 1 ? 'es' : ''}</div>
                 </div>
-                <Select
+                <select
                   value={zona ?? ''}
                   disabled={guardando === c.club}
                   onChange={e => void cambiar(c, e.target.value)}
-                  aria-label={`Zona de ${c.nombre}`}
-                  className={`w-auto max-w-[230px] py-1 text-meta ${zona ? '' : 'border-amber-300 bg-amber-50 text-amber-700'}`}
+                  className={`text-[11px] border rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 max-w-[230px] ${
+                    zona ? 'border-slate-200 text-slate-700' : 'border-amber-300 bg-amber-50 text-amber-700'
+                  }`}
                 >
                   <option value="">— sin zona —</option>
                   {ZONAS.map(z => <option key={z} value={z}>{z}</option>)}
-                </Select>
+                </select>
               </div>
             )
           })}
           {visibles.length > 200 && (
-            <p className="text-badge text-slate-500 italic px-5 py-3 text-center">
+            <p className="text-[11px] text-slate-400 italic px-5 py-3 text-center">
               Se muestran 200 de {visibles.length}. Busca por nombre para llegar al resto.
             </p>
           )}
         </div>
       </div>
-    </Dialog>
+    </div>
   )
 }
 
@@ -315,7 +318,7 @@ export function EquiposTab({
 
   const chipCls = (d: { rel: number; cub: number } | undefined, activo: boolean) => {
     if (activo) return 'bg-primary text-white border-primary'
-    if (!d || d.rel === 0) return 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
+    if (!d || d.rel === 0) return 'bg-white text-slate-400 border-slate-200 hover:border-slate-400'
     const pct = d.cub / d.rel
     if (pct >= 1) return 'bg-green-50 text-green-700 border-green-300 hover:border-green-500'
     if (pct >= 0.5) return 'bg-amber-50 text-amber-700 border-amber-300 hover:border-amber-500'
@@ -334,51 +337,50 @@ export function EquiposTab({
             {resumen.huecos.length > 0 && <span className="text-red-600 font-semibold"> · {resumen.rel - resumen.cub} sin cubrir</span>}
           </span>
         ) : (
-          <span className="text-secondary text-slate-500 inline-flex items-center gap-1">Marca con <Star className="w-3.5 h-3.5 text-amber-500" aria-label="la estrella" /> los equipos que te importan y esto se convierte en tu cuadro de control</span>
+          <span className="text-xs text-slate-400">Marca con ★ los equipos que te importan y esto se convierte en tu cuadro de control</span>
         )}
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
-          <Button
-            size="sm"
-            variant="secondary"
-            icon={historico ? <History /> : <CalendarDays />}
+          <button
             onClick={() => setHistorico(h => !h)}
-            aria-pressed={historico}
             title={historico
               ? 'Ahora se cuentan TODOS los partidos, de cualquier temporada. Pulsa para contar solo los de esta.'
               : `Ahora solo se cuentan los partidos del ${fmtDate(desde)} en adelante. Pulsa para contar todo el histórico.`}
+            className="text-[11px] font-semibold border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-600 hover:border-slate-400"
           >
-            {historico ? 'Todo el histórico' : `Temporada ${etiquetaTemporada(desde)} · desde ${fmtDate(desde)}`}
-          </Button>
-          <Button size="sm" variant="secondary" icon={<MapPin />} onClick={onAbrirZonas}>Zonas</Button>
-          <Button size="sm" variant="secondary" icon={<ClipboardList />} onClick={onAbrirPlantilla}>Actualizar plantilla</Button>
-          <Button size="sm" variant="primary" icon={<Plus />} onClick={() => setAltaAbierta(a => !a)} aria-expanded={altaAbierta}>Equipo</Button>
+            {historico ? '🕓 Todo el histórico' : `📅 Temporada ${etiquetaTemporada(desde)} · desde ${fmtDate(desde)}`}
+          </button>
+          <button onClick={onAbrirZonas} className="text-[11px] font-semibold border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-600 hover:border-primary hover:text-primary">📍 Zonas</button>
+          <button onClick={onAbrirPlantilla} className="text-[11px] font-semibold border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-600 hover:border-primary hover:text-primary">📋 Actualizar plantilla</button>
+          <button onClick={() => setAltaAbierta(a => !a)} className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold bg-primary text-white rounded-lg hover:bg-primary/90">
+            <Plus className="w-3.5 h-3.5" /> Equipo
+          </button>
         </div>
       </div>
 
       {altaAbierta && (
         <div className="bg-blue-50/50 border border-blue-200 rounded-xl p-3 flex flex-wrap items-end gap-2">
           <div className="flex-1 min-w-[200px]">
-            <label className="block text-badge font-bold text-slate-500 uppercase mb-1">Equipo</label>
-            <Input
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Equipo</label>
+            <input
               value={nuevoNombre}
               onChange={e => setNuevoNombre(e.target.value)}
               placeholder="Ej.: Rayo Vallecano Juv A"
-              aria-label="Nombre del equipo"
               autoFocus
               onKeyDown={e => { if (e.key === 'Enter') void crearEquipo() }}
+              className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
             />
           </div>
           <div className="min-w-[160px]">
-            <label className="block text-badge font-bold text-slate-500 uppercase mb-1">Categoría</label>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Categoría</label>
             <select value={nuevaCat} onChange={e => setNuevaCat(e.target.value)} className={SELECT_CLS + ' w-full'}>
               <option value="">— sin categoría —</option>
               {categorias.filter(c => c !== SIN_CATEGORIA).map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
-          <Button variant="primary" icon={<Star />} onClick={() => void crearEquipo()}>
-            Añadir como relevante
-          </Button>
-          <p className="w-full text-badge text-slate-500">
+          <button onClick={() => void crearEquipo()} className="px-3 py-1.5 text-xs font-bold bg-primary text-white rounded-lg hover:bg-primary/90">
+            Añadir como ★
+          </button>
+          <p className="w-full text-[10.5px] text-slate-500">
             Para equipos que te importan y de los que <strong>todavía no tienes a nadie apuntado</strong>.
           </p>
         </div>
@@ -387,8 +389,8 @@ export function EquiposTab({
       {/* ── Zonas y categorías: chips que resumen Y filtran ── */}
       <div className="space-y-1.5">
         <div className="flex flex-wrap items-center gap-1">
-          <span className="text-badge font-bold text-slate-500 uppercase w-14">Zona</span>
-          <button onClick={() => setZonaSel('all')} className={`text-badge font-semibold rounded-full border px-2 py-0.5 ${chipCls(undefined, zonaSel === 'all')}`}>Todas</button>
+          <span className="text-[10px] font-bold text-slate-400 uppercase w-14">Zona</span>
+          <button onClick={() => setZonaSel('all')} className={`text-[11px] font-semibold rounded-full border px-2 py-0.5 ${chipCls(undefined, zonaSel === 'all')}`}>Todas</button>
           {zonas.map(z => {
             const d = resumen.porZona[z]
             return (
@@ -396,7 +398,7 @@ export function EquiposTab({
                 key={z}
                 onClick={() => setZonaSel(zonaSel === z ? 'all' : z)}
                 title={z}
-                className={`text-badge font-semibold rounded-full border px-2 py-0.5 ${chipCls(d, zonaSel === z)}`}
+                className={`text-[11px] font-semibold rounded-full border px-2 py-0.5 ${chipCls(d, zonaSel === z)}`}
               >
                 {z === SIN_ZONA ? 'Sin zona' : (ZONA_CORTA[z as Zona] ?? z)}
                 {d && <span className="ml-1 opacity-70">{d.cub}/{d.rel}</span>}
@@ -405,15 +407,15 @@ export function EquiposTab({
           })}
         </div>
         <div className="flex flex-wrap items-center gap-1">
-          <span className="text-badge font-bold text-slate-500 uppercase w-14">Categ.</span>
-          <button onClick={() => setCatSel('all')} className={`text-badge font-semibold rounded-full border px-2 py-0.5 ${chipCls(undefined, catSel === 'all')}`}>Todas</button>
+          <span className="text-[10px] font-bold text-slate-400 uppercase w-14">Categ.</span>
+          <button onClick={() => setCatSel('all')} className={`text-[11px] font-semibold rounded-full border px-2 py-0.5 ${chipCls(undefined, catSel === 'all')}`}>Todas</button>
           {categorias.map(c => {
             const d = resumen.porCat[c]
             return (
               <button
                 key={c}
                 onClick={() => setCatSel(catSel === c ? 'all' : c)}
-                className={`text-badge font-semibold rounded-full border px-2 py-0.5 ${chipCls(d, catSel === c)}`}
+                className={`text-[11px] font-semibold rounded-full border px-2 py-0.5 ${chipCls(d, catSel === c)}`}
               >
                 {c === SIN_CATEGORIA ? 'Sin categoría' : c}
                 {d && <span className="ml-1 opacity-70">{d.cub}/{d.rel}</span>}
@@ -426,19 +428,19 @@ export function EquiposTab({
       {/* ── Huecos: lo accionable de verdad ── */}
       {resumen.huecos.length > 0 && (
         <div className="bg-red-50/60 border border-red-200 rounded-xl px-3 py-2 flex flex-wrap items-center gap-1.5">
-          <span className="text-badge font-bold text-red-700">Dónde falta control:</span>
+          <span className="text-[11px] font-bold text-red-700">Dónde falta control:</span>
           {resumen.huecos.slice(0, 8).map(h => (
             <button
               key={h.zona + h.cat}
               onClick={() => { setZonaSel(h.zona); setCatSel(h.cat); setSoloRelevantes(true) }}
-              className="text-badge font-semibold bg-white border border-red-200 text-red-700 rounded-full px-2 py-0.5 hover:border-red-400"
+              className="text-[11px] font-semibold bg-white border border-red-200 text-red-700 rounded-full px-2 py-0.5 hover:border-red-400"
             >
               {(ZONA_CORTA[h.zona as Zona] ?? h.zona)} · {h.cat === SIN_CATEGORIA ? '—' : h.cat}
               <span className="ml-1 font-bold">{h.falta}</span>
             </button>
           ))}
-          {resumen.huecos.length > 8 && <span className="text-badge text-red-600">y {resumen.huecos.length - 8} más</span>}
-          <button onClick={() => setVerMatriz(v => !v)} className="ml-auto text-badge font-semibold text-red-700 hover:underline">
+          {resumen.huecos.length > 8 && <span className="text-[11px] text-red-600">y {resumen.huecos.length - 8} más</span>}
+          <button onClick={() => setVerMatriz(v => !v)} className="ml-auto text-[11px] font-semibold text-red-700 hover:underline">
             {verMatriz ? 'Ocultar cuadro' : 'Ver cuadro completo'}
           </button>
         </div>
@@ -447,7 +449,7 @@ export function EquiposTab({
       {/* ── Cuadro completo, plegado por defecto ── */}
       {verMatriz && (
         <div className="bg-white border border-slate-200 rounded-xl overflow-x-auto">
-          <table className="w-full text-badge">
+          <table className="w-full text-[11px]">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200">
                 <th className="text-left px-3 py-1.5 font-semibold text-slate-500 uppercase">Zona</th>
@@ -477,21 +479,20 @@ export function EquiposTab({
 
       {/* ── Filtros finos ── */}
       <div className="flex flex-wrap items-center gap-2 pt-1">
-        <label className="flex items-center gap-1.5 text-badge font-semibold text-slate-600 cursor-pointer">
+        <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 cursor-pointer">
           <input type="checkbox" checked={soloRelevantes} onChange={e => setSoloRelevantes(e.target.checked)} className="accent-blue-600" />
-          Solo <Star className="w-3.5 h-3.5 text-amber-500" aria-hidden="true" /> relevantes
+          Solo ★ relevantes
         </label>
         <div className="relative flex-1 min-w-[150px] max-w-xs">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" aria-hidden="true" />
-          <Input
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+          <input
             value={q}
             onChange={e => setQ(e.target.value)}
             placeholder="Buscar equipo…"
-            aria-label="Buscar equipo"
-            className="pl-8"
+            className="w-full pl-8 pr-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30"
           />
         </div>
-        <span className="text-xs text-slate-500">{visibles.length} equipos</span>
+        <span className="text-xs text-slate-400">{visibles.length} equipos</span>
         <BotonCsv
           nombre="equipos-control"
           cabeceras={['Equipo', 'Club', 'Zona', 'Categoría', 'Relevante', 'Cubierto', 'Jugadores', 'Informes', 'Partidos temporada', 'Partidos total', 'Último partido']}
@@ -508,13 +509,13 @@ export function EquiposTab({
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-badge text-slate-500 uppercase tracking-wide">
-                <th className="px-2 py-2 font-semibold w-10" title="Relevante: este equipo nos importa"><Star className="w-3.5 h-3.5 inline" aria-label="Relevante" /></th>
-                <th className="px-2 py-2 font-semibold w-10" title="Cubierto esta temporada"><Check className="w-3.5 h-3.5 inline" aria-label="Cubierto" /></th>
+              <tr className="bg-slate-50 border-b border-slate-200 text-[11px] text-slate-500 uppercase tracking-wide">
+                <th className="px-2 py-2 font-semibold w-8" title="Relevante: este equipo nos importa">★</th>
+                <th className="px-2 py-2 font-semibold w-8" title="Cubierto esta temporada">✓</th>
                 <th className="text-left px-3 py-2 font-semibold">Equipo</th>
                 <th className="text-left px-2 py-2 font-semibold">Zona</th>
                 <th className="text-left px-2 py-2 font-semibold">Categoría</th>
-                <th className="text-center px-2 py-2 font-semibold" title="Jugadores en la app">Jug.</th>
+                <th className="text-center px-2 py-2 font-semibold" title="Jugadores en la BBDD">Jug.</th>
                 <th className="text-center px-2 py-2 font-semibold" title="Informes sobre jugadores de este equipo">Inf.</th>
                 <th className="text-center px-2 py-2 font-semibold" title="Partidos suyos en la pestaña Partidos">Part.</th>
                 <th className="text-left px-2 py-2 font-semibold">Último</th>
@@ -524,7 +525,7 @@ export function EquiposTab({
             </thead>
             <tbody className="divide-y divide-slate-50">
               {visibles.length === 0 && (
-                <tr><td colSpan={11} className="text-center py-10 text-slate-500 text-sm">No hay equipos que coincidan.</td></tr>
+                <tr><td colSpan={11} className="text-center py-10 text-slate-400 text-sm">No hay equipos que coincidan.</td></tr>
               )}
               {visibles.slice(0, 300).map(f => {
                 const sem = semaforoEquipo(f, nPartidos(f))
@@ -532,60 +533,50 @@ export function EquiposTab({
                   <tr
                     key={f.clave}
                     onClick={() => onAbrirEquipo(f.nombre)}
-                    tabIndex={0}
-                    role="button"
-                    aria-label={`Abrir ${f.nombre}`}
-                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onAbrirEquipo(f.nombre) } }}
-                    className={`cursor-pointer hover:bg-slate-50 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40 ${equipoAbierto && normEquipo(equipoAbierto) === f.clave ? 'bg-blue-50/50' : ''}`}
+                    className={`cursor-pointer hover:bg-slate-50 transition-colors ${equipoAbierto && normEquipo(equipoAbierto) === f.clave ? 'bg-blue-50/50' : ''}`}
                   >
-                    <td className="px-1 py-1 text-center" onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
+                    <td className="px-2 py-2 text-center" onClick={e => e.stopPropagation()}>
                       <button
-                        type="button"
                         onClick={() => void marcar(f, 'relevante')}
-                        aria-pressed={f.relevante}
-                        aria-label={f.relevante ? `Quitar ${f.nombre} de relevantes` : `Marcar ${f.nombre} como relevante`}
                         title={f.relevante ? 'Quitar de relevantes' : 'Marcar como relevante'}
-                        className={`inline-flex items-center justify-center min-w-11 min-h-11 sm:min-w-0 sm:min-h-0 sm:w-8 sm:h-8 rounded-lg ${f.relevante ? 'text-amber-500' : 'text-slate-500 hover:text-amber-500'}`}
-                      ><Star className={`w-4 h-4 ${f.relevante ? 'fill-current' : ''}`} /></button>
+                        className={`text-base leading-none ${f.relevante ? 'text-amber-500' : 'text-slate-200 hover:text-amber-400'}`}
+                      >★</button>
                     </td>
-                    <td className="px-1 py-1 text-center" onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
+                    <td className="px-2 py-2 text-center" onClick={e => e.stopPropagation()}>
                       <button
-                        type="button"
                         onClick={() => void marcar(f, 'cubierto')}
-                        aria-pressed={f.cubierto}
-                        aria-label={f.cubierto ? `Marcar ${f.nombre} como no cubierto` : `Marcar ${f.nombre} como cubierto esta temporada`}
                         title={f.cubierto ? 'Marcar como NO cubierto' : 'Marcar como cubierto esta temporada'}
-                        className={`inline-flex items-center justify-center min-w-11 min-h-11 sm:min-w-0 sm:min-h-0 sm:w-8 sm:h-8 rounded-lg ${f.cubierto ? 'text-green-600' : 'text-slate-500 hover:text-green-600'}`}
-                      ><Check className="w-4 h-4" strokeWidth={f.cubierto ? 3 : 2} /></button>
+                        className={`text-sm leading-none font-bold ${f.cubierto ? 'text-green-600' : 'text-slate-200 hover:text-green-500'}`}
+                      >✓</button>
                     </td>
                     <td className="px-3 py-2 font-medium text-slate-800">
                       {f.nombre}
-                      {!f.enCatalogo && <span className="ml-1.5 text-badge font-bold text-blue-500 uppercase" title="Todavía no está en el catálogo">nuevo</span>}
+                      {!f.enCatalogo && <span className="ml-1.5 text-[9px] font-bold text-blue-500 uppercase" title="Todavía no está en el catálogo">nuevo</span>}
                     </td>
-                    <td className="px-2 py-2 text-badge text-slate-500 whitespace-nowrap">
+                    <td className="px-2 py-2 text-[11px] text-slate-500 whitespace-nowrap">
                       {f.zona === SIN_ZONA ? <span className="text-amber-600">sin zona</span> : (ZONA_CORTA[f.zona as Zona] ?? f.zona)}
                     </td>
-                    <td className="px-2 py-2 text-badge text-slate-500 whitespace-nowrap">
+                    <td className="px-2 py-2 text-[11px] text-slate-500 whitespace-nowrap">
                       {f.categoria === SIN_CATEGORIA ? <span className="text-amber-600">—</span> : f.categoria}
                     </td>
-                    <td className={`px-2 py-2 text-center text-xs font-semibold ${f.jugadores ? 'text-slate-700' : 'text-slate-500'}`}>{f.jugadores || '—'}</td>
-                    <td className={`px-2 py-2 text-center text-xs ${f.informes ? 'text-slate-600' : 'text-slate-500'}`}>{f.informes || '—'}</td>
+                    <td className={`px-2 py-2 text-center text-xs font-semibold ${f.jugadores ? 'text-slate-700' : 'text-slate-300'}`}>{f.jugadores || '—'}</td>
+                    <td className={`px-2 py-2 text-center text-xs ${f.informes ? 'text-slate-600' : 'text-slate-300'}`}>{f.informes || '—'}</td>
                     <td className="px-2 py-2 text-center text-xs">
                       <span
-                        className={nPartidos(f) ? 'font-semibold text-slate-700' : 'text-slate-500'}
+                        className={nPartidos(f) ? 'font-semibold text-slate-700' : 'text-slate-300'}
                         title={historico ? 'Partidos de todas las temporadas' : `Partidos desde el ${fmtDate(desde)}`}
                       >{nPartidos(f) || '—'}</span>
                       {!historico && f.partidosHist > f.partidos && (
-                        <span className="text-badge text-slate-500" title={`${f.partidosHist} partidos suyos en total, contando temporadas anteriores`}> ({f.partidosHist})</span>
+                        <span className="text-[10px] text-slate-400" title={`${f.partidosHist} partidos suyos en total, contando temporadas anteriores`}> ({f.partidosHist})</span>
                       )}
                     </td>
-                    <td className="px-2 py-2 text-badge text-slate-500 whitespace-nowrap">
-                      {f.ultimoPartido ? fmtDate(f.ultimoPartido) : <span className="text-slate-500">—</span>}
+                    <td className="px-2 py-2 text-[11px] text-slate-500 whitespace-nowrap">
+                      {f.ultimoPartido ? fmtDate(f.ultimoPartido) : <span className="text-slate-300">—</span>}
                     </td>
                     <td className="px-2 py-2">
-                      <span className={`inline-flex text-badge font-bold rounded-full border px-2 py-0.5 ${sem.cls}`}>{sem.txt}</span>
+                      <span className={`inline-flex text-[10px] font-bold rounded-full border px-2 py-0.5 ${sem.cls}`}>{sem.txt}</span>
                     </td>
-                    <td className="px-2 py-2 text-right"><ChevronRight className="w-3.5 h-3.5 text-slate-500 inline" aria-hidden="true" /></td>
+                    <td className="px-2 py-2 text-right"><ChevronRight className="w-3.5 h-3.5 text-slate-300 inline" /></td>
                   </tr>
                 )
               })}
@@ -593,7 +584,7 @@ export function EquiposTab({
           </table>
         </div>
         {visibles.length > 300 && (
-          <p className="text-badge text-slate-500 italic px-4 py-3 text-center border-t border-slate-100">
+          <p className="text-[11px] text-slate-400 italic px-4 py-3 text-center border-t border-slate-100">
             Se muestran 300 de {visibles.length}. Filtra por zona o categoría para ver el resto.
           </p>
         )}

@@ -2,12 +2,10 @@ import { useState } from "react";
 import type { Player, Postpartido, Task } from "../types";
 import { calcAge } from "../types";
 import type { Profile } from "../contexts/AuthContext";
+import logoImg from '../assets/logo.jpeg';
 import { EmptyState } from "../components/EmptyState";
-import { DetailHeader } from "../components/shell";
-import { SectionTabs } from "../components/ui";
-import { L } from "../lib/labels";
 import {
-  Users, FileText, AlertTriangle, Shield, ClipboardList,
+  ArrowLeft, LogOut, Users, FileText, AlertTriangle, Shield, ClipboardList,
 } from "lucide-react";
 
 interface Props {
@@ -16,29 +14,57 @@ interface Props {
   postpartidos: Postpartido[];
   tasks: Task[];
   onBack: () => void;
+  onLogout: () => void;
+  onAdmin?: () => void;
 }
 
 type TabId = "plantilla" | "contratos" | "postpartidos";
 
-export function OverviewPanel({ players, profiles, postpartidos, tasks, onBack }: Props) {
+export function OverviewPanel({ players, profiles, postpartidos, tasks, onBack, onLogout, onAdmin }: Props) {
   const [tab, setTab] = useState<TabId>("plantilla");
 
+  const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
+    { id: "plantilla", label: "Plantilla", icon: <Users className="w-4 h-4" /> },
+    { id: "contratos", label: "Contratos", icon: <FileText className="w-4 h-4" /> },
+    { id: "postpartidos", label: "Postpartidos", icon: <ClipboardList className="w-4 h-4" /> },
+  ];
+
   return (
-    <div className="min-h-dvh bg-slate-50">
-      {/* Pantalla admin sin nivel 1 propio: DetailHeader con atrás */}
-      <DetailHeader onBack={onBack} title="Overview" subtitle="Estadísticas generales" />
-      <SectionTabs<TabId>
-        variant="secondary"
-        label="Secciones de Overview"
-        className="sticky top-[var(--shell-h)] z-20 bg-white border-b border-slate-200 px-4 [&>div]:mx-auto [&>div]:max-w-5xl"
-        items={[
-          { id: "plantilla", label: "Plantilla", icon: <Users /> },
-          { id: "contratos", label: "Contratos", icon: <FileText /> },
-          { id: "postpartidos", label: "Postpartidos", icon: <ClipboardList /> },
-        ]}
-        value={tab}
-        onChange={setTab}
-      />
+    <div className="min-h-screen bg-slate-50">
+      {/* Header */}
+      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
+        <div className="mx-auto max-w-5xl flex items-center gap-3 px-4 py-3">
+          <button onClick={onBack} aria-label="Volver" className="p-2 sm:p-1.5 rounded-md hover:bg-slate-100 text-slate-500 hover:text-slate-700">
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <img src={logoImg} alt="" className="h-8 w-auto rounded" />
+          <div className="flex-1 min-w-0">
+            <h1 className="text-base font-bold text-slate-800 truncate">Overview</h1>
+            <p className="text-xs text-slate-400 truncate">Estadísticas generales</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {onAdmin && (
+              <button onClick={onAdmin} aria-label="Admin" className="p-2 rounded-md hover:bg-slate-100 text-slate-500 hover:text-slate-700" title="Admin">
+                <Shield className="w-4 h-4" />
+              </button>
+            )}
+            <button onClick={onLogout} aria-label="Cerrar sesión" className="p-2 rounded-md hover:bg-slate-100 text-slate-500 hover:text-slate-700" title="Cerrar sesión">
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+        {/* Tabs */}
+        <div className="mx-auto max-w-5xl px-4 flex gap-1">
+          {tabs.map((t) => (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
+                tab === t.id ? 'border-primary text-slate-800' : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}>
+              {t.icon}{t.label}
+            </button>
+          ))}
+        </div>
+      </header>
 
       <main className="mx-auto max-w-5xl px-4 py-6">
         {tab === "plantilla" && <PlantillaTab players={players} profiles={profiles} />}
@@ -129,12 +155,12 @@ function PlantillaTab({ players, profiles }: { players: Player[]; profiles: Prof
             return (
               <div key={band.label} className="flex-1 flex flex-col items-center gap-1">
                 <span className="text-xs font-semibold text-slate-700">{band.count}</span>
-                <span className="text-badge text-slate-500">{pct}%</span>
+                <span className="text-[9px] text-slate-400">{pct}%</span>
                 <div
                   className="w-full rounded-t bg-blue-400 transition-all"
                   style={{ height: `${barHeight}px` }}
                 />
-                <span className="text-meta text-slate-500 font-medium">{band.label}</span>
+                <span className="text-[11px] text-slate-500 font-medium">{band.label}</span>
               </div>
             );
           })}
@@ -148,7 +174,7 @@ function PlantillaTab({ players, profiles }: { players: Player[]; profiles: Prof
           <div className="space-y-1.5 max-h-48 overflow-y-auto">
             {nationalities.map(([nat, count]) => (
               <div key={nat} className="flex items-center justify-between gap-2 py-1">
-                <span className="text-secondary text-slate-700 truncate min-w-0">{nat}</span>
+                <span className="text-xs text-slate-700 truncate min-w-0">{nat}</span>
                 <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded flex-shrink-0">{count}</span>
               </div>
             ))}
@@ -161,7 +187,7 @@ function PlantillaTab({ players, profiles }: { players: Player[]; profiles: Prof
           <div className="space-y-1.5 max-h-48 overflow-y-auto">
             {positions.map(([pos, count]) => (
               <div key={pos} className="flex items-center justify-between gap-2 py-1">
-                <span className="text-secondary text-slate-700 truncate min-w-0">{pos}</span>
+                <span className="text-xs text-slate-700 truncate min-w-0">{pos}</span>
                 <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded flex-shrink-0">{count}</span>
               </div>
             ))}
@@ -177,7 +203,7 @@ function PlantillaTab({ players, profiles }: { players: Player[]; profiles: Prof
           <div className="space-y-1.5 max-h-48 overflow-y-auto">
             {clubs.map(([club, count]) => (
               <div key={club} className="flex items-center justify-between gap-2 py-1">
-                <span className="text-secondary text-slate-700 truncate min-w-0">{club}</span>
+                <span className="text-xs text-slate-700 truncate min-w-0">{club}</span>
                 <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded flex-shrink-0">{count}</span>
               </div>
             ))}
@@ -189,15 +215,15 @@ function PlantillaTab({ players, profiles }: { players: Player[]; profiles: Prof
 
         {/* Managers */}
         <div className="bg-white border border-slate-200 rounded-lg p-4">
-          <h3 className="text-sm font-semibold text-slate-800 mb-3">{L.encargados}</h3>
+          <h3 className="text-sm font-semibold text-slate-800 mb-3">Encargados</h3>
           <div className="space-y-1.5 max-h-48 overflow-y-auto">
             {managers.map((m) => (
               <div key={m.profile!.id} className="flex items-center justify-between gap-2 py-1">
                 <div className="flex items-center gap-2 min-w-0">
-                  <span aria-hidden="true" className="w-6 h-6 rounded-full bg-slate-200 text-badge font-bold flex items-center justify-center text-slate-600 flex-shrink-0">
+                  <span className="w-5 h-5 rounded-full bg-slate-200 text-[9px] font-bold flex items-center justify-center text-slate-600 flex-shrink-0">
                     {m.profile!.avatar}
                   </span>
-                  <span className="text-secondary text-slate-700 truncate">{m.profile!.name}</span>
+                  <span className="text-xs text-slate-700 truncate">{m.profile!.name}</span>
                 </div>
                 <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded flex-shrink-0 whitespace-nowrap">{m.count} jugadores</span>
               </div>
@@ -272,7 +298,7 @@ function ContratosTab({ players }: { players: Player[] }) {
     return parts.join(' ');
   };
   const colorForDays = (d: number) =>
-    d < 0 ? 'text-slate-500' : d < 183 ? 'text-red-600' : d < 365 ? 'text-amber-600' : 'text-emerald-600';
+    d < 0 ? 'text-slate-400' : d < 183 ? 'text-red-600' : d < 365 ? 'text-amber-600' : 'text-emerald-600';
   const bgForDays = (d: number) =>
     d < 0 ? 'bg-slate-50' : d < 183 ? 'bg-red-50 border-red-100' : d < 365 ? 'bg-amber-50 border-amber-100' : 'bg-emerald-50 border-emerald-100';
 
@@ -294,9 +320,9 @@ function ContratosTab({ players }: { players: Player[] }) {
           <h3 className="text-sm font-semibold text-slate-800">Contratos de representación</h3>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[520px] text-secondary">
+          <table className="w-full min-w-[520px] text-xs">
             <thead>
-              <tr className="bg-slate-50 text-slate-500 text-meta uppercase tracking-wide">
+              <tr className="bg-slate-50 text-slate-500">
                 <th className="text-left px-4 py-2 font-medium">Jugador</th>
                 <th className="text-left px-4 py-2 font-medium">Inicio</th>
                 <th className="text-left px-4 py-2 font-medium">Fin</th>
@@ -335,9 +361,9 @@ function ContratosTab({ players }: { players: Player[] }) {
           <h3 className="text-sm font-semibold text-slate-800">Contratos de club</h3>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[600px] text-secondary">
+          <table className="w-full min-w-[600px] text-xs">
             <thead>
-              <tr className="bg-slate-50 text-slate-500 text-meta uppercase tracking-wide">
+              <tr className="bg-slate-50 text-slate-500">
                 <th className="text-left px-4 py-2 font-medium">Jugador</th>
                 <th className="text-left px-4 py-2 font-medium">Club</th>
                 <th className="text-left px-4 py-2 font-medium">Fin</th>
@@ -441,7 +467,7 @@ function PostpartidosTab({ postpartidos, tasks, players, profiles }: {
         {/* Por responsable */}
         <div className="bg-white border border-slate-200 rounded-lg p-4">
           <h3 className="text-sm font-semibold text-slate-800 mb-1">Quién hace qué</h3>
-          <p className="text-meta text-slate-500 mb-3">Postpartidos por responsable · completados / total</p>
+          <p className="text-[11px] text-slate-400 mb-3">Postpartidos por responsable · completados / total</p>
           <div className="space-y-2.5 max-h-72 overflow-y-auto">
             {assignees.map((a) => {
               const pct = Math.round((a.total / maxAssignee) * 100);
@@ -450,14 +476,14 @@ function PostpartidosTab({ postpartidos, tasks, players, profiles }: {
                 <div key={a.id}>
                   <div className="flex items-center justify-between gap-2 mb-1">
                     <div className="flex items-center gap-2 min-w-0">
-                      <span aria-hidden="true" className="w-6 h-6 rounded-full bg-slate-200 text-badge font-bold flex items-center justify-center text-slate-600 flex-shrink-0">
+                      <span className="w-5 h-5 rounded-full bg-slate-200 text-[9px] font-bold flex items-center justify-center text-slate-600 flex-shrink-0">
                         {a.profile?.avatar ?? "?"}
                       </span>
-                      <span className="text-secondary text-slate-700 truncate">{a.profile?.name ?? L.sinResponsable}</span>
+                      <span className="text-xs text-slate-700 truncate">{a.profile?.name ?? "Sin responsable"}</span>
                     </div>
                     <span className="text-xs font-semibold text-slate-500 whitespace-nowrap flex-shrink-0">
                       {a.done}/{a.total}
-                      <span className="text-slate-500 font-normal"> · {donePct}%</span>
+                      <span className="text-slate-300 font-normal"> · {donePct}%</span>
                     </span>
                   </div>
                   <div className="h-2 bg-slate-100 rounded-full overflow-hidden" style={{ width: `${pct}%`, minWidth: '2rem' }}>
@@ -467,18 +493,18 @@ function PostpartidosTab({ postpartidos, tasks, players, profiles }: {
               );
             })}
           </div>
-          <p className="text-meta text-slate-500 mt-2">Largo de la barra = volumen · relleno verde = parte completada</p>
+          <p className="text-[10px] text-slate-300 mt-2">Largo de la barra = volumen · relleno verde = parte completada</p>
         </div>
 
         {/* Por jugador */}
         <div className="bg-white border border-slate-200 rounded-lg p-4">
           <h3 className="text-sm font-semibold text-slate-800 mb-1">Jugadores con más postpartidos</h3>
-          <p className="text-meta text-slate-500 mb-3">Informes postpartido acumulados por jugador</p>
+          <p className="text-[11px] text-slate-400 mb-3">Informes postpartido acumulados por jugador</p>
           <div className="space-y-1.5 max-h-72 overflow-y-auto">
             {topPlayers.map(([name, v], i) => (
               <div key={name} className="flex items-center gap-2 py-1">
-                <span className={`w-5 text-meta font-bold flex-shrink-0 text-right ${i < 3 ? "text-blue-600" : "text-slate-500"}`}>{i + 1}</span>
-                <span className="text-secondary text-slate-700 truncate min-w-0 flex-1">{name}</span>
+                <span className={`w-5 text-[11px] font-bold flex-shrink-0 text-right ${i < 3 ? "text-blue-600" : "text-slate-300"}`}>{i + 1}</span>
+                <span className="text-xs text-slate-700 truncate min-w-0 flex-1">{name}</span>
                 <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden flex-shrink-0 hidden sm:block">
                   <div className="h-full bg-blue-400" style={{ width: `${Math.round((v.total / maxPlayer) * 100)}%` }} />
                 </div>
@@ -505,7 +531,7 @@ function StatBox({ label, value, color }: { label: string; value: string; color:
   return (
     <div className={`rounded-lg p-3 ${colors[color] || colors.slate}`}>
       <p className="text-lg font-bold">{value}</p>
-      <p className="text-badge font-medium opacity-80 uppercase tracking-wide">{label}</p>
+      <p className="text-[11px] font-medium opacity-70 uppercase tracking-wide">{label}</p>
     </div>
   );
 }

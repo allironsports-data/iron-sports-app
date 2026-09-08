@@ -1,15 +1,14 @@
 import React, { useState, useMemo } from 'react'
 import {
-  Search, X, Plus, Trash2,
-  FileText, Pencil, Inbox, Users, ClipboardList, Check, ArrowRight,
+  Search, X, Plus, LogOut, Trash2, Send,
+  FileText, Pencil, Inbox, TrendingUp, Eye, Users,
 } from 'lucide-react'
+import logoImg from '../assets/logo.jpeg'
 import type { ScoutingPlayer, ScoutingReport, BoulemaPeticion, BoulemaPlayer } from '../types'
 import type { Profile } from '../contexts/AuthContext'
 import { ToastStack } from '../components/ToastStack'
 import { useToast } from '../hooks/useToast'
-import { ConfirmModal } from '../components/ConfirmModal'
-import { Badge, Button, ClickableRow, Dialog, Field, IconButton, Input, SectionTabs, Select, Textarea } from '../components/ui'
-import { L } from '../lib/labels'
+import { useEscapeKey } from '../hooks/useEscapeKey'
 import { useIsDesktop } from '../hooks/useIsDesktop'
 import { useDebounce } from '../hooks/useDebounce'
 import * as db from '../lib/db'
@@ -70,6 +69,18 @@ function personaToName(persona: string | undefined, profiles: Profile[]): string
   return p ? p.name : persona
 }
 
+function FormRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">{label}</label>
+      {children}
+    </div>
+  )
+}
+
+function Spinner() {
+  return <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+}
 
 // ── Chips de filtros activos ─────────────────────────────────
 type FilterChip = { key: string; label: string; onRemove: () => void }
@@ -77,16 +88,16 @@ function ActiveFilterChips({ chips, onClearAll }: { chips: FilterChip[]; onClear
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {chips.map(c => (
-        <span key={c.key} className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full pl-2.5 pr-1 py-0.5 text-badge font-medium">
+        <span key={c.key} className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full pl-2.5 pr-1 py-0.5 text-[11px] font-medium">
           {c.label}
-          <IconButton label={`Quitar filtro ${c.label}`} onClick={c.onRemove} className="min-h-0 min-w-0 h-5 w-5 sm:h-5 sm:w-5 hover:bg-blue-100 [&>svg]:w-3 [&>svg]:h-3">
-            <X />
-          </IconButton>
+          <button onClick={c.onRemove} aria-label={`Quitar filtro ${c.label}`} className="p-0.5 rounded-full hover:bg-blue-100">
+            <X className="w-3 h-3" />
+          </button>
         </span>
       ))}
-      <Button variant="link" size="sm" onClick={onClearAll} className="ml-1">
+      <button onClick={onClearAll} className="text-[11px] text-slate-400 hover:text-slate-600 underline ml-1">
         Limpiar todo
-      </Button>
+      </button>
     </div>
   )
 }
@@ -130,11 +141,9 @@ function AddBoulemaModal({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  const dirty = initial
-    ? (playerName !== initial.playerName || notes !== (initial.notes ?? '') || team !== (initial.team ?? ''))
-    : !!(playerName.trim() || notes.trim() || team.trim())
+  useEscapeKey(onClose)
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!playerName.trim() || saving) return
     setSaving(true)
@@ -162,116 +171,167 @@ function AddBoulemaModal({
   }
 
   return (
-    <Dialog
-      open
-      onClose={onClose}
-      title={initial ? 'Editar petición' : 'Añadir petición de informe'}
-      onSubmit={handleSubmit}
-      dirty={dirty}
-      historyKey="boulema-peticion"
-      footer={<>
-        {error && <p className="text-secondary text-red-600 w-full" role="alert">{error}</p>}
-        <Button onClick={onClose} className="mr-auto">{L.cancelar}</Button>
-        <Button type="submit" variant="primary" disabled={!playerName.trim()} loading={saving}>
-          {initial ? 'Guardar cambios' : 'Añadir petición'}
-        </Button>
-      </>}
-    >
-      <div className="space-y-3">
-        <Field label={L.jugador} required>
-          <Input
-            value={playerName}
-            onChange={e => setPlayerName(e.target.value)}
-            placeholder="Nombre del jugador"
-            required
-            autoFocus
-          />
-        </Field>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+          <h2 className="text-base font-semibold text-slate-800 flex items-center gap-2">
+            <Send className="w-4 h-4 text-slate-400" />
+            {initial ? 'Editar petición' : 'Añadir petición de informe'}
+          </h2>
+          <button onClick={onClose} aria-label="Cerrar" className="p-2.5 sm:p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
 
-        <Field label="Posición">
-          <Select value={position} onChange={e => setPosition(e.target.value)}>
-            <option value="">—</option>
-            {POSITIONS_SCOUTING.map(p => <option key={p} value={p}>{p}</option>)}
-          </Select>
-        </Field>
+        <form onSubmit={handleSubmit} className="p-5 space-y-3">
+          <FormRow label="Jugador *">
+            <input
+              value={playerName}
+              onChange={e => setPlayerName(e.target.value)}
+              placeholder="Nombre del jugador"
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+              required
+              autoFocus
+            />
+          </FormRow>
 
-        <div className="grid grid-cols-2 gap-2">
-          <Field label="Año nac.">
-            <Input value={birthYear} onChange={e => setBirthYear(e.target.value)} placeholder="2007" maxLength={4} />
-          </Field>
-          <Field label="Mes nac.">
-            <Select value={birthMonth} onChange={e => setBirthMonth(e.target.value)}>
+          <FormRow label="Posición">
+            <select
+              value={position}
+              onChange={e => setPosition(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+            >
               <option value="">—</option>
-              {MONTHS_ES_FULL.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
-            </Select>
-          </Field>
-        </div>
+              {POSITIONS_SCOUTING.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </FormRow>
 
-        <Field label="Equipo">
-          <Input value={team} onChange={e => setTeam(e.target.value)} placeholder="Club actual" />
-        </Field>
+          <div className="grid grid-cols-2 gap-2">
+            <FormRow label="Año nac.">
+              <input
+                value={birthYear}
+                onChange={e => setBirthYear(e.target.value)}
+                placeholder="2007"
+                maxLength={4}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              />
+            </FormRow>
+            <FormRow label="Mes nac.">
+              <select
+                value={birthMonth}
+                onChange={e => setBirthMonth(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              >
+                <option value="">—</option>
+                {MONTHS_ES_FULL.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
+              </select>
+            </FormRow>
+          </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <Field label="País (donde juega)">
-            <Input value={country} onChange={e => setCountry(e.target.value)} placeholder="Senegal" />
-          </Field>
-          <Field label="Nacionalidad">
-            <Input value={nationality} onChange={e => setNationality(e.target.value)} placeholder="Senegalesa" />
-          </Field>
-        </div>
+          <FormRow label="Equipo">
+            <input
+              value={team}
+              onChange={e => setTeam(e.target.value)}
+              placeholder="Club actual"
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+            />
+          </FormRow>
 
-        <Field label="Ofrecido por">
-          <Input
-            value={offeredBy}
-            onChange={e => setOfferedBy(e.target.value)}
-            placeholder="Agente, intermediario..."
-            list="offeredby-suggestions"
-          />
-        </Field>
-        <datalist id="offeredby-suggestions">
-          {boulemaPeticiones
-            .map(p => p.offeredBy)
-            .filter((v): v is string => !!v)
-            .filter((v, i, arr) => arr.indexOf(v) === i)
-            .map(v => <option key={v} value={v} />)}
-        </datalist>
+          <div className="grid grid-cols-2 gap-2">
+            <FormRow label="País (donde juega)">
+              <input
+                value={country}
+                onChange={e => setCountry(e.target.value)}
+                placeholder="Senegal"
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              />
+            </FormRow>
+            <FormRow label="Nacionalidad">
+              <input
+                value={nationality}
+                onChange={e => setNationality(e.target.value)}
+                placeholder="Senegalesa"
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              />
+            </FormRow>
+          </div>
 
-        <Field label="Pedir informe a" error={requestedFrom.length === 0 ? 'Selecciona al menos una persona' : undefined}>
-          {() => (
-            <div className="flex flex-wrap gap-2 pt-0.5" role="group" aria-label="Pedir informe a">
+          <FormRow label="Ofrecido por">
+            <input
+              value={offeredBy}
+              onChange={e => setOfferedBy(e.target.value)}
+              placeholder="Agente, intermediario..."
+              list="offeredby-suggestions"
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+            />
+            <datalist id="offeredby-suggestions">
+              {boulemaPeticiones
+                .map(p => p.offeredBy)
+                .filter((v): v is string => !!v)
+                .filter((v, i, arr) => arr.indexOf(v) === i)
+                .map(v => <option key={v} value={v} />)}
+            </datalist>
+          </FormRow>
+
+          <FormRow label="Pedir informe a">
+            <div className="flex flex-wrap gap-2 pt-0.5">
               {profiles.map(p => {
                 const selected = requestedFrom.includes(p.avatar)
                 return (
                   <button
                     key={p.id}
                     type="button"
-                    aria-pressed={selected}
                     onClick={() => toggleAssignee(p.avatar)}
-                    className={`flex items-center gap-1.5 px-2.5 min-h-9 sm:min-h-8 rounded-lg border text-secondary transition-colors ${
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-sm transition-colors ${
                       selected
                         ? 'bg-primary text-white border-primary'
-                        : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400'
+                        : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
                     }`}
                   >
-                    <span className="font-mono font-bold">{p.avatar}</span>
-                    <span>{p.name.split(' ')[0]}</span>
+                    <span className="font-mono font-bold text-xs">{p.avatar}</span>
+                    <span className="text-xs">{p.name.split(' ')[0]}</span>
                   </button>
                 )
               })}
             </div>
-          )}
-        </Field>
+            {requestedFrom.length === 0 && (
+              <p className="text-xs text-red-500 mt-1">Selecciona al menos una persona</p>
+            )}
+          </FormRow>
 
-        <Field label="Notas / contexto">
-          <Textarea
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-            placeholder="Información adicional sobre el jugador o contexto de la petición..."
-            rows={3}
-          />
-        </Field>
+          <FormRow label="Notas / contexto">
+            <textarea
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              placeholder="Información adicional sobre el jugador o contexto de la petición..."
+              rows={3}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-y"
+            />
+          </FormRow>
+
+          {error && <p className="text-xs text-red-500">{error}</p>}
+
+          <div className="flex gap-2 pt-2 sticky bottom-0 bg-white -mx-5 -mb-5 px-5 pb-5 safe-area-bottom">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2 text-sm font-medium border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={!playerName.trim() || saving}
+              className="flex-1 py-2 text-sm font-medium bg-primary text-white rounded-xl hover:bg-primary/90 disabled:opacity-40 transition-colors inline-flex items-center justify-center gap-2"
+            >
+              {saving && <Spinner />}
+              {saving ? 'Guardando…' : initial ? 'Guardar cambios' : 'Añadir petición'}
+            </button>
+          </div>
+        </form>
       </div>
-    </Dialog>
+    </div>
   )
 }
 
@@ -311,7 +371,9 @@ function RespondWithInformeModal({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  useEscapeKey(onClose)
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!text.trim() || saving) return
     // Verificar que la petición sigue existiendo (estado no obsoleto)
@@ -363,78 +425,102 @@ function RespondWithInformeModal({
   const authorName = personaToName(peticion.requestedBy, profiles)
 
   return (
-    <Dialog
-      open
-      onClose={onClose}
-      title="Crear informe"
-      onSubmit={handleSubmit}
-      dirty={!!(text.trim() || title.trim())}
-      historyKey="boulema-informe"
-      footer={<>
-        {error && <p className="text-secondary text-red-600 w-full" role="alert">{error}</p>}
-        <Button onClick={onClose} className="mr-auto">{L.cancelar}</Button>
-        <Button type="submit" variant="primary" disabled={!text.trim()} loading={saving}>Guardar informe</Button>
-      </>}
-    >
-      {/* Context banner */}
-      <div className="bg-blue-50 border border-blue-200 rounded-xl px-3 py-2.5 text-secondary mb-3">
-        <div className="font-semibold text-blue-800 mb-0.5">
-          {peticion.playerName}
-          {peticion.position && <span className="font-normal text-blue-700 ml-1.5">· {peticion.position}</span>}
-          {peticion.birthYear && <span className="font-normal text-blue-600 ml-1.5">{peticion.birthYear}</span>}
-          {peticion.team && <span className="font-normal text-blue-600 ml-1.5 italic">{peticion.team}</span>}
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+          <h2 className="text-base font-semibold text-slate-800 flex items-center gap-2">
+            <FileText className="w-4 h-4 text-slate-400" />
+            Crear informe
+          </h2>
+          <button onClick={onClose} aria-label="Cerrar" className="p-2.5 sm:p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
+            <X className="w-4 h-4" />
+          </button>
         </div>
-        <div className="text-blue-600">
-          Pedido por <span className="font-mono font-semibold">{peticion.requestedBy}</span>
-          {authorName && authorName !== peticion.requestedBy && ` · ${authorName.split(' ')[0]}`}
-        </div>
-        {existingPlayer ? (
-          <div className="mt-1 text-meta text-blue-600 inline-flex items-center gap-1"><Check className="w-3 h-3" aria-hidden="true" /> Jugador encontrado en la base de datos</div>
-        ) : (
-          <div className="mt-1 text-meta text-blue-600">Se creará un nuevo jugador en captación</div>
-        )}
-      </div>
 
-      <div className="space-y-3">
-        <Field label="Título (opcional)">
-          <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Título del informe" />
-        </Field>
-
-        <Field label={L.informe} required hint="Ctrl+Enter o ⌘+Enter guarda">
-          {p => (
-            <>
-              {!text.trim() && (
-                <Button
-                  variant="link"
-                  size="sm"
-                  icon={<ClipboardList />}
-                  onClick={() => setText('FÍSICO:\n\nTÉCNICA:\n\nTÁCTICA:\n\nMENTALIDAD:\n\nCONTEXTO (equipo, rol, rival):\n\nCONCLUSIÓN:\n')}
-                  className="self-start"
-                >
-                  Usar plantilla
-                </Button>
-              )}
-              <Textarea
-                {...p}
-                value={text}
-                onChange={e => setText(e.target.value)}
-                placeholder="Escribe aquí tu informe sobre el jugador..."
-                rows={6}
-                required
-                autoFocus
-              />
-            </>
+        {/* Context banner */}
+        <div className="mx-5 mt-4 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2.5 text-xs">
+          <div className="font-semibold text-blue-800 mb-0.5">
+            {peticion.playerName}
+            {peticion.position && <span className="font-normal text-blue-600 ml-1.5">· {peticion.position}</span>}
+            {peticion.birthYear && <span className="font-normal text-blue-500 ml-1.5">{peticion.birthYear}</span>}
+            {peticion.team && <span className="font-normal text-blue-500 ml-1.5 italic">{peticion.team}</span>}
+          </div>
+          <div className="text-blue-500">
+            Pedido por <span className="font-mono font-semibold">{peticion.requestedBy}</span>
+            {authorName && authorName !== peticion.requestedBy && ` · ${authorName.split(' ')[0]}`}
+          </div>
+          {existingPlayer ? (
+            <div className="mt-1 text-[11px] text-blue-400">✓ Jugador encontrado en la base de datos</div>
+          ) : (
+            <div className="mt-1 text-[11px] text-blue-400">Se creará un nuevo jugador en captación</div>
           )}
-        </Field>
+        </div>
 
-        <Field label={L.veredicto}>
-          <Select value={conclusion} onChange={e => setConclusion(e.target.value as BoulemaConclusionOption)}>
-            <option value="">Sin veredicto</option>
-            {BOULEMA_CONCLUSION_OPTIONS.filter(Boolean).map(c => <option key={c} value={c}>{c}</option>)}
-          </Select>
-        </Field>
+        <form onSubmit={handleSubmit} className="p-5 space-y-3">
+          <FormRow label="Título (opcional)">
+            <input
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="Título del informe"
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+            />
+          </FormRow>
+
+          <FormRow label="Informe *">
+              {!text.trim() && (
+                <button
+                  type="button"
+                  onClick={() => setText('FÍSICO:\n\nTÉCNICA:\n\nTÁCTICA:\n\nMENTALIDAD:\n\nCONTEXTO (equipo, rol, rival):\n\nCONCLUSIÓN:\n')}
+                  className="text-[11px] text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  📋 Usar plantilla
+                </button>
+              )}
+            <textarea
+              value={text}
+              onChange={e => setText(e.target.value)}
+              placeholder="Escribe aquí tu informe sobre el jugador..."
+              rows={6}
+              required
+              autoFocus
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 resize-y"
+            />
+          </FormRow>
+
+          <FormRow label="Conclusión">
+            <select
+              value={conclusion}
+              onChange={e => setConclusion(e.target.value as BoulemaConclusionOption)}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+            >
+              <option value="">Sin conclusión</option>
+              {BOULEMA_CONCLUSION_OPTIONS.filter(Boolean).map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </FormRow>
+
+          {error && <p className="text-xs text-red-500">{error}</p>}
+
+          <div className="flex gap-2 pt-2 sticky bottom-0 bg-white -mx-5 -mb-5 px-5 pb-5 safe-area-bottom">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2 text-sm font-medium border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={!text.trim() || saving}
+              className="flex-1 py-2 text-sm font-medium bg-primary text-white rounded-xl hover:bg-primary/90 disabled:opacity-40 transition-colors inline-flex items-center justify-center gap-2"
+            >
+              {saving && <Spinner />}
+              {saving ? 'Guardando…' : 'Guardar informe'}
+            </button>
+          </div>
+        </form>
       </div>
-    </Dialog>
+    </div>
   )
 }
 
@@ -457,14 +543,11 @@ function BoulemaPlayerModal({ profiles, initial, onClose, onSave, promote }: {
   const [manager, setManager] = useState(initial?.manager ?? '')
   const [notes, setNotes] = useState(initial?.notes ?? '')
   const [saving, setSaving] = useState(false)
+  useEscapeKey(onClose)
 
   const canSave = fullName.trim().length >= 2 && !saving
-  const dirty = initial
-    ? (fullName !== initial.fullName || notes !== (initial.notes ?? '') || contacto !== (initial.contacto ?? '') || team !== (initial.team ?? ''))
-    : !!(fullName.trim() || notes.trim())
 
-  const save = async (e?: React.FormEvent<HTMLFormElement>) => {
-    e?.preventDefault()
+  const save = async () => {
     if (!canSave) return
     setSaving(true)
     try {
@@ -484,74 +567,82 @@ function BoulemaPlayerModal({ profiles, initial, onClose, onSave, promote }: {
     }
   }
 
+  const INPUT = 'w-full px-3 py-2 text-xs border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30'
   return (
-    <Dialog
-      open
-      onClose={onClose}
-      title={initial ? 'Editar jugador' : 'Añadir jugador de Boulema'}
-      onSubmit={save}
-      dirty={dirty}
-      historyKey="boulema-jugador"
-      footer={<>
-        {promote && (
-          promote.exists ? (
-            <span className="text-secondary text-green-700 font-medium inline-flex items-center gap-1 mr-auto"><Check className="w-3.5 h-3.5" aria-hidden="true" /> Ya en {L.captacion}</span>
-          ) : (
-            <Button
-              size="sm"
-              icon={<ArrowRight />}
-              onClick={() => void promote.run()}
-              className="mr-auto border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
-              title="Crea su ficha en Captación (scouting) con estos datos"
-            >
-              Pasar a {L.captacion}
-            </Button>
-          )
-        )}
-        <Button onClick={onClose} className={promote ? '' : 'mr-auto'}>{L.cancelar}</Button>
-        <Button type="submit" variant="primary" disabled={!canSave} loading={saving}>
-          {initial ? L.guardar : 'Añadir'}
-        </Button>
-      </>}
-    >
-      <div className="space-y-3">
-        <Field label="Nombre" required>
-          <Input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Nombre del jugador" autoFocus />
-        </Field>
-        <div className="grid grid-cols-2 gap-2">
-          <Field label="Año nac.">
-            <Input value={birthYear} onChange={e => setBirthYear(e.target.value)} placeholder="2008" />
-          </Field>
-          <Field label="Posición">
-            <Select value={position} onChange={e => setPosition(e.target.value)}>
-              <option value="">—</option>
-              {POSITIONS_SCOUTING.map(p => <option key={p} value={p}>{p}</option>)}
-            </Select>
-          </Field>
-          <Field label={L.club}>
-            <Input value={team} onChange={e => setTeam(e.target.value)} />
-          </Field>
-          <Field label="País (donde juega)">
-            <Input value={country} onChange={e => setCountry(e.target.value)} />
-          </Field>
-          <Field label="Nacionalidad">
-            <Input value={nationality} onChange={e => setNationality(e.target.value)} />
-          </Field>
-          <Field label={L.encargado}>
-            <Select value={manager} onChange={e => setManager(e.target.value)}>
-              <option value="">{L.sinEncargado}</option>
-              {profiles.map(p => <option key={p.id} value={p.avatar}>{p.avatar} · {p.name.split(' ')[0]}</option>)}
-            </Select>
-          </Field>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-5 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold text-slate-800">{initial ? 'Editar jugador' : 'Añadir jugador de Boulema'}</h3>
+          <button onClick={onClose} aria-label="Cerrar" className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"><X className="w-4 h-4" /></button>
         </div>
-        <Field label="Contacto">
-          <Input value={contacto} onChange={e => setContacto(e.target.value)} placeholder="Teléfono, persona…" />
-        </Field>
-        <Field label="Notas">
-          <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} />
-        </Field>
+        <div className="mt-4 space-y-3">
+          <div>
+            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Nombre *</label>
+            <input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Nombre del jugador" autoFocus className={`mt-1 ${INPUT}`} />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Año nac.</label>
+              <input value={birthYear} onChange={e => setBirthYear(e.target.value)} placeholder="2008" className={`mt-1 ${INPUT}`} />
+            </div>
+            <div>
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Posición</label>
+              <select value={position} onChange={e => setPosition(e.target.value)} className={`mt-1 ${INPUT}`}>
+                <option value="">—</option>
+                {POSITIONS_SCOUTING.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Club</label>
+              <input value={team} onChange={e => setTeam(e.target.value)} className={`mt-1 ${INPUT}`} />
+            </div>
+            <div>
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">País (donde juega)</label>
+              <input value={country} onChange={e => setCountry(e.target.value)} className={`mt-1 ${INPUT}`} />
+            </div>
+            <div>
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Nacionalidad</label>
+              <input value={nationality} onChange={e => setNationality(e.target.value)} className={`mt-1 ${INPUT}`} />
+            </div>
+            <div>
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Encargado AIS</label>
+              <select value={manager} onChange={e => setManager(e.target.value)} className={`mt-1 ${INPUT}`}>
+                <option value="">—</option>
+                {profiles.map(p => <option key={p.id} value={p.avatar}>{p.avatar} · {p.name.split(' ')[0]}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Contacto</label>
+            <input value={contacto} onChange={e => setContacto(e.target.value)} placeholder="Teléfono, persona…" className={`mt-1 ${INPUT}`} />
+          </div>
+          <div>
+            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Notas</label>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} className={`mt-1 ${INPUT} resize-y`} />
+          </div>
+        </div>
+        <div className="mt-5 flex items-center gap-2">
+          {promote && (
+            promote.exists ? (
+              <span className="text-[11px] text-green-600 font-medium">Ya en Captación ✓</span>
+            ) : (
+              <button
+                onClick={() => void promote.run()}
+                className="px-2.5 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 text-[11px] font-semibold hover:bg-blue-100 transition-colors"
+                title="Crea su ficha en Captación (scouting) con estos datos"
+              >
+                → Pasar a Captación
+              </button>
+            )
+          )}
+          <span className="flex-1" />
+          <button onClick={onClose} className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:bg-slate-100 transition-colors">Cancelar</button>
+          <button onClick={() => void save()} disabled={!canSave} className="px-4 py-1.5 rounded-lg bg-primary text-white text-xs font-medium disabled:opacity-40 hover:bg-primary/90 transition-colors">
+            {saving ? 'Guardando…' : initial ? 'Guardar' : 'Añadir'}
+          </button>
+        </div>
       </div>
-    </Dialog>
+    </div>
   )
 }
 
@@ -572,14 +663,11 @@ interface Props {
   onAddBoulemaPlayer: (p: Omit<BoulemaPlayer, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>
   onUpdateBoulemaPlayer: (p: BoulemaPlayer) => Promise<void>
   onDeleteBoulemaPlayer: (id: string) => Promise<void>
+  onGoToSection: (s: 'tareas' | 'distribucion' | 'captacion') => void
   onOpenScoutingPlayer: (id: string) => void
-  /** Sub-pestaña controlada desde fuera (App la sincroniza con #/boulema/sub) */
-  tab?: BoulemaTabId
-  onTabChange?: (tab: BoulemaTabId) => void
+  onLogout: () => void
+  onAdmin?: () => void
 }
-
-export type BoulemaTabId = 'peticiones' | 'mantenimiento'
-const BOU_TABS: readonly BoulemaTabId[] = ['peticiones', 'mantenimiento']
 
 export function Boulema({
   profiles,
@@ -596,9 +684,10 @@ export function Boulema({
   onAddBoulemaPlayer,
   onUpdateBoulemaPlayer,
   onDeleteBoulemaPlayer,
+  onGoToSection,
   onOpenScoutingPlayer,
-  tab: tabProp,
-  onTabChange,
+  onLogout,
+  onAdmin,
 }: Props) {
   const { toasts, showToast, dismissToast } = useToast()
   // Antes se pintaban SIEMPRE las dos versiones de la lista (la tabla de
@@ -608,10 +697,7 @@ export function Boulema({
 
   // ── estado local ──
   // ── pestañas de la sección ──
-  // Si App pasa `tab` manda la prop; si no, estado interno.
-  const [bouTabInterno, setBouTabInterno] = useState<BoulemaTabId>('peticiones')
-  const bouTab: BoulemaTabId = tabProp && BOU_TABS.includes(tabProp) ? tabProp : bouTabInterno
-  const setBouTab = (t: BoulemaTabId) => { setBouTabInterno(t); onTabChange?.(t) }
+  const [bouTab, setBouTab] = useState<'peticiones' | 'mantenimiento'>('peticiones')
 
   // ── mantenimiento light ──
   const [mantSearch, setMantSearch] = useState('')
@@ -657,23 +743,73 @@ export function Boulema({
 
 
   return (
-    <div className="min-h-full bg-slate-50 flex flex-col">
-      {/* Sub-pestañas de Boulema (la barra superior y el nivel 1 los pinta AppShell) */}
-      <div className="sticky top-[var(--shell-h)] z-20 bg-white border-b border-slate-200">
-        <div className="max-w-6xl mx-auto px-3 sm:px-6">
-          <SectionTabs<BoulemaTabId>
-            variant="secondary"
-            label="Secciones de Boulema"
-            value={bouTab}
-            onChange={setBouTab}
-            items={[
-              { id: 'peticiones', label: L.peticiones, icon: <Inbox /> },
-              { id: 'mantenimiento', label: L.mantenimiento, icon: <Users />, count: boulemaPlayers.length },
-            ]}
-            className="bg-white"
-          />
+    <div className="min-h-screen bg-slate-50 flex flex-col">
+      {/* Header */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center gap-3 h-12 sm:h-14">
+          <img src={logoImg} alt="All Iron Sports" className="h-7 sm:h-8 w-auto rounded" />
+          <span className="text-xs font-bold text-slate-800 tracking-wide uppercase hidden sm:block">All Iron Sports</span>
+          <div className="flex-1" />
+          {onAdmin && (
+            <button onClick={onAdmin} className="text-xs text-slate-500 hover:text-slate-800 px-2 py-2 sm:py-1 rounded hover:bg-slate-100">Admin</button>
+          )}
+          <button onClick={onLogout} aria-label="Cerrar sesión" className="text-slate-400 hover:text-slate-700 p-2.5 sm:p-1.5 rounded hover:bg-slate-100">
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
-      </div>
+
+        {/* Level 1: main sections */}
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 hidden sm:flex items-center border-t border-slate-100 overflow-x-auto scrollbar-none">
+          <button
+            onClick={() => onGoToSection('tareas')}
+            className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
+          >
+            Mantenimiento
+          </button>
+          <button
+            onClick={() => onGoToSection('distribucion')}
+            className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
+          >
+            <TrendingUp className="w-3.5 h-3.5" />
+            Distribución
+          </button>
+          <button
+            onClick={() => onGoToSection('captacion')}
+            className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
+          >
+            <Eye className="w-3.5 h-3.5" />
+            Captación
+          </button>
+          <button className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 border-primary text-primary transition-colors">
+            <Inbox className="w-3.5 h-3.5" />
+            Boulema
+          </button>
+        </div>
+
+        {/* Sub-pestañas de Boulema */}
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center gap-1 py-1.5 border-t border-slate-100 bg-slate-50/60 overflow-x-auto scrollbar-none">
+          {([
+            { id: 'peticiones' as const, label: 'Peticiones', icon: <Inbox className="w-3.5 h-3.5" /> },
+            { id: 'mantenimiento' as const, label: 'Mantenimiento', icon: <Users className="w-3.5 h-3.5" /> },
+          ]).map(t => (
+            <button
+              key={t.id}
+              onClick={() => setBouTab(t.id)}
+              className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                bouTab === t.id ? 'bg-primary text-white' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
+              }`}
+            >
+              {t.icon}
+              {t.label}
+              {t.id === 'mantenimiento' && boulemaPlayers.length > 0 && (
+                <span className={`min-w-[16px] text-center text-[10px] font-bold rounded-full px-1 ${bouTab === t.id ? 'bg-white/25 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                  {boulemaPlayers.length}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      </header>
 
       {bouTab === 'peticiones' && (() => {
 
@@ -706,73 +842,73 @@ export function Boulema({
             {/* Header */}
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div className="flex items-center gap-2">
-                <Inbox className="w-5 h-5 text-slate-500" aria-hidden="true" />
-                <h2 className="text-base font-semibold text-slate-800">{L.peticiones}</h2>
-                <Badge>
+                <Inbox className="w-5 h-5 text-slate-400" />
+                <h2 className="text-base font-semibold text-slate-800">Boulema</h2>
+                <span className="text-xs font-medium px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full">
                   {filteredPeticiones.length}{filteredPeticiones.length !== boulemaPeticiones.length ? `/${boulemaPeticiones.length}` : ''}
-                </Badge>
+                </span>
               </div>
-              <Button variant="primary" icon={<Plus />} onClick={() => setShowAddBoulema(true)}>
-                Añadir petición
-              </Button>
+              <button
+                onClick={() => setShowAddBoulema(true)}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-primary text-white rounded-xl hover:bg-primary/90 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Añadir petición</span>
+              </button>
             </div>
 
             {/* Search + Filters */}
             <div className="flex flex-wrap items-center gap-2">
               {/* Search */}
               <div className="relative flex-1 min-w-[180px]">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" aria-hidden="true" />
-                <Input
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                <input
                   value={bouSearch}
                   onChange={e => setBouSearch(e.target.value)}
                   placeholder="Buscar jugador, club, ofrecido por..."
-                  aria-label="Buscar petición"
-                  className="pl-8 pr-9 py-1.5"
+                  className="w-full pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                 />
                 {bouSearch && (
-                  <IconButton label="Limpiar búsqueda" onClick={() => setBouSearch('')} className="absolute right-0.5 top-1/2 -translate-y-1/2">
-                    <X />
-                  </IconButton>
+                  <button onClick={() => setBouSearch('')} aria-label="Limpiar búsqueda" className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 )}
               </div>
 
               {/* Position filter */}
               {bouAllPositions.length > 0 && (
-                <Select
+                <select
                   value={bouPosFilter}
                   onChange={e => setBouPosFilter(e.target.value)}
-                  aria-label="Filtrar por posición"
-                  className="w-auto py-1 text-secondary font-medium"
+                  className="px-2.5 py-1.5 text-xs font-medium border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                 >
                   <option value="all">Posición</option>
                   {bouAllPositions.map(p => <option key={p} value={p}>{p}</option>)}
-                </Select>
+                </select>
               )}
 
               {/* Year filter */}
               {bouAllYears.length > 0 && (
-                <Select
+                <select
                   value={bouYearFilter}
                   onChange={e => setBouYearFilter(e.target.value)}
-                  aria-label="Filtrar por año de nacimiento"
-                  className="w-auto py-1 text-secondary font-medium"
+                  className="px-2.5 py-1.5 text-xs font-medium border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                 >
                   <option value="all">Año nac.</option>
                   {bouAllYears.map(y => <option key={y} value={y}>{y}</option>)}
-                </Select>
+                </select>
               )}
 
               {/* Offered by filter */}
               {bouAllOfferedBy.length > 0 && (
-                <Select
+                <select
                   value={bouOfferedFilter}
                   onChange={e => setBouOfferedFilter(e.target.value)}
-                  aria-label="Filtrar por ofrecido por"
-                  className="w-auto py-1 text-secondary font-medium"
+                  className="px-2.5 py-1.5 text-xs font-medium border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                 >
                   <option value="all">Ofrecido por</option>
                   {bouAllOfferedBy.map(o => <option key={o} value={o}>{o}</option>)}
-                </Select>
+                </select>
               )}
 
             </div>
@@ -798,16 +934,17 @@ export function Boulema({
             <div className="space-y-2">
               {boulemaPeticiones.length === 0 ? (
                 <div className="bg-white border border-dashed border-slate-200 rounded-2xl py-12 text-center">
-                  <Inbox className="w-8 h-8 text-slate-300 mx-auto mb-2" aria-hidden="true" />
-                  <p className="text-body text-slate-600 font-medium">Sin peticiones de informe</p>
-                  <p className="text-secondary text-slate-500 mt-1">Añade una petición para pedir un informe sobre un jugador</p>
+                  <Inbox className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                  <p className="text-sm text-slate-400 font-medium">Sin peticiones de informe</p>
+                  <p className="text-xs text-slate-300 mt-1">Añade una petición para pedir un informe sobre un jugador</p>
                 </div>
               ) : filteredPeticiones.length === 0 ? (
-                <p className="text-secondary text-slate-500 text-center py-8">Sin resultados con los filtros actuales</p>
+                <p className="text-xs text-slate-400 text-center py-8">Sin resultados con los filtros actuales</p>
               ) : (
                 filteredPeticiones.map(p => {
                   const requesterProfile = profiles.find(pr => pr.avatar === p.requestedBy)
                   const rel = relativeDate(p.createdAt)
+                  const isConfirming = confirmDeletePeticion === p.id
                   // Reports explicitly linked via reportIds
                   const explicitLinkedReports = p.reportIds
                     .map(id => reportById.get(id))
@@ -839,56 +976,56 @@ export function Boulema({
                         <div className="flex-1 min-w-0">
                           {/* Player name + chips: NOMBRE / POSICIÓN / FECHA / CLUB / PAÍS / NACIONALIDAD */}
                           <div className="flex flex-wrap items-center gap-1.5 mb-1">
-                            <span className="font-semibold text-slate-800 text-body">{p.playerName}</span>
+                            <span className="font-semibold text-slate-800 text-sm">{p.playerName}</span>
                             {p.position && (
-                              <Badge pill={false}>{p.position}</Badge>
+                              <span className="text-[11px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{p.position}</span>
                             )}
                             {(p.birthYear || monthLabel) && (
-                              <span className="text-badge text-slate-600 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded font-mono">
+                              <span className="text-[11px] text-slate-400 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded font-mono">
                                 {[monthLabel, p.birthYear].filter(Boolean).join('/')}
                               </span>
                             )}
                             {p.team && (
-                              <span className="text-secondary text-slate-600 italic">{p.team}</span>
+                              <span className="text-[11px] text-slate-500 italic">{p.team}</span>
                             )}
                             {p.country && (
-                              <span className="text-secondary text-slate-600 italic">{p.country}</span>
+                              <span className="text-[11px] text-slate-500 italic">{p.country}</span>
                             )}
                             {p.nationality && (
-                              <span className="text-badge text-violet-700 bg-violet-50 border border-violet-100 px-1.5 py-0.5 rounded">{p.nationality}</span>
+                              <span className="text-[11px] text-violet-600 bg-violet-50 border border-violet-100 px-1.5 py-0.5 rounded">{p.nationality}</span>
                             )}
                           </div>
 
                           {/* Offered by */}
                           {p.offeredBy && (
-                            <div className="text-secondary text-slate-600 mb-1">
-                              <span className="text-slate-500">Ofrecido por</span>{' '}
-                              <span className="font-medium text-slate-700">{p.offeredBy}</span>
+                            <div className="text-[11px] text-slate-500 mb-1">
+                              <span className="text-slate-400">Ofrecido por</span>{' '}
+                              <span className="font-medium text-slate-600">{p.offeredBy}</span>
                             </div>
                           )}
 
                           {/* Assignment — multi-destinatario */}
-                          <div className="flex flex-wrap items-center gap-1.5 text-secondary text-slate-600 mb-1">
-                            <span className="text-slate-500">Pedido por</span>
-                            <span className="font-mono font-semibold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">
+                          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 mb-1">
+                            <span className="text-slate-400">Pedido por</span>
+                            <span className="font-mono font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
                               {p.requestedBy}
                               {requesterProfile && (
-                                <span className="font-sans font-normal ml-1 text-slate-500">· {requesterProfile.name.split(' ')[0]}</span>
+                                <span className="font-sans font-normal ml-1 text-slate-400">· {requesterProfile.name.split(' ')[0]}</span>
                               )}
                             </span>
-                            <ArrowRight className="w-3 h-3 text-slate-500" aria-hidden="true" />
+                            <span className="text-slate-400">→</span>
                             {p.requestedFrom.map(av => {
                               const pr = profiles.find(x => x.avatar === av)
                               const done = linkedReports.some(r => r.persona === av)
                               return (
-                                <span key={av} className={`font-mono font-semibold px-1.5 py-0.5 rounded border text-badge ${
+                                <span key={av} className={`font-mono font-semibold px-1.5 py-0.5 rounded border text-[11px] ${
                                   done
                                     ? 'bg-green-50 text-green-700 border-green-200'
                                     : 'bg-blue-50 text-blue-700 border-blue-100'
                                 }`}>
                                   {av}
                                   {pr && <span className="font-sans font-normal ml-1 opacity-70">· {pr.name.split(' ')[0]}</span>}
-                                  {done && <Check className="w-3 h-3 inline ml-1" aria-label="Informe hecho" />}
+                                  {done && <span className="ml-1">✓</span>}
                                 </span>
                               )
                             })}
@@ -896,16 +1033,16 @@ export function Boulema({
 
                           {/* Notes — truncadas con "ver más" inline */}
                           {p.notes && (
-                            <div className="mb-1.5 text-secondary text-slate-600 leading-relaxed">
+                            <div className="mb-1.5 text-xs text-slate-500 leading-relaxed">
                               {notesExpanded ? (
                                 <span className="whitespace-pre-wrap">{p.notes}{' '}
-                                  <button type="button" onClick={() => toggleNotes(p.id)} aria-expanded="true" className="text-primary hover:underline whitespace-nowrap">ver menos</button>
+                                  <button onClick={() => toggleNotes(p.id)} className="text-blue-500 hover:text-blue-700 whitespace-nowrap">ver menos ▲</button>
                                 </span>
                               ) : (
                                 <span>
                                   {notesFirstLine}
                                   {notesHasMore && (
-                                    <>{' '}<button type="button" onClick={() => toggleNotes(p.id)} aria-expanded="false" className="text-primary hover:underline whitespace-nowrap">ver más</button></>
+                                    <>{' '}<button onClick={() => toggleNotes(p.id)} className="text-blue-500 hover:text-blue-700 whitespace-nowrap">ver más ▼</button></>
                                   )}
                                 </span>
                               )}
@@ -919,28 +1056,30 @@ export function Boulema({
                                 ? new Date(report.createdAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
                                 : ''
                               return (
-                                <button
+                                <div
                                   key={report.id}
-                                  type="button"
                                   onClick={() => onOpenScoutingPlayer(report.playerId)}
-                                  title="Abrir informe en Captación"
-                                  className="inline-flex items-center gap-1.5 px-2.5 min-h-9 sm:min-h-8 text-secondary font-medium bg-green-100 text-green-700 border border-green-200 rounded-lg hover:bg-green-200 transition-colors"
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-green-100 text-green-700 border border-green-200 rounded-lg cursor-pointer hover:bg-green-200 transition-colors"
                                 >
-                                  <FileText className="w-3 h-3" aria-hidden="true" />
+                                  <FileText className="w-3 h-3" />
                                   <span className="font-mono font-bold">{report.persona ?? '?'}</span>
-                                  {reportDate && <span className="text-green-700 opacity-80">{reportDate}</span>}
+                                  {reportDate && <span className="text-green-600 opacity-80">{reportDate}</span>}
                                   {report.conclusion && (
-                                    <span className={`ml-0.5 px-1.5 py-0.5 rounded text-badge ${BOULEMA_CONCLUSION_STYLE[report.conclusion] ?? 'bg-slate-100 text-slate-600'}`}>
+                                    <span className={`ml-0.5 px-1.5 py-0.5 rounded text-[11px] ${BOULEMA_CONCLUSION_STYLE[report.conclusion] ?? 'bg-slate-100 text-slate-600'}`}>
                                       {report.conclusion}
                                     </span>
                                   )}
-                                </button>
+                                </div>
                               )
                             })}
                             {!currentUserDone && (
-                              <Button size="sm" variant="primary" icon={<FileText />} onClick={() => setRespondingPeticion(p)}>
+                              <button
+                                onClick={() => setRespondingPeticion(p)}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+                              >
+                                <FileText className="w-3 h-3" />
                                 Crear informe
-                              </Button>
+                              </button>
                             )}
                           </div>
                         </div>
@@ -948,7 +1087,7 @@ export function Boulema({
                         {/* Right: date + actions */}
                         <div className="flex-shrink-0 flex flex-col items-end gap-1">
                           {rel && (
-                            <span className={`text-badge font-semibold px-1.5 py-0.5 rounded-full ${
+                            <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-full ${
                               rel === 'hoy' ? 'bg-green-100 text-green-700' :
                               rel === 'ayer' ? 'bg-blue-50 text-blue-600' :
                               'bg-slate-100 text-slate-500'
@@ -956,14 +1095,51 @@ export function Boulema({
                               {rel}
                             </span>
                           )}
-                          <div className="text-meta text-slate-500">{fmtDate(p.createdAt)}</div>
+                          <div className="text-[11px] text-slate-400">{fmtDate(p.createdAt)}</div>
                           <div className="flex items-center gap-1 mt-1">
-                            <IconButton label="Editar petición" onClick={() => setEditingPeticion(p)}>
-                              <Pencil />
-                            </IconButton>
-                            <IconButton label="Eliminar petición" onClick={() => setConfirmDeletePeticion(p.id)} className="hover:text-red-600 hover:bg-red-50">
-                              <Trash2 />
-                            </IconButton>
+                            {isConfirming ? (
+                              <>
+                                <button
+                                  onClick={() => setConfirmDeletePeticion(null)}
+                                  className="text-[11px] px-2 py-0.5 border border-slate-200 rounded text-slate-500 hover:bg-slate-50"
+                                >
+                                  Cancelar
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      await onDeleteBoulemaPeticion(p.id)
+                                      setConfirmDeletePeticion(null)
+                                      showToast('Petición eliminada')
+                                    } catch {
+                                      showToast('Error al eliminar la petición', 'error')
+                                    }
+                                  }}
+                                  className="text-[11px] px-2 py-0.5 bg-red-500 text-white rounded hover:bg-red-600"
+                                >
+                                  Eliminar
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => setEditingPeticion(p)}
+                                  className="p-2 sm:p-1 rounded text-slate-300 hover:text-blue-500 hover:bg-blue-50 transition-colors"
+                                  title="Editar petición"
+                                  aria-label="Editar petición"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => setConfirmDeletePeticion(p.id)}
+                                  className="p-2 sm:p-1 rounded text-slate-300 hover:text-red-400 hover:bg-red-50 transition-colors"
+                                  title="Eliminar petición"
+                                  aria-label="Eliminar petición"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -989,36 +1165,39 @@ export function Boulema({
           <div className="flex-1 max-w-4xl mx-auto w-full px-3 sm:px-6 py-4 space-y-3">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div className="flex items-center gap-2">
-                <Users className="w-5 h-5 text-slate-500" aria-hidden="true" />
-                <h2 className="text-base font-semibold text-slate-800">{L.mantenimiento}</h2>
-                <Badge>{filtered.length}</Badge>
+                <Users className="w-5 h-5 text-slate-400" />
+                <h2 className="text-base font-semibold text-slate-800">Mantenimiento</h2>
+                <span className="text-xs font-medium px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full">{filtered.length}</span>
               </div>
-              <Button variant="primary" icon={<Plus />} onClick={() => setShowAddMantPlayer(true)}>
-                Añadir jugador
-              </Button>
+              <button
+                onClick={() => setShowAddMantPlayer(true)}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-primary text-white rounded-xl hover:bg-primary/90 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Añadir jugador</span>
+              </button>
             </div>
 
             {boulemaPlayers.length > 0 && (
               <div className="relative max-w-xs">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" aria-hidden="true" />
-                <Input
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                <input
                   value={mantSearch}
                   onChange={e => setMantSearch(e.target.value)}
                   placeholder="Buscar jugador, club, país..."
-                  aria-label="Buscar jugador"
-                  className="pl-8 py-1.5"
+                  className="w-full pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                 />
               </div>
             )}
 
             {boulemaPlayers.length === 0 ? (
               <div className="bg-white border border-dashed border-slate-200 rounded-2xl py-12 text-center">
-                <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" aria-hidden="true" />
-                <p className="text-body text-slate-600 font-medium">Aún no hay jugadores de Boulema</p>
-                <p className="text-secondary text-slate-500 mt-1">Versión light del mantenimiento: nombre, club, país, contacto y notas</p>
+                <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <p className="text-sm text-slate-400 font-medium">Aún no hay jugadores de Boulema</p>
+                <p className="text-xs text-slate-300 mt-1">Versión light del mantenimiento: nombre, club, país, contacto y notas</p>
               </div>
             ) : filtered.length === 0 ? (
-              <p className="text-secondary text-slate-500 text-center py-8">Sin resultados con la búsqueda</p>
+              <p className="text-xs text-slate-400 text-center py-8">Sin resultados con la búsqueda</p>
             ) : (
               <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
                 {/* Escritorio: tabla */}
@@ -1027,32 +1206,44 @@ export function Boulema({
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-slate-50 border-b border-slate-200">
-                        {[L.jugador, 'Año', 'Posición', L.club, 'País', L.encargado, 'Notas', ''].map((h, i) => (
-                          <th key={i} className="text-left px-3 py-2 text-meta font-semibold uppercase tracking-wide text-slate-600 whitespace-nowrap">{h || <span className="sr-only">Acciones</span>}</th>
+                        {['Jugador', 'Año', 'Posición', 'Club', 'País', 'Enc.', 'Notas', ''].map((h, i) => (
+                          <th key={i} className="text-left px-3 py-2 text-[10.5px] font-bold uppercase tracking-wide text-slate-400 whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {filtered.map(p => (
-                        <tr
-                          key={p.id}
-                          tabIndex={0}
-                          role="button"
-                          onClick={() => setEditingMantPlayer(p)}
-                          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditingMantPlayer(p) } }}
-                          className="cursor-pointer hover:bg-slate-50/60 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
-                        >
+                        <tr key={p.id} onClick={() => setEditingMantPlayer(p)} className="cursor-pointer hover:bg-slate-50/60 transition-colors">
                           <td className="px-3 py-2 font-medium text-slate-800">{p.fullName}</td>
-                          <td className="px-3 py-2 text-slate-600 tabular-nums">{p.birthYear ?? '—'}</td>
-                          <td className="px-3 py-2 text-slate-600">{p.position ?? '—'}</td>
-                          <td className="px-3 py-2 text-slate-600">{p.team ?? '—'}</td>
-                          <td className="px-3 py-2 text-slate-600">{p.country ?? '—'}</td>
-                          <td className="px-3 py-2 text-slate-600 font-mono text-secondary">{p.manager ?? '—'}</td>
-                          <td className="px-3 py-2 text-slate-500 text-secondary max-w-[220px] truncate">{p.notes ?? ''}</td>
+                          <td className="px-3 py-2 text-slate-500 tabular-nums">{p.birthYear ?? '—'}</td>
+                          <td className="px-3 py-2 text-slate-500">{p.position ?? '—'}</td>
+                          <td className="px-3 py-2 text-slate-500">{p.team ?? '—'}</td>
+                          <td className="px-3 py-2 text-slate-500">{p.country ?? '—'}</td>
+                          <td className="px-3 py-2 text-slate-500 font-mono text-xs">{p.manager ?? '—'}</td>
+                          <td className="px-3 py-2 text-slate-400 text-xs max-w-[220px] truncate">{p.notes ?? ''}</td>
                           <td className="px-2 py-2" onClick={e => e.stopPropagation()}>
-                            <IconButton label={`Eliminar a ${p.fullName}`} onClick={() => setConfirmDeleteMantId(p.id)} className="hover:text-red-600 hover:bg-red-50">
-                              <Trash2 />
-                            </IconButton>
+                            {confirmDeleteMantId === p.id ? (
+                              <span className="flex items-center gap-1">
+                                <button onClick={() => setConfirmDeleteMantId(null)} className="text-[11px] px-2 py-0.5 border border-slate-200 rounded text-slate-500 hover:bg-slate-50">No</button>
+                                <button
+                                  onClick={async () => {
+                                    try { await onDeleteBoulemaPlayer(p.id); setConfirmDeleteMantId(null); showToast('Jugador eliminado') }
+                                    catch { showToast('No se pudo eliminar', 'error') }
+                                  }}
+                                  className="text-[11px] px-2 py-0.5 bg-red-500 text-white rounded hover:bg-red-600"
+                                >
+                                  Sí
+                                </button>
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => setConfirmDeleteMantId(p.id)}
+                                className="p-1 rounded text-slate-300 hover:text-red-400 hover:bg-red-50 transition-colors"
+                                aria-label="Eliminar jugador"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -1064,17 +1255,15 @@ export function Boulema({
                 {!esAncha && (
                 <div className="divide-y divide-slate-100">
                   {filtered.map(p => (
-                    <ClickableRow key={p.id} onClick={() => setEditingMantPlayer(p)} className="rounded-none px-3 py-2.5">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <span className="min-w-0 flex-1">
-                          <span className="block text-body font-semibold text-slate-800 truncate">{p.fullName}</span>
-                          <span className="block text-meta text-slate-500 truncate">
-                            {[p.team, p.birthYear, p.country].filter(Boolean).join(' · ') || '—'}
-                          </span>
+                    <button key={p.id} onClick={() => setEditingMantPlayer(p)} className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left active:bg-slate-50">
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold text-slate-800 truncate">{p.fullName}</span>
+                        <span className="block text-[11px] text-slate-400 truncate">
+                          {[p.team, p.birthYear, p.country].filter(Boolean).join(' · ') || '—'}
                         </span>
-                        {p.manager && <span className="flex-shrink-0 text-badge font-mono font-bold bg-slate-100 text-slate-600 rounded px-1.5 py-0.5" title={L.encargado}>{p.manager}</span>}
-                      </div>
-                    </ClickableRow>
+                      </span>
+                      {p.manager && <span className="flex-shrink-0 text-[10px] font-mono font-bold bg-slate-100 text-slate-600 rounded px-1.5 py-0.5">{p.manager}</span>}
+                    </button>
                   ))}
                 </div>
                 )}
@@ -1179,44 +1368,6 @@ export function Boulema({
           }}
         />
       )}
-
-      {/* Confirmaciones de borrado */}
-      <ConfirmModal
-        open={!!confirmDeletePeticion}
-        title="¿Eliminar esta petición?"
-        message="Esta acción no se puede deshacer."
-        confirmLabel={L.eliminar}
-        onConfirm={async () => {
-          if (!confirmDeletePeticion) return
-          try {
-            await onDeleteBoulemaPeticion(confirmDeletePeticion)
-            showToast('Petición eliminada')
-          } catch {
-            showToast('Error al eliminar la petición', 'error')
-          } finally {
-            setConfirmDeletePeticion(null)
-          }
-        }}
-        onCancel={() => setConfirmDeletePeticion(null)}
-      />
-      <ConfirmModal
-        open={!!confirmDeleteMantId}
-        title={`¿Eliminar a ${boulemaPlayers.find(p => p.id === confirmDeleteMantId)?.fullName ?? 'este jugador'}?`}
-        message="Esta acción no se puede deshacer."
-        confirmLabel={L.eliminar}
-        onConfirm={async () => {
-          if (!confirmDeleteMantId) return
-          try {
-            await onDeleteBoulemaPlayer(confirmDeleteMantId)
-            showToast('Jugador eliminado')
-          } catch {
-            showToast('No se pudo eliminar', 'error')
-          } finally {
-            setConfirmDeleteMantId(null)
-          }
-        }}
-        onCancel={() => setConfirmDeleteMantId(null)}
-      />
 
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>

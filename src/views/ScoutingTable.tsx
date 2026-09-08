@@ -1,11 +1,8 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import type { ScoutingPlayer, ScoutingAssessment } from '../types'
 import * as db from '../lib/db'
-import { Save, X, Check, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Save, X, Check } from 'lucide-react'
 import { isValidDate } from '../lib/validate'
-import { Button } from '../components/ui'
-import { useBeforeUnload } from '../hooks/useBeforeUnload'
-import { L } from '../lib/labels'
 
 // Tabla de edición rápida de jugadores de scouting (Captación > Jugadores
 // > modo Edición). Mismo patrón que PlayersTable de jugadores propios:
@@ -42,11 +39,9 @@ interface Props {
   players: ScoutingPlayer[]
   onUpdatePlayer: (p: ScoutingPlayer) => void
   showToast: (message: string, variant?: 'success' | 'error' | 'info') => void
-  /** Nº de cambios sin guardar (para que la pestaña avise antes de salir) */
-  onDirtyChange?: (n: number) => void
 }
 
-export function ScoutingTable({ players, onUpdatePlayer, showToast, onDirtyChange }: Props) {
+export function ScoutingTable({ players, onUpdatePlayer, showToast }: Props) {
   const [editing, setEditing] = useState<EditingCell | null>(null)
   const [editValue, setEditValue] = useState('')
   const [editInvalid, setEditInvalid] = useState(false)
@@ -93,7 +88,7 @@ export function ScoutingTable({ players, onUpdatePlayer, showToast, onDirtyChang
       setValue: (p, v) => ({ ...p, categoria: v.trim() || undefined }),
     },
     {
-      key: 'assessment', label: L.etiquetaJugador, width: 'min-w-[110px]', type: 'select', options: ASSESSMENT_OPTIONS,
+      key: 'assessment', label: 'Assessment', width: 'min-w-[110px]', type: 'select', options: ASSESSMENT_OPTIONS,
       getValue: p => p.assessment ?? '',
       setValue: (p, v) => ({ ...p, assessment: (v || undefined) as ScoutingAssessment | undefined }),
     },
@@ -218,43 +213,40 @@ export function ScoutingTable({ players, onUpdatePlayer, showToast, onDirtyChang
   const discardAll = () => { setPendingChanges(new Map()); setEditing(null) }
   const hasChanges = pendingChanges.size > 0
 
-  // Aviso al recargar/cerrar con cambios pendientes, y aviso al padre
-  useBeforeUnload(hasChanges)
-  const onDirtyRef = useRef(onDirtyChange)
-  useEffect(() => { onDirtyRef.current = onDirtyChange }, [onDirtyChange])
-  useEffect(() => { onDirtyRef.current?.(pendingChanges.size) }, [pendingChanges.size])
-  useEffect(() => () => { onDirtyRef.current?.(0) }, [])
-
   return (
     <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
       {/* Toolbar de cambios */}
       <div className="px-4 py-2.5 border-b border-slate-100 flex flex-wrap items-center gap-2 bg-slate-50/60">
-        <span className="text-secondary text-slate-500">
+        <span className="text-xs text-slate-500">
           Edición rápida — clic en cualquier celda · Tab avanza · Enter confirma · Esc cancela
         </span>
         <span className="flex-1" />
         {savedFeedback && (
-          <span role="status" className="inline-flex items-center gap-1.5 text-secondary font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-1">
+          <span role="status" className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-1">
             <Check className="w-3.5 h-3.5" />{savedFeedback}
           </span>
         )}
         {hasChanges && (
           <>
-            <span className="text-secondary text-amber-600 font-semibold">{pendingChanges.size} cambio{pendingChanges.size !== 1 ? 's' : ''} sin guardar</span>
-            <Button size="sm" variant="secondary" icon={<X />} onClick={discardAll}>Descartar</Button>
-            <Button size="sm" variant="primary" icon={<Save />} loading={saving} onClick={saveAll}>
-              {saving ? 'Guardando…' : 'Guardar todo'}
-            </Button>
+            <span className="text-xs text-amber-600 font-semibold">{pendingChanges.size} cambio{pendingChanges.size !== 1 ? 's' : ''} sin guardar</span>
+            <button onClick={discardAll}
+              className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-white transition-colors">
+              <X className="w-3 h-3" />Descartar
+            </button>
+            <button onClick={saveAll} disabled={saving}
+              className="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg text-white font-semibold bg-primary hover:bg-primary/90 disabled:opacity-50 transition-colors">
+              <Save className="w-3 h-3" />{saving ? 'Guardando…' : 'Guardar todo'}
+            </button>
           </>
         )}
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1500px] text-secondary">
+        <table className="w-full min-w-[1500px] text-xs">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200">
               {columns.map(col => (
-                <th key={col.key} className={`text-left px-3 py-2.5 text-meta uppercase tracking-wide font-semibold text-slate-500 ${col.width} whitespace-nowrap`}>
+                <th key={col.key} className={`text-left px-3 py-2.5 font-semibold text-slate-600 ${col.width} whitespace-nowrap`}>
                   {col.label}
                 </th>
               ))}
@@ -282,7 +274,7 @@ export function ScoutingTable({ players, onUpdatePlayer, showToast, onDirtyChang
                               onChange={e => setEditValue(e.target.value)}
                               onBlur={confirmEdit}
                               onKeyDown={handleKeyDown}
-                              className="w-full rounded border border-blue-300 px-1.5 py-1 text-secondary focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
+                              className="w-full rounded border border-blue-300 px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
                             >
                               <option value="">—</option>
                               {(col.options ?? []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
@@ -296,23 +288,21 @@ export function ScoutingTable({ players, onUpdatePlayer, showToast, onDirtyChang
                               onBlur={confirmEdit}
                               onKeyDown={handleKeyDown}
                               aria-invalid={editInvalid}
-                              className={`w-full rounded border px-1.5 py-1 text-secondary focus:outline-none focus:ring-2 ${
+                              className={`w-full rounded border px-1.5 py-1 text-xs focus:outline-none focus:ring-2 ${
                                 editInvalid ? 'border-red-400 ring-1 ring-red-200 focus:ring-red-200' : 'border-blue-300 focus:ring-blue-200'
                               }`}
                             />
                           )
                         ) : (
-                          <button
-                            type="button"
+                          <div
                             onClick={() => startEdit(player.id, col.key)}
                             title="Clic para editar"
-                            aria-label={`Editar ${col.label.toLowerCase()} de ${player.fullName}`}
-                            className={`block w-full text-left cursor-pointer hover:bg-blue-50 rounded px-1.5 py-1 -mx-1.5 -my-0.5 transition-colors truncate max-w-[260px] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40 outline-none ${
+                            className={`cursor-pointer hover:bg-blue-50 rounded px-1.5 py-1 -mx-1.5 -my-0.5 transition-colors truncate max-w-[260px] ${
                               col.key === 'fullName' ? 'font-medium text-slate-800' : 'text-slate-600'
-                            } ${!value ? 'text-slate-400' : ''}`}
+                            } ${!value ? 'text-slate-300' : ''}`}
                           >
                             {displayValue}
-                          </button>
+                          </div>
                         )}
                       </td>
                     )
@@ -321,7 +311,7 @@ export function ScoutingTable({ players, onUpdatePlayer, showToast, onDirtyChang
               )
             })}
             {pagePlayers.length === 0 && (
-              <tr><td colSpan={columns.length} className="text-center py-10 text-slate-500 text-body">No hay jugadores que coincidan con los filtros</td></tr>
+              <tr><td colSpan={columns.length} className="text-center py-10 text-slate-400 text-sm">No hay jugadores que coincidan con los filtros</td></tr>
             )}
           </tbody>
         </table>
@@ -329,19 +319,27 @@ export function ScoutingTable({ players, onUpdatePlayer, showToast, onDirtyChang
 
       {/* Paginación */}
       <div className="border-t border-slate-200 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 bg-slate-50">
-        <span className="text-meta text-slate-500">
+        <span className="text-[11px] text-slate-400">
           {players.length} jugador{players.length !== 1 ? 'es' : ''}
           {totalPages > 1 && ` · mostrando ${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, players.length)}`}
         </span>
         {totalPages > 1 && (
           <div className="flex items-center gap-1">
-            <Button size="sm" variant="secondary" icon={<ChevronLeft />} onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}>
-              Anterior
-            </Button>
-            <span className="text-secondary text-slate-500 px-1.5">{page + 1} / {totalPages}</span>
-            <Button size="sm" variant="secondary" onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}>
-              Siguiente <ChevronRight className="w-4 h-4" />
-            </Button>
+            <button
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={page === 0}
+              className="px-2.5 py-1 text-xs font-medium border border-slate-300 rounded-lg bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 transition-colors"
+            >
+              ← Anterior
+            </button>
+            <span className="text-xs text-slate-500 px-1.5">{page + 1} / {totalPages}</span>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1}
+              className="px-2.5 py-1 text-xs font-medium border border-slate-300 rounded-lg bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 transition-colors"
+            >
+              Siguiente →
+            </button>
           </div>
         )}
       </div>

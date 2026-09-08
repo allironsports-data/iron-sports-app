@@ -1,14 +1,9 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
-import type { FormEvent } from 'react'
 import {
-  Search, ChevronRight, ChevronDown, Phone, X,
+  Search, ChevronRight, ChevronDown, Phone, X, ArrowLeft,
   Users, Star, Plus, Pencil, Check, Trash2,
-  List, LayoutList, AlertCircle, AlertTriangle, UserX, Database, CloudUpload,
+  List, LayoutList, AlertCircle, UserX, Database, CloudUpload,
 } from 'lucide-react'
-import { Badge, Button, Dialog, Field, IconButton, Input, Select } from '../components/ui'
-import { DetailHeader } from '../components/shell'
-import { ConfirmModal } from '../components/ConfirmModal'
-import { L } from '../lib/labels'
 import {
   cargarContactos, aplicarOverride, sinNulos, rowToContact, contactToRow,
   type Contact, type ContactDraft,
@@ -104,19 +99,13 @@ const TIER_COLORS: Record<string, { bg: string; text: string }> = {
   'Tier 1': { bg: 'bg-amber-100', text: 'text-amber-800' },
   'Tier 2': { bg: 'bg-blue-50',   text: 'text-blue-700' },
   'Tier 3': { bg: 'bg-slate-100', text: 'text-slate-600' },
-  'Tier 4': { bg: 'bg-slate-50',  text: 'text-slate-600' },
-}
-
-/** «Tier 1» (valor guardado) → «Nivel 1» (texto visible). No cambia el dato. */
-function tierLabel(tier?: string): string {
-  if (!tier) return ''
-  return tier.replace(/^Tier\s*/i, `${L.nivel} `)
+  'Tier 4': { bg: 'bg-slate-50',  text: 'text-slate-400' },
 }
 
 function TierBadge({ tier }: { tier?: string }) {
   if (!tier) return null
-  const cls = TIER_COLORS[tier] ?? { bg: 'bg-slate-100', text: 'text-slate-600' }
-  return <span className={`px-1.5 py-0.5 rounded text-badge font-medium ${cls.bg} ${cls.text}`}>{tierLabel(tier)}</span>
+  const cls = TIER_COLORS[tier] ?? { bg: 'bg-slate-100', text: 'text-slate-500' }
+  return <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${cls.bg} ${cls.text}`}>{tier}</span>
 }
 
 function initials(name?: string) {
@@ -545,107 +534,95 @@ export function Contactos({ onBack, isAdmin }: { onBack: () => void; isAdmin?: b
   }, [alphaFiltered])
 
   return (
-    <div className="min-h-full bg-slate-50 flex flex-col">
-      {/* ── Cabecera (DetailHeader: atrás + título) ── */}
-      <DetailHeader
-        onBack={onBack}
-        title={
-          <span className="inline-flex items-center gap-2">
-            Contactos
-            <Badge tone="danger" pill={false} className="uppercase tracking-wide">Admin</Badge>
-          </span>
-        }
-        actions={
-          <Button variant="primary" size="sm" icon={<Plus />} onClick={() => setModal({ mode: 'add' })}>
-            Añadir
-          </Button>
-        }
-      />
-
-      {/* Aviso honesto: mientras la agenda no esté en la base de datos,
-          lo que edites aquí no lo ve nadie más ni te sigue al móvil */}
-      {!migrado && !cargando && (
-        <div className="max-w-6xl mx-auto w-full px-4 pt-3">
-          <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-secondary text-amber-800" role="status">
-            <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" aria-hidden="true" />
-            <span>
-              <strong>Solo en este dispositivo.</strong> Los contactos que añadas o edites se guardan solo en este navegador: no se comparten con el equipo ni aparecen en tu móvil, y se pierden si borras los datos del navegador.
+    <div className="min-h-screen bg-slate-50 flex flex-col">
+      {/* ── Header ── */}
+      <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-sm">
+        <div className="max-w-6xl mx-auto px-4 py-2 sm:py-0 sm:h-14 flex flex-wrap sm:flex-nowrap items-center gap-2">
+          <button onClick={onBack} className="p-2 sm:p-1.5 -ml-1 rounded hover:bg-slate-100 text-slate-500">
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+          <span className="text-sm font-semibold text-slate-800">Contactos</span>
+          <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 text-[11px] font-semibold uppercase tracking-wide">Admin</span>
+          {/* Aviso honesto: mientras la agenda no esté en la base de datos,
+              lo que edites aquí no lo ve nadie más ni te sigue al móvil */}
+          {!migrado && !cargando && (
+            <span
+              className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 text-[10.5px] font-semibold"
+              title="Los contactos que añadas o edites se guardan solo en este navegador: no se comparten con el equipo ni aparecen en tu móvil, y se pierden si borras los datos del navegador."
+            >
+              ⚠ Solo en este dispositivo
             </span>
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* ── Barra de acciones: vista, filtros y búsqueda ── */}
-      <div className="bg-white border-b border-slate-200">
-        <div className="max-w-6xl mx-auto px-4 py-2 flex flex-wrap items-center gap-2">
+          <div className="flex-1" />
+
           {/* View toggle */}
-          <div className="flex items-center border border-slate-300 rounded-lg overflow-hidden">
-            <Button
-              size="sm"
-              variant="ghost"
-              icon={<LayoutList />}
+          <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden">
+            <button
               onClick={() => setViewMode('regions')}
-              aria-pressed={viewMode === 'regions'}
-              className={`rounded-none ${viewMode === 'regions' ? 'bg-slate-800 text-white hover:bg-slate-700' : ''}`}
+              className={`flex items-center gap-1 px-2.5 py-1.5 text-xs transition-colors ${viewMode === 'regions' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
               title="Vista por liga"
             >
+              <LayoutList className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Por liga</span>
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              icon={<List />}
+            </button>
+            <button
               onClick={() => { setViewMode('alpha'); setShowFavorites(false) }}
-              aria-pressed={viewMode === 'alpha'}
-              className={`rounded-none border-l border-slate-300 ${viewMode === 'alpha' ? 'bg-slate-800 text-white hover:bg-slate-700' : ''}`}
+              className={`flex items-center gap-1 px-2.5 py-1.5 text-xs transition-colors ${viewMode === 'alpha' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
               title="Vista alfabética"
             >
+              <List className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">A–Z</span>
-            </Button>
+            </button>
           </div>
 
           {/* Filters (compact) */}
-          <Select
+          <select
             value={roleFilter ?? ''}
             onChange={e => setRoleFilter(e.target.value || null)}
-            aria-label="Filtrar por rol"
-            className="w-auto max-w-[150px] py-1 text-secondary"
+            className="pl-2 pr-1 py-1.5 text-xs border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-200 appearance-none max-w-[110px] border-slate-200 text-slate-600"
           >
-            <option value="">Rol: todos</option>
+            <option value="">Rol…</option>
             {ALL_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-          </Select>
+          </select>
 
-          <Select
+          <select
             value={tierFilter ?? ''}
             onChange={e => setTierFilter(e.target.value || null)}
-            aria-label={`Filtrar por ${L.nivel.toLowerCase()}`}
-            className="w-auto py-1 text-secondary"
+            className="pl-2 pr-1 py-1.5 text-xs border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-200 appearance-none max-w-[80px] border-slate-200 text-slate-600"
           >
-            <option value="">{L.nivel}: todos</option>
-            <option value="Tier 1">{L.nivel} 1</option>
-            <option value="Tier 2">{L.nivel} 2</option>
-            <option value="Tier 3">{L.nivel} 3</option>
-            <option value="Tier 4">{L.nivel} 4</option>
-          </Select>
+            <option value="">Tier…</option>
+            <option value="Tier 1">T1</option>
+            <option value="Tier 2">T2</option>
+            <option value="Tier 3">T3</option>
+            <option value="Tier 4">T4</option>
+          </select>
+
+          <button
+            onClick={() => setModal({ mode: 'add' })}
+            className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex-shrink-0"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Añadir
+          </button>
 
           {/* Search — wider; full row on mobile */}
-          <div className="relative w-full sm:w-64 sm:ml-auto">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" aria-hidden="true" />
-            <Input
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+            <input
               value={search}
               onChange={e => { setSearch(e.target.value); if (e.target.value) { setSelectedRegion(null); setShowFavorites(false) } }}
               placeholder="Buscar nombre, club, teléfono…"
-              aria-label="Buscar contacto"
-              className="pl-8 pr-9 py-1.5"
+              className="w-full pl-8 pr-7 py-1.5 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-200"
             />
             {search && (
-              <IconButton label="Limpiar búsqueda" onClick={() => setSearch('')} className="absolute right-0.5 top-1/2 -translate-y-1/2">
-                <X />
-              </IconButton>
+              <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                <X className="w-3.5 h-3.5" />
+              </button>
             )}
           </div>
         </div>
-      </div>
+      </header>
       {cargando && (
         <div className="max-w-6xl mx-auto w-full px-4 pt-3">
           <div className="flex items-center gap-2 text-sm text-slate-500">
@@ -668,16 +645,15 @@ export function Contactos({ onBack, isAdmin }: { onBack: () => void; isAdmin?: b
                   : ' Pide a un administrador que la importe.'}
             </span>
             {esAdmin && !errorDb && (
-              <Button
-                size="sm"
-                icon={<CloudUpload />}
+              <button
                 onClick={importarAhora}
-                disabled={!!errorCarga}
-                loading={!!importando}
-                className="ml-auto bg-amber-600 text-white border-amber-600 hover:bg-amber-700"
+                disabled={!!importando || !!errorCarga}
+                className="ml-auto flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-60 transition-colors"
               >
-                {importando ? importando : 'Importar ahora'}
-              </Button>
+                {importando
+                  ? <><span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" /> {importando}</>
+                  : <><CloudUpload className="w-3.5 h-3.5" /> Importar ahora</>}
+              </button>
             )}
             {errorDb && (
               <button onClick={() => { void cargarDb() }} className="ml-auto underline font-medium text-xs">reintentar</button>
@@ -699,9 +675,9 @@ export function Contactos({ onBack, isAdmin }: { onBack: () => void; isAdmin?: b
 
         {/* ── Sidebar ── */}
         <aside className="w-full sm:w-52 flex-shrink-0 mb-4 sm:mb-0 sm:mr-4">
-          <div className="bg-white border border-slate-200 rounded-lg overflow-hidden sm:sticky sm:top-[calc(var(--shell-h)+1rem)]">
+          <div className="bg-white border border-slate-200 rounded-lg overflow-hidden sm:sticky sm:top-20">
             <div className="px-3 py-2 border-b border-slate-100">
-              <p className="text-meta font-semibold text-slate-500 uppercase tracking-wide">Regiones</p>
+              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Regiones</p>
             </div>
             <div className="overflow-y-auto max-h-64 sm:max-h-[calc(100vh-120px)]">
               {/* Favoritos */}
@@ -715,7 +691,7 @@ export function Contactos({ onBack, isAdmin }: { onBack: () => void; isAdmin?: b
                   <Star className={`w-3.5 h-3.5 ${showFavorites ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`} />
                   Favoritos
                 </span>
-                <span className={`ml-2 text-badge rounded-full px-1.5 ${showFavorites ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-400'}`}>
+                <span className={`ml-2 text-[11px] rounded-full px-1.5 ${showFavorites ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-400'}`}>
                   {favorites.size}
                 </span>
               </button>
@@ -740,9 +716,9 @@ export function Contactos({ onBack, isAdmin }: { onBack: () => void; isAdmin?: b
                           ? <ChevronDown className="w-3 h-3 text-slate-400" />
                           : <ChevronRight className="w-3 h-3 text-slate-400" />
                         }
-                        <span className="text-meta font-bold text-slate-500 uppercase tracking-wider">{label}</span>
+                        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">{label}</span>
                       </span>
-                      <span className="text-meta text-slate-500">{confTotal}</span>
+                      <span className="text-[11px] text-slate-400">{confTotal}</span>
                     </button>
 
                     {/* Regions in this confederation */}
@@ -764,7 +740,7 @@ export function Contactos({ onBack, isAdmin }: { onBack: () => void; isAdmin?: b
                             )}
                             {region}
                           </span>
-                          <span className={`ml-1 flex-shrink-0 text-badge rounded-full px-1.5 ${
+                          <span className={`ml-1 flex-shrink-0 text-[11px] rounded-full px-1.5 ${
                             active ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-400'
                           }`}>{counts.withContact}</span>
                         </button>
@@ -854,7 +830,7 @@ export function Contactos({ onBack, isAdmin }: { onBack: () => void; isAdmin?: b
                 <div className="flex flex-col items-center justify-center py-24 text-center">
                   <Users className="w-10 h-10 text-slate-300 mb-3" />
                   <p className="text-sm font-medium text-slate-500">Selecciona una región</p>
-                  <p className="text-secondary text-slate-500 mt-1">
+                  <p className="text-xs text-slate-400 mt-1">
                     {REAL_CONTACTS.length.toLocaleString()} contactos · {ALL_REGIONS.length} regiones
                   </p>
                 </div>
@@ -865,7 +841,7 @@ export function Contactos({ onBack, isAdmin }: { onBack: () => void; isAdmin?: b
                 <div className="mb-3 flex items-center gap-2">
                   <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
                   <span className="text-sm font-semibold text-slate-700">Favoritos</span>
-                  <span className="text-secondary text-slate-500">{regionFiltered.length} contacto{regionFiltered.length !== 1 ? 's' : ''}</span>
+                  <span className="text-xs text-slate-400">{regionFiltered.length} contacto{regionFiltered.length !== 1 ? 's' : ''}</span>
                 </div>
               )}
 
@@ -889,7 +865,7 @@ export function Contactos({ onBack, isAdmin }: { onBack: () => void; isAdmin?: b
                       {(isSearching || showFavorites) && (
                         <div className="flex items-center gap-2 mb-2">
                           <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{region}</h2>
-                          <span className="text-meta text-slate-500">{totalInRegion}</span>
+                          <span className="text-[11px] text-slate-400">{totalInRegion}</span>
                         </div>
                       )}
                       <div className="space-y-2">
@@ -911,12 +887,12 @@ export function Contactos({ onBack, isAdmin }: { onBack: () => void; isAdmin?: b
                                   )}
                                   <span className="text-sm font-semibold text-slate-800 truncate">{team}</span>
                                   {!hasOnlyPlaceholder && (
-                                    <span className="text-meta text-slate-500 flex-shrink-0">
+                                    <span className="text-[11px] text-slate-400 flex-shrink-0">
                                       {realContacts.length} contacto{realContacts.length !== 1 ? 's' : ''}
                                     </span>
                                   )}
                                   {hasOnlyPlaceholder && (
-                                    <span className="text-meta text-amber-500 flex-shrink-0">Sin contacto</span>
+                                    <span className="text-[11px] text-amber-500 flex-shrink-0">Sin contacto</span>
                                   )}
                                   {contacts[0]?.tier && <TierBadge tier={contacts[0].tier} />}
                                 </div>
@@ -971,7 +947,7 @@ export function Contactos({ onBack, isAdmin }: { onBack: () => void; isAdmin?: b
 
               {/* Empty search */}
               {isSearching && regionFiltered.length === 0 && (
-                <div className="text-center py-16 text-body text-slate-500">
+                <div className="text-center py-16 text-sm text-slate-400">
                   Sin resultados para «{search}»
                 </div>
               )}
@@ -994,14 +970,13 @@ export function Contactos({ onBack, isAdmin }: { onBack: () => void; isAdmin?: b
       )}
 
       {/* ── Delete confirmation ── */}
-      <ConfirmModal
-        open={!!deleteState}
-        title={`Eliminar ${deleteState?.ids.length === 1 ? 'contacto' : `${deleteState?.ids.length ?? 0} contactos`}`}
-        message="Esta acción no se puede deshacer."
-        confirmLabel={L.eliminar}
-        onConfirm={() => { if (deleteState) confirmDelete(deleteState.ids) }}
-        onCancel={() => setDeleteState(null)}
-      />
+      {deleteState && (
+        <DeleteConfirmModal
+          count={deleteState.ids.length}
+          onConfirm={() => confirmDelete(deleteState.ids)}
+          onCancel={() => setDeleteState(null)}
+        />
+      )}
 
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
@@ -1027,24 +1002,23 @@ function AlphaContactRow({
         type="checkbox"
         checked={isSelected}
         onChange={onToggleSelect}
-        className="w-4 h-4 accent-blue-600 flex-shrink-0"
-        aria-label={`Seleccionar ${c.name ?? 'contacto'}`}
+        className="w-3.5 h-3.5 accent-blue-600 flex-shrink-0"
       />
       {/* Avatar */}
-      <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0" aria-hidden="true">
-        <span className="text-badge font-semibold text-slate-600">{initials(c.name)}</span>
+      <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
+        <span className="text-[11px] font-semibold text-slate-500">{initials(c.name)}</span>
       </div>
       {/* Info */}
       <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-x-3 gap-y-0.5 items-center">
         <div className="min-w-0">
-          <p className="text-body font-medium text-slate-800 truncate">
-            {c.name ?? <span className="text-slate-500 italic text-secondary">Sin nombre</span>}
+          <p className="text-sm font-medium text-slate-800 truncate">
+            {c.name ?? <span className="text-slate-400 italic text-xs">Sin nombre</span>}
           </p>
-          {c.role && <p className="text-secondary text-slate-500 truncate">{c.role}</p>}
+          {c.role && <p className="text-xs text-slate-400 truncate">{c.role}</p>}
         </div>
         <div className="min-w-0">
-          <p className="text-secondary text-slate-600 truncate font-medium">{c.team ?? '—'}</p>
-          <p className="text-meta text-slate-500 truncate">{c.region}</p>
+          <p className="text-xs text-slate-600 truncate font-medium">{c.team ?? '—'}</p>
+          <p className="text-[11px] text-slate-400 truncate">{c.region}</p>
         </div>
         <div className="flex items-center gap-2">
           {c.phone1 && <PhoneLink phone={c.phone1} />}
@@ -1052,17 +1026,20 @@ function AlphaContactRow({
         </div>
       </div>
       {/* Actions */}
-      <div className="flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100 transition-opacity flex-shrink-0">
-        <IconButton label="Editar" onClick={onEdit}><Pencil /></IconButton>
-        <IconButton
-          label={isFavorite ? 'Quitar favorito' : 'Añadir favorito'}
-          aria-pressed={isFavorite}
+      <div className="flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0">
+        <button onClick={onEdit} className="p-2 sm:p-1.5 rounded hover:bg-slate-200 text-slate-400" title="Editar">
+          <Pencil className="w-3.5 h-3.5" />
+        </button>
+        <button
           onClick={onToggleFavorite}
-          className={isFavorite ? 'text-amber-500' : ''}
+          className={`p-2 sm:p-1.5 rounded hover:bg-slate-200 ${isFavorite ? 'text-amber-400' : 'text-slate-300'}`}
+          title={isFavorite ? 'Quitar favorito' : 'Añadir favorito'}
         >
-          <Star className={isFavorite ? 'fill-amber-400' : ''} />
-        </IconButton>
-        <IconButton label={L.eliminar} onClick={onDelete} className="hover:text-red-600 hover:bg-red-50"><Trash2 /></IconButton>
+          <Star className={`w-3.5 h-3.5 ${isFavorite ? 'fill-amber-400' : ''}`} />
+        </button>
+        <button onClick={onDelete} className="p-2 sm:p-1.5 rounded hover:bg-red-100 text-slate-300 hover:text-red-500" title="Eliminar">
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
       </div>
     </div>
   )
@@ -1081,19 +1058,19 @@ function ContactRow({
 }) {
   return (
     <div className="px-4 py-2.5 flex items-start gap-3 hover:bg-slate-50 transition-colors group">
-      <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 mt-0.5" aria-hidden="true">
-        <span className="text-badge font-semibold text-slate-600">{initials(c.name)}</span>
+      <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+        <span className="text-[11px] font-semibold text-slate-500">{initials(c.name)}</span>
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-body font-medium text-slate-800">
-            {c.name ?? <span className="text-slate-500 italic text-secondary">Sin nombre</span>}
+          <span className="text-sm font-medium text-slate-800">
+            {c.name ?? <span className="text-slate-400 italic text-xs">Sin nombre</span>}
           </span>
-          {c.role && <span className="text-secondary text-slate-600">{c.role}</span>}
+          {c.role && <span className="text-xs text-slate-500">{c.role}</span>}
           {c.tier && <TierBadge tier={c.tier} />}
           {c._noClub && (
-            <span className="flex items-center gap-0.5 text-meta text-slate-500">
-              <UserX className="w-3 h-3" aria-hidden="true" /> Sin club
+            <span className="flex items-center gap-0.5 text-[11px] text-slate-400">
+              <UserX className="w-3 h-3" /> Sin club
             </span>
           )}
         </div>
@@ -1102,17 +1079,19 @@ function ContactRow({
           {c.phone2 && <PhoneLink phone={c.phone2} />}
         </div>
       </div>
-      <div className="flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100 transition-opacity flex-shrink-0 mt-0.5">
-        <IconButton label="Editar" onClick={onEdit}><Pencil /></IconButton>
-        <IconButton
-          label={isFavorite ? 'Quitar favorito' : 'Añadir favorito'}
-          aria-pressed={isFavorite}
+      <div className="flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0 mt-0.5">
+        <button onClick={onEdit} className="p-2 sm:p-1.5 rounded hover:bg-slate-200 text-slate-400" title="Editar">
+          <Pencil className="w-3.5 h-3.5" />
+        </button>
+        <button
           onClick={onToggleFavorite}
-          className={isFavorite ? 'text-amber-500' : ''}
+          className={`p-2 sm:p-1.5 rounded hover:bg-slate-200 ${isFavorite ? 'text-amber-400' : 'text-slate-300'}`}
         >
-          <Star className={isFavorite ? 'fill-amber-400' : ''} />
-        </IconButton>
-        <IconButton label={L.eliminar} onClick={onDelete} className="hover:text-red-600 hover:bg-red-50"><Trash2 /></IconButton>
+          <Star className={`w-3.5 h-3.5 ${isFavorite ? 'fill-amber-400' : ''}`} />
+        </button>
+        <button onClick={onDelete} className="p-2 sm:p-1.5 rounded hover:bg-red-100 text-slate-300 hover:text-red-500" title="Eliminar">
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
       </div>
     </div>
   )
@@ -1122,11 +1101,43 @@ function PhoneLink({ phone }: { phone: string }) {
   return (
     <a
       href={`tel:${phone.replace(/\s/g, '')}`}
-      className="inline-flex items-center gap-1 text-secondary text-primary hover:underline min-h-9 sm:min-h-0"
+      className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 hover:underline"
     >
-      <Phone className="w-3 h-3" aria-hidden="true" />
+      <Phone className="w-3 h-3" />
       {phone}
     </a>
+  )
+}
+
+// ── Delete confirm modal ──────────────────────────────────────────────────────
+
+function DeleteConfirmModal({ count, onConfirm, onCancel }: {
+  count: number; onConfirm: () => void; onCancel: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+        <div className="flex items-start gap-3 mb-4">
+          <Trash2 className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-slate-800">
+              Eliminar {count === 1 ? 'contacto' : `${count} contactos`}
+            </p>
+            <p className="text-xs text-slate-500 mt-1">
+              Esta acción no se puede deshacer.
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={onCancel} className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-600">
+            Cancelar
+          </button>
+          <button onClick={onConfirm} className="flex-1 px-3 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium">
+            Eliminar
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -1174,7 +1185,7 @@ function ContactFormModal({
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     // null = «campo borrado» (ver ContactDraft)
     onSave({
@@ -1189,123 +1200,130 @@ function ContactFormModal({
     })
   }
 
-  const dirty = mode === 'add'
-    ? !!(name.trim() || role.trim() || phone1.trim())
-    : (name !== (contact?.name ?? '') || role !== (contact?.role ?? '') || phone1 !== (contact?.phone1 ?? '') || phone2 !== (contact?.phone2 ?? '') || team !== (contact?.team ?? '') || tier !== (contact?.tier ?? ''))
-
   return (
-    <Dialog
-      open
-      onClose={onClose}
-      title={mode === 'add' ? 'Nuevo contacto' : 'Editar contacto'}
-      onSubmit={handleSubmit}
-      dirty={dirty}
-      historyKey="contacto-form"
-      footer={<>
-        <Button onClick={onClose} className="mr-auto">{L.cancelar}</Button>
-        <Button type="submit" variant="primary" icon={<Check />}>{mode === 'add' ? 'Crear' : L.guardar}</Button>
-      </>}
-    >
-      <div className="space-y-3">
-        <Field label="Nombre completo">
-          <Input value={name} onChange={e => setName(e.target.value)} placeholder="Nombre" autoFocus />
-        </Field>
-
-        <Field label="Rol / Cargo">
-          <Input value={role} onChange={e => setRole(e.target.value)} list="roles-list" placeholder="Director deportivo, CEO…" />
-        </Field>
-        <datalist id="roles-list">{roles.map(r => <option key={r} value={r} />)}</datalist>
-
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Teléfono 1">
-            <Input type="tel" value={phone1} onChange={e => setPhone1(e.target.value)} placeholder="+34 600…" />
-          </Field>
-          <Field label="Teléfono 2">
-            <Input type="tel" value={phone2} onChange={e => setPhone2(e.target.value)} placeholder="Opcional" />
-          </Field>
-        </div>
-
-        {/* Sin club toggle */}
-        <div className="flex items-center gap-2 p-2.5 rounded-lg border border-slate-200 bg-slate-50">
-          <button
-            type="button"
-            role="switch"
-            aria-checked={noClub}
-            aria-label="Sin club / Libre"
-            onClick={() => setNoClub(v => !v)}
-            className={`w-9 h-5 rounded-full transition-colors flex-shrink-0 relative ${noClub ? 'bg-amber-400' : 'bg-slate-300'}`}
-          >
-            <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${noClub ? 'left-4' : 'left-0.5'}`} />
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 sticky top-0 bg-white">
+          <h2 className="text-sm font-semibold text-slate-800">
+            {mode === 'add' ? 'Nuevo contacto' : 'Editar contacto'}
+          </h2>
+          <button onClick={onClose} className="p-2 sm:p-1 rounded hover:bg-slate-100 text-slate-400">
+            <X className="w-4 h-4" />
           </button>
-          <div>
-            <p className="text-body font-medium text-slate-700">Sin club / Libre</p>
-            <p className="text-meta text-slate-500">Persona sin club asignado actualmente</p>
-          </div>
-          {noClub && <UserX className="w-4 h-4 text-amber-500 ml-auto" aria-hidden="true" />}
         </div>
 
-        {/* Region + Team (hidden if noClub) */}
-        {!noClub && (
-          <>
-            <Field label="Liga / Región" required>
-              <Select value={region} onChange={e => { setRegion(e.target.value); setTeam(''); setTeamInput('') }} required>
-                <option value="">Seleccionar región…</option>
-                {regions.map(r => <option key={r} value={r}>{r}</option>)}
-              </Select>
-            </Field>
-            <div ref={teamRef}>
-              <Field label="Club / Equipo">
-                {p => (
-                  <div className="relative">
-                    <Input
-                      {...p}
-                      value={teamInput}
-                      onChange={e => { setTeamInput(e.target.value); setTeam(e.target.value); setShowSugg(true) }}
-                      onFocus={() => setShowSugg(true)}
-                      placeholder={region ? 'Escribe o elige club…' : 'Selecciona región primero'}
-                      disabled={!region}
-                      autoComplete="off"
-                    />
-                    {showSugg && teamSuggestions.length > 0 && (
-                      <div className="absolute z-10 left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                        {teamSuggestions.map(t => (
-                          <button key={t} type="button"
-                            onClick={() => { setTeam(t); setTeamInput(t); setShowSugg(false) }}
-                            className="w-full text-left px-3 py-2 text-body hover:bg-blue-50 text-slate-700"
-                          >{t}</button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </Field>
-            </div>
-          </>
-        )}
+        <form onSubmit={handleSubmit} className="px-5 py-4 space-y-3 safe-area-bottom">
+          {/* Name */}
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Nombre completo</label>
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="Nombre" className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+          </div>
 
-        {/* Nivel */}
-        <Field label={`${L.nivel} del club`}>
-          {() => (
-            <div className="flex gap-2 flex-wrap" role="radiogroup" aria-label={`${L.nivel} del club`}>
+          {/* Role */}
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Rol / Cargo</label>
+            <input value={role} onChange={e => setRole(e.target.value)} list="roles-list" placeholder="Director deportivo, CEO…" className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+            <datalist id="roles-list">{roles.map(r => <option key={r} value={r} />)}</datalist>
+          </div>
+
+          {/* Phones */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Teléfono 1</label>
+              <input type="tel" value={phone1} onChange={e => setPhone1(e.target.value)} placeholder="+34 600…" className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Teléfono 2</label>
+              <input type="tel" value={phone2} onChange={e => setPhone2(e.target.value)} placeholder="Opcional" className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+            </div>
+          </div>
+
+          {/* Sin club toggle */}
+          <div className="flex items-center gap-2 p-2.5 rounded-lg border border-slate-200 bg-slate-50">
+            <button
+              type="button"
+              onClick={() => setNoClub(v => !v)}
+              className={`w-9 h-5 rounded-full transition-colors flex-shrink-0 relative ${noClub ? 'bg-amber-400' : 'bg-slate-300'}`}
+            >
+              <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${noClub ? 'left-4' : 'left-0.5'}`} />
+            </button>
+            <div>
+              <p className="text-xs font-medium text-slate-700">Sin club / Libre</p>
+              <p className="text-[11px] text-slate-400">Persona sin club asignado actualmente</p>
+            </div>
+            {noClub && <UserX className="w-4 h-4 text-amber-500 ml-auto" />}
+          </div>
+
+          {/* Region + Team (hidden if noClub) */}
+          {!noClub && (
+            <>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Liga / Región *</label>
+                <select value={region} onChange={e => { setRegion(e.target.value); setTeam(''); setTeamInput('') }} required className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
+                  <option value="">Seleccionar región…</option>
+                  {regions.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
+              <div ref={teamRef}>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Club / Equipo</label>
+                <div className="relative">
+                  <input
+                    value={teamInput}
+                    onChange={e => { setTeamInput(e.target.value); setTeam(e.target.value); setShowSugg(true) }}
+                    onFocus={() => setShowSugg(true)}
+                    placeholder={region ? 'Escribe o elige club…' : 'Selecciona región primero'}
+                    disabled={!region}
+                    className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:bg-slate-50"
+                  />
+                  {showSugg && teamSuggestions.length > 0 && (
+                    <div className="absolute z-10 left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {teamSuggestions.map(t => (
+                        <button key={t} type="button"
+                          onClick={() => { setTeam(t); setTeamInput(t); setShowSugg(false) }}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 text-slate-700"
+                        >{t}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Tier */}
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Tier del club</label>
+            <div className="flex gap-2 flex-wrap">
               {['', 'Tier 1', 'Tier 2', 'Tier 3', 'Tier 4'].map(t => (
-                <button key={t} type="button" role="radio" aria-checked={tier === t} onClick={() => setTier(t)}
-                  className={`px-2.5 min-h-9 sm:min-h-8 rounded text-secondary font-medium border transition-colors ${
+                <button key={t} type="button" onClick={() => setTier(t)}
+                  className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
                     tier === t
-                      ? t === '' ? 'bg-slate-100 border-slate-300 text-slate-700'
+                      ? t === '' ? 'bg-slate-100 border-slate-300 text-slate-600'
                         : t === 'Tier 1' ? 'bg-amber-100 border-amber-300 text-amber-800'
                         : t === 'Tier 2' ? 'bg-blue-50 border-blue-300 text-blue-700'
-                        : t === 'Tier 3' ? 'bg-slate-100 border-slate-300 text-slate-700'
-                        : 'bg-slate-50 border-slate-300 text-slate-600'
-                      : 'border-slate-300 text-slate-600 hover:border-slate-400'
+                        : t === 'Tier 3' ? 'bg-slate-100 border-slate-300 text-slate-600'
+                        : 'bg-slate-50 border-slate-200 text-slate-400'
+                      : 'border-slate-200 text-slate-400 hover:border-slate-300'
                   }`}
                 >
-                  {t ? tierLabel(t) : `Sin ${L.nivel.toLowerCase()}`}
+                  {t || 'Sin tier'}
                 </button>
               ))}
             </div>
-          )}
-        </Field>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-2 pt-2">
+            <button type="button" onClick={onClose} className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-600">
+              Cancelar
+            </button>
+            <button type="submit" className="flex-1 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center justify-center gap-1.5">
+              <Check className="w-3.5 h-3.5" />
+              {mode === 'add' ? 'Crear' : 'Guardar'}
+            </button>
+          </div>
+        </form>
       </div>
-    </Dialog>
+    </div>
   )
 }

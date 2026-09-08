@@ -1,8 +1,7 @@
 import { useState, useMemo } from 'react'
-import { ChevronDown, Check } from 'lucide-react'
+import { X, ChevronDown } from 'lucide-react'
 import type { Club, ClubNegotiation } from '../types'
-import { Dialog, Button, Badge } from './ui'
-import { L } from '../lib/labels'
+import { useEscapeKey } from '../hooks/useEscapeKey'
 import { leagueLabel } from '../lib/clubTiers'
 
 /** Modal "Asignar por liga": marca ligas enteras o clubes sueltos para crear negociaciones en Pendiente. */
@@ -77,111 +76,119 @@ export function BulkAssignModal({ clubs, existingNegotiations, onClose, onSave }
     try { await onSave(newIds) } finally { setSaving(false) }
   }
 
+  useEscapeKey(onClose)
+
   return (
-    <Dialog
-      open
-      onClose={onClose}
-      title="Asignar por liga"
-      description={<>Marca ligas enteras o clubes individuales. Se crearán como <span className="font-semibold text-purple-700">Pendiente</span>.</>}
-      dirty={newIds.length > 0}
-      historyKey="bulk-assign"
-      onSubmit={e => { e.preventDefault(); void handleSave() }}
-      footer={
-        <>
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
+      <div className="bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 flex-shrink-0">
+          <h2 className="font-semibold text-slate-800 text-sm flex-1">Asignar por liga</h2>
           {newIds.length > 0 && (
-            <Badge tone="primary" className="mr-auto bg-purple-100 text-purple-700">
+            <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full font-medium">
               {newIds.length} seleccionado{newIds.length !== 1 ? 's' : ''}
-            </Badge>
+            </span>
           )}
-          <Button onClick={onClose}>{L.cancelar}</Button>
-          <Button
-            type="submit"
-            variant="primary"
-            loading={saving}
-            disabled={newIds.length === 0}
-            className="bg-purple-600 hover:bg-purple-700 disabled:hover:bg-purple-600"
-          >
-            {saving ? 'Asignando…' : `Asignar ${newIds.length} club${newIds.length !== 1 ? 's' : ''}`}
-          </Button>
-        </>
-      }
-    >
-      <div className="-mx-4 sm:-mx-5 -my-4">
-        {leagues.map(([league, leagueClubs]) => {
-          const isExpanded = expanded.has(league)
-          const state = getLeagueState(league)
-          const available = leagueClubs.filter(c => !existingIds.has(c.id))
-          const allAlreadyAssigned = available.length === 0
+          <button onClick={onClose} aria-label="Cerrar" className="p-2 sm:p-1 rounded hover:bg-slate-100 text-slate-400">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
 
-          return (
-            <div key={league} className="border-b border-slate-100 last:border-0">
-              <div className="flex items-center px-4 py-2 gap-3 hover:bg-slate-50">
-                {/* Checkbox de toda la liga */}
-                <input
-                  type="checkbox"
-                  aria-label={`Seleccionar toda la liga ${league}`}
-                  checked={state !== 'none'}
-                  disabled={allAlreadyAssigned}
-                  ref={el => { if (el) el.indeterminate = state === 'partial' }}
-                  onChange={() => toggleLeague(league)}
-                  className="w-4 h-4 rounded text-purple-600 cursor-pointer flex-shrink-0"
-                />
-                {/* Nombre de la liga: clic para desplegar */}
-                <button
-                  type="button"
-                  onClick={() => toggleExpand(league)}
-                  aria-expanded={isExpanded}
-                  className="flex-1 flex items-center gap-2 text-left min-w-0 min-h-11 sm:min-h-9 rounded focus-visible:ring-2 focus-visible:ring-primary/40 outline-none"
-                >
-                  <span className="font-medium text-slate-800 text-body truncate">{league}</span>
-                  <span className="text-meta text-slate-500 flex-shrink-0">{leagueClubs.length}</span>
-                  {state === 'all' && !allAlreadyAssigned && (
-                    <span className="text-meta text-purple-600 font-medium flex-shrink-0 inline-flex items-center gap-0.5"><Check className="w-3 h-3" aria-hidden="true" /> todos</span>
-                  )}
-                  {allAlreadyAssigned && (
-                    <span className="text-meta text-green-600 flex-shrink-0">ya asignados</span>
-                  )}
-                  <ChevronDown className={`w-3.5 h-3.5 text-slate-500 ml-auto flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} aria-hidden="true" />
-                </button>
-              </div>
+        <p className="px-4 py-2 text-xs text-slate-500 border-b border-slate-100 flex-shrink-0">
+          Marca ligas enteras o clubes individuales. Se crearán como <span className="font-semibold text-purple-700">Pendiente</span>.
+        </p>
 
-              {isExpanded && (
-                <div className="px-4 pb-2 space-y-1 bg-slate-50">
-                  {leagueClubs.map(club => {
-                    const alreadyExists = existingIds.has(club.id)
-                    const isSelected = selected.has(club.id)
-                    return (
-                      <label
-                        key={club.id}
-                        className={`flex items-center gap-3 px-3 py-2 min-h-11 sm:min-h-0 rounded-lg border cursor-pointer transition-colors ${
-                          alreadyExists
-                            ? 'border-green-200 bg-green-50 cursor-not-allowed opacity-60'
-                            : isSelected
-                              ? 'border-purple-300 bg-purple-50'
-                              : 'border-slate-200 bg-white hover:bg-slate-50'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isSelected || alreadyExists}
-                          disabled={alreadyExists}
-                          onChange={() => !alreadyExists && toggleClub(club.id)}
-                          className="w-4 h-4 rounded text-purple-600"
-                        />
-                        <span className="flex-1 text-body text-slate-800 truncate">{club.name}</span>
-                        {club.aisManager && (
-                          <span className="text-meta font-mono text-slate-500 flex-shrink-0" title={L.encargado}>{club.aisManager}</span>
-                        )}
-                        {alreadyExists && <span className="text-meta text-green-600 flex-shrink-0">asignado</span>}
-                      </label>
-                    )
-                  })}
+        {/* Leagues accordion */}
+        <div className="overflow-y-auto flex-1">
+          {leagues.map(([league, leagueClubs]) => {
+            const isExpanded = expanded.has(league)
+            const state = getLeagueState(league)
+            const available = leagueClubs.filter(c => !existingIds.has(c.id))
+            const allAlreadyAssigned = available.length === 0
+
+            return (
+              <div key={league} className="border-b border-slate-100 last:border-0">
+                <div className="flex items-center px-4 py-2.5 gap-3 hover:bg-slate-50">
+                  {/* League-level checkbox */}
+                  <input
+                    type="checkbox"
+                    checked={state !== 'none'}
+                    disabled={allAlreadyAssigned}
+                    ref={el => { if (el) el.indeterminate = state === 'partial' }}
+                    onChange={() => toggleLeague(league)}
+                    className="w-4 h-4 rounded text-purple-600 cursor-pointer flex-shrink-0"
+                  />
+                  {/* League name — click to expand */}
+                  <button
+                    onClick={() => toggleExpand(league)}
+                    className="flex-1 flex items-center gap-2 text-left min-w-0"
+                  >
+                    <span className="font-medium text-slate-800 text-sm truncate">{league}</span>
+                    <span className="text-xs text-slate-400 flex-shrink-0">{leagueClubs.length}</span>
+                    {state === 'all' && !allAlreadyAssigned && (
+                      <span className="text-xs text-purple-600 font-medium flex-shrink-0">✓ todos</span>
+                    )}
+                    {allAlreadyAssigned && (
+                      <span className="text-xs text-green-600 flex-shrink-0">ya asignados</span>
+                    )}
+                    <ChevronDown className={`w-3.5 h-3.5 text-slate-400 ml-auto flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                  </button>
                 </div>
-              )}
-            </div>
-          )
-        })}
+
+                {isExpanded && (
+                  <div className="px-4 pb-2 space-y-1 bg-slate-50">
+                    {leagueClubs.map(club => {
+                      const alreadyExists = existingIds.has(club.id)
+                      const isSelected = selected.has(club.id)
+                      return (
+                        <label
+                          key={club.id}
+                          className={`flex items-center gap-3 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${
+                            alreadyExists
+                              ? 'border-green-200 bg-green-50 cursor-not-allowed opacity-60'
+                              : isSelected
+                                ? 'border-purple-300 bg-purple-50'
+                                : 'border-slate-200 bg-white hover:bg-slate-50'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected || alreadyExists}
+                            disabled={alreadyExists}
+                            onChange={() => !alreadyExists && toggleClub(club.id)}
+                            className="w-4 h-4 rounded text-purple-600"
+                          />
+                          <span className="flex-1 text-sm text-slate-800 truncate">{club.name}</span>
+                          {club.aisManager && (
+                            <span className="text-xs font-mono text-slate-400 flex-shrink-0">{club.aisManager}</span>
+                          )}
+                          {alreadyExists && <span className="text-xs text-green-600 flex-shrink-0">asignado</span>}
+                        </label>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Footer */}
+        <div className="px-4 py-3 border-t border-slate-100 flex gap-2 flex-shrink-0 safe-area-bottom">
+          <button onClick={onClose} className="flex-1 py-2 text-sm border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50">
+            Cancelar
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={newIds.length === 0 || saving}
+            className="flex-1 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 font-medium"
+          >
+            {saving
+              ? <span className="flex items-center justify-center gap-2"><span className="inline-block w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin align-middle" /> Asignando…</span>
+              : `Asignar ${newIds.length} club${newIds.length !== 1 ? 's' : ''}`}
+          </button>
+        </div>
       </div>
-    </Dialog>
+    </div>
   )
 }

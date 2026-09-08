@@ -10,8 +10,8 @@ import type { FirmasEntry, FirmasStatus } from '../../../types'
 export const AVISO_TITULO: Record<string, string> = {
   'sin-accion':    'Calientes sin próxima acción',
   'sin-encargado': 'Sin encargado asignado',
-  'descartado':    'Descartados en scouting pero vivos en Firmar',
-  'duplicado':     'Repetidos en Firmar',
+  'descartado':    'Descartados en scouting pero vivos en el pipeline',
+  'duplicado':     'Repetidos en el pipeline',
   'recalentar':    'Fríos que acumulan informes «Llamar»',
   'cambio-club':   'Han cambiado de club',
   'contrato':      'Contrato de club acabando',

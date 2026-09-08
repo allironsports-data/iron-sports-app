@@ -1,11 +1,8 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react'
 import {
-  FileText, Calendar, CalendarDays, ClipboardList, Users, Target, Sun, PenLine, Shield, WifiOff,
+  LogOut, FileText, Calendar, CalendarDays, TrendingUp, Eye, ClipboardList, Users, Inbox, Target, Sun, PenLine, Shield,
 } from 'lucide-react'
-import { SectionTabs, Button, type TabItem } from '../../components/ui'
-import { ConfirmModal } from '../../components/ConfirmModal'
-import { useBeforeUnload } from '../../hooks/useBeforeUnload'
-import { L } from '../../lib/labels'
+import logoImg from '../../assets/logo.jpeg'
 import type { ScoutingPlayer, ScoutingReport, ScoutingAssessment, ScoutingMatch, FirmasEntry } from '../../types'
 import * as db from '../../lib/db'
 import { buscarJugadoresParecidos } from '../../lib/duplicados'
@@ -19,7 +16,7 @@ import { isValidName } from '../../lib/validate'
 import { clubBase, normEquipo } from '../../lib/zonas'
 import { teamMatchKind } from '../../lib/equipos'
 import { generarInformeMensual } from '../../lib/informeMensual'
-import { type CaptacionTab, type ConclusionOption, type MatchScoutInfo, ALL_TABS, ALL_ASSESSMENTS, PRETEMPORADA_MIN_BIRTH_YEAR, normConclusion, personaToName, todayISO, isAfterToday } from './helpers'
+import { type CaptacionTab, type ConclusionOption, type MatchScoutInfo, ALL_ASSESSMENTS, PRETEMPORADA_MIN_BIRTH_YEAR, normConclusion, personaToName, todayISO, isAfterToday } from './helpers'
 import type { Props } from './types'
 import { JugadoresTab, PAGE_SIZE, type JugadoresView } from './JugadoresTab'
 import { InformesTab } from './InformesTab'
@@ -48,9 +45,9 @@ export function Captacion({
   scoutingMatches,
   profiles,
   currentProfile,
-  tab,
-  onTabChange,
-  loading = false,
+  onGoToSection,
+  onLogout,
+  onAdmin,
   onAddPlayer,
   onUpdatePlayer,
   onDeletePlayer,
@@ -98,38 +95,13 @@ export function Captacion({
   // ── toasts ──
   const { toasts, showToast, dismissToast } = useToast()
 
-  // ── sub-pestaña ──
-  // La prop `tab` (App.tsx la sincroniza con #/captacion/sub) manda cuando
-  // llega; si no, se recupera la última de sessionStorage.
-  const [captTab, setCaptTab] = useState<CaptacionTab>(() => {
-    if (tab && ALL_TABS.includes(tab)) return tab
-    const guardada = sessionStorage.getItem('capt_tab') as CaptacionTab | null
-    return guardada && ALL_TABS.includes(guardada) ? guardada : 'jugadores'
-  })
-  useEffect(() => { sessionStorage.setItem('capt_tab', captTab) }, [captTab])
-  useEffect(() => {
-    if (tab && ALL_TABS.includes(tab)) setCaptTab(tab)
-  }, [tab])
-  const onTabChangeRef = React.useRef(onTabChange)
-  useEffect(() => { onTabChangeRef.current = onTabChange }, [onTabChange])
-  // Cualquier cambio interno de pestaña se comunica a App (para el hash)
-  useEffect(() => { onTabChangeRef.current?.(captTab) }, [captTab])
-
+  // ── section tab ── (must be before header-height effect)
+  const [captTab, setCaptTab] = useState<CaptacionTab>('jugadores')
   const RESTRICTED_TABS: CaptacionTab[] = ['jugadores', 'partidos', 'planificacion', 'informes']
   useEffect(() => {
     if (restricted && !RESTRICTED_TABS.includes(captTab)) setCaptTab('jugadores')
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [restricted, captTab])
-
-  // Cambios sin guardar en la tabla de edición rápida (Jugadores › Edición):
-  // al cambiar de pestaña se pregunta antes de perderlos.
-  const [edicionPendiente, setEdicionPendiente] = useState(0)
-  const [tabPendiente, setTabPendiente] = useState<CaptacionTab | null>(null)
-  useBeforeUnload(edicionPendiente > 0)
-  const cambiarTab = useCallback((t: CaptacionTab) => {
-    if (edicionPendiente > 0 && t !== captTab) { setTabPendiente(t); return }
-    setCaptTab(t)
-  }, [edicionPendiente, captTab])
 
   // Navegación externa: abrir la ficha de un jugador concreto (p. ej. desde Boulema)
   useEffect(() => {
@@ -219,6 +191,18 @@ export function Captacion({
       return p.candidateSeenCount == null || n > p.candidateSeenCount
     }).length,
   [scoutingPlayers, llamarCountByPlayer, conclThreshold])
+
+  // ── header height (for panel offset) ──
+  const headerRef = React.useRef<HTMLElement>(null)
+  const [headerHeight, setHeaderHeight] = useState(0)
+  useEffect(() => {
+    const measure = () => {
+      if (headerRef.current) setHeaderHeight(headerRef.current.offsetHeight)
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [captTab]) // recalculate if tabs change row count
 
   // ── filter state ──
   const [search, setSearch] = useState('')
@@ -326,14 +310,12 @@ export function Captacion({
   // que ya no existe y volveríamos a tener dos donde hay uno.
   const [renombrando, setRenombrando] = useState<string | null>(null)
   useEffect(() => { setRenombrando(null) }, [panelEquipo])
-  /** Confirmación del renombrado (antes era un confirm() nativo) */
-  const [confirmRenombre, setConfirmRenombre] = useState<{ nuevo: string; mensaje: string } | null>(null)
 
-  function guardarRenombre(): Promise<void> {
+  async function guardarRenombre() {
     const f = filaEquipoAbierta
     const nuevo = (renombrando ?? '').trim()
-    if (!f || !nuevo) { setRenombrando(null); return Promise.resolve() }
-    if (nuevo === f.nombre) { setRenombrando(null); return Promise.resolve() }
+    if (!f || !nuevo) { setRenombrando(null); return }
+    if (nuevo === f.nombre) { setRenombrando(null); return }
 
     const jugadores = scoutingPlayers.filter(p => normEquipo(p.team) === f.clave)
     const local = scoutingMatches.filter(m => normEquipo(m.homeTeam) === f.clave)
@@ -341,22 +323,10 @@ export function Captacion({
     const partidos = new Set([...local, ...visitante].map(m => m.id)).size
 
     const yaExiste = filasEquipos.some(x => x.clave === normEquipo(nuevo) && x.clave !== f.clave)
-    const aviso = yaExiste ? `Ya existe «${nuevo}»: los dos equipos quedarán fusionados en uno. ` : ''
-    setConfirmRenombre({
-      nuevo,
-      mensaje: `${aviso}Se actualizarán ${jugadores.length} jugador${jugadores.length !== 1 ? 'es' : ''} y ${partidos} partido${partidos !== 1 ? 's' : ''} de «${f.nombre}».`,
-    })
-    return Promise.resolve()
-  }
-
-  async function ejecutarRenombre() {
-    const f = filaEquipoAbierta
-    const nuevo = confirmRenombre?.nuevo ?? ''
-    setConfirmRenombre(null)
-    if (!f || !nuevo) return
-    const jugadores = scoutingPlayers.filter(p => normEquipo(p.team) === f.clave)
-    const local = scoutingMatches.filter(m => normEquipo(m.homeTeam) === f.clave)
-    const visitante = scoutingMatches.filter(m => normEquipo(m.awayTeam) === f.clave)
+    const aviso = yaExiste
+      ? `Ya existe «${nuevo}». Los dos equipos quedarán fusionados en uno.\n\n`
+      : ''
+    if (!confirm(`${aviso}Renombrar «${f.nombre}» → «${nuevo}».\n\nSe actualizarán ${jugadores.length} jugador${jugadores.length !== 1 ? 'es' : ''} y ${partidos} partido${partidos !== 1 ? 's' : ''}.`)) return
 
     try {
       await db.renombrarEquipo({
@@ -1004,7 +974,7 @@ export function Captacion({
       await db.updateScoutingPlayer(updated)
       onUpdatePlayer(updated)
     } catch {
-      showToast('Error al actualizar la etiqueta', 'error')
+      showToast('Error al actualizar el assessment', 'error')
     }
   }
 
@@ -1041,7 +1011,7 @@ export function Captacion({
         onRemoveMatchPlayer={onRemoveMatchPlayer}
         onAddReport={onAddReport}
         onLinkReportToMatch={handleLinkReportToMatch}
-        onOpenEquipo={(nombre) => { setDetailMatchId(null); cambiarTab('equipos'); abrirJugador(null); setPanelEquipo(nombre.trim()) }}
+        onOpenEquipo={(nombre) => { setDetailMatchId(null); setCaptTab('equipos'); abrirJugador(null); setPanelEquipo(nombre.trim()) }}
         onCreateAndLinkPlayer={handleCreateAndLinkPlayer}
         onFixPlayerTeam={handleFixPlayerTeam}
         onOpenPlayer={id => { if (variant === 'modal') setDetailMatchId(null); abrirJugador(id) }}
@@ -1223,7 +1193,7 @@ export function Captacion({
       }
       showToast(`${personaToName(scout, profiles) || scout} asignado a este partido`)
     } catch {
-      showToast(isAdmin ? 'No se pudo asignar el scout. ¿Está ejecutada la migración de match_scouts?' : 'No se pudo asignar el scout. Inténtalo de nuevo.', 'error')
+      showToast('No se pudo asignar el scout. ¿Está ejecutada la migración de match_scouts?', 'error')
     }
   }
 
@@ -1314,21 +1284,6 @@ export function Captacion({
     []
   )
 
-  // Sub-pestañas (mismo orden de siempre; el reordenado es otro punto)
-  const tabItems = useMemo<TabItem<CaptacionTab>[]>(() => ([
-    { id: 'firmar', label: L.firmar, icon: <PenLine /> },
-    { id: 'conclusiones', label: 'Conclusiones', icon: <Target />, count: newCandidatesCount, alert: newCandidatesCount > 0 },
-    { id: 'contratos', label: 'Fin de contrato', icon: <Calendar /> },
-    { id: 'jugadores', label: L.jugadores, icon: <Users /> },
-    { id: 'equipos', label: 'Equipos', icon: <Shield /> },
-    { id: 'informes', label: 'Informes recientes', icon: <FileText /> },
-    { id: 'partidos', label: L.partidos, icon: <ClipboardList /> },
-    { id: 'planificacion', label: L.planificacion, icon: <CalendarDays /> },
-    { id: 'pretemporada', label: 'Pretemporada', icon: <Sun /> },
-  ] as TabItem<CaptacionTab>[]).map(t => ({ ...t, hidden: restricted && !RESTRICTED_TABS.includes(t.id) })),
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  [newCandidatesCount, restricted])
-
   // ── render ───────────────────────────────────────────────────
 
   const hasPanel = !!panelPlayer || showAddPlayer || showEditPlayer || !!panelEquipo
@@ -1347,60 +1302,108 @@ export function Captacion({
 
   return (
     <div
-      className="min-h-[calc(100dvh-var(--shell-h,0px))] bg-slate-50 flex flex-col transition-[padding] duration-150"
+      className="min-h-screen bg-slate-50 flex flex-col transition-[padding] duration-150"
       style={pantallaPartida ? { paddingRight: anchoPanel } : undefined}
     >
-      {/* Sub-pestañas de Captación (la barra superior y el nivel 1 los pinta AppShell) */}
-      <div className="sticky top-[var(--shell-h)] z-20 bg-white border-b border-slate-200 -mt-4 -mx-3 sm:-mx-6 mb-4">
-        <div className="max-w-6xl mx-auto px-3 sm:px-6">
-          <SectionTabs<CaptacionTab>
-            variant="secondary"
-            label="Secciones de Captación"
-            items={tabItems}
-            value={captTab}
-            onChange={cambiarTab}
-            trailing={
-              <div className="flex items-center gap-1 pl-2">
-                {colaInformes.length > 0 && (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    icon={<WifiOff />}
-                    onClick={() => void procesarColaInformes(true)}
-                    aria-label={`${colaInformes.length} informe${colaInformes.length !== 1 ? 's' : ''} pendiente${colaInformes.length !== 1 ? 's' : ''} de enviar. Reintentar ahora`}
-                    title={colaInformes.find(x => x.ultimoError)?.ultimoError
-                      ? `Último error: ${colaInformes.find(x => x.ultimoError)!.ultimoError}. Clic para reintentar ahora.`
-                      : 'Se enviarán solos cuando vuelva la conexión. Clic para reintentar ahora.'}
-                    className="border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
-                  >
-                    {colaInformes.length} <span className="hidden sm:inline">pendiente{colaInformes.length !== 1 ? 's' : ''}</span>
-                  </Button>
-                )}
-                {/* Informe mensual en PDF: se abre listo para imprimir → «Guardar como PDF» */}
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  icon={<FileText />}
-                  onClick={() => generarInformeMensual({ scoutingPlayers, scoutingReports, scoutingMatches })}
-                  aria-label="Informe mensual para clubes en PDF"
-                  title="Informe mensual para clubes en PDF: jugadores de interés y campograma"
-                >
-                  <span className="hidden sm:inline">Informe mensual</span>
-                </Button>
-              </div>
-            }
-          />
+      {/* Header */}
+      <header ref={headerRef} className="bg-white border-b border-slate-200 sticky top-0 z-50">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center gap-3 h-12 sm:h-14">
+          <img src={logoImg} alt="All Iron Sports" className="h-7 sm:h-8 w-auto rounded" />
+          <span className="text-xs font-bold text-slate-800 tracking-wide uppercase hidden sm:block">All Iron Sports</span>
+          {colaInformes.length > 0 && (
+            <button
+              onClick={() => void procesarColaInformes(true)}
+              title={colaInformes.find(x => x.ultimoError)?.ultimoError
+                ? `Último error: ${colaInformes.find(x => x.ultimoError)!.ultimoError}. Clic para reintentar ahora.`
+                : 'Se enviarán solos cuando vuelva la conexión. Clic para reintentar ahora.'}
+              className="text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 hover:bg-amber-100 whitespace-nowrap"
+            >
+              📡 {colaInformes.length} informe{colaInformes.length !== 1 ? 's' : ''} pendiente{colaInformes.length !== 1 ? 's' : ''} de enviar
+            </button>
+          )}
+          <div className="flex-1" />
+          {/* Informe semanal en PDF: se abre listo para imprimir → «Guardar como PDF» */}
+          <button
+            onClick={() => generarInformeMensual({ scoutingPlayers, scoutingReports, scoutingMatches })}
+            title="Informe mensual para clubes en PDF: jugadores de interés y campograma"
+            className="text-xs font-semibold text-slate-500 hover:text-primary px-2 py-2 sm:py-1 rounded hover:bg-slate-100 whitespace-nowrap"
+          >
+            📄 <span className="hidden sm:inline">Informe mensual</span>
+          </button>
+          {onAdmin && (
+            <button onClick={onAdmin} className="text-xs text-slate-500 hover:text-slate-800 px-2 py-2 sm:py-1 rounded hover:bg-slate-100">Admin</button>
+          )}
+          <button onClick={onLogout} aria-label="Cerrar sesión" className="text-slate-400 hover:text-slate-700 p-2.5 sm:p-1.5 rounded hover:bg-slate-100">
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
-      </div>
 
-      {loading && ['partidos', 'jugadores', 'informes'].includes(captTab) && (
-        <div role="status" className="max-w-6xl mx-auto w-full px-3 sm:px-6 pt-3">
-          <div className="flex items-center gap-2 text-secondary text-slate-500 bg-white border border-slate-200 rounded-lg px-3 py-2">
-            <span aria-hidden="true" className="inline-block w-3.5 h-3.5 border-2 border-slate-300 border-t-primary rounded-full animate-spin" />
-            Cargando datos de Captación…
-          </div>
+        {/* Level 1: main sections (oculto para cuentas solo-Captación) */}
+        {!restricted && (
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 hidden sm:flex items-center border-t border-slate-100 overflow-x-auto scrollbar-none">
+          <button
+            onClick={() => onGoToSection('tareas')}
+            className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
+          >
+            Mantenimiento
+          </button>
+          <button
+            onClick={() => onGoToSection('distribucion')}
+            className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
+          >
+            <TrendingUp className="w-3.5 h-3.5" />
+            Distribución
+          </button>
+          <button className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 border-primary text-primary transition-colors">
+            <Eye className="w-3.5 h-3.5" />
+            Captación
+          </button>
+          <button
+            onClick={() => onGoToSection('boulema')}
+            className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
+          >
+            <Inbox className="w-3.5 h-3.5" />
+            Boulema
+          </button>
         </div>
-      )}
+        )}
+
+        {/* Captación sub-tabs */}
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center gap-1 py-1.5 border-t border-slate-100 bg-slate-50/60 overflow-x-auto scrollbar-none">
+          {([
+            { id: 'firmar' as CaptacionTab, label: 'Pipeline/Firmar', labelMobile: 'Pipeline', icon: <PenLine className="w-3.5 h-3.5" /> },
+            { id: 'conclusiones' as CaptacionTab, label: 'Conclusiones', labelMobile: 'Concl.', icon: <Target className="w-3.5 h-3.5" /> },
+            { id: 'contratos' as CaptacionTab, label: 'Fin de contrato', labelMobile: 'Contratos', icon: <Calendar className="w-3.5 h-3.5" /> },
+            { id: 'jugadores' as CaptacionTab, label: 'Jugadores', labelMobile: 'Jugadores', icon: <Users className="w-3.5 h-3.5" /> },
+            { id: 'equipos' as CaptacionTab, label: 'Equipos', labelMobile: 'Equipos', icon: <Shield className="w-3.5 h-3.5" /> },
+            { id: 'informes' as CaptacionTab, label: 'Informes recientes', labelMobile: 'Informes', icon: <FileText className="w-3.5 h-3.5" /> },
+            { id: 'partidos' as CaptacionTab, label: 'Partidos', labelMobile: 'Partidos', icon: <ClipboardList className="w-3.5 h-3.5" /> },
+            { id: 'planificacion' as CaptacionTab, label: 'Planificación', labelMobile: 'Planif.', icon: <CalendarDays className="w-3.5 h-3.5" /> },
+            { id: 'pretemporada' as CaptacionTab, label: 'Pretemporada', labelMobile: 'Pretemp.', icon: <Sun className="w-3.5 h-3.5" /> },
+          ]).filter(t => !restricted || RESTRICTED_TABS.includes(t.id)).map(t => (
+            <button
+              key={t.id}
+              onClick={() => setCaptTab(t.id)}
+              className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                captTab === t.id
+                  ? 'bg-primary text-white'
+                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
+              }`}
+            >
+              {t.icon}
+              <span className="hidden sm:inline">{t.label}</span>
+              <span className="sm:hidden">{t.labelMobile}</span>
+              {t.id === 'conclusiones' && newCandidatesCount > 0 && (
+                <span className={`min-w-[16px] text-center text-[10px] font-bold rounded-full px-1 ${
+                  captTab === t.id ? 'bg-white/25 text-white' : 'bg-amber-400 text-amber-950'
+                }`}>
+                  {newCandidatesCount > 99 ? '99+' : newCandidatesCount}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      </header>
 
       {/* ── JUGADORES TAB ────────────────────────────────────── */}
       {captTab === 'jugadores' && (
@@ -1420,7 +1423,6 @@ export function Captacion({
           openAddPlayer={openAddPlayer}
           onUpdatePlayer={onUpdatePlayer}
           showToast={showToast}
-          onEdicionPendiente={setEdicionPendiente}
           abrirJugador={abrirJugador}
           setShowAddPlayer={setShowAddPlayer} setShowEditPlayer={setShowEditPlayer}
           panelPlayerId={panelPlayerId}
@@ -1450,8 +1452,9 @@ export function Captacion({
           onCreate={onCreateFirmasEntry}
           onPatch={onPatchFirmasEntry}
           onDelete={onDeleteFirmasEntry}
-          onOpenScoutingPlayer={(id) => { cambiarTab('jugadores'); abrirJugador(id) }}
+          onOpenScoutingPlayer={(id) => { setCaptTab('jugadores'); abrirJugador(id) }}
           showToast={showToast}
+          headerHeight={headerHeight}
         />
       )}
 
@@ -1514,7 +1517,7 @@ export function Captacion({
           scoutingMatches={scoutingMatches}
           reportPersonas={reportPersonas}
           reportPersonaFilter={reportPersonaFilter} setReportPersonaFilter={setReportPersonaFilter}
-          setCaptTab={cambiarTab}
+          setCaptTab={setCaptTab}
           abrirJugador={abrirJugador}
         />
       )}
@@ -1601,7 +1604,7 @@ export function Captacion({
           preCatFilter={preCatFilter} setPreCatFilter={setPreCatFilter}
           preAssessFilter={preAssessFilter} setPreAssessFilter={setPreAssessFilter}
           preSortKey={preSortKey} preSortDir={preSortDir} setPreSort={setPreSort}
-          setCaptTab={cambiarTab}
+          setCaptTab={setCaptTab}
           abrirJugador={abrirJugador}
         />
       )}
@@ -1612,12 +1615,13 @@ export function Captacion({
         <PlayerPanel
           fullscreen={fullscreen} setFullscreen={setFullscreen}
           isDesktop={isDesktop}
+          headerHeight={headerHeight}
           closePanel={closePanel}
           showToast={showToast}
           isAdmin={isAdmin}
           currentProfile={currentProfile}
           profiles={profiles}
-          setCaptTab={cambiarTab}
+          setCaptTab={setCaptTab}
           abrirJugador={abrirJugador}
           panelPlayerId={panelPlayerId} panelPlayer={panelPlayer} setPanelPlayerId={setPanelPlayerId}
           panelEquipo={panelEquipo} setPanelEquipo={setPanelEquipo}
@@ -1675,14 +1679,13 @@ export function Captacion({
               ? 'Toca los partidos que quieras fusionar'
               : `${mergeSelected.size} partido${mergeSelected.size !== 1 ? 's' : ''} seleccionado${mergeSelected.size !== 1 ? 's' : ''}`}
           </span>
-          <Button
-            size="sm"
+          <button
             onClick={() => setShowMergeModal(true)}
             disabled={mergeSelected.size < 2}
-            className="bg-white text-violet-700 border-white rounded-full font-bold hover:bg-violet-50"
+            className="text-xs font-bold bg-white text-violet-700 rounded-full px-3 py-1.5 disabled:opacity-40 whitespace-nowrap"
           >
-            Fusionar
-          </Button>
+            Fusionar →
+          </button>
         </div>
       )}
 
@@ -1727,27 +1730,6 @@ export function Captacion({
         />
       )}
 
-      {/* Confirmaciones (sustituyen a los confirm() nativos) */}
-      <ConfirmModal
-        open={!!confirmRenombre}
-        title={`Renombrar «${filaEquipoAbierta?.nombre ?? ''}» → «${confirmRenombre?.nuevo ?? ''}»`}
-        message={confirmRenombre?.mensaje}
-        confirmLabel="Renombrar"
-        variant="default"
-        onConfirm={ejecutarRenombre}
-        onCancel={() => setConfirmRenombre(null)}
-      />
-      <ConfirmModal
-        open={!!tabPendiente}
-        title="Cambios sin guardar"
-        message={`Tienes ${edicionPendiente} cambio${edicionPendiente !== 1 ? 's' : ''} sin guardar en la tabla de edición. Si cambias de pestaña se perderán.`}
-        confirmLabel="Descartar y cambiar"
-        cancelLabel="Seguir editando"
-        variant="danger"
-        onConfirm={() => { if (tabPendiente) setCaptTab(tabPendiente); setTabPendiente(null); setEdicionPendiente(0) }}
-        onCancel={() => setTabPendiente(null)}
-      />
-
       {/* Toasts globales de la vista */}
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
@@ -1755,7 +1737,7 @@ export function Captacion({
         .field {
           width: 100%;
           padding: 6px 10px;
-          font-size: 0.8125rem;
+          font-size: 0.75rem;
           border: 1px solid #e2e8f0;
           border-radius: 8px;
           background: white;
