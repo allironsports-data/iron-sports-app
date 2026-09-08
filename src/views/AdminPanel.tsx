@@ -49,7 +49,7 @@ export function AdminPanel({ profiles, tasks, players, scoutingPlayers, scouting
     <div className="min-h-screen bg-slate-50">
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="max-w-5xl mx-auto flex items-center gap-3 px-4 py-3">
-          <button onClick={onBack} className="p-2 sm:p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600">
+          <button aria-label="Volver" onClick={onBack} className="p-2 sm:p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600">
             <ArrowLeft className="w-5 h-5" />
           </button>
           <img src={logoImg} alt="" className="h-8 w-auto rounded" />
@@ -57,7 +57,7 @@ export function AdminPanel({ profiles, tasks, players, scoutingPlayers, scouting
             <h1 className="text-base font-bold text-slate-800 truncate">Administración</h1>
             <p className="text-xs text-slate-400 truncate">Gestión del equipo y seguimiento</p>
           </div>
-          <button onClick={onLogout} className="p-2 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600" title="Cerrar sesión">
+          <button aria-label="Cerrar sesión" onClick={onLogout} className="p-2 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600" title="Cerrar sesión">
             <LogOut className="w-4 h-4" />
           </button>
         </div>
@@ -438,7 +438,7 @@ function HistorialTab({ profiles }: { profiles: Profile[] }) {
           <div className="flex items-center gap-1 flex-1 min-w-[200px]">
             <input value={filaInput} onChange={e => setFilaInput(e.target.value)} placeholder="Buscar por id de fila (uuid)"
               className="flex-1 text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
-            <button type="submit" className="p-1.5 rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50" title="Buscar"><Search className="w-3.5 h-3.5" /></button>
+            <button aria-label="Buscar" type="submit" className="p-1.5 rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50" title="Buscar"><Search className="w-3.5 h-3.5" /></button>
             {filaId && <button type="button" onClick={() => { setFilaId(''); setFilaInput('') }} className="text-xs text-slate-400 hover:text-slate-600 underline">Quitar</button>}
           </div>
         </form>

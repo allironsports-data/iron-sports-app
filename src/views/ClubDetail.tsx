@@ -332,7 +332,7 @@ export function ClubDetail({
                       <div className="flex items-center gap-1 sm:gap-2">
                         <button
                           onClick={e => { e.stopPropagation(); setEditingNeg(neg) }}
-                          className="p-2 sm:p-1 text-slate-300 hover:text-blue-500"
+                          className="p-2 sm:p-1 text-slate-500 hover:text-blue-500"
                           title="Abrir esta negociación"
                           aria-label="Abrir esta negociación"
                         >
@@ -496,13 +496,13 @@ export function ClubDetail({
                           <Plus className="w-3 h-3" /> Ofrecer
                         </button>
                         <div className="flex items-center gap-1">
-                          <button onClick={() => setEditingNeed({ index: i, need })} aria-label="Editar necesidad" className="p-2 sm:p-1 text-slate-300 hover:text-slate-500">
+                          <button onClick={() => setEditingNeed({ index: i, need })} aria-label="Editar necesidad" className="p-2 sm:p-1 text-slate-500 hover:text-slate-500">
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => setConfirmDeleteNeedIdx(i)}
                             aria-label="Eliminar necesidad"
-                            className="p-2 sm:p-1 text-slate-300 hover:text-red-400"
+                            className="p-2 sm:p-1 text-slate-500 hover:text-red-400"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>

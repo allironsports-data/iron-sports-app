@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { Plus, Search, Edit3, ExternalLink, Trash2, Users, X, CheckSquare, ChevronDown, Check, ArrowLeft, List, LayoutGrid } from 'lucide-react'
+import { Plus, Search, Edit3, ExternalLink, Trash2, Users, X, CheckSquare, ChevronDown, Check, ArrowLeft, List, LayoutGrid, StickyNote, Clock } from 'lucide-react'
 import type { Club, ClubNegotiation } from '../types'
 import type { Profile } from '../contexts/AuthContext'
 import type { ToastVariant } from '../hooks/useToast'
@@ -505,10 +505,10 @@ export function PlayerClubList({
           <div className="flex items-center gap-1.5 min-w-0">
             <span className={`text-sm font-medium flex-shrink-0 max-w-[60%] truncate ${neg.status === 'descartado' ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{club.name}</span>
             {club.league && <span className="text-[11px] text-slate-400 truncate min-w-0 hidden sm:inline">· {leagueLabel(club.league, club.country)}</span>}
-            {neg.updates && neg.updates.length > 0 && <span className="text-[11px] text-slate-400 flex-shrink-0">📝 {neg.updates.length}</span>}
+            {neg.updates && neg.updates.length > 0 && <span className="inline-flex items-center gap-0.5 text-[11px] text-slate-400 flex-shrink-0"><StickyNote className="w-3 h-3" /> {neg.updates.length}</span>}
             {isStale(neg) && (
-              <span title={`Sin actividad en ${daysSince(lastActivity(neg))} días`} className="text-[11px] font-medium text-amber-600 flex-shrink-0">
-                ⏰ {daysSince(lastActivity(neg))}d
+              <span title={`Sin actividad en ${daysSince(lastActivity(neg))} días`} className="inline-flex items-center gap-0.5 text-[11px] font-medium text-amber-600 flex-shrink-0">
+                <Clock className="w-3 h-3" /> {daysSince(lastActivity(neg))}d
               </span>
             )}
           </div>
@@ -516,7 +516,7 @@ export function PlayerClubList({
           {expanded && (lastActivity(neg) || lastUpdate) && (
             <p className="text-[11px] text-slate-400 truncate mt-0.5">
               {lastActivity(neg) && <span className="text-slate-300">Actualizado {fmtShort(lastActivity(neg))}</span>}
-              {lastUpdate && <span> · 📝 {lastUpdate.text}</span>}
+              {lastUpdate && <span className="inline-flex items-center gap-0.5"> · <StickyNote className="w-3 h-3" /> {lastUpdate.text}</span>}
             </p>
           )}
         </div>
@@ -527,7 +527,7 @@ export function PlayerClubList({
             onClick={e => { e.stopPropagation(); setEditingNeg(neg) }}
             aria-label="Edición rápida"
             title="Edición rápida"
-            className="p-1 text-slate-300 hover:text-slate-600 flex-shrink-0"
+            className="p-1 text-slate-500 hover:text-slate-600 flex-shrink-0"
           >
             <Edit3 className="w-3.5 h-3.5" />
           </button>
@@ -536,7 +536,7 @@ export function PlayerClubList({
           <button
             onClick={e => { e.stopPropagation(); onSelectClub(club.id) }}
             title="Ver ficha del club"
-            className="p-1 text-slate-300 hover:text-blue-500 flex-shrink-0 hidden sm:inline-flex"
+            className="p-1 text-slate-500 hover:text-blue-500 flex-shrink-0 hidden sm:inline-flex"
           >
             <ExternalLink className="w-3.5 h-3.5" />
           </button>
@@ -638,7 +638,7 @@ export function PlayerClubList({
                 <>
                   <div className="border-t border-slate-100 my-1" />
                   <CheckItem selected={staleOnly} count={staleCount} onToggle={() => setStaleOnly(v => !v)}>
-                    <span className="text-amber-600">⏰ Estancadas</span>
+                    <span className="inline-flex items-center gap-1 text-amber-600"><Clock className="w-3 h-3" /> Estancadas</span>
                   </CheckItem>
                 </>
               )}

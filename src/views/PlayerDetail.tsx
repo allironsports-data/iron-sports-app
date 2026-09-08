@@ -582,10 +582,10 @@ const TaskCard = memo(function TaskCard({
           </div>
           {canEdit && (
             <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-              <button onClick={() => onSelect(task)} aria-label="Ver detalles de la tarea" className="p-2 -m-1 sm:p-1 sm:m-0 text-slate-300 hover:text-blue-500 transition-colors" title="Ver detalles">
+              <button onClick={() => onSelect(task)} aria-label="Ver detalles de la tarea" className="p-2 -m-1 sm:p-1 sm:m-0 text-slate-500 hover:text-blue-500 transition-colors" title="Ver detalles">
                 <Edit3 className="w-3.5 h-3.5" />
               </button>
-              <button onClick={() => onRequestDelete(task)} aria-label="Eliminar tarea" title="Eliminar tarea" className="p-2 -m-1 sm:p-1 sm:m-0 text-slate-300 hover:text-red-400 transition-colors">
+              <button onClick={() => onRequestDelete(task)} aria-label="Eliminar tarea" title="Eliminar tarea" className="p-2 -m-1 sm:p-1 sm:m-0 text-slate-500 hover:text-red-400 transition-colors">
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -1223,12 +1223,12 @@ function PerformanceTab({ player, profiles, onUpdate, postpartidos = [], scoutin
                     <div className="flex items-center gap-1">
                       <button onClick={() => setEditingNote(note)}
                         aria-label="Editar informe"
-                        className="p-2 sm:p-1 text-slate-300 hover:text-blue-500">
+                        className="p-2 sm:p-1 text-slate-500 hover:text-blue-500">
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
                       <button onClick={() => setNoteToDelete(note)}
                         aria-label="Eliminar informe"
-                        className="p-2 sm:p-1 text-slate-300 hover:text-red-500">
+                        className="p-2 sm:p-1 text-slate-500 hover:text-red-500">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -1275,7 +1275,7 @@ function PerformanceTab({ player, profiles, onUpdate, postpartidos = [], scoutin
                   </div>
                   <button onClick={() => setVideoToDelete(v)}
                     aria-label="Eliminar sesión de vídeo"
-                    className="p-2 sm:p-1 text-slate-300 hover:text-red-500 flex-shrink-0">
+                    className="p-2 sm:p-1 text-slate-500 hover:text-red-500 flex-shrink-0">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -1796,7 +1796,7 @@ function LinksSection({ player, onUpdate, onError }: {
               </a>
               <button onClick={() => removeLink(link.id)}
                 aria-label={`Eliminar enlace ${link.label}`}
-                className="p-2 sm:p-1 text-slate-300 hover:text-red-500 flex-shrink-0">
+                className="p-2 sm:p-1 text-slate-500 hover:text-red-500 flex-shrink-0">
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -2394,10 +2394,10 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
                               </span>
                               {evt.type === 'activity' && evt.activityRef && (
                                 <>
-                                  <button onClick={() => openEdit(evt.activityRef!)} aria-label="Editar evento" className="p-2 sm:p-0.5 text-slate-300 hover:text-blue-500 rounded transition-colors">
+                                  <button onClick={() => openEdit(evt.activityRef!)} aria-label="Editar evento" className="p-2 sm:p-0.5 text-slate-500 hover:text-blue-500 rounded transition-colors">
                                     <Edit3 className="w-3 h-3" />
                                   </button>
-                                  <button onClick={() => handleDelete(evt.activityRef!)} aria-label="Eliminar evento" className="p-2 sm:p-0.5 text-slate-300 hover:text-red-500 rounded transition-colors">
+                                  <button onClick={() => handleDelete(evt.activityRef!)} aria-label="Eliminar evento" className="p-2 sm:p-0.5 text-slate-500 hover:text-red-500 rounded transition-colors">
                                     <Trash2 className="w-3 h-3" />
                                   </button>
                                 </>

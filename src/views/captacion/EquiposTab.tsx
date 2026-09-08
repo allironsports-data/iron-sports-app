@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react'
-import { Search, X, Plus, ChevronRight } from 'lucide-react'
+import { Search, X, Plus, ChevronRight, MapPin, ClipboardList } from 'lucide-react'
 import type { ScoutingPlayer } from '../../types'
 import type { Equipo as EquipoCatalogo } from '../../lib/db'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
@@ -349,8 +349,8 @@ export function EquiposTab({
           >
             {historico ? '🕓 Todo el histórico' : `📅 Temporada ${etiquetaTemporada(desde)} · desde ${fmtDate(desde)}`}
           </button>
-          <button onClick={onAbrirZonas} className="text-[11px] font-semibold border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-600 hover:border-primary hover:text-primary">📍 Zonas</button>
-          <button onClick={onAbrirPlantilla} className="text-[11px] font-semibold border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-600 hover:border-primary hover:text-primary">📋 Actualizar plantilla</button>
+          <button onClick={onAbrirZonas} className="inline-flex items-center gap-1 text-[11px] font-semibold border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-600 hover:border-primary hover:text-primary"><MapPin className="w-3 h-3" /> Zonas</button>
+          <button onClick={onAbrirPlantilla} className="inline-flex items-center gap-1 text-[11px] font-semibold border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-600 hover:border-primary hover:text-primary"><ClipboardList className="w-3 h-3" /> Actualizar plantilla</button>
           <button onClick={() => setAltaAbierta(a => !a)} className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold bg-primary text-white rounded-lg hover:bg-primary/90">
             <Plus className="w-3.5 h-3.5" /> Equipo
           </button>

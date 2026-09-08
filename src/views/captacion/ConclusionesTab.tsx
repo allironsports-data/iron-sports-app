@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react'
-import { X, Maximize2 } from 'lucide-react'
+import { X, Maximize2, Settings, Goal, Bell, Map, MapPin, TrendingUp, AlertTriangle, ChevronUp, ChevronDown } from 'lucide-react'
 import type { ScoutingPlayer, ScoutingReport, ScoutingAssessment } from '../../types'
 import { ZONAS, SIN_ZONA, zonaDe, type Zona } from '../../lib/zonas'
 import { PITCH_SLOTS, POS_GROUPS, slotDe as pitchSlotOf, grupoDe as posGroupOf } from '../../lib/campo'
@@ -226,14 +226,14 @@ export function ConclusionesTab({ players, reports, threshold, onThresholdChange
   [players, reportsByPlayer])
 
   const segBtn = (active: boolean) =>
-    `px-2.5 py-1 rounded text-[11px] font-semibold transition-colors ${active ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`
+    `inline-flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold transition-colors ${active ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`
 
   return (
     <div className="space-y-4">
       {/* ── a) Candidatos a Llamar — bandeja de alertas ── */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-center gap-2">
-          <h3 className="text-sm font-bold text-slate-800">🔔 Candidatos a Llamar</h3>
+          <h3 className="inline-flex items-center gap-1.5 text-sm font-bold text-slate-800"><Bell className="w-4 h-4 text-slate-400" /> Candidatos a Llamar</h3>
           {newCandidates.length > 0 && (
             <span className="text-xs bg-amber-400 text-amber-950 rounded-full px-2 py-0.5 font-bold">{newCandidates.length} nuevo{newCandidates.length !== 1 ? 's' : ''}</span>
           )}
@@ -345,15 +345,15 @@ export function ConclusionesTab({ players, reports, threshold, onThresholdChange
       {/* ── b) Mapa ── */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-center gap-2">
-          <h3 className="text-sm font-bold text-slate-800">🗺️ Jugadores en {mapAssessment}</h3>
+          <h3 className="inline-flex items-center gap-1.5 text-sm font-bold text-slate-800"><Map className="w-4 h-4 text-slate-400" /> Jugadores en {mapAssessment}</h3>
           <span className="text-xs bg-slate-100 text-slate-600 rounded-full px-2 py-0.5 font-semibold">{mapPlayers.length}</span>
           {zonaFilter !== 'all' && (
             <button
               onClick={() => { setZonaFilter('all'); setSelectedCell(null) }}
-              className="text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5 hover:bg-blue-100"
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5 hover:bg-blue-100"
               title="Quitar el filtro de zona"
             >
-              📍 {zonaFilter} ✕
+              <MapPin className="w-3 h-3" /> {zonaFilter} <X className="w-3 h-3" />
             </button>
           )}
           <div className="ml-auto flex flex-wrap items-center gap-1.5">
@@ -364,7 +364,7 @@ export function ConclusionesTab({ players, reports, threshold, onThresholdChange
               className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
               title="Filtrar por zona geográfica del club"
             >
-              <option value="all">📍 Todas las zonas</option>
+              <option value="all">Todas las zonas</option>
               {ZONAS.map(z => (
                 <option key={z} value={z} disabled={!conteoZonas[z]}>
                   {z} ({conteoZonas[z] ?? 0})
@@ -378,15 +378,16 @@ export function ConclusionesTab({ players, reports, threshold, onThresholdChange
               onClick={onAbrirZonas}
               title="Cambiar la zona de un club"
               className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-500 hover:text-slate-700 hover:border-slate-400"
-            >⚙</button>
+              aria-label="Cambiar la zona de un club"
+            ><Settings className="w-3.5 h-3.5" /></button>
             <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
               <button className={segBtn(mapView === 'matriz')} onClick={() => setMapView('matriz')}>Matriz</button>
-              <button className={segBtn(mapView === 'campo')} onClick={() => setMapView('campo')}>⚽ Campograma</button>
+              <button className={segBtn(mapView === 'campo')} onClick={() => setMapView('campo')}><Goal className="w-3.5 h-3.5" /> Campograma</button>
             </div>
             {mapView === 'matriz' && (
               <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
-                <button className={segBtn(mapDim === 'pos')} onClick={() => { setMapDim('pos'); setSelectedCell(null) }}>× Posición</button>
-                <button className={segBtn(mapDim === 'cat')} onClick={() => { setMapDim('cat'); setSelectedCell(null) }}>× Categoría</button>
+                <button className={segBtn(mapDim === 'pos')} onClick={() => { setMapDim('pos'); setSelectedCell(null) }}>Por posición</button>
+                <button className={segBtn(mapDim === 'cat')} onClick={() => { setMapDim('cat'); setSelectedCell(null) }}>Por categoría</button>
               </div>
             )}
             <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
@@ -551,13 +552,14 @@ export function ConclusionesTab({ players, reports, threshold, onThresholdChange
       {/* ── c) Movimientos ── */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
-          <h3 className="text-sm font-bold text-slate-800">📈 Movimientos · últimas 3 semanas</h3>
+          <h3 className="inline-flex items-center gap-1.5 text-sm font-bold text-slate-800"><TrendingUp className="w-4 h-4 text-slate-400" /> Movimientos · últimas 3 semanas</h3>
           {staleDecidir.length > 0 && (
             <button
               onClick={() => setShowStale(v => !v)}
-              className="ml-auto text-[11px] font-semibold text-orange-700 bg-orange-50 border border-orange-200 rounded-full px-2.5 py-1 hover:bg-orange-100 transition-colors"
+              className="ml-auto inline-flex items-center gap-1 text-[11px] font-semibold text-orange-700 bg-orange-50 border border-orange-200 rounded-full px-2.5 py-1 hover:bg-orange-100 transition-colors"
             >
-              ⚠️ {staleDecidir.length} en Decidir sin actividad {'>'}6 sem {showStale ? '▴' : '▾'}
+              <AlertTriangle className="w-3 h-3" /> {staleDecidir.length} en Decidir sin actividad {'>'}6 sem
+              {showStale ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
             </button>
           )}
         </div>

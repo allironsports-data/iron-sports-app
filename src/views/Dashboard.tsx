@@ -1150,7 +1150,7 @@ export function Dashboard({
                                 onToggleStatusHidden(p.id, true).catch(() => showToast('No se pudo guardar. Inténtalo de nuevo.', 'error'));
                               }}
                               title={`Ocultar a ${p.name.split(' ')[0]} del panel`}
-                              className="p-0.5 text-slate-300 hover:text-slate-500 cursor-pointer flex-shrink-0"
+                              className="p-0.5 text-slate-500 hover:text-slate-500 cursor-pointer flex-shrink-0"
                             >
                               <EyeOff className="w-3 h-3" />
                             </span>
@@ -1175,7 +1175,7 @@ export function Dashboard({
                         ) : (
                           <div
                             onClick={isMe && onUpdateMemberStatus ? (e) => { e.stopPropagation(); setMyNoteDraft(s?.note ?? ''); setMyNoteEditing(true); } : undefined}
-                            className={`text-[11px] truncate ${s?.note ? 'text-slate-600' : 'text-slate-300 italic'} ${isMe && onUpdateMemberStatus ? 'hover:text-slate-800' : ''}`}
+                            className={`text-[11px] truncate ${s?.note ? 'text-slate-600' : 'text-slate-500 italic'} ${isMe && onUpdateMemberStatus ? 'hover:text-slate-800' : ''}`}
                             title={isMe && onUpdateMemberStatus ? 'Editar mi nota' : undefined}
                           >
                             💬 {s?.note || (isMe && onUpdateMemberStatus ? 'Añadir nota…' : '—')}
@@ -1356,7 +1356,7 @@ export function Dashboard({
                 return (
                   <div className="p-3">
                     <div className="flex items-center gap-2 mb-2">
-                      <button onClick={() => setTaskWeekOffset(o => o - 1)} className="px-2 py-1 rounded-lg border border-slate-200 text-xs text-slate-500 hover:bg-slate-50">←</button>
+                      <button onClick={() => setTaskWeekOffset(o => o - 1)} aria-label="Semana anterior" className="px-2 py-1 rounded-lg border border-slate-200 text-xs text-slate-500 hover:bg-slate-50"><ChevronLeft className="w-3.5 h-3.5" /></button>
                       <span className="text-xs font-semibold text-slate-700">
                         {new Date(days[0]).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} – {new Date(days[6]).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
                         {taskWeekOffset === 0 && <span className="text-slate-400 font-normal"> · esta semana</span>}
@@ -1364,7 +1364,7 @@ export function Dashboard({
                       {taskWeekOffset !== 0 && (
                         <button onClick={() => setTaskWeekOffset(0)} className="text-[11px] text-blue-600 hover:underline">hoy</button>
                       )}
-                      <button onClick={() => setTaskWeekOffset(o => o + 1)} className="px-2 py-1 rounded-lg border border-slate-200 text-xs text-slate-500 hover:bg-slate-50">→</button>
+                      <button onClick={() => setTaskWeekOffset(o => o + 1)} aria-label="Semana siguiente" className="px-2 py-1 rounded-lg border border-slate-200 text-xs text-slate-500 hover:bg-slate-50"><ChevronRight className="w-3.5 h-3.5" /></button>
                       {before.length > 0 && taskWeekOffset === 0 && (
                         <span className="ml-auto text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded-full px-2 py-0.5">{before.length} vencida{before.length !== 1 ? 's' : ''} anteriores</span>
                       )}
@@ -2025,7 +2025,7 @@ export function Dashboard({
                                     onToggleStatusHidden(p.id, true).catch(() => showToast('No se pudo guardar. Inténtalo de nuevo.', 'error'));
                                   }}
                                   title={`Ocultar a ${p.name.split(' ')[0]} de las vistas de equipo`}
-                                  className="p-1 text-slate-300 hover:text-slate-500 cursor-pointer flex-shrink-0"
+                                  className="p-1 text-slate-500 hover:text-slate-500 cursor-pointer flex-shrink-0"
                                 >
                                   <EyeOff className="w-3.5 h-3.5" />
                                 </span>
@@ -2233,7 +2233,7 @@ export function Dashboard({
                         <button
                           onClick={() => { setPpVideoUrl(pp.videoUrl ?? ''); setPpCompleteTarget({ pp, task }); }}
                           title="Completar (pide el link del vídeo)"
-                          className="flex-shrink-0 p-1 rounded-full text-slate-300 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                          className="flex-shrink-0 p-1 rounded-full text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
                         >
                           <CheckSquare className="w-4 h-4" />
                         </button>
@@ -2249,7 +2249,7 @@ export function Dashboard({
                             }
                           }}
                           title="Desmarcar (volver a pendiente)"
-                          className="flex-shrink-0 p-1 rounded-full text-slate-300 hover:text-amber-600 hover:bg-amber-50 transition-colors"
+                          className="flex-shrink-0 p-1 rounded-full text-slate-500 hover:text-amber-600 hover:bg-amber-50 transition-colors"
                         >
                           <RotateCcw className="w-4 h-4" />
                         </button>
@@ -2258,7 +2258,7 @@ export function Dashboard({
                         <button
                           onClick={() => setPpDeleteConfirm(pp)}
                           title="Eliminar postpartido (y su tarea)"
-                          className="flex-shrink-0 p-1 rounded-full text-slate-300 hover:text-red-600 hover:bg-red-50 transition-colors"
+                          className="flex-shrink-0 p-1 rounded-full text-slate-500 hover:text-red-600 hover:bg-red-50 transition-colors"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>

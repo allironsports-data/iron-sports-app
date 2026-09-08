@@ -363,7 +363,7 @@ export function FirmasDetailPanel({
                         <select value={actionAssignee} onChange={e => setActionAssignee(e.target.value)} className={SELECT_CLS}>
                           {profiles.map(p => <option key={p.id} value={p.id}>{p.avatar || p.name}</option>)}
                         </select>
-                        <button onClick={() => setEditingAction(false)} className="px-2 py-1 rounded-lg text-[11px] text-slate-500 hover:bg-slate-100">✕</button>
+                        <button onClick={() => setEditingAction(false)} aria-label="Cancelar" className="px-2 py-1 rounded-lg text-[11px] text-slate-500 hover:bg-slate-100"><X className="w-3 h-3" /></button>
                         <button onClick={saveAction} className="px-2.5 py-1 rounded-lg bg-primary text-white text-[11px] font-medium hover:bg-primary/90">OK</button>
                       </div>
                     </div>

@@ -538,7 +538,7 @@ export function Contactos({ onBack, isAdmin }: { onBack: () => void; isAdmin?: b
       {/* ── Header ── */}
       <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-sm">
         <div className="max-w-6xl mx-auto px-4 py-2 sm:py-0 sm:h-14 flex flex-wrap sm:flex-nowrap items-center gap-2">
-          <button onClick={onBack} className="p-2 sm:p-1.5 -ml-1 rounded hover:bg-slate-100 text-slate-500">
+          <button aria-label="Volver" onClick={onBack} className="p-2 sm:p-1.5 -ml-1 rounded hover:bg-slate-100 text-slate-500">
             <ArrowLeft className="w-4 h-4" />
           </button>
           <span className="text-sm font-semibold text-slate-800">Contactos</span>
@@ -774,7 +774,7 @@ export function Contactos({ onBack, isAdmin }: { onBack: () => void; isAdmin?: b
                   </span>
                 </label>
                 {selected.size > 0 && (
-                  <button
+                  <button aria-label="Eliminar"
                     onClick={() => setDeleteState({ ids: [...selected] })}
                     className="flex items-center gap-1 ml-auto px-2.5 py-1.5 text-xs font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
                   >
@@ -1027,17 +1027,17 @@ function AlphaContactRow({
       </div>
       {/* Actions */}
       <div className="flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0">
-        <button onClick={onEdit} className="p-2 sm:p-1.5 rounded hover:bg-slate-200 text-slate-400" title="Editar">
+        <button aria-label="Editar" onClick={onEdit} className="p-2 sm:p-1.5 rounded hover:bg-slate-200 text-slate-400" title="Editar">
           <Pencil className="w-3.5 h-3.5" />
         </button>
         <button
           onClick={onToggleFavorite}
-          className={`p-2 sm:p-1.5 rounded hover:bg-slate-200 ${isFavorite ? 'text-amber-400' : 'text-slate-300'}`}
+          className={`p-2 sm:p-1.5 rounded hover:bg-slate-200 ${isFavorite ? 'text-amber-400' : 'text-slate-500'}`}
           title={isFavorite ? 'Quitar favorito' : 'Añadir favorito'}
         >
           <Star className={`w-3.5 h-3.5 ${isFavorite ? 'fill-amber-400' : ''}`} />
         </button>
-        <button onClick={onDelete} className="p-2 sm:p-1.5 rounded hover:bg-red-100 text-slate-300 hover:text-red-500" title="Eliminar">
+        <button aria-label="Eliminar" onClick={onDelete} className="p-2 sm:p-1.5 rounded hover:bg-red-100 text-slate-500 hover:text-red-500" title="Eliminar">
           <Trash2 className="w-3.5 h-3.5" />
         </button>
       </div>
@@ -1080,16 +1080,16 @@ function ContactRow({
         </div>
       </div>
       <div className="flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0 mt-0.5">
-        <button onClick={onEdit} className="p-2 sm:p-1.5 rounded hover:bg-slate-200 text-slate-400" title="Editar">
+        <button aria-label="Editar" onClick={onEdit} className="p-2 sm:p-1.5 rounded hover:bg-slate-200 text-slate-400" title="Editar">
           <Pencil className="w-3.5 h-3.5" />
         </button>
         <button
           onClick={onToggleFavorite}
-          className={`p-2 sm:p-1.5 rounded hover:bg-slate-200 ${isFavorite ? 'text-amber-400' : 'text-slate-300'}`}
+          className={`p-2 sm:p-1.5 rounded hover:bg-slate-200 ${isFavorite ? 'text-amber-400' : 'text-slate-500'}`}
         >
           <Star className={`w-3.5 h-3.5 ${isFavorite ? 'fill-amber-400' : ''}`} />
         </button>
-        <button onClick={onDelete} className="p-2 sm:p-1.5 rounded hover:bg-red-100 text-slate-300 hover:text-red-500" title="Eliminar">
+        <button aria-label="Eliminar" onClick={onDelete} className="p-2 sm:p-1.5 rounded hover:bg-red-100 text-slate-500 hover:text-red-500" title="Eliminar">
           <Trash2 className="w-3.5 h-3.5" />
         </button>
       </div>

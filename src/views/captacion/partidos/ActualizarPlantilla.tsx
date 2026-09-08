@@ -123,7 +123,7 @@ export function ActualizarPlantilla({ scoutingPlayers, onClose, onFixTeam, onCre
               <div className="space-y-0.5">
                 {cambian.map(e => (
                   <div key={e.nombre} className="flex items-center gap-1.5 text-[11px]">
-                    <button onClick={() => void aplicar([e], false)} className="text-amber-700 font-bold" title="Cambiar solo este">→</button>
+                    <button onClick={() => void aplicar([e], false)} aria-label="Cambiar solo este" className="text-amber-700 font-bold" title="Cambiar solo este">→</button>
                     <span className="font-semibold text-slate-700">{e.player!.fullName}</span>
                     {e.certeza === 'probable' && <span className="text-slate-400">«{e.nombre}»</span>}
                     <span className="text-slate-400 line-through">{e.player!.team || 'sin equipo'}</span>

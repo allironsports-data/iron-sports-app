@@ -1,5 +1,5 @@
 import React from 'react'
-import { Search, X, Plus, Calendar, Pencil, ClipboardList } from 'lucide-react'
+import { Search, X, Plus, Calendar, Pencil, ClipboardList, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { ScoutingPlayer, ScoutingMatch } from '../../types'
 import type { Profile } from '../../contexts/AuthContext'
 import { EmptyState } from '../../components/EmptyState'
@@ -149,7 +149,7 @@ export function PartidosTab({
         return (
           <div className="bg-white border border-slate-200 rounded-xl p-3">
             <div className="flex items-center gap-2 mb-2">
-              <button onClick={() => setMatchWeekOffset(o => o - 1)} className="px-2 py-1 rounded-lg border border-slate-200 text-xs text-slate-500 hover:bg-slate-50">←</button>
+              <button onClick={() => setMatchWeekOffset(o => o - 1)} aria-label="Semana anterior" className="px-2 py-1 rounded-lg border border-slate-200 text-xs text-slate-500 hover:bg-slate-50"><ChevronLeft className="w-3.5 h-3.5" /></button>
               <span className="text-xs font-semibold text-slate-700">
                 {parseDia(days[0]).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} – {parseDia(days[6]).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
                 {matchWeekOffset === 0 && <span className="text-slate-400 font-normal"> · esta semana</span>}
@@ -157,7 +157,7 @@ export function PartidosTab({
               {matchWeekOffset !== 0 && (
                 <button onClick={() => setMatchWeekOffset(0)} className="text-[11px] text-blue-600 hover:underline">hoy</button>
               )}
-              <button onClick={() => setMatchWeekOffset(o => o + 1)} className="px-2 py-1 rounded-lg border border-slate-200 text-xs text-slate-500 hover:bg-slate-50">→</button>
+              <button onClick={() => setMatchWeekOffset(o => o + 1)} aria-label="Semana siguiente" className="px-2 py-1 rounded-lg border border-slate-200 text-xs text-slate-500 hover:bg-slate-50"><ChevronRight className="w-3.5 h-3.5" /></button>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-7 gap-1.5">
               {days.map((d, i) => {

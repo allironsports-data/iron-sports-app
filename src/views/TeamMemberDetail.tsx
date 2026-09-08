@@ -417,7 +417,7 @@ export function TeamMemberDetail({ profile, tasks, players, onBack, onSelectPlay
                           onClick={() => setTaskStatus(t, 'completada')}
                           title="Marcar como completada"
                           aria-label="Marcar como completada"
-                          className="flex-shrink-0 p-1 rounded-full text-slate-300 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                          className="flex-shrink-0 p-1 rounded-full text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
                         >
                           <CheckCircle2 className="w-4 h-4" />
                         </button>
