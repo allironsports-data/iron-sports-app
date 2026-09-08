@@ -1,10 +1,10 @@
-import { useState, useMemo } from 'react'
-import { Search, X, Plus, Pencil, Maximize2 } from 'lucide-react'
+import { useState, useMemo, useEffect } from 'react'
+import { Search, X, Plus, Pencil, Maximize2, AlertTriangle } from 'lucide-react'
 import type { ScoutingPlayer, ScoutingReport, ScoutingMatch } from '../../../types'
 import type { Profile } from '../../../contexts/AuthContext'
 import * as db from '../../../lib/db'
 import { useEscapeKey } from '../../../hooks/useEscapeKey'
-import { teamMatchKind, teamsAlike } from '../../../lib/equipos'
+import { teamMatchKind, teamsAlike, avisoEquipoPartido } from '../../../lib/equipos'
 import { POS_GROUPS, grupoDe as posGroupOf, type PosGroup } from '../../../lib/campo'
 import { AssessmentChip, Spinner, FichaCarcasa } from '../comun'
 import { type ShowToast, type MatchScoutInfo, type ConclusionOption, type SuggestWhy, CONCLUSION_OPTIONS, normConclusion, CONCLUSION_STYLE, MONTHS_ES, birthYearFromBirthdate, personaToName, fmtDate, SUGGEST_ORDER, SUGGEST_LABEL, SEARCH_LIMIT, scoutColor } from '../helpers'
@@ -73,6 +73,10 @@ export function MatchDetailModal({
   const [savingQuick, setSavingQuick] = useState(false)
   const [addScoutOpen, setAddScoutOpen] = useState(false)
   const [informeAbierto, setInformeAbierto] = useState<string | null>(null)
+  // Jugadores recién añadidos cuyo equipo de ficha no es ninguno de los dos
+  // que juegan este partido: se ofrece corregirlo aquí mismo.
+  const [avisosEquipo, setAvisosEquipo] = useState<{ player: ScoutingPlayer; sugerido: string | null }[]>([])
+  useEffect(() => { setAvisosEquipo([]) }, [match.id])
   // Vista ampliada (pantalla completa, solo lectura, con el texto de los informes)
   const [ampliado, setAmpliado] = useState(false)
 
@@ -156,6 +160,7 @@ export function MatchDetailModal({
   async function handleAddPlayer(playerId: string) {
     try {
       await onAddMatchPlayer(match.id, playerId)
+      avisarSiEquipoNoCuadra(playerId)
     } catch (e) {
       const err = e as { code?: string; message?: string }
       showToast?.(
@@ -163,6 +168,30 @@ export function MatchDetailModal({
           ? 'Ese partido ya no existe (se fusionó con otro). Recarga la página.'
           : `Error al vincular el jugador: ${err?.message ?? 'desconocido'}`,
         'error')
+    }
+  }
+
+  /** Avisa si el equipo de la ficha no es ninguno de los dos que juegan. */
+  function avisarSiEquipoNoCuadra(playerId: string) {
+    const p = scoutingPlayers.find(x => x.id === playerId)
+    if (!p) return
+    const aviso = avisoEquipoPartido(p.team, match.homeTeam, match.awayTeam)
+    if (!aviso) return
+    setAvisosEquipo(prev => prev.some(a => a.player.id === p.id)
+      ? prev
+      : [...prev, { player: p, sugerido: aviso.sugerido }])
+  }
+
+  function descartarAviso(playerId: string) {
+    setAvisosEquipo(prev => prev.filter(a => a.player.id !== playerId))
+  }
+
+  async function corregirEquipo(p: ScoutingPlayer, equipo: string) {
+    descartarAviso(p.id)
+    try {
+      await onFixPlayerTeam(p, equipo)
+    } catch {
+      showToast?.('No se ha podido cambiar el equipo', 'error')
     }
   }
 
@@ -710,6 +739,45 @@ export function MatchDetailModal({
                 </div>
               )}
             </div>
+
+            {/* ── Aviso: el equipo de la ficha no es ninguno de los dos ── */}
+            {avisosEquipo.map(({ player, sugerido }) => {
+              // El sugerido primero; el otro después. Sin duplicados.
+              const opciones = sugerido
+                ? [sugerido, sugerido === match.homeTeam ? match.awayTeam : match.homeTeam]
+                : [match.homeTeam, match.awayTeam]
+              return (
+                <div key={player.id} className="flex flex-wrap items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+                  <span className="text-xs text-amber-900 flex-1 min-w-[200px]">
+                    <span className="font-semibold">{player.fullName}</span>
+                    {player.team?.trim()
+                      ? <> figura en <span className="font-semibold">{player.team}</span>, que no juega este partido.</>
+                      : <> no tiene equipo en su ficha.</>}
+                    {' '}¿Lo cambio?
+                  </span>
+                  {opciones.map((eq, i) => (
+                    <button
+                      key={eq}
+                      onClick={() => void corregirEquipo(player, eq)}
+                      className={`text-xs font-semibold rounded-lg px-2.5 py-1 transition-colors ${
+                        i === 0
+                          ? 'bg-amber-600 text-white hover:bg-amber-700'
+                          : 'bg-white border border-amber-300 text-amber-800 hover:bg-amber-100'
+                      }`}
+                    >
+                      {eq}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => descartarAviso(player.id)}
+                    className="text-xs text-amber-700 hover:text-amber-900 underline px-1"
+                  >
+                    Dejarlo así
+                  </button>
+                </div>
+              )
+            })}
 
             <div>
               {searchResults.length > 0 ? (

@@ -118,3 +118,37 @@ export function equipoMatchKind(a?: string, b?: string): 'equipo' | 'club' | 'pa
 export function mismoEquipo(a?: string, b?: string): boolean {
   return equipoMatchKind(a, b) === 'equipo'
 }
+
+// ── ¿El equipo de la ficha cuadra con el partido? ─────────────────────
+//
+// Al añadir un jugador a un partido conviene avisar si el equipo que tiene
+// en su ficha no es ninguno de los dos que juegan: o está desactualizado
+// (ascendió del filial) o es un despiste al vincularlo.
+//
+// Se compara con equipoMatchKind, no con teamMatchKind: «Villarreal Juv B»
+// y «Villarreal Juv A» son el MISMO CLUB pero no el mismo equipo, y ese es
+// justo el caso que hay que cazar.
+
+export type AvisoEquipo = {
+  /** El de los dos que es del mismo club (el candidato evidente), si lo hay */
+  sugerido: string | null
+}
+
+/**
+ * `null` = el equipo de la ficha es uno de los dos que juegan, nada que avisar.
+ * Si devuelve objeto, hay que ofrecer corregirlo. `sugerido` señala al equipo
+ * del mismo club cuando lo hay («Villarreal Juv B» → «Villarreal Juv A»); si
+ * el jugador es de un club que no pinta nada aquí, va a null y se ofrecen los
+ * dos. Un jugador sin equipo en la ficha también se avisa (hay que ponérselo).
+ */
+export function avisoEquipoPartido(
+  equipoFicha: string | undefined,
+  local: string,
+  visitante: string,
+): AvisoEquipo | null {
+  const enLocal = equipoMatchKind(equipoFicha, local)
+  const enVisitante = equipoMatchKind(equipoFicha, visitante)
+  if (enLocal === 'equipo' || enVisitante === 'equipo') return null
+  const sugerido = enLocal === 'club' ? local : enVisitante === 'club' ? visitante : null
+  return { sugerido }
+}

@@ -33,6 +33,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Ficha del jugador de Captación: además de los informes de partido ya se pueden meter otros tres tipos — «Personalidad y entorno» (quién lo cuenta y semáforo verde/ámbar/rojo), «Contractual» (cuánto contrato le queda, qué cobra, cláusula y si el dato es fiable) y «Opinión del mercado» (qué club, quién lo dice y nivel de interés). Se añaden desde el botón ▾ que hay junto a «Añadir informe», y si el jugador no tiene ninguno no ocupan nada en pantalla',
       'Informe contractual: si pones un fin de contrato distinto al de la ficha, te ofrece actualizarlo también allí, para no dejar dos fechas que se contradicen',
       'Los tres tipos nuevos salen también en el PDF de «Exportar informe», en su propio apartado, y el resumen de IA los tiene en cuenta',
+      'Al añadir un jugador a un partido, si el equipo de su ficha no es ninguno de los dos que juegan, sale un aviso para corregirlo en el momento: si es del mismo club pero otra categoría (Villarreal Juv B en un Villarreal Juv A – Elche Juv A) propone directamente el equipo correcto; si es de un club que no juega ese partido, o no tiene equipo en la ficha, ofrece los dos. También se puede dejar como está',
       'Vista ampliada de la ficha del jugador (botón ⤢): más ancha y con una barra de resumen arriba — informes de partido, cuántos son «Llamar», partidos vistos, fecha del último informe y, solo si los hay, cuántos informes de personalidad, contractuales o de mercado',
     ],
     adminItems: [
