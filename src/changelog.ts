@@ -26,6 +26,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Carga inicial más rápida: las tablas grandes (informes, partidos, alineaciones, jugadores de captación…) se leen en paralelo en vez de página a página, así que «Sincronizando datos…» dura mucho menos',
       'Conclusiones · Llamar: nuevo botón «Ver por zonas» que abre a pantalla completa todos los jugadores en «Llamar» agrupados por zona geográfica, ordenados por prioridad (más informes «Llamar» primero, en empate el más reciente), para repartir las llamadas de un vistazo',
       'Login: el campo de email tiene el foco al abrir, y el mensaje de error ya distingue credenciales incorrectas de un fallo de conexión (antes ambos decían «Email o contraseña incorrectos»)',
+      'Mensajes técnicos de "falta ejecutar el SQL/la migración" (Partidos, Firmar, asignar scout a un partido, Historial) ya no se muestran a todo el mundo: los scouts ven un mensaje normal, el aviso técnico solo lo ve un admin',
     ],
     adminItems: [
       'En la consola del navegador aparece «[carga] fase 2 … ms» con el tiempo de cada tabla, ordenado de mayor a menor, para localizar la lenta',

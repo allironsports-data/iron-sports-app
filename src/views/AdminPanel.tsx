@@ -382,7 +382,7 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
                       {resetStatus === 'ok' ? '✓ Guardada' : resetStatus === 'saving' ? '...' : 'Guardar'}
                     </button>
                     <button onClick={() => setResetId(null)} className="text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>
-                    {resetStatus === 'error' && <span className="text-xs text-red-500">Error — usa Supabase Auth</span>}
+                    {resetStatus === 'error' && <span className="text-xs text-red-500">No se pudo cambiar la contraseña — hazlo desde Supabase Auth</span>}
                   </div>
                 )}
 

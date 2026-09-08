@@ -45,7 +45,7 @@ export function HistorialCambios({ tabla, filaId, profiles, limit = 200, compact
     } catch (e) {
       // 42P01: la tabla aún no está migrada
       const code = (e as { code?: string } | null)?.code
-      setError(code === '42P01' ? 'El historial aún no está activado (falta ejecutar migration_audit_log.sql).' : 'No se ha podido cargar el historial.')
+      setError(code === '42P01' ? 'El historial de cambios aún no está activado en este entorno.' : 'No se ha podido cargar el historial.')
     } finally {
       setCargando(false)
     }

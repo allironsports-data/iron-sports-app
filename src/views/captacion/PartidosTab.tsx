@@ -330,7 +330,7 @@ export function PartidosTab({
         <EmptyState
           icon={<ClipboardList className="w-10 h-10" />}
           title="No hay partidos registrados aún"
-          subtitle="Si acabas de activar esta función, recuerda ejecutar el SQL de creación de tabla en Supabase"
+          subtitle={isAdmin ? 'Si acabas de activar esta función, recuerda ejecutar el SQL de creación de tabla en Supabase' : 'Añade el primero'}
           action={
             <button
               onClick={openAddMatch}

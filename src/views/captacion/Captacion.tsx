@@ -1195,7 +1195,7 @@ export function Captacion({
       }
       showToast(`${personaToName(scout, profiles) || scout} asignado a este partido`)
     } catch {
-      showToast('No se pudo asignar el scout. ¿Está ejecutada la migración de match_scouts?', 'error')
+      showToast(isAdmin ? 'No se pudo asignar el scout. ¿Está ejecutada la migración de match_scouts?' : 'No se ha podido asignar el scout. Inténtalo de nuevo.', 'error')
     }
   }
 
@@ -1441,6 +1441,7 @@ export function Captacion({
           entries={firmasEntries}
           profiles={profiles}
           currentProfile={currentProfile}
+          isAdmin={isAdmin}
           scoutingPlayers={scoutingPlayers}
           scoutingReports={scoutingReports}
           scoutingMatches={scoutingMatches}

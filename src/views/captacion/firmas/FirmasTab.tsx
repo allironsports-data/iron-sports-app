@@ -17,7 +17,7 @@ import { FirmasDetailPanel } from './FirmasDetailPanel'
 import { FirmasAddModal } from './FirmasAddModal'
 
 export function FirmasTab({
-  entries, profiles, currentProfile, scoutingPlayers, scoutingReports, scoutingMatches,
+  entries, profiles, currentProfile, isAdmin, scoutingPlayers, scoutingReports, scoutingMatches,
   matchPlayers, boulemaPeticiones, players, onCreatePlayer, onSyncActionTasks,
   onCreate, onPatch, onDelete, onOpenScoutingPlayer, showToast, headerHeight,
   openEntryId, onOpenEntryConsumed,
@@ -25,6 +25,7 @@ export function FirmasTab({
   entries: FirmasEntry[]
   profiles: Profile[]
   currentProfile: Profile
+  isAdmin: boolean
   scoutingPlayers: ScoutingPlayer[]
   scoutingReports: ScoutingReport[]
   scoutingMatches: ScoutingMatch[]
@@ -614,7 +615,7 @@ export function FirmasTab({
         <EmptyState
           icon={<PenLine className="w-10 h-10" />}
           title="Aún no hay jugadores en el pipeline de firmas"
-          subtitle="Si acabas de activar esta función, recuerda ejecutar la migración SQL en Supabase y el snippet de importación del Trello"
+          subtitle={isAdmin ? 'Si acabas de activar esta función, recuerda ejecutar la migración SQL en Supabase y el snippet de importación del Trello' : 'Añade el primero'}
         />
       ) : (
         <>
@@ -1216,7 +1217,7 @@ export function FirmasTab({
               showToast(`${draft.playerName} añadido al pipeline`)
             } catch (err) {
               console.error(err)
-              showToast('No se pudo crear (¿has ejecutado la migración SQL?)', 'error')
+              showToast(isAdmin ? 'No se pudo crear (¿has ejecutado la migración SQL?)' : 'No se ha podido crear. Inténtalo de nuevo.', 'error')
             }
           }}
         />
