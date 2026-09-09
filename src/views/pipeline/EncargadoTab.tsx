@@ -79,6 +79,9 @@ function Bloque({
   )
 }
 
+/** Los firmados ya no son trabajo pendiente: no salen en el embudo ni en la tabla */
+const ESTATUS_VIVOS: FirmasStatus[] = FIRMAS_STATUSES.filter(s => s !== 'firmado')
+
 type Orden = 'parado' | 'nombre' | 'estatus' | 'accion'
 
 export function EncargadoTab({
@@ -104,60 +107,73 @@ export function EncargadoTab({
     () => entries.filter(e => e.managers.includes(quien)),
     [entries, quien],
   )
+  // Los firmados ya no son trabajo: fuera de los bloques, del embudo y de la
+  // tabla. Se siguen contando arriba para saber cuántos llevas cerrados.
+  const vivas = useMemo(() => mias.filter(e => e.status !== 'firmado'), [mias])
+  const firmados = mias.length - vivas.length
 
+  // Cada tarjeta sale en UN solo bloque, el más urgente que le toque. Si no,
+  // la misma caliente parada con acción vencida aparecía tres veces y los
+  // contadores no sumaban nada: no sabías cuántas cosas tenías de verdad.
   const bloques = useMemo(() => {
-    const vivas = mias.filter(e => e.status !== 'firmado')
+    const usadas = new Set<string>()
+    const coger = (lista: { e: FirmasEntry; detalle?: string }[]) => {
+      const out = lista.filter(x => !usadas.has(x.e.id))
+      out.forEach(x => usadas.add(x.e.id))
+      return out
+    }
 
     // 1. Lo que toca hoy: próxima acción de hoy o vencida
-    const hoy = vivas
+    const hoy = coger(vivas
       .filter(e => e.nextAction && cuandoAccion(e.nextActionDate).vencida)
       .sort((a, b) => (a.nextActionDate ?? '').localeCompare(b.nextActionDate ?? ''))
       .map(e => {
         const meta = e.nextActionKind ? FIRMAS_ACTION_KIND_META[e.nextActionKind] : undefined
         const c = cuandoAccion(e.nextActionDate)
         return { e, detalle: `${meta?.icon ?? ''} ${e.nextAction} · ${c.txt}`.trim() }
-      })
+      }))
 
     // 2. Se enfrían: pasan la cadencia de su estatus (10/50/90 días)
-    const frias = vivas
+    const frias = coger(vivas
       .map(e => ({ e, aging: firmasAging(e) }))
       .filter(x => x.aging?.overdue)
       .sort((a, b) => (b.aging!.days - b.aging!.limit) - (a.aging!.days - a.aging!.limit))
-      .map(({ e, aging }) => ({ e, detalle: `${aging!.days} d sin tocar (máx. ${aging!.limit})` }))
+      .map(({ e, aging }) => ({ e, detalle: `${aging!.days} d sin tocar (máx. ${aging!.limit})` })))
 
-    // 3. Calientes: las que están a punto
-    const calientes = vivas
+    // 3. Calientes que no salían ya arriba: van bien, solo hay que empujar
+    const calientes = coger(vivas
       .filter(e => e.status === 'caliente')
       .map(e => ({ e, d: dias(e.statusUpdatedAt ?? e.updatedAt) }))
       .sort((a, b) => (b.d ?? 0) - (a.d ?? 0))
-      .map(({ e, d }) => ({ e, detalle: d == null ? '' : d === 0 ? 'hoy' : `hace ${d} d` }))
+      .map(({ e, d }) => ({ e, detalle: d == null ? '' : d === 0 ? 'hoy' : `hace ${d} d` })))
 
     // 4. Sin teléfono: en la práctica están esperando el número
-    const sinTel = vivas.filter(necesitaTelefono).map(e => ({ e }))
+    const sinTel = coger(vivas.filter(necesitaTelefono).map(e => ({ e })))
 
-    return { hoy, frias, calientes, sinTel }
-  }, [mias])
+    const pendientes = hoy.length + frias.length + calientes.length + sinTel.length
+    return { hoy, frias, calientes, sinTel, pendientes }
+  }, [vivas])
 
   // ── Mi pipeline: embudo + tabla ──
   const porEstatus = useMemo(() => {
     const m = {} as Record<FirmasStatus, FirmasEntry[]>
-    FIRMAS_STATUSES.forEach(s => { m[s] = [] })
-    mias.forEach(e => { m[e.status]?.push(e) })
+    ESTATUS_VIVOS.forEach(s => { m[s] = [] })
+    vivas.forEach(e => { m[e.status]?.push(e) })
     return m
-  }, [mias])
+  }, [vivas])
 
-  const maxEstatus = Math.max(1, ...FIRMAS_STATUSES.map(s => porEstatus[s].length))
+  const maxEstatus = Math.max(1, ...ESTATUS_VIVOS.map(s => porEstatus[s].length))
 
   const tabla = useMemo(() => {
-    const lista = estatusSel === 'all' ? mias : porEstatus[estatusSel]
+    const lista = estatusSel === 'all' ? vivas : porEstatus[estatusSel]
     const parado = (e: FirmasEntry) => firmasAging(e)?.days ?? dias(e.updatedAt) ?? 0
     return [...lista].sort((a, b) => {
       if (orden === 'nombre') return a.playerName.localeCompare(b.playerName)
-      if (orden === 'estatus') return FIRMAS_STATUSES.indexOf(a.status) - FIRMAS_STATUSES.indexOf(b.status) || a.playerName.localeCompare(b.playerName)
+      if (orden === 'estatus') return ESTATUS_VIVOS.indexOf(a.status) - ESTATUS_VIVOS.indexOf(b.status) || a.playerName.localeCompare(b.playerName)
       if (orden === 'accion') return (a.nextActionDate ?? '9999').localeCompare(b.nextActionDate ?? '9999')
       return parado(b) - parado(a)
     })
-  }, [mias, porEstatus, estatusSel, orden])
+  }, [vivas, porEstatus, estatusSel, orden])
 
   const persona = conPipeline.find(p => p.id === quien)
   const esYo = quien === currentProfile.id
@@ -173,7 +189,8 @@ export function EncargadoTab({
               {esYo ? 'Mi pipeline' : `Pipeline de ${persona?.name ?? '—'}`}
             </h2>
             <p className="text-xs text-slate-400">
-              {mias.length} tarjeta{mias.length !== 1 ? 's' : ''} · {mias.filter(e => e.status !== 'firmado').length} en marcha
+              {vivas.length} en marcha · {bloques.pendientes} necesitan algo
+              {firmados > 0 && <> · {firmados} firmad{firmados !== 1 ? 'os' : 'o'}</>}
             </p>
           </div>
           <select
@@ -245,7 +262,7 @@ export function EncargadoTab({
                 )}
               </div>
               <div className="p-3 space-y-1">
-                {FIRMAS_STATUSES.map(s => {
+                {ESTATUS_VIVOS.map(s => {
                   const n = porEstatus[s].length
                   const cfg = FIRMAS_CONFIG[s]
                   const sel = estatusSel === s

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { LogOut, TrendingUp, Eye, Inbox, PenLine, Activity, MapPin, UserCog } from 'lucide-react'
+import { LogOut, TrendingUp, Eye, Inbox, PenLine, Activity, MapPin, UserCog, Bell } from 'lucide-react'
 import logoImg from '../../assets/logo.jpeg'
 import type { Player, Task, FirmasEntry, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion } from '../../types'
 import type { Profile } from '../../contexts/AuthContext'
@@ -9,6 +9,8 @@ import { useToast } from '../../hooks/useToast'
 import { FirmasTab } from '../captacion/firmas/FirmasTab'
 import { TimelineTab } from './TimelineTab'
 import { EncargadoTab } from './EncargadoTab'
+import { AvisosTab } from './AvisosTab'
+import { useFirmasAvisos } from '../captacion/firmas/avisos'
 
 // ── Sección PIPELINE ─────────────────────────────────────────────────
 // Antes era la primera pestaña de Captación («Pipeline/Firmar»). Se ha
@@ -17,7 +19,7 @@ import { EncargadoTab } from './EncargadoTab'
 //   Firmar   → el tablero de siempre, tal cual estaba
 //   Timeline → todo lo que se mueve, de más reciente a más antiguo
 
-export type PipelineTab = 'firmar' | 'zona' | 'encargado' | 'timeline'
+export type PipelineTab = 'firmar' | 'zona' | 'encargado' | 'avisos' | 'timeline'
 
 export interface PipelineProps {
   firmasEntries: FirmasEntry[]
@@ -51,6 +53,18 @@ export function Pipeline(props: PipelineProps) {
     onGoToSection, onLogout, onAdmin,
   } = props
   const isAdmin = currentProfile.is_admin
+
+  // Los avisos se calculan aquí para poder enseñar el contador en la pestaña
+  // sin tener que entrar en ella
+  const avisos = useFirmasAvisos({
+    entries: firmasEntries,
+    scoutingPlayers: props.scoutingPlayers,
+    scoutingReports: props.scoutingReports,
+    scoutingMatches: props.scoutingMatches,
+    matchPlayers: props.matchPlayers,
+    boulemaPeticiones: props.boulemaPeticiones,
+    players: props.players,
+  })
   const { toasts, showToast, dismissToast } = useToast()
 
   const [tabElegida, setTab] = useState<PipelineTab>(
@@ -114,6 +128,7 @@ export function Pipeline(props: PipelineProps) {
             { id: 'firmar' as PipelineTab, label: 'Firmar', icon: <PenLine className="w-3.5 h-3.5" /> },
             { id: 'zona' as PipelineTab, label: 'Por zona', icon: <MapPin className="w-3.5 h-3.5" /> },
             { id: 'encargado' as PipelineTab, label: 'Por encargado', icon: <UserCog className="w-3.5 h-3.5" /> },
+            { id: 'avisos' as PipelineTab, label: 'Avisos', icon: <Bell className="w-3.5 h-3.5" />, badge: avisos.totalAvisos, alerta: avisos.urgentes > 0 },
             { id: 'timeline' as PipelineTab, label: 'Timeline', icon: <Activity className="w-3.5 h-3.5" /> },
           ]).map(t => (
             <button
@@ -124,6 +139,14 @@ export function Pipeline(props: PipelineProps) {
               }`}
             >
               {t.icon}{t.label}
+              {!!t.badge && (
+                <span className={`min-w-[16px] text-center text-[10px] font-bold rounded-full px-1 ${
+                  tab === t.id ? 'bg-white/25 text-white'
+                  : t.alerta ? 'bg-red-500 text-white' : 'bg-slate-200 text-slate-600'
+                }`}>
+                  {t.badge > 99 ? '99+' : t.badge}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -138,9 +161,6 @@ export function Pipeline(props: PipelineProps) {
           isAdmin={isAdmin}
           scoutingPlayers={props.scoutingPlayers}
           scoutingReports={props.scoutingReports}
-          scoutingMatches={props.scoutingMatches}
-          matchPlayers={props.matchPlayers}
-          boulemaPeticiones={props.boulemaPeticiones}
           players={props.players}
           onCreatePlayer={props.onCreatePlayer}
           onSyncActionTasks={props.onSyncFirmasActionTasks}
@@ -160,6 +180,18 @@ export function Pipeline(props: PipelineProps) {
           entries={firmasEntries}
           profiles={profiles}
           currentProfile={currentProfile}
+          onAbrirEntry={id => { setSaltoId(id); setTab('firmar') }}
+        />
+      )}
+
+      {tab === 'avisos' && (
+        <AvisosTab
+          grupos={avisos.gruposAviso}
+          urgentes={avisos.urgentes}
+          total={avisos.totalAvisos}
+          avisosMudos={avisos.avisosMudos}
+          onSilenciar={avisos.silenciar}
+          onRestaurar={avisos.restaurarAvisos}
           onAbrirEntry={id => { setSaltoId(id); setTab('firmar') }}
         />
       )}

@@ -1,24 +1,23 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react'
 import { Search, X, Plus, ChevronDown, ChevronRight, Pencil, Users, PenLine, MapPin, MessageSquare, LayoutGrid } from 'lucide-react'
-import type { Player, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion, FirmasEntry, FirmasStatus, FirmasComment } from '../../../types'
+import type { Player, ScoutingPlayer, ScoutingReport, FirmasEntry, FirmasStatus, FirmasComment } from '../../../types'
 import type { Profile } from '../../../contexts/AuthContext'
 import { ConfirmModal } from '../../../components/ConfirmModal'
 import { EmptyState } from '../../../components/EmptyState'
 import { useEscapeKey } from '../../../hooks/useEscapeKey'
 import { useDebounce } from '../../../hooks/useDebounce'
 import { ZONAS_PIPELINE as FIRMAS_ZONE_ORDER } from '../../../lib/zonas'
-import { teamsAlike, equipoMatchKind } from '../../../lib/equipos'
 import { norm as normSearch } from '../../../lib/texto'
-import { hoyISO, parseDia, sumarDias } from '../../../lib/fechas'
-import { type ShowToast, type PatchFirmasEntry, SELECT_CLS, normConclusion, fmtDate, todayISO, scoutColor } from '../helpers'
+import { parseDia } from '../../../lib/fechas'
+import { type ShowToast, type PatchFirmasEntry, SELECT_CLS, fmtDate, todayISO, scoutColor } from '../helpers'
 import { FirmasManagers, FirmasHoverCard } from './comun'
-import { AVISO_TITULO, FIRMAS_STATUSES, FIRMAS_CONFIG, FIRMAS_ACTION_KIND_META, necesitaTelefono, firmasAging } from './helpers'
+import { FIRMAS_STATUSES, FIRMAS_CONFIG, FIRMAS_ACTION_KIND_META, necesitaTelefono, firmasAging } from './helpers'
 import { FirmasDetailPanel } from './FirmasDetailPanel'
 import { FirmasAddModal } from './FirmasAddModal'
 
 export function FirmasTab({
-  entries, profiles, currentProfile, isAdmin, scoutingPlayers, scoutingReports, scoutingMatches,
-  matchPlayers, boulemaPeticiones, players, onCreatePlayer, onSyncActionTasks,
+  entries, profiles, currentProfile, isAdmin, scoutingPlayers, scoutingReports,
+  players, onCreatePlayer, onSyncActionTasks,
   onCreate, onPatch, onDelete, onOpenScoutingPlayer, showToast, headerHeight,
   openEntryId, onOpenEntryConsumed, vistaFija,
 }: {
@@ -28,9 +27,6 @@ export function FirmasTab({
   isAdmin: boolean
   scoutingPlayers: ScoutingPlayer[]
   scoutingReports: ScoutingReport[]
-  scoutingMatches: ScoutingMatch[]
-  matchPlayers: ScoutingMatchPlayer[]
-  boulemaPeticiones: BoulemaPeticion[]
   players: Player[]
   onCreatePlayer: (p: Player) => Promise<Player>
   onSyncActionTasks?: () => Promise<number>
@@ -89,7 +85,6 @@ export function FirmasTab({
   const [panelId, setPanelId] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<FirmasEntry | null>(null)
-  const [showAlerts, setShowAlerts] = useState(false)
   const [showAgenda, setShowAgenda] = useState(false)
   const [showResumen, setShowResumen] = useState(false)
   const [syncingTasks, setSyncingTasks] = useState(false)
@@ -165,187 +160,6 @@ export function FirmasTab({
 
   const overdueCount = useMemo(() => entries.filter(e => firmasAging(e)?.overdue).length, [entries])
 
-  // ── avisos cruzados con el resto de la app ──
-  const alerts = useMemo(() => {
-    const out: { icon: string; text: string; entryId: string; tone: 'blue' | 'green' | 'amber' | 'red'; kind: string }[] = []
-    const today = todayISO()
-    // sumarDias trabaja en día local; toISOString() daba el día UTC (entre 00:00 y 02:00 «hoy» aún es ayer)
-    const plus30 = sumarDias(hoyISO(), 30)
-    const minus14 = sumarDias(hoyISO(), -14)
-    const since14 = new Date(Date.now() - 14 * 86400000).toISOString()
-    const since90 = new Date(Date.now() - 90 * 86400000).toISOString()
-    const in30 = Date.now() + 30 * 86400000
-    const in180 = Date.now() + 180 * 86400000
-
-    const active = entries.filter(e => e.status !== 'firmado')
-
-    // caliente sin próxima acción programada — el olvido más caro
-    active.filter(e => e.status === 'caliente' && !e.nextActionDate).forEach(e => {
-      out.push({ icon: '🔥', tone: 'red', entryId: e.id, kind: 'sin-accion', text: `${e.playerName} está caliente sin próxima acción programada — ponle fecha` })
-    })
-
-    // alta sin encargado
-    active.filter(e => e.managers.length === 0).forEach(e => {
-      out.push({ icon: '👤', tone: 'red', entryId: e.id, kind: 'sin-encargado', text: `${e.playerName} no tiene encargado asignado` })
-    })
-
-    // incoherencia con el assessment de scouting.
-    // Nota: que en scouting esté en «Llamar» y aquí frío/templado es NORMAL —
-    // el proceso natural es: scouting decide «Llamar» → pasa a Firmar, y aquí
-    // vive su propio estatus. Solo avisamos del caso contradictorio (Descartado).
-    active.forEach(e => {
-      const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
-      if (sp?.assessment === 'Descartado') {
-        out.push({ icon: '🚫', tone: 'red', entryId: e.id, kind: 'descartado', text: `${e.playerName}: en scouting está Descartado — ¿sacarlo del pipeline?` })
-      }
-    })
-
-    // frío que se calienta solo: 2+ informes «Llamar» en 90 días
-    active.filter(e => e.status === 'frio' && e.scoutingPlayerId).forEach(e => {
-      const n = (reportsByPlayer[e.scoutingPlayerId!] ?? [])
-        .filter(r => (r.fecha ?? r.createdAt) >= since90 && normConclusion(r.conclusion) === 'Llamar').length
-      if (n >= 2) out.push({ icon: '📈', tone: 'amber', entryId: e.id, kind: 'recalentar', text: `${e.playerName} acumula ${n} informes «Llamar» recientes — candidato a recalentar` })
-    })
-
-    // le vieron en un partido (añadido al campograma, últimos 14 días)
-    const recentMatches = new Map(scoutingMatches.filter(m => m.date <= today && m.date >= minus14).map(m => [m.id, m]))
-    const seenByPlayer: Record<string, ScoutingMatch> = {}
-    matchPlayers.forEach(mp => {
-      const m = recentMatches.get(mp.matchId)
-      if (m && (!seenByPlayer[mp.playerId] || m.date > seenByPlayer[mp.playerId].date)) seenByPlayer[mp.playerId] = m
-    })
-    active.forEach(e => {
-      const m = e.scoutingPlayerId ? seenByPlayer[e.scoutingPlayerId] : undefined
-      if (m) out.push({ icon: '👀', tone: 'green', entryId: e.id, kind: 'visto', text: `A ${e.playerName} le vieron el ${fmtDate(m.date)} en ${m.homeTeam} vs ${m.awayTeam} — buen momento para llamar` })
-    })
-
-    // partidos de Captación registrados (≤30 días vista) donde juega su equipo
-    const upcoming = scoutingMatches.filter(m => m.date >= today && m.date <= plus30).sort((a, b) => a.date.localeCompare(b.date))
-    active.forEach(e => {
-      const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
-      if (!sp?.team) return
-      const m = upcoming.find(m => teamsAlike(sp.team, m.homeTeam) || teamsAlike(sp.team, m.awayTeam))
-      if (m) out.push({
-        icon: '🏟️', tone: 'blue', entryId: e.id, kind: 'juega',
-        text: `${e.playerName}: su equipo juega ${m.homeTeam} vs ${m.awayTeam} el ${fmtDate(m.date)}${m.assignedTo ? ` (lo ve ${m.assignedTo})` : ''}`,
-      })
-    })
-
-    // informes nuevos (≤14 días) sobre jugadores del pipeline
-    active.forEach(e => {
-      if (!e.scoutingPlayerId) return
-      const recent = (reportsByPlayer[e.scoutingPlayerId] ?? []).filter(r => (r.fecha ?? r.createdAt) >= since14)
-      if (recent.length > 0) {
-        const r = recent[0]
-        out.push({
-          icon: '📄', tone: 'green', entryId: e.id, kind: 'informe',
-          text: `Informe nuevo de ${e.playerName}${r.persona ? ` (${r.persona})` : ''}${r.conclusion ? ` — conclusión: ${normConclusion(r.conclusion)}` : ''}`,
-        })
-      }
-    })
-
-    // también está en Boulema: petición de informe sobre el mismo jugador
-    active.forEach(e => {
-      const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
-      const names = new Set([normSearch(e.playerName), ...(sp ? [normSearch(sp.fullName)] : [])])
-      const pet = boulemaPeticiones.find(p => names.has(normSearch(p.playerName)))
-      if (pet) out.push({ icon: '📥', tone: 'blue', entryId: e.id, kind: 'boulema', text: `Hay una petición en Boulema sobre ${e.playerName} (pedida por ${pet.requestedBy})` })
-    })
-
-    // cambio de club en su ficha de scouting
-    active.forEach(e => {
-      const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
-      // mismo club pero otra categoría (Juv B → Juv A) también avisa, pero
-      // con otro texto: no hace falta revisar la zona
-      const cambio = sp?.team && e.knownTeam ? equipoMatchKind(e.knownTeam, sp.team) : 'equipo'
-      if (sp?.team && e.knownTeam && cambio !== 'equipo') {
-        out.push({ icon: '🔁', tone: 'amber', entryId: e.id, kind: 'cambio-club', text: cambio === 'club'
-          ? `${e.playerName} cambió de equipo dentro del club: ${e.knownTeam} → ${sp.team} (confírmalo en su panel)`
-          : `${e.playerName} cambió de club: ${e.knownTeam} → ${sp.team} — revisa la zona (confírmalo en su panel)` })
-      }
-    })
-
-    // cumpleaños próximos (≤30 días) — 16 y 18 destacados.
-    // Se omiten las fechas placeholder AAAA-02-28 (solo se conocía el año).
-    active.forEach(e => {
-      const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
-      if (!sp?.birthdate || sp.birthdate.endsWith('-02-28')) return
-      const [by, bm, bd] = sp.birthdate.split('-').map(Number)
-      const now = new Date()
-      let next = new Date(now.getFullYear(), bm - 1, bd)
-      if (next.getTime() < now.getTime() - 86400000) next = new Date(now.getFullYear() + 1, bm - 1, bd)
-      if (next.getTime() > in30) return
-      const turns = next.getFullYear() - by
-      const key = turns === 16 || turns === 18
-      out.push({
-        icon: '🎂', tone: key ? 'amber' : 'blue', entryId: e.id, kind: 'cumple',
-        text: `${e.playerName} cumple ${turns} el ${fmtDate(next.toISOString())}${key ? ' — edad clave para firmar' : ''}`,
-      })
-    })
-
-    // contrato de club que expira pronto (≤6 meses)
-    active.forEach(e => {
-      const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
-      if (!sp?.clubContract) return
-      let d: Date | null = null
-      const ddmmyyyy = sp.clubContract.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
-      if (ddmmyyyy) d = new Date(+ddmmyyyy[3], +ddmmyyyy[2] - 1, +ddmmyyyy[1])
-      else if (/^\d{4}-\d{2}-\d{2}/.test(sp.clubContract)) d = new Date(sp.clubContract)
-      if (!d || isNaN(d.getTime())) return
-      if (d.getTime() > Date.now() && d.getTime() <= in180) {
-        out.push({ icon: '📃', tone: 'amber', entryId: e.id, kind: 'contrato', text: `El contrato de club de ${e.playerName} acaba el ${fmtDate(d.toISOString())}` })
-      }
-    })
-
-    // duplicados: mismo jugador de scouting en más de una entrada
-    const byLink: Record<string, FirmasEntry[]> = {}
-    entries.forEach(e => { if (e.scoutingPlayerId) (byLink[e.scoutingPlayerId] ??= []).push(e) })
-    Object.values(byLink).filter(l => l.length > 1).forEach(l => {
-      out.push({ icon: '👥', tone: 'red', entryId: l[0].id, kind: 'duplicado', text: `${l[0].playerName} está ${l.length} veces en el pipeline (${l.map(x => x.zone).join(' y ')})` })
-    })
-
-    // firmado que aún no está en Mantenimiento
-    entries.filter(e => e.status === 'firmado').forEach(e => {
-      const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
-      const nm = normSearch(sp?.fullName ?? e.playerName)
-      if (!players.some(p => normSearch(p.name) === nm)) {
-        out.push({ icon: '🎉', tone: 'green', entryId: e.id, kind: 'firmado', text: `${e.playerName} está firmado y aún no está en Mantenimiento — créalo desde su panel` })
-      }
-    })
-
-    const rank = { red: 0, amber: 1, blue: 2, green: 3 }
-    return out.sort((a, b) => rank[a.tone] - rank[b.tone] || a.text.localeCompare(b.text))
-  }, [entries, spById, scoutingMatches, matchPlayers, reportsByPlayer, boulemaPeticiones, players])
-
-  // Avisos silenciados: cada uno decide qué tipos no quiere ver. Se guarda en
-  // este navegador, así que no molesta a nadie más.
-  const [avisosMudos, setAvisosMudos] = useState<Set<string>>(() => {
-    try { return new Set(JSON.parse(localStorage.getItem('firmas_avisos_mudos') ?? '[]') as string[]) }
-    catch { return new Set() }
-  })
-  const silenciar = (kind: string) => setAvisosMudos(prev => {
-    const next = new Set(prev)
-    if (next.has(kind)) next.delete(kind); else next.add(kind)
-    localStorage.setItem('firmas_avisos_mudos', JSON.stringify([...next]))
-    return next
-  })
-
-  // Agrupados por tipo: 20 líneas iguales no son 20 avisos, son uno con 20 casos
-  const gruposAviso = useMemo(() => {
-    const m = new Map<string, { kind: string; icon: string; tone: string; titulo: string; items: typeof alerts }>()
-    for (const a of alerts) {
-      if (avisosMudos.has(a.kind)) continue
-      let g = m.get(a.kind)
-      if (!g) { g = { kind: a.kind, icon: a.icon, tone: a.tone, titulo: AVISO_TITULO[a.kind] ?? a.kind, items: [] }; m.set(a.kind, g) }
-      g.items.push(a)
-    }
-    const rank: Record<string, number> = { red: 0, amber: 1, blue: 2, green: 3 }
-    return [...m.values()].sort((a, b) => rank[a.tone] - rank[b.tone] || b.items.length - a.items.length)
-  }, [alerts, avisosMudos])
-
-  const urgentes = useMemo(() => gruposAviso.filter(g => g.tone === 'red').reduce((n, g) => n + g.items.length, 0), [gruposAviso])
-  const totalAvisos = useMemo(() => gruposAviso.reduce((n, g) => n + g.items.length, 0), [gruposAviso])
-  const [grupoAbierto, setGrupoAbierto] = useState<string | null>(null)
 
   // ── agenda: todas las próximas acciones pendientes, por fecha ──
   const agenda = useMemo(() =>
@@ -626,88 +440,6 @@ export function FirmasTab({
         />
       ) : (
         <>
-          {/* Avisos cruzados. Agrupados por tipo y con lo urgente delante:
-              una tira de 40 líneas sueltas no la lee nadie. */}
-          {totalAvisos > 0 && (
-            <div className={`border rounded-lg overflow-hidden ${urgentes > 0 ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200'}`}>
-              <button
-                onClick={() => setShowAlerts(v => !v)}
-                className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${urgentes > 0 ? 'hover:bg-red-100/50' : 'hover:bg-slate-100/60'}`}
-              >
-                {urgentes > 0 ? (
-                  <>
-                    <span className="text-sm">⚠️</span>
-                    <span className="text-xs font-bold text-red-700">{urgentes} que requieren acción</span>
-                    {totalAvisos > urgentes && (
-                      <span className="text-[11px] text-slate-500">· {totalAvisos - urgentes} informativos</span>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <span className="text-sm">🔔</span>
-                    <span className="text-xs font-semibold text-slate-600">{totalAvisos} avisos informativos</span>
-                  </>
-                )}
-                <span className="hidden sm:inline text-[11px] text-slate-500 truncate ml-1">
-                  {gruposAviso.slice(0, 3).map(g => `${g.titulo} (${g.items.length})`).join(' · ')}
-                </span>
-                <ChevronDown className={`w-4 h-4 text-slate-400 ml-auto flex-shrink-0 transition-transform ${showAlerts ? 'rotate-180' : ''}`} />
-              </button>
-
-              {showAlerts && (
-                <div className="border-t border-slate-200 divide-y divide-slate-100 bg-white max-h-[26rem] overflow-y-auto">
-                  {gruposAviso.map(g => {
-                    const abierto = grupoAbierto === g.kind
-                    return (
-                      <div key={g.kind}>
-                        <div className="flex items-center gap-2 px-3 py-2">
-                          <button
-                            onClick={() => setGrupoAbierto(abierto ? null : g.kind)}
-                            className="flex-1 flex items-center gap-2 text-left min-w-0"
-                          >
-                            <span className="flex-shrink-0">{g.icon}</span>
-                            <span className={`text-xs font-semibold truncate ${g.tone === 'red' ? 'text-red-700' : 'text-slate-700'}`}>{g.titulo}</span>
-                            <span className={`text-[10px] font-bold rounded-full px-1.5 py-px flex-shrink-0 ${
-                              g.tone === 'red' ? 'bg-red-100 text-red-700' :
-                              g.tone === 'amber' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
-                            }`}>{g.items.length}</span>
-                            <ChevronDown className={`w-3 h-3 text-slate-300 transition-transform ${abierto ? 'rotate-180' : ''}`} />
-                          </button>
-                          <button
-                            onClick={() => silenciar(g.kind)}
-                            title="No volver a enseñarme este tipo de aviso (solo en este navegador)"
-                            className="text-[10px] text-slate-500 hover:text-slate-700 flex-shrink-0"
-                          >silenciar</button>
-                        </div>
-                        {abierto && (
-                          <div className="bg-slate-50/70 divide-y divide-slate-100">
-                            {g.items.map((a, i) => (
-                              <button
-                                key={i}
-                                onClick={() => setPanelId(a.entryId)}
-                                className="w-full text-left text-[11.5px] text-slate-700 px-3 py-1.5 pl-9 hover:bg-white transition-colors"
-                              >
-                                {a.text}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                  {avisosMudos.size > 0 && (
-                    <button
-                      onClick={() => { setAvisosMudos(new Set()); localStorage.removeItem('firmas_avisos_mudos') }}
-                      className="w-full text-[11px] text-slate-400 hover:text-slate-600 px-3 py-2 text-left"
-                    >
-                      Tienes {avisosMudos.size} tipo{avisosMudos.size !== 1 ? 's' : ''} de aviso silenciado{avisosMudos.size !== 1 ? 's' : ''} — volver a enseñarlos
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
           {/* Agenda: todas las próximas acciones programadas, por fecha */}
           {agenda.length > 0 && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg overflow-hidden">
@@ -894,45 +626,59 @@ export function FirmasTab({
             const zonesAll = zones
             const activeZone = zonesAll.includes(selZone) ? selZone : (zonesAll[0] ?? '')
             const zoneEntries = filteredNoZone.filter(e => e.zone === activeZone)
+            // Lista de zonas a la izquierda y el tablero al lado, como una
+            // bandeja de correo: se ve de qué zona estás mirando sin perder de
+            // vista las demás. Antes era una rejilla de tarjetas encima que
+            // empujaba el tablero fuera de la pantalla.
             return (
-              <div className="space-y-3">
-                {/* Selector de zonas con resumen */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-                  {zonesAll.map(z => {
-                    const zEntries = filteredNoZone.filter(e => e.zone === z)
-                    const active = z === activeZone
-                    return (
-                      <button
-                        key={z}
-                        onClick={() => setSelZone(z)}
-                        className={`text-left rounded-lg border px-3 py-2 transition-all ${
-                          active
-                            ? 'border-primary bg-primary/5 ring-1 ring-primary/30'
-                            : 'border-slate-200 bg-white hover:border-slate-300'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-1">
-                          <span className={`text-xs font-semibold truncate ${active ? 'text-primary' : 'text-slate-700'}`}>{z}</span>
-                          <span className={`text-xs font-bold flex-shrink-0 ${active ? 'text-primary' : 'text-slate-400'}`}>{zEntries.length}</span>
-                        </div>
-                        <div className="mt-1 flex items-center gap-2">
-                          {FIRMAS_STATUSES.map(s => {
-                            const n = zEntries.filter(e => e.status === s).length
-                            if (n === 0) return null
-                            return (
-                              <span key={s} className="inline-flex items-center gap-0.5 text-[10.5px] text-slate-500" title={FIRMAS_CONFIG[s].label}>
-                                <span className={`w-1.5 h-1.5 rounded-full ${FIRMAS_CONFIG[s].dot}`} />
-                                {n}
-                              </span>
-                            )
-                          })}
-                          {zEntries.length === 0 && <span className="text-[10.5px] text-slate-300">sin jugadores</span>}
-                        </div>
-                      </button>
-                    )
-                  })}
+              <div className="flex flex-col lg:flex-row gap-3 items-start">
+                <div className="w-full lg:w-56 flex-shrink-0">
+                  {/* Móvil: tira horizontal · Escritorio: lista vertical */}
+                  <div className="flex lg:flex-col gap-1.5 lg:gap-1 overflow-x-auto lg:overflow-visible pb-1 lg:pb-0 -mx-3 px-3 lg:mx-0 lg:px-0 scrollbar-none">
+                    {zonesAll.map(z => {
+                      const zEntries = filteredNoZone.filter(e => e.zone === z)
+                      const activa = z === activeZone
+                      const urgentes = zEntries.filter(e => firmasAging(e)?.overdue).length
+                      return (
+                        <button
+                          key={z}
+                          onClick={() => setSelZone(z)}
+                          className={`flex-shrink-0 lg:w-full text-left rounded-lg border px-2.5 py-1.5 transition-colors ${
+                            activa
+                              ? 'border-primary bg-primary/5 ring-1 ring-primary/30'
+                              : 'border-slate-200 bg-white hover:border-slate-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span className={`text-xs font-semibold truncate ${activa ? 'text-primary' : 'text-slate-700'}`}>{z}</span>
+                            <span className={`ml-auto text-xs font-bold flex-shrink-0 ${activa ? 'text-primary' : 'text-slate-400'}`}>{zEntries.length}</span>
+                            {urgentes > 0 && (
+                              <span
+                                title={`${urgentes} sin tocar más de la cuenta`}
+                                className="flex-shrink-0 text-[10px] font-bold rounded-full px-1 bg-red-100 text-red-600"
+                              >{urgentes}</span>
+                            )}
+                          </div>
+                          <div className="hidden lg:flex items-center gap-2 mt-0.5">
+                            {FIRMAS_STATUSES.map(st => {
+                              const n = zEntries.filter(e => e.status === st).length
+                              if (n === 0) return null
+                              return (
+                                <span key={st} className="inline-flex items-center gap-0.5 text-[10.5px] text-slate-500" title={FIRMAS_CONFIG[st].label}>
+                                  <span className={`w-1.5 h-1.5 rounded-full ${FIRMAS_CONFIG[st].dot}`} />
+                                  {n}
+                                </span>
+                              )
+                            })}
+                            {zEntries.length === 0 && <span className="text-[10.5px] text-slate-300">sin jugadores</span>}
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
 
+                <div className="flex-1 min-w-0 w-full">
                 {/* Tablero de la zona seleccionada */}
                 {activeZone ? (
                   <div>
@@ -988,6 +734,7 @@ export function FirmasTab({
                 ) : (
                   <p className="text-xs text-slate-400 text-center py-6">No hay zonas todavía</p>
                 )}
+                </div>
               </div>
             )
           })()}
