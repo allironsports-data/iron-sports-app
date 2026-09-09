@@ -219,6 +219,26 @@ export function FirmasTab({
     setHover(null)
   }
 
+  // ── cadencia: días sin tocar, en la propia tarjeta ──
+  // Antes era un punto de color: te decía que algo iba mal pero no cuánto, y
+  // para saberlo había que abrir la ficha. El número cabe igual.
+  const chipCadencia = (aging: ReturnType<typeof firmasAging>) => {
+    if (!aging) return null
+    const tono = aging.overdue
+      ? 'bg-red-100 text-red-700'
+      : aging.warn
+        ? 'bg-amber-100 text-amber-700'
+        : 'text-slate-400'
+    return (
+      <span
+        className={`text-[10px] font-semibold leading-none rounded px-1 py-0.5 flex-shrink-0 tabular-nums ${tono}`}
+        title={`${aging.days} día${aging.days !== 1 ? 's' : ''} sin tocar · límite de cadencia ${aging.limit}${aging.overdue ? ' — desatendido' : ''}`}
+      >
+        {aging.days}d
+      </span>
+    )
+  }
+
   // ── tarjeta ──
   const card = (e: FirmasEntry, showStatusDot = false) => {
     const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
@@ -241,12 +261,7 @@ export function FirmasTab({
             <span className="truncate">{e.playerName}</span>
           </span>
           <span className="flex items-center gap-1 flex-shrink-0">
-            {aging?.overdue && (
-              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" title={`Desatendido: ${aging.days} días sin tocar (límite ${aging.limit})`} />
-            )}
-            {aging && !aging.overdue && aging.warn && (
-              <span className="w-2 h-2 rounded-full bg-amber-400" title={`${aging.days} días sin tocar (límite ${aging.limit})`} />
-            )}
+            {chipCadencia(aging)}
             <FirmasManagers managerIds={e.managers} profiles={profiles} />
           </span>
         </div>
@@ -343,8 +358,7 @@ export function FirmasTab({
             )}
           </span>
         </span>
-        {aging?.overdue && <span className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" title={`${aging.days} días sin tocar`} />}
-        {!aging?.overdue && aging?.warn && <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />}
+        {chipCadencia(aging)}
         <FirmasManagers managerIds={e.managers} profiles={profiles} max={2} />
         <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
       </button>

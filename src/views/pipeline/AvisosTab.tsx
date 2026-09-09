@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { BellOff, CheckCircle2, ChevronRight } from 'lucide-react'
+import { BellOff, Check, CheckCircle2, Clock } from 'lucide-react'
 import { EmptyState } from '../../components/EmptyState'
-import type { GrupoAviso } from '../captacion/firmas/avisos'
+import type { Aviso, GrupoAviso } from '../captacion/firmas/avisos'
 
 // ── Avisos del pipeline ──────────────────────────────────────────────
 // Antes era un desplegable encima del tablero: para leerlo había que
@@ -20,6 +20,7 @@ const tonoDe = (t: string) => TONO[t as keyof typeof TONO] ?? TONO.blue
 
 export function AvisosTab({
   grupos, urgentes, total, avisosMudos, onSilenciar, onRestaurar, onAbrirEntry,
+  onPosponer, onVisto, ocultos, onRestaurarPospuestos,
 }: {
   grupos: GrupoAviso[]
   urgentes: number
@@ -28,6 +29,10 @@ export function AvisosTab({
   onSilenciar: (kind: string) => void
   onRestaurar: () => void
   onAbrirEntry: (id: string) => void
+  onPosponer: (a: Aviso, dias?: number) => void
+  onVisto: (a: Aviso) => void
+  ocultos: number
+  onRestaurarPospuestos: () => void
 }) {
   const [soloUrgentes, setSoloUrgentes] = useState(false)
   const visibles = soloUrgentes ? grupos.filter(g => g.tone === 'red') : grupos
@@ -61,7 +66,9 @@ export function AvisosTab({
           <EmptyState
             icon={<CheckCircle2 className="w-10 h-10" />}
             title="Nada que revisar"
-            subtitle="No hay ningún aviso pendiente en el pipeline"
+            subtitle={ocultos > 0
+              ? `No queda ningún aviso pendiente (${ocultos} pospuesto${ocultos !== 1 ? 's' : ''} o visto${ocultos !== 1 ? 's' : ''})`
+              : 'No hay ningún aviso pendiente en el pipeline'}
           />
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
@@ -83,15 +90,33 @@ export function AvisosTab({
                     </button>
                   </div>
                   <div className="divide-y divide-slate-50 max-h-[320px] overflow-y-auto">
-                    {g.items.map((a, i) => (
-                      <button
-                        key={i}
-                        onClick={() => onAbrirEntry(a.entryId)}
-                        className="w-full flex items-center gap-2 text-left text-[11.5px] text-slate-700 px-3 py-1.5 hover:bg-slate-50 transition-colors"
-                      >
-                        <span className="flex-1">{a.text}</span>
-                        <ChevronRight className="w-3 h-3 text-slate-300 flex-shrink-0" />
-                      </button>
+                    {g.items.map(a => (
+                      <div key={`${a.kind}|${a.entryId}`} className="flex items-center hover:bg-slate-50 transition-colors">
+                        <button
+                          onClick={() => onAbrirEntry(a.entryId)}
+                          className="flex-1 min-w-0 text-left text-[11.5px] text-slate-700 pl-3 pr-2 py-1.5"
+                        >
+                          {a.text}
+                        </button>
+                        <span className="flex items-center gap-0.5 pr-2 flex-shrink-0">
+                          <button
+                            onClick={() => onPosponer(a, 7)}
+                            title="Posponer 7 días"
+                            aria-label="Posponer 7 días"
+                            className="p-1 rounded text-slate-300 hover:text-amber-600 hover:bg-amber-50"
+                          >
+                            <Clock className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => onVisto(a)}
+                            title="Visto — no volver a avisarme de esto (vuelve si cambia)"
+                            aria-label="Marcar como visto"
+                            className="p-1 rounded text-slate-300 hover:text-emerald-600 hover:bg-emerald-50"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                          </button>
+                        </span>
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -100,14 +125,24 @@ export function AvisosTab({
           </div>
         )}
 
-        {avisosMudos.size > 0 && (
-          <button
-            onClick={onRestaurar}
-            className="text-[11px] text-slate-500 hover:text-slate-700 underline"
-          >
-            Tienes {avisosMudos.size} tipo{avisosMudos.size !== 1 ? 's' : ''} de aviso silenciado{avisosMudos.size !== 1 ? 's' : ''} — volver a enseñarlos
-          </button>
-        )}
+        <div className="flex flex-col gap-1">
+          {ocultos > 0 && (
+            <button
+              onClick={onRestaurarPospuestos}
+              className="text-[11px] text-slate-500 hover:text-slate-700 underline text-left"
+            >
+              {ocultos} aviso{ocultos !== 1 ? 's' : ''} pospuesto{ocultos !== 1 ? 's' : ''} o dado{ocultos !== 1 ? 's' : ''} por visto{ocultos !== 1 ? 's' : ''} — volver a enseñarlo{ocultos !== 1 ? 's' : ''}
+            </button>
+          )}
+          {avisosMudos.size > 0 && (
+            <button
+              onClick={onRestaurar}
+              className="text-[11px] text-slate-500 hover:text-slate-700 underline text-left"
+            >
+              Tienes {avisosMudos.size} tipo{avisosMudos.size !== 1 ? 's' : ''} de aviso silenciado{avisosMudos.size !== 1 ? 's' : ''} — volver a enseñarlos
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

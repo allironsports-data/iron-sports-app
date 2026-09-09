@@ -192,6 +192,10 @@ export function Pipeline(props: PipelineProps) {
           avisosMudos={avisos.avisosMudos}
           onSilenciar={avisos.silenciar}
           onRestaurar={avisos.restaurarAvisos}
+          onPosponer={avisos.posponer}
+          onVisto={avisos.marcarVisto}
+          ocultos={avisos.ocultos}
+          onRestaurarPospuestos={avisos.restaurarPospuestos}
           onAbrirEntry={id => { setSaltoId(id); setTab('firmar') }}
         />
       )}

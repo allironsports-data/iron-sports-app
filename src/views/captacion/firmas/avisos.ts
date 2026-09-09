@@ -23,6 +23,22 @@ export interface Aviso {
   kind: string
 }
 
+const POSPUESTOS_KEY = 'firmas_avisos_pospuestos'
+/** «Visto»: no tiene fecha de vuelta, vuelve solo si cambia el texto del aviso */
+const SIEMPRE = '9999-12-31'
+
+export type Pospuestos = Record<string, { hasta: string; sig?: string }>
+
+/** Un aviso concreto = tipo + ficha. El texto no entra: cambia con la fecha */
+export const claveAviso = (a: Aviso) => `${a.kind}|${a.entryId}`
+
+export function estaOculto(a: Aviso, pospuestos: Pospuestos, hoy: string): boolean {
+  const p = pospuestos[claveAviso(a)]
+  if (!p) return false
+  if (p.sig !== undefined) return p.sig === a.text
+  return p.hasta > hoy
+}
+
 export interface GrupoAviso {
   kind: string
   icon: string
@@ -219,18 +235,56 @@ export function useFirmasAvisos({
     return next
   })
 
+  // Avisos aplazados o dados por vistos, uno a uno (los de arriba silencian el
+  // tipo entero). También se guardan en este navegador.
+  //   · posponer → vuelve solo cuando pase la fecha
+  //   · visto    → no vuelve mientras el aviso diga exactamente lo mismo; si
+  //                cambia (otra fecha de contrato, otro club…) reaparece,
+  //                que para eso ya es otro aviso
+  const [pospuestos, setPospuestos] = useState<Pospuestos>(() => {
+    try { return JSON.parse(localStorage.getItem(POSPUESTOS_KEY) ?? '{}') as Pospuestos }
+    catch { return {} }
+  })
+
+  const guardarPospuestos = (next: Pospuestos) => {
+    // de paso tiramos los caducados: si no, el objeto crece para siempre
+    const hoy = hoyISO()
+    const limpio: Pospuestos = {}
+    for (const [k, v] of Object.entries(next)) if (v.hasta >= hoy) limpio[k] = v
+    localStorage.setItem(POSPUESTOS_KEY, JSON.stringify(limpio))
+    setPospuestos(limpio)
+  }
+
+  const posponer = (a: Aviso, dias = 7) =>
+    guardarPospuestos({ ...pospuestos, [claveAviso(a)]: { hasta: sumarDias(hoyISO(), dias) } })
+
+  const marcarVisto = (a: Aviso) =>
+    guardarPospuestos({ ...pospuestos, [claveAviso(a)]: { hasta: SIEMPRE, sig: a.text } })
+
+  const restaurarPospuestos = () => {
+    localStorage.removeItem(POSPUESTOS_KEY)
+    setPospuestos({})
+  }
+
+  const ocultos = useMemo(() => {
+    const hoy = hoyISO()
+    return alerts.filter(a => !avisosMudos.has(a.kind) && estaOculto(a, pospuestos, hoy)).length
+  }, [alerts, avisosMudos, pospuestos])
+
   // Agrupados por tipo: 20 líneas iguales no son 20 avisos, son uno con 20 casos
   const gruposAviso = useMemo(() => {
+    const hoy = hoyISO()
     const m = new Map<string, { kind: string; icon: string; tone: string; titulo: string; items: typeof alerts }>()
     for (const a of alerts) {
       if (avisosMudos.has(a.kind)) continue
+      if (estaOculto(a, pospuestos, hoy)) continue
       let g = m.get(a.kind)
       if (!g) { g = { kind: a.kind, icon: a.icon, tone: a.tone, titulo: AVISO_TITULO[a.kind] ?? a.kind, items: [] }; m.set(a.kind, g) }
       g.items.push(a)
     }
     const rank: Record<string, number> = { red: 0, amber: 1, blue: 2, green: 3 }
     return [...m.values()].sort((a, b) => rank[a.tone] - rank[b.tone] || b.items.length - a.items.length)
-  }, [alerts, avisosMudos])
+  }, [alerts, avisosMudos, pospuestos])
 
   const urgentes = useMemo(() => gruposAviso.filter(g => g.tone === 'red').reduce((n, g) => n + g.items.length, 0), [gruposAviso])
   const totalAvisos = useMemo(() => gruposAviso.reduce((n, g) => n + g.items.length, 0), [gruposAviso])
@@ -240,5 +294,9 @@ export function useFirmasAvisos({
     localStorage.removeItem('firmas_avisos_mudos')
   }
 
-  return { gruposAviso, urgentes, totalAvisos, avisosMudos, silenciar, restaurarAvisos }
+  return {
+    gruposAviso, urgentes, totalAvisos,
+    avisosMudos, silenciar, restaurarAvisos,
+    posponer, marcarVisto, ocultos, restaurarPospuestos,
+  }
 }
