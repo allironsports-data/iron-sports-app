@@ -28,7 +28,6 @@ import { EquiposTab, ZonasPanel } from './EquiposTab'
 import { useFilasEquipos, inicioTemporada } from './filasEquipos'
 import { ConclusionesTab } from './ConclusionesTab'
 import { ContratosTab } from './ContratosTab'
-import { FirmasTab } from './firmas/FirmasTab'
 import { MatchDetailModal } from './partidos/MatchDetailModal'
 import { MergeMatchesModal } from './partidos/MergeMatchesModal'
 import { ActualizarPlantilla } from './partidos/ActualizarPlantilla'
@@ -73,8 +72,7 @@ export function Captacion({
   onSetMatchScoutMode,
   openPlayerId,
   onOpenPlayerConsumed,
-  openFirmasEntryId,
-  onOpenFirmasEntryConsumed,
+  onOpenFirmas,
   openMatchId,
   onOpenMatchConsumed,
   openTab,
@@ -85,13 +83,8 @@ export function Captacion({
   clubZonas,
   onSetClubZona,
   players,
-  onCreatePlayer,
-  boulemaPeticiones,
-  onSyncFirmasActionTasks,
   firmasEntries,
   onCreateFirmasEntry,
-  onPatchFirmasEntry,
-  onDeleteFirmasEntry,
 }: Props) {
   const isAdmin = currentProfile.is_admin
 
@@ -116,11 +109,6 @@ export function Captacion({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openPlayerId])
 
-  // Navegación externa: abrir una entrada de Firmar (p. ej. desde el Dashboard)
-  useEffect(() => {
-    if (openFirmasEntryId) setCaptTab('firmar')
-  }, [openFirmasEntryId])
-
   // Navegación externa: abrir la ficha de un partido (p. ej. desde «Mi día»)
   useEffect(() => {
     if (openMatchId) {
@@ -140,8 +128,6 @@ export function Captacion({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openTab])
 
-  // Salto interno a una tarjeta de Firmar (desde la ficha de un jugador)
-  const [firmasJumpId, setFirmasJumpId] = useState<string | null>(null)
 
   // ── umbral de candidatos (compartido: badge de pestaña + Conclusiones) ──
   const [conclThreshold, setConclThreshold] = useState<number>(() => {
@@ -1268,6 +1254,13 @@ export function Captacion({
             Captación
           </button>
           <button
+            onClick={() => onGoToSection('pipeline')}
+            className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
+          >
+            <PenLine className="w-3.5 h-3.5" />
+            Pipeline
+          </button>
+          <button
             onClick={() => onGoToSection('boulema')}
             className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
           >
@@ -1280,7 +1273,6 @@ export function Captacion({
         {/* Captación sub-tabs */}
         <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center gap-1 py-1.5 border-t border-slate-100 bg-slate-50/60 overflow-x-auto scrollbar-none">
           {([
-            { id: 'firmar' as CaptacionTab, label: 'Pipeline/Firmar', labelMobile: 'Pipeline', icon: <PenLine className="w-3.5 h-3.5" /> },
             { id: 'conclusiones' as CaptacionTab, label: 'Conclusiones', labelMobile: 'Concl.', icon: <Target className="w-3.5 h-3.5" /> },
             { id: 'contratos' as CaptacionTab, label: 'Fin de contrato', labelMobile: 'Contratos', icon: <Calendar className="w-3.5 h-3.5" /> },
             { id: 'jugadores' as CaptacionTab, label: 'Jugadores', labelMobile: 'Jugadores', icon: <Users className="w-3.5 h-3.5" /> },
@@ -1341,32 +1333,6 @@ export function Captacion({
       )}
 
       {/* ── CONCLUSIONES TAB ─────────────────────────────────── */}
-      {/* ── FIRMAR TAB ───────────────────────────────────────── */}
-      {captTab === 'firmar' && (
-        <FirmasTab
-          entries={firmasEntries}
-          profiles={profiles}
-          currentProfile={currentProfile}
-          isAdmin={isAdmin}
-          scoutingPlayers={scoutingPlayers}
-          scoutingReports={scoutingReports}
-          scoutingMatches={scoutingMatches}
-          matchPlayers={matchPlayers}
-          boulemaPeticiones={boulemaPeticiones}
-          players={players}
-          onCreatePlayer={onCreatePlayer}
-          onSyncActionTasks={onSyncFirmasActionTasks}
-          openEntryId={openFirmasEntryId ?? firmasJumpId}
-          onOpenEntryConsumed={() => { onOpenFirmasEntryConsumed?.(); setFirmasJumpId(null) }}
-          onCreate={onCreateFirmasEntry}
-          onPatch={onPatchFirmasEntry}
-          onDelete={onDeleteFirmasEntry}
-          onOpenScoutingPlayer={(id) => { setCaptTab('jugadores'); abrirJugador(id) }}
-          showToast={showToast}
-          headerHeight={headerHeight}
-        />
-      )}
-
       {captTab === 'conclusiones' && (
         <div className="flex-1 w-full px-3 sm:px-6 py-4">
           <div className="max-w-6xl mx-auto">
@@ -1536,7 +1502,7 @@ export function Captacion({
           handleSavePlayer={handleSavePlayer} savingPlayer={savingPlayer}
           firmasEntries={firmasEntries}
           onCreateFirmasEntry={onCreateFirmasEntry}
-          setFirmasJumpId={setFirmasJumpId}
+          setFirmasJumpId={onOpenFirmas}
           handleQuickAssessment={handleQuickAssessment}
           openEditPlayer={openEditPlayer}
           confirmDeletePlayer={confirmDeletePlayer} setConfirmDeletePlayer={setConfirmDeletePlayer}

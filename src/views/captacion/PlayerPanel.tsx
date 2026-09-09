@@ -152,7 +152,8 @@ export function PlayerPanel({
   savingPlayer: boolean
   firmasEntries: FirmasEntry[]
   onCreateFirmasEntry: (e: Omit<FirmasEntry, 'id' | 'createdAt' | 'updatedAt'>) => Promise<FirmasEntry>
-  setFirmasJumpId: React.Dispatch<React.SetStateAction<string | null>>
+  /** Saltar a la tarjeta de Pipeline recién creada */
+  setFirmasJumpId: (id: string) => void
   handleQuickAssessment: (player: ScoutingPlayer, assessment: ScoutingAssessment | undefined) => Promise<void>
   openEditPlayer: (p: ScoutingPlayer) => void
   confirmDeletePlayer: boolean

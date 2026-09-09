@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { Search, X, Home, TrendingUp, Eye, Inbox, Bell, Sun } from 'lucide-react'
+import { Search, X, Home, TrendingUp, Eye, Inbox, Bell, Sun, PenLine} from 'lucide-react'
 import type { Player, ScoutingPlayer, FirmasEntry, Club, Task } from '../types'
 import { onSavingChange } from '../lib/supabase'
 import { norm } from '../lib/texto'
@@ -72,6 +72,7 @@ export function BottomNav({ current, onGo, onSearch }: {
     { id: 'tareas', label: 'Manten.', icon: <Home className="w-5 h-5" />, match: ['tareas', 'jugadores'] },
     { id: 'distribucion', label: 'Distrib.', icon: <TrendingUp className="w-5 h-5" />, match: ['distribucion'] },
     { id: 'captacion', label: 'Captación', icon: <Eye className="w-5 h-5" />, match: ['captacion'] },
+    { id: 'pipeline', label: 'Pipeline', icon: <PenLine className="w-5 h-5" />, match: ['pipeline'] },
     { id: 'boulema', label: 'Boulema', icon: <Inbox className="w-5 h-5" />, match: ['boulema'] },
   ]
   return (

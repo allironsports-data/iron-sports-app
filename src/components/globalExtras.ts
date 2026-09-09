@@ -1,6 +1,6 @@
 // Tipos y helpers sin componentes de GlobalExtras (fuera del .tsx por fast refresh)
 
-export type MainSection = 'tareas' | 'jugadores' | 'distribucion' | 'captacion' | 'boulema' | 'mi-dia'
+export type MainSection = 'tareas' | 'jugadores' | 'distribucion' | 'captacion' | 'pipeline' | 'boulema' | 'mi-dia'
 
 /** Lanza una notificación del sistema (si hay permiso y la pestaña no está visible) */
 export function fireSystemNotification(message: string) {

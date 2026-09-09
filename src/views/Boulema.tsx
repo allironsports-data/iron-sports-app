@@ -1,8 +1,7 @@
 import React, { useState, useMemo } from 'react'
 import {
   Search, X, Plus, LogOut, Trash2, Send,
-  FileText, Pencil, Inbox, TrendingUp, Eye, Users,
-} from 'lucide-react'
+  FileText, Pencil, Inbox, TrendingUp, Eye, Users, PenLine} from 'lucide-react'
 import logoImg from '../assets/logo.jpeg'
 import type { ScoutingPlayer, ScoutingReport, BoulemaPeticion, BoulemaPlayer } from '../types'
 import type { Profile } from '../contexts/AuthContext'
@@ -663,7 +662,7 @@ interface Props {
   onAddBoulemaPlayer: (p: Omit<BoulemaPlayer, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>
   onUpdateBoulemaPlayer: (p: BoulemaPlayer) => Promise<void>
   onDeleteBoulemaPlayer: (id: string) => Promise<void>
-  onGoToSection: (s: 'tareas' | 'distribucion' | 'captacion') => void
+  onGoToSection: (s: 'tareas' | 'distribucion' | 'captacion' | 'pipeline') => void
   onOpenScoutingPlayer: (id: string) => void
   onLogout: () => void
   onAdmin?: () => void
@@ -779,6 +778,13 @@ export function Boulema({
           >
             <Eye className="w-3.5 h-3.5" />
             Captación
+          </button>
+          <button
+            onClick={() => onGoToSection('pipeline')}
+            className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
+          >
+            <PenLine className="w-3.5 h-3.5" />
+            Pipeline
           </button>
           <button className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 border-primary text-primary transition-colors">
             <Inbox className="w-3.5 h-3.5" />

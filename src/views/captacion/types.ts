@@ -3,7 +3,6 @@ import type { Player, ScoutingPlayer, ScoutingReport, ScoutingInfo, ScoutingMatc
 import type { Profile } from '../../contexts/AuthContext'
 import type { Equipo as EquipoCatalogo } from '../../lib/db'
 import type { Zona } from '../../lib/zonas'
-import type { PatchFirmasEntry } from './helpers'
 // ── Props ────────────────────────────────────────────────────
 
 export interface Props {
@@ -13,7 +12,7 @@ export interface Props {
   profiles: Profile[]
   currentProfile: Profile
   onBack: () => void
-  onGoToSection: (s: 'tareas' | 'jugadores' | 'distribucion' | 'boulema') => void
+  onGoToSection: (s: 'tareas' | 'jugadores' | 'distribucion' | 'pipeline' | 'boulema') => void
   onLogout: () => void
   onAdmin?: () => void
   onAddPlayer: (p: ScoutingPlayer) => void
@@ -46,9 +45,6 @@ export interface Props {
   /** Abrir la ficha de un jugador al montar (navegación desde otra sección, p. ej. Boulema) */
   openPlayerId?: string | null
   onOpenPlayerConsumed?: () => void
-  /** Abrir una entrada del pipeline Firmar (navegación desde el Dashboard) */
-  openFirmasEntryId?: string | null
-  onOpenFirmasEntryConsumed?: () => void
   /** Abrir la ficha de un partido (navegación desde «Mi día») */
   openMatchId?: string | null
   onOpenMatchConsumed?: () => void
@@ -67,12 +63,9 @@ export interface Props {
   players: Player[]
   onCreatePlayer: (p: Player) => Promise<Player>
   boulemaPeticiones: BoulemaPeticion[]
-  /** Crear tareas del tablero para las próximas acciones que aún no tienen (backfill) */
-  onSyncFirmasActionTasks?: () => Promise<number>
+  /** Solo para leer: la etiqueta de pipeline que sale en las listas de jugadores */
   firmasEntries: FirmasEntry[]
   onCreateFirmasEntry: (e: Omit<FirmasEntry, 'id' | 'createdAt' | 'updatedAt'>) => Promise<FirmasEntry>
-  onUpdateFirmasEntry: (e: FirmasEntry) => Promise<void>
-  /** Cambio parcial sobre el estado más reciente (ver PatchFirmasEntry) */
-  onPatchFirmasEntry: PatchFirmasEntry
-  onDeleteFirmasEntry: (id: string) => Promise<void>
+  /** Saltar a la sección Pipeline y abrir esa tarjeta */
+  onOpenFirmas: (id: string) => void
 }

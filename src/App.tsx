@@ -28,6 +28,7 @@ const PlayersTable     = lazy(() => import('./views/PlayersTable').then(m => ({ 
 const Distribution     = lazy(() => import('./views/Distribution').then(m => ({ default: m.Distribution })))
 const ClubDetail       = lazy(() => import('./views/ClubDetail').then(m => ({ default: m.ClubDetail })))
 const Captacion        = lazy(() => import('./views/Captacion').then(m => ({ default: m.Captacion })))
+const Pipeline         = lazy(() => import('./views/pipeline/Pipeline').then(m => ({ default: m.Pipeline })))
 const Contactos        = lazy(() => import('./views/Contactos').then(m => ({ default: m.Contactos })))
 const TeamMemberDetail = lazy(() => import('./views/TeamMemberDetail').then(m => ({ default: m.TeamMemberDetail })))
 const Boulema          = lazy(() => import('./views/Boulema').then(m => ({ default: m.Boulema })))
@@ -1263,16 +1264,9 @@ export default function App() {
     setFirmasEntries(prev => [...prev, saved])
     return saved
   }
-  const handleUpdateFirmasEntry = async (e: FirmasEntry) => {
-    const prev = firmasEntries.find(x => x.id === e.id)
-    const final = await syncFirmasActionTask(prev, e)
-    await db.updateFirmasEntry(final)
-    setFirmasEntries(prevList => prevList.map(x => x.id === final.id ? final : x))
-  }
   /**
    * Parche parcial de una tarjeta de Firmar. A diferencia de
-   * handleUpdateFirmasEntry (formulario de edición completa, manda la tarjeta
-   * entera), aquí solo se aplican `changes` sobre lo que HAY AHORA: escribir
+   * un guardado completo (que mandaría la tarjeta entera), aquí solo se aplican `changes` sobre lo que HAY AHORA: escribir
    * en «Notas» y pulsar «Enviar apunte» en el mismo gesto ya no hace que el
    * segundo guardado borre las notas del primero. Optimista: la UI cambia
    * al momento y se revierte si falla. Los parches al mismo id van en cola.
@@ -1490,8 +1484,7 @@ export default function App() {
       onSetMatchScoutMode={handleSetMatchScoutMode}
       openPlayerId={captacionOpenPlayerId}
       onOpenPlayerConsumed={() => setCaptacionOpenPlayerId(null)}
-      openFirmasEntryId={captacionOpenFirmasId}
-      onOpenFirmasEntryConsumed={() => setCaptacionOpenFirmasId(null)}
+      onOpenFirmas={(id) => { setCaptacionOpenFirmasId(id); setMainSection('pipeline') }}
       openMatchId={captacionOpenMatchId}
       openTab={captacionOpenTab}
       onOpenTabConsumed={() => setCaptacionOpenTab(null)}
@@ -1500,11 +1493,7 @@ export default function App() {
       onCreatePlayer={handleAddPlayer}
       boulemaPeticiones={boulemaPeticiones}
       firmasEntries={firmasEntries}
-      onSyncFirmasActionTasks={handleSyncFirmasActionTasks}
       onCreateFirmasEntry={handleCreateFirmasEntry}
-      onUpdateFirmasEntry={handleUpdateFirmasEntry}
-      onPatchFirmasEntry={handlePatchFirmasEntry}
-      onDeleteFirmasEntry={handleDeleteFirmasEntry}
       clubZonas={clubZonas}
       onSetClubZona={handleSetClubZona}
       equipos={equipos}
@@ -1512,6 +1501,32 @@ export default function App() {
       restricted={!!profile.captacion_only}
     />
   )
+  const pipelineNode = (
+    <Pipeline
+      firmasEntries={firmasEntries}
+      tasks={tasks}
+      profiles={profiles}
+      currentProfile={profile}
+      scoutingPlayers={scoutingPlayers}
+      scoutingReports={scoutingReports}
+      scoutingMatches={scoutingMatches}
+      matchPlayers={matchPlayers}
+      boulemaPeticiones={boulemaPeticiones}
+      players={players}
+      onCreatePlayer={handleAddPlayer}
+      onSyncFirmasActionTasks={handleSyncFirmasActionTasks}
+      onCreateFirmasEntry={handleCreateFirmasEntry}
+      onPatchFirmasEntry={handlePatchFirmasEntry}
+      onDeleteFirmasEntry={handleDeleteFirmasEntry}
+      onOpenScoutingPlayer={(id) => { setCaptacionOpenPlayerId(id); setMainSection('captacion') }}
+      openEntryId={captacionOpenFirmasId}
+      onOpenEntryConsumed={() => setCaptacionOpenFirmasId(null)}
+      onGoToSection={(s) => setMainSection(s)}
+      onLogout={signOut}
+      onAdmin={profile.is_admin && !profile.captacion_only ? () => { setMainSection('tareas'); setShowAdmin(true) } : undefined}
+    />
+  )
+
   // «Mi día»: agenda personal de hoy. También para la cuenta solo-Captación.
   const miDiaNode = (
     <MiDia
@@ -1742,6 +1757,7 @@ export default function App() {
   }
 
   if (mainSection === 'captacion') return withExtras(captacionNode)
+  if (mainSection === 'pipeline') return withExtras(pipelineNode)
 
   if (mainSection === 'mi-dia') return withExtras(miDiaNode)
 

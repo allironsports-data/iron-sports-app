@@ -44,14 +44,15 @@ import {
   RotateCcw,
   Check,
   Inbox,
-  Sun } from "lucide-react";
+  Sun,
+  PenLine } from "lucide-react";
 import { POSITIONS, POSITION_CODES, positionLabel } from "../lib/positions";
 
 const PRIMARY = "hsl(220,72%,26%)";
 
 interface Props {
   view?: 'tareas' | 'jugadores';   // which section to show
-  onViewChange?: (v: 'tareas' | 'jugadores' | 'distribucion' | 'captacion' | 'boulema' | 'mi-dia') => void;
+  onViewChange?: (v: 'tareas' | 'jugadores' | 'distribucion' | 'captacion' | 'pipeline' | 'boulema' | 'mi-dia') => void;
   /** Abrir una tarea concreta al entrar (p. ej. desde «Mi día»); se consume una vez abierta */
   openTaskId?: string | null;
   onOpenTaskConsumed?: () => void;
@@ -756,6 +757,13 @@ export function Dashboard({
               >
                 <Eye className="w-3.5 h-3.5" />
                 Captación
+              </button>
+              <button
+                onClick={() => { setInternalTab(null); onViewChange('pipeline'); }}
+                className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
+              >
+                <PenLine className="w-3.5 h-3.5" />
+                Pipeline
               </button>
               <button
                 onClick={() => { setInternalTab(null); onViewChange('boulema'); }}
