@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { LogOut, TrendingUp, Eye, Inbox, PenLine, Activity } from 'lucide-react'
+import { LogOut, TrendingUp, Eye, Inbox, PenLine, Activity, MapPin, UserCog } from 'lucide-react'
 import logoImg from '../../assets/logo.jpeg'
 import type { Player, Task, FirmasEntry, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion } from '../../types'
 import type { Profile } from '../../contexts/AuthContext'
@@ -8,6 +8,7 @@ import { ToastStack } from '../../components/ToastStack'
 import { useToast } from '../../hooks/useToast'
 import { FirmasTab } from '../captacion/firmas/FirmasTab'
 import { TimelineTab } from './TimelineTab'
+import { EncargadoTab } from './EncargadoTab'
 
 // ── Sección PIPELINE ─────────────────────────────────────────────────
 // Antes era la primera pestaña de Captación («Pipeline/Firmar»). Se ha
@@ -16,7 +17,7 @@ import { TimelineTab } from './TimelineTab'
 //   Firmar   → el tablero de siempre, tal cual estaba
 //   Timeline → todo lo que se mueve, de más reciente a más antiguo
 
-export type PipelineTab = 'firmar' | 'timeline'
+export type PipelineTab = 'firmar' | 'zona' | 'encargado' | 'timeline'
 
 export interface PipelineProps {
   firmasEntries: FirmasEntry[]
@@ -111,6 +112,8 @@ export function Pipeline(props: PipelineProps) {
         <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center gap-1 py-1.5 border-t border-slate-100 bg-slate-50/60 overflow-x-auto scrollbar-none">
           {([
             { id: 'firmar' as PipelineTab, label: 'Firmar', icon: <PenLine className="w-3.5 h-3.5" /> },
+            { id: 'zona' as PipelineTab, label: 'Por zona', icon: <MapPin className="w-3.5 h-3.5" /> },
+            { id: 'encargado' as PipelineTab, label: 'Por encargado', icon: <UserCog className="w-3.5 h-3.5" /> },
             { id: 'timeline' as PipelineTab, label: 'Timeline', icon: <Activity className="w-3.5 h-3.5" /> },
           ]).map(t => (
             <button
@@ -126,8 +129,9 @@ export function Pipeline(props: PipelineProps) {
         </div>
       </header>
 
-      {tab === 'firmar' && (
+      {(tab === 'firmar' || tab === 'zona') && (
         <FirmasTab
+          vistaFija={tab === 'zona' ? 'zona' : undefined}
           entries={firmasEntries}
           profiles={profiles}
           currentProfile={currentProfile}
@@ -148,6 +152,15 @@ export function Pipeline(props: PipelineProps) {
           onOpenScoutingPlayer={props.onOpenScoutingPlayer}
           showToast={showToast}
           headerHeight={headerHeight}
+        />
+      )}
+
+      {tab === 'encargado' && (
+        <EncargadoTab
+          entries={firmasEntries}
+          profiles={profiles}
+          currentProfile={currentProfile}
+          onAbrirEntry={id => { setSaltoId(id); setTab('firmar') }}
         />
       )}
 

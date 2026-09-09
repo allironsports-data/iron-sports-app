@@ -20,7 +20,7 @@ export function FirmasTab({
   entries, profiles, currentProfile, isAdmin, scoutingPlayers, scoutingReports, scoutingMatches,
   matchPlayers, boulemaPeticiones, players, onCreatePlayer, onSyncActionTasks,
   onCreate, onPatch, onDelete, onOpenScoutingPlayer, showToast, headerHeight,
-  openEntryId, onOpenEntryConsumed,
+  openEntryId, onOpenEntryConsumed, vistaFija,
 }: {
   entries: FirmasEntry[]
   profiles: Profile[]
@@ -42,11 +42,18 @@ export function FirmasTab({
   headerHeight: number
   openEntryId?: string | null
   onOpenEntryConsumed?: () => void
+  /** Si viene, manda esta vista y se esconde el selector: la pestaña del
+   *  Pipeline ya dice cuál es (Firmar = estatus, Por zona = zona). */
+  vistaFija?: 'estatus' | 'zona' | 'encargado'
 }) {
   // ── vista y filtros ──
-  const [view, setView] = useState<'estatus' | 'zona' | 'encargado'>(
+  const [viewLibre, setView] = useState<'estatus' | 'zona' | 'encargado'>(
     () => (sessionStorage.getItem('capt_firmas_view') as 'estatus' | 'zona' | 'encargado') ?? 'estatus'
   )
+  // «Zona» ya no está en este selector (es una pestaña del Pipeline). Si
+  // alguien la tenía guardada de antes, se cae a estatus en vez de dejar una
+  // vista sin forma de salir de ella.
+  const view = vistaFija ?? (viewLibre === 'zona' ? 'estatus' : viewLibre)
   useEffect(() => { sessionStorage.setItem('capt_firmas_view', view) }, [view])
 
   const [search, setSearch] = useState('')
@@ -820,6 +827,7 @@ export function FirmasTab({
                 Limpiar
               </button>
             )}
+            {!vistaFija && (
             <div className="ml-auto flex items-center rounded-lg border border-slate-200 overflow-hidden">
               <button
                 onClick={() => setView('estatus')}
@@ -829,13 +837,6 @@ export function FirmasTab({
                 <span className="hidden sm:inline">Estatus</span>
               </button>
               <button
-                onClick={() => setView('zona')}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors ${view === 'zona' ? 'bg-primary text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
-              >
-                <MapPin className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Zona</span>
-              </button>
-              <button
                 onClick={() => setView('encargado')}
                 className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors ${view === 'encargado' ? 'bg-primary text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
               >
@@ -843,6 +844,7 @@ export function FirmasTab({
                 <span className="hidden sm:inline">Encargado</span>
               </button>
             </div>
+            )}
           </div>
 
           {/* ── Vista por ESTATUS: móvil = píldoras + lista · escritorio = tablero ── */}
