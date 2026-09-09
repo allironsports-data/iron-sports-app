@@ -12,7 +12,7 @@ import { type ShowToast, type CaptacionTab, type ConclusionOption, ASSESSMENT_CO
 import { AddToFirmasButton } from './firmas/AddToFirmasButton'
 import { InfosSection, AddInfoMenu } from './InfosSection'
 import { TIPO_CONFIG, TIPOS } from './tiposInfo'
-import { type FilaEquipo, SIN_CATEGORIA, inicioTemporada, etiquetaTemporada } from './filasEquipos'
+import { type FilaEquipo, SIN_CATEGORIA, inicioTemporada, etiquetaTemporada, reglaRelevante, reglaCubierto, MIN_PARTIDOS_CUBIERTO, MIN_LLAMAR_RELEVANTE } from './filasEquipos'
 // ── Panel lateral (persiste entre pestañas) ───────────────────────────
 // Tres caras: formulario de alta/edición de jugador, ficha del equipo y
 // ficha del jugador (con el formulario de informe, borrador y cola).
@@ -501,6 +501,27 @@ export function PlayerPanel({
                     >✓ {f.cubierto ? 'Cubierto' : 'Marcar cubierto'}</button>
                   </div>
 
+                  {/* Por qué la pestaña Equipos lo da por relevante/cubierto aunque
+                      no lo hayas marcado tú: si no se explica aquí, no hay forma
+                      de saberlo (los jugadores pueden no tener etiqueta ninguna). */}
+                  {((!f.relevante && reglaRelevante(f)) || (!f.cubierto && reglaCubierto(f.partidos))) && (
+                    <div className="text-[11px] text-blue-900 bg-blue-50 border border-blue-200 rounded-lg px-2.5 py-1.5 space-y-0.5">
+                      {!f.relevante && reglaRelevante(f) && (
+                        <div>
+                          Sale como <strong>relevante</strong>: {f.enLlamar} jugadores en Llamar
+                          {' '}(mínimo {MIN_LLAMAR_RELEVANTE}) — marcados abajo con ●
+                        </div>
+                      )}
+                      {!f.cubierto && reglaCubierto(f.partidos) && (
+                        <div>
+                          Sale como <strong>cubierto</strong>: {f.partidos} partidos vistos esta temporada
+                          {' '}(mínimo {MIN_PARTIDOS_CUBIERTO})
+                        </div>
+                      )}
+                      <div className="text-blue-700">Es automático; pulsa el botón de arriba para fijarlo tú.</div>
+                    </div>
+                  )}
+
                   {/* Los números */}
                   <div className="grid grid-cols-4 gap-2">
                     {[
@@ -580,6 +601,15 @@ export function PlayerPanel({
                           onClick={() => abrirJugador(p.id, f.nombre)}
                           className="w-full flex items-center gap-2 text-left bg-white border border-slate-200 rounded-lg px-2 py-1.5 hover:border-primary"
                         >
+                          {/* ● = cuenta como «en Llamar» para la regla de equipo relevante */}
+                          {f.enLlamarIds.includes(p.id) && (
+                            <span
+                              className="text-amber-500 leading-none flex-shrink-0"
+                              title={p.assessment === 'Llamar'
+                                ? 'Cuenta como «en Llamar»: tiene esa etiqueta'
+                                : 'Cuenta como «en Llamar»: tiene informes con veredicto Llamar, aunque su etiqueta sea otra'}
+                            >●</span>
+                          )}
                           <span className="text-xs font-semibold text-slate-700 truncate flex-1">{p.fullName}</span>
                           <span className="text-[10px] text-slate-400 w-10 text-right">{p.position1 ?? '—'}</span>
                           <span className="text-[10px] text-slate-400 w-8 text-right">{birthYearFromBirthdate(p.birthdate)}</span>

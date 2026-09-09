@@ -47,6 +47,8 @@ export interface FilaEquipo {
   informes: number
   /** Jugadores suyos «en Llamar»: con esa etiqueta o con algún informe de veredicto Llamar */
   enLlamar: number
+  /** Quiénes son, para poder enseñar POR QUÉ el equipo sale como relevante */
+  enLlamarIds: string[]
   partidos: number
   partidosHist: number
   ultimoPartido?: string
@@ -117,6 +119,9 @@ export function calcularFilasEquipos(
       : undefined
     const nombre = cat?.nombre ?? masUsado ?? k
     const pt = partidos.get(k)
+    const enLlamarIds = jug
+      .filter(p => p.assessment === 'Llamar' || conInformeLlamar.has(p.id))
+      .map(p => p.id)
     out.push({
       nombre,
       clave: k,
@@ -138,7 +143,8 @@ export function calcularFilasEquipos(
         return orden(a.assessment) - orden(b.assessment) || a.fullName.localeCompare(b.fullName)
       }),
       informes: jug.reduce((n, p) => n + (informesPorJugador[p.id] ?? 0), 0),
-      enLlamar: jug.filter(p => p.assessment === 'Llamar' || conInformeLlamar.has(p.id)).length,
+      enLlamar: enLlamarIds.length,
+      enLlamarIds,
       partidos: pt?.temporada ?? 0,
       partidosHist: pt?.total ?? 0,
       ultimoPartido: pt?.ultimo,
