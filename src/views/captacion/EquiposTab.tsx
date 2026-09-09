@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react'
-import { Search, X, Plus, ChevronRight, MapPin, ClipboardList } from 'lucide-react'
+import { Search, X, Plus, ChevronRight, MapPin, ClipboardList, Wand2, History, CalendarDays } from 'lucide-react'
 import type { ScoutingPlayer } from '../../types'
 import type { Equipo as EquipoCatalogo } from '../../lib/db'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
@@ -7,7 +7,7 @@ import { ZONAS, ZONA_CORTA, SIN_ZONA, zonaDe, clubBase, normEquipo, type Zona } 
 import { norm as normSearch } from '../../lib/texto'
 import { BotonCsv } from '../../components/BotonCsv'
 import { type ShowToast, SELECT_CLS, fmtDate } from './helpers'
-import { type FilaEquipo, etiquetaTemporada, SIN_CATEGORIA, semaforoEquipo } from './filasEquipos'
+import { type FilaEquipo, etiquetaTemporada, SIN_CATEGORIA, semaforoEquipo, reglaRelevante, reglaCubierto, MIN_PARTIDOS_CUBIERTO, MIN_LLAMAR_RELEVANTE } from './filasEquipos'
 // ── Zonas de los clubes ──────────────────────────────────────────────
 // La zona va a nivel de CLUB, no de jugador: si cambias «Villarreal», te
 // cambian de golpe el primer equipo, el B y todos los juveniles, y los
@@ -244,7 +244,46 @@ export function EquiposTab({
     (f: FilaEquipo) => historico ? f.partidosHist : f.partidos,
     [historico],
   )
-  const cubierto = useCallback((f: FilaEquipo) => f.cubierto || nPartidos(f) > 0, [nPartidos])
+  // Marca efectiva = la que pusiste a mano O la que deduce la regla.
+  // Antes bastaba 1 partido para contar como cubierto en el resumen, pero la
+  // columna ✓ solo miraba la marca manual: los dos números no cuadraban.
+  const cubierto = useCallback((f: FilaEquipo) => f.cubierto || reglaCubierto(nPartidos(f)), [nPartidos])
+  const relevante = useCallback((f: FilaEquipo) => f.relevante || reglaRelevante(f), [])
+
+  // Equipos que cumplen la regla pero no la tienen guardada
+  const pendientes = useMemo(() => filas.filter(f =>
+    (!f.relevante && reglaRelevante(f)) || (!f.cubierto && reglaCubierto(nPartidos(f)))
+  ), [filas, nPartidos])
+  const [aplicando, setAplicando] = useState(false)
+
+  async function aplicarReglas() {
+    if (aplicando || pendientes.length === 0) return
+    setAplicando(true)
+    let ok = 0
+    try {
+      // De cinco en cinco: son upserts sueltos y de golpe serían cientos
+      for (let i = 0; i < pendientes.length; i += 5) {
+        const lote = pendientes.slice(i, i + 5)
+        await Promise.all(lote.map(async f => {
+          const cambio: { relevante?: boolean; cubierto?: boolean } = {}
+          if (!f.relevante && reglaRelevante(f)) cambio.relevante = true
+          if (!f.cubierto && reglaCubierto(nPartidos(f))) cambio.cubierto = true
+          await onSaveEquipo({
+            nombre: f.nombre,
+            club: f.club,
+            categoria: f.categoria === SIN_CATEGORIA ? undefined : f.categoria,
+            ...cambio,
+          })
+          ok++
+        }))
+      }
+      showToast(`${ok} equipo${ok !== 1 ? 's' : ''} actualizado${ok !== 1 ? 's' : ''}`)
+    } catch {
+      showToast(ok > 0 ? `Guardados ${ok}; el resto ha fallado` : 'No se ha podido guardar', 'error')
+    } finally {
+      setAplicando(false)
+    }
+  }
 
   // ── Resumen: en vez de una matriz enorme, dos tiras de chips que
   //    además FILTRAN. Cada chip dice cuántos relevantes hay cubiertos.
@@ -255,7 +294,7 @@ export function EquiposTab({
     const huecos: { zona: string; cat: string; falta: number }[] = []
     const celdas: Record<string, { rel: number; cub: number }> = {}
     for (const f of filas) {
-      if (!f.relevante) continue
+      if (!relevante(f)) continue
       rel++
       const ok = cubierto(f)
       if (ok) cub++
@@ -276,16 +315,16 @@ export function EquiposTab({
     }
     huecos.sort((a, b) => b.falta - a.falta)
     return { porZona, porCat, rel, cub, huecos, celdas }
-  }, [filas, cubierto])
+  }, [filas, cubierto, relevante])
 
   const nq = normSearch(q)
   const visibles = useMemo(() => filas.filter(f => {
     if (zonaSel !== 'all' && f.zona !== zonaSel) return false
     if (catSel !== 'all' && f.categoria !== catSel) return false
-    if (soloRelevantes && !f.relevante) return false
+    if (soloRelevantes && !relevante(f)) return false
     if (nq && !normSearch(`${f.nombre} ${f.club}`).includes(nq)) return false
     return true
-  }), [filas, zonaSel, catSel, soloRelevantes, nq])
+  }), [filas, zonaSel, catSel, soloRelevantes, nq, relevante])
 
   async function marcar(f: FilaEquipo, campo: 'relevante' | 'cubierto') {
     try {
@@ -328,6 +367,27 @@ export function EquiposTab({
   return (
     <div className="flex-1 max-w-[1500px] mx-auto w-full px-3 sm:px-6 py-4 space-y-3">
 
+      {/* ── Reglas automáticas: se ven solas, se guardan al pulsar ── */}
+      {pendientes.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+          <Wand2 className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+          <span className="text-xs text-blue-900 flex-1 min-w-[220px]">
+            <span className="font-semibold">{pendientes.length}</span>
+            {pendientes.length === 1 ? ' equipo cumple una regla' : ' equipos cumplen alguna regla'} y aún no lo tienen guardado
+            <span className="text-blue-700">
+              {' '}— relevante con {MIN_LLAMAR_RELEVANTE}+ jugadores en Llamar, cubierto con {MIN_PARTIDOS_CUBIERTO}+ partidos vistos
+            </span>
+          </span>
+          <button
+            onClick={() => void aplicarReglas()}
+            disabled={aplicando}
+            className="text-xs font-semibold rounded-lg px-2.5 py-1 bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          >
+            {aplicando ? 'Guardando…' : 'Aplicar'}
+          </button>
+        </div>
+      )}
+
       {/* ── Cabecera: una línea con el estado y las herramientas ── */}
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="text-sm font-bold text-slate-800">Control de equipos</h2>
@@ -345,9 +405,11 @@ export function EquiposTab({
             title={historico
               ? 'Ahora se cuentan TODOS los partidos, de cualquier temporada. Pulsa para contar solo los de esta.'
               : `Ahora solo se cuentan los partidos del ${fmtDate(desde)} en adelante. Pulsa para contar todo el histórico.`}
-            className="text-[11px] font-semibold border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-600 hover:border-slate-400"
+            className="inline-flex items-center gap-1 text-[11px] font-semibold border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-600 hover:border-slate-400"
           >
-            {historico ? '🕓 Todo el histórico' : `📅 Temporada ${etiquetaTemporada(desde)} · desde ${fmtDate(desde)}`}
+            {historico
+              ? <><History className="w-3 h-3" /> Todo el histórico</>
+              : <><CalendarDays className="w-3 h-3" /> Temporada {etiquetaTemporada(desde)} · desde {fmtDate(desde)}</>}
           </button>
           <button onClick={onAbrirZonas} className="inline-flex items-center gap-1 text-[11px] font-semibold border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-600 hover:border-primary hover:text-primary"><MapPin className="w-3 h-3" /> Zonas</button>
           <button onClick={onAbrirPlantilla} className="inline-flex items-center gap-1 text-[11px] font-semibold border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-600 hover:border-primary hover:text-primary"><ClipboardList className="w-3 h-3" /> Actualizar plantilla</button>
@@ -528,7 +590,10 @@ export function EquiposTab({
                 <tr><td colSpan={11} className="text-center py-10 text-slate-400 text-sm">No hay equipos que coincidan.</td></tr>
               )}
               {visibles.slice(0, 300).map(f => {
-                const sem = semaforoEquipo(f, nPartidos(f))
+                const relRegla = reglaRelevante(f)
+                const cubRegla = reglaCubierto(nPartidos(f))
+                // El semáforo mira la marca efectiva, no solo la manual
+                const sem = semaforoEquipo({ ...f, relevante: f.relevante || relRegla }, nPartidos(f))
                 return (
                   <tr
                     key={f.clave}
@@ -536,17 +601,32 @@ export function EquiposTab({
                     className={`cursor-pointer hover:bg-slate-50 transition-colors ${equipoAbierto && normEquipo(equipoAbierto) === f.clave ? 'bg-blue-50/50' : ''}`}
                   >
                     <td className="px-2 py-2 text-center" onClick={e => e.stopPropagation()}>
+                      {/* Relleno = marcado a mano · hueco de color = lo deduce la regla */}
                       <button
                         onClick={() => void marcar(f, 'relevante')}
-                        title={f.relevante ? 'Quitar de relevantes' : 'Marcar como relevante'}
-                        className={`text-base leading-none ${f.relevante ? 'text-amber-500' : 'text-slate-200 hover:text-amber-400'}`}
-                      >★</button>
+                        title={f.relevante
+                          ? 'Quitar de relevantes'
+                          : relRegla
+                            ? `${f.enLlamar} jugadores en Llamar: la regla lo da por relevante. Pulsa para fijarlo.`
+                            : 'Marcar como relevante'}
+                        className={`text-base leading-none ${
+                          f.relevante ? 'text-amber-500'
+                          : relRegla ? 'text-amber-300 hover:text-amber-500'
+                          : 'text-slate-200 hover:text-amber-400'}`}
+                      >{f.relevante ? '★' : relRegla ? '☆' : '★'}</button>
                     </td>
                     <td className="px-2 py-2 text-center" onClick={e => e.stopPropagation()}>
                       <button
                         onClick={() => void marcar(f, 'cubierto')}
-                        title={f.cubierto ? 'Marcar como NO cubierto' : 'Marcar como cubierto esta temporada'}
-                        className={`text-sm leading-none font-bold ${f.cubierto ? 'text-green-600' : 'text-slate-200 hover:text-green-500'}`}
+                        title={f.cubierto
+                          ? 'Marcar como NO cubierto'
+                          : cubRegla
+                            ? `${nPartidos(f)} partidos vistos: la regla lo da por cubierto. Pulsa para fijarlo.`
+                            : 'Marcar como cubierto esta temporada'}
+                        className={`text-sm leading-none font-bold ${
+                          f.cubierto ? 'text-green-600'
+                          : cubRegla ? 'text-green-400 hover:text-green-600'
+                          : 'text-slate-200 hover:text-green-500'}`}
                       >✓</button>
                     </td>
                     <td className="px-3 py-2 font-medium text-slate-800">
