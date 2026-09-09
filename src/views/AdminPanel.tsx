@@ -2,7 +2,11 @@ import { useCallback, useEffect, useState } from 'react'
 import logoImg from '../assets/logo.jpeg'
 import type { Profile } from '../contexts/AuthContext'
 import type { Task, Player, ScoutingPlayer, ScoutingReport, ScoutingMatch, FirmasEntry } from '../types'
+import type { Equipo as EquipoCatalogo } from '../lib/db'
+import type { Zona } from '../lib/zonas'
 import { CaptacionStats } from './CaptacionStats'
+import { EstadisticasTab } from './captacion/EstadisticasTab'
+import { useFilasEquipos, inicioTemporada } from './captacion/filasEquipos'
 import { updateProfile } from '../lib/db'
 import { hoyISO, esVencida, parseDia } from '../lib/fechas'
 import { supabase } from '../lib/supabase'
@@ -10,7 +14,7 @@ import { AUDIT_TABLAS } from '../lib/dbAudit'
 import { HistorialCambios } from '../components/HistorialCambios'
 import { fechaRelativa } from '../lib/formato'
 import { fetchClientErrors, vaciarErroresAntiguos, type ClientError } from '../lib/dbErrors'
-import { ArrowLeft, LogOut, Shield, UserPlus, Check, X, Edit3, Copy, Trash2, KeyRound, AlertTriangle, BarChart3, Users, ChevronDown, ChevronRight, Clock, CheckCircle2, Circle, Eye, History, Bug, Search } from 'lucide-react'
+import { ArrowLeft, LogOut, Shield, UserPlus, Check, X, Edit3, Copy, Trash2, KeyRound, AlertTriangle, BarChart3, Users, ChevronDown, ChevronRight, Clock, CheckCircle2, Circle, Eye, History, Bug, Search, ShieldCheck } from 'lucide-react'
 
 
 function generatePassword() {
@@ -26,21 +30,29 @@ interface Props {
   scoutingReports: ScoutingReport[]
   scoutingMatches: ScoutingMatch[]
   firmasEntries: FirmasEntry[]
+  /** Catálogo de equipos y zonas corregidas: para el cuadro de control de equipos */
+  equipos: EquipoCatalogo[]
+  clubZonas: Record<string, Zona>
   onBack: () => void
   onRefresh: () => Promise<void>
   onLogout: () => void
   onOpenTable?: () => void
 }
 
-type AdminTab = 'equipo' | 'tareas' | 'captacion' | 'historial' | 'errores'
+type AdminTab = 'equipo' | 'tareas' | 'captacion' | 'controlEquipos' | 'historial' | 'errores'
 
-export function AdminPanel({ profiles, tasks, players, scoutingPlayers, scoutingReports, scoutingMatches, firmasEntries, onBack, onRefresh, onLogout, onOpenTable }: Props) {
+export function AdminPanel({ profiles, tasks, players, scoutingPlayers, scoutingReports, scoutingMatches, firmasEntries, equipos, clubZonas, onBack, onRefresh, onLogout, onOpenTable }: Props) {
   const [tab, setTab] = useState<AdminTab>('equipo')
+
+  // Las mismas filas que la pestaña Equipos de Captación: una sola forma de contar
+  const desdeTemporada = inicioTemporada()
+  const filasEquipos = useFilasEquipos(equipos, scoutingPlayers, scoutingReports, scoutingMatches, clubZonas, desdeTemporada)
 
   const tabs: { id: AdminTab; label: string; icon: React.ReactNode }[] = [
     { id: 'equipo', label: 'Equipo', icon: <Users className="w-4 h-4" /> },
     { id: 'tareas', label: 'Seguimiento', icon: <BarChart3 className="w-4 h-4" /> },
     { id: 'captacion', label: 'Stats Captación', icon: <Eye className="w-4 h-4" /> },
+    { id: 'controlEquipos', label: 'Control de equipos', icon: <ShieldCheck className="w-4 h-4" /> },
     { id: 'historial', label: 'Historial', icon: <History className="w-4 h-4" /> },
     { id: 'errores', label: 'Errores', icon: <Bug className="w-4 h-4" /> },
   ]
@@ -85,6 +97,7 @@ export function AdminPanel({ profiles, tasks, players, scoutingPlayers, scouting
             profiles={profiles}
           />
         )}
+        {tab === 'controlEquipos' && <EstadisticasTab filas={filasEquipos} desde={desdeTemporada} />}
         {tab === 'historial' && <HistorialTab profiles={profiles} />}
         {tab === 'errores' && <ErroresTab profiles={profiles} />}
       </main>

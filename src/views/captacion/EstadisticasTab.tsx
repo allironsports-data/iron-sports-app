@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, History, CalendarDays } from 'lucide-react'
 import type { ScoutingAssessment } from '../../types'
 import { ZONA_CORTA, SIN_ZONA, type Zona } from '../../lib/zonas'
 import { BotonCsv } from '../../components/BotonCsv'
 import { ALL_ASSESSMENTS, ASSESSMENT_DOT } from './helpers'
-import { type FilaEquipo, etiquetaTemporada, reglaRelevante, reglaCubierto } from './filasEquipos'
+import { type FilaEquipo, etiquetaTemporada, reglaRelevante, reglaCubierto, MIN_LLAMAR_RELEVANTE, MIN_PARTIDOS_CUBIERTO } from './filasEquipos'
 
-// ── Pestaña ESTADÍSTICAS · dónde estamos y dónde no ──────────────────
+// ── Estadísticas de control de equipos (Admin → Control de equipos) ──
 // Responde a tres preguntas de un vistazo:
 //   ¿de cuántos equipos tenemos control, y de cuáles no?
 //   ¿en qué zonas y categorías se concentra lo interesante (Llamar/Seguir)?
@@ -61,15 +61,14 @@ function Tarjeta({ n, label, tono }: { n: number | string; label: string; tono?:
 }
 
 export function EstadisticasTab({
-  filas, desde, historico, onAbrirEquipo,
+  filas, desde,
 }: {
   filas: FilaEquipo[]
+  /** Inicio de la temporada actual (inicioTemporada()) */
   desde: string
-  /** true = contar partidos de todas las temporadas (mismo criterio que Equipos) */
-  historico: boolean
-  onAbrirEquipo: (nombre: string) => void
 }) {
   const [dim, setDim] = useState<'zona' | 'categoria'>('zona')
+  const [historico, setHistorico] = useState(false)
 
   const nPartidos = (f: FilaEquipo) => historico ? f.partidosHist : f.partidos
   const esRelevante = (f: FilaEquipo) => f.relevante || reglaRelevante(f)
@@ -148,12 +147,25 @@ export function EstadisticasTab({
     <div className="flex-1 w-full px-3 sm:px-6 py-4">
       <div className="max-w-6xl mx-auto space-y-4">
 
-        <div>
-          <h2 className="text-sm font-semibold text-slate-800">Estadísticas de control</h2>
-          <p className="text-xs text-slate-400">
-            Cuentan los partidos {historico ? 'de todas las temporadas' : `de la temporada ${etiquetaTemporada(desde)}`}.
-            {' '}Se cambia en el botón de temporada de la pestaña Equipos.
-          </p>
+        <div className="flex flex-wrap items-start gap-2">
+          <div className="flex-1 min-w-[240px]">
+            <h2 className="text-sm font-semibold text-slate-800">Control de equipos</h2>
+            <p className="text-xs text-slate-400">
+              Relevante = {MIN_LLAMAR_RELEVANTE}+ jugadores en Llamar (etiqueta o informe con ese veredicto).
+              {' '}Cubierto = {MIN_PARTIDOS_CUBIERTO}+ partidos vistos. Cuenta también lo que hayáis marcado a mano.
+            </p>
+          </div>
+          <button
+            onClick={() => setHistorico(h => !h)}
+            title={historico
+              ? 'Ahora se cuentan TODOS los partidos. Pulsa para contar solo los de esta temporada.'
+              : 'Ahora solo se cuentan los partidos de esta temporada. Pulsa para contar todo el histórico.'}
+            className="inline-flex items-center gap-1 text-[11px] font-semibold border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-600 hover:border-slate-400"
+          >
+            {historico
+              ? <><History className="w-3 h-3" /> Todo el histórico</>
+              : <><CalendarDays className="w-3 h-3" /> Temporada {etiquetaTemporada(desde)}</>}
+          </button>
         </div>
 
         {/* ── De un vistazo ── */}
@@ -255,11 +267,7 @@ export function EstadisticasTab({
             ) : (
               <div className="divide-y divide-slate-50">
                 {datos.topEquipos.map(f => (
-                  <button
-                    key={f.clave}
-                    onClick={() => onAbrirEquipo(f.nombre)}
-                    className="w-full flex items-center gap-2 px-4 py-2 text-left hover:bg-slate-50 transition-colors"
-                  >
+                  <div key={f.clave} className="flex items-center gap-2 px-4 py-2">
                     <span className="text-xs font-medium text-slate-800 truncate flex-1">{f.nombre}</span>
                     <span className="text-[11px] text-slate-400 whitespace-nowrap hidden sm:inline">
                       {f.zona === SIN_ZONA ? 'sin zona' : (ZONA_CORTA[f.zona as Zona] ?? f.zona)}
@@ -268,7 +276,7 @@ export function EstadisticasTab({
                       <span className={`w-1.5 h-1.5 rounded-full ${ASSESSMENT_DOT['Llamar' as ScoutingAssessment] ?? 'bg-amber-400'}`} />
                       {f.enLlamar}
                     </span>
-                  </button>
+                  </div>
                 ))}
               </div>
             )}
@@ -288,11 +296,7 @@ export function EstadisticasTab({
             ) : (
               <div className="divide-y divide-slate-50 max-h-[420px] overflow-y-auto">
                 {datos.sinCubrir.slice(0, 40).map(f => (
-                  <button
-                    key={f.clave}
-                    onClick={() => onAbrirEquipo(f.nombre)}
-                    className="w-full flex items-center gap-2 px-4 py-2 text-left hover:bg-slate-50 transition-colors"
-                  >
+                  <div key={f.clave} className="flex items-center gap-2 px-4 py-2">
                     <span className="text-xs font-medium text-slate-800 truncate flex-1">{f.nombre}</span>
                     <span className="text-[11px] text-slate-400 whitespace-nowrap hidden sm:inline">
                       {f.zona === SIN_ZONA ? 'sin zona' : (ZONA_CORTA[f.zona as Zona] ?? f.zona)}
@@ -303,7 +307,7 @@ export function EstadisticasTab({
                     <span className="text-[11px] text-slate-500 whitespace-nowrap tabular-nums">
                       {nPartidos(f)} part.
                     </span>
-                  </button>
+                  </div>
                 ))}
                 {datos.sinCubrir.length > 40 && (
                   <p className="px-4 py-2 text-[11px] text-slate-400">y {datos.sinCubrir.length - 40} más</p>

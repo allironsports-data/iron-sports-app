@@ -1629,6 +1629,8 @@ export default function App() {
         scoutingReports={scoutingReports}
         scoutingMatches={scoutingMatches}
         firmasEntries={firmasEntries}
+        equipos={equipos}
+        clubZonas={clubZonas}
         onBack={() => setShowAdmin(false)}
         onRefresh={handleRefreshProfiles}
         onLogout={signOut}

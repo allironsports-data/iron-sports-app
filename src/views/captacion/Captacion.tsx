@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react'
 import {
-  LogOut, FileText, Calendar, CalendarDays, TrendingUp, Eye, ClipboardList, Users, Inbox, Target, PenLine, Shield, Wifi, BarChart3,
+  LogOut, FileText, Calendar, CalendarDays, TrendingUp, Eye, ClipboardList, Users, Inbox, Target, PenLine, Shield, Wifi,
 } from 'lucide-react'
 import logoImg from '../../assets/logo.jpeg'
 import type { ScoutingPlayer, ScoutingReport, ScoutingAssessment, ScoutingMatch, FirmasEntry } from '../../types'
@@ -25,7 +25,6 @@ import { PlanificacionTab } from './PlanificacionTab'
 import { construirPlanificacion } from '../../lib/planificacion'
 import { PlayerPanel } from './PlayerPanel'
 import { EquiposTab, ZonasPanel } from './EquiposTab'
-import { EstadisticasTab } from './EstadisticasTab'
 import { useFilasEquipos, inicioTemporada } from './filasEquipos'
 import { ConclusionesTab } from './ConclusionesTab'
 import { ContratosTab } from './ContratosTab'
@@ -293,9 +292,6 @@ export function Captacion({
 
   // Fila del equipo que se está viendo en el panel lateral
   // Se calcula UNA vez aquí (antes también lo hacía EquiposTab por su cuenta) y se pasa por prop
-  // Contar partidos de toda la historia o solo de esta temporada. Vive aquí
-  // para que Equipos y Estadísticas cuenten siempre lo mismo.
-  const [historicoEquipos, setHistoricoEquipos] = useState(false)
   const desdeTemporada = inicioTemporada()
   const filasEquipos = useFilasEquipos(equipos, scoutingPlayers, scoutingReports, scoutingMatches, clubZonas, desdeTemporada)
   const filaEquipoAbierta = useMemo(
@@ -1289,7 +1285,6 @@ export function Captacion({
             { id: 'contratos' as CaptacionTab, label: 'Fin de contrato', labelMobile: 'Contratos', icon: <Calendar className="w-3.5 h-3.5" /> },
             { id: 'jugadores' as CaptacionTab, label: 'Jugadores', labelMobile: 'Jugadores', icon: <Users className="w-3.5 h-3.5" /> },
             { id: 'equipos' as CaptacionTab, label: 'Equipos', labelMobile: 'Equipos', icon: <Shield className="w-3.5 h-3.5" /> },
-            { id: 'estadisticas' as CaptacionTab, label: 'Estadísticas', labelMobile: 'Stats', icon: <BarChart3 className="w-3.5 h-3.5" /> },
             { id: 'informes' as CaptacionTab, label: 'Informes recientes', labelMobile: 'Informes', icon: <FileText className="w-3.5 h-3.5" /> },
             { id: 'partidos' as CaptacionTab, label: 'Partidos', labelMobile: 'Partidos', icon: <ClipboardList className="w-3.5 h-3.5" /> },
             { id: 'planificacion' as CaptacionTab, label: 'Planificación', labelMobile: 'Planif.', icon: <CalendarDays className="w-3.5 h-3.5" /> },
@@ -1413,23 +1408,12 @@ export function Captacion({
         <EquiposTab
           filas={filasEquipos}
           desde={desdeTemporada}
-          historico={historicoEquipos}
-          setHistorico={setHistoricoEquipos}
           onSaveEquipo={onSaveEquipo}
           onAbrirEquipo={n => { abrirJugador(null); setPanelEquipo(n) }}
           equipoAbierto={panelEquipo}
           onAbrirZonas={() => setZonasAbierto(true)}
           onAbrirPlantilla={() => setShowPlantilla(true)}
           showToast={showToast}
-        />
-      )}
-
-      {captTab === 'estadisticas' && (
-        <EstadisticasTab
-          filas={filasEquipos}
-          desde={desdeTemporada}
-          historico={historicoEquipos}
-          onAbrirEquipo={n => { setCaptTab('equipos'); abrirJugador(null); setPanelEquipo(n) }}
         />
       )}
 

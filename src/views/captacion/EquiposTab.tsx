@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { Search, X, Plus, ChevronRight, MapPin, ClipboardList, Wand2, History, CalendarDays } from 'lucide-react'
 import type { ScoutingPlayer } from '../../types'
 import type { Equipo as EquipoCatalogo } from '../../lib/db'
@@ -205,16 +205,13 @@ export function ZonasPanel({ players, clubZonas, onSetClubZona, onClose, showToa
 }
 
 export function EquiposTab({
-  filas, desde, historico, setHistorico,
+  filas, desde,
   onSaveEquipo, onAbrirEquipo, equipoAbierto, onAbrirZonas, onAbrirPlantilla, showToast,
 }: {
   /** Filas calculadas UNA vez en Captacion.tsx con useFilasEquipos (se comparten con el panel lateral) */
   filas: FilaEquipo[]
   /** Inicio de la temporada actual (inicioTemporada()) */
   desde: string
-  /** Contar partidos de todas las temporadas. Vive en Captacion.tsx: lo comparte con Estadísticas */
-  historico: boolean
-  setHistorico: React.Dispatch<React.SetStateAction<boolean>>
   onSaveEquipo: (e: Partial<EquipoCatalogo> & { nombre: string; club: string }) => Promise<void>
   onAbrirEquipo: (nombre: string) => void
   equipoAbierto: string | null
@@ -225,6 +222,7 @@ export function EquiposTab({
   const [zonaSel, setZonaSel] = useState<string>('all')
   const [catSel, setCatSel] = useState<string>('all')
   const [soloRelevantes, setSoloRelevantes] = useState(false)
+  const [historico, setHistorico] = useState(false)
   const [q, setQ] = useState('')
   const [verMatriz, setVerMatriz] = useState(false)
   const [altaAbierta, setAltaAbierta] = useState(false)
