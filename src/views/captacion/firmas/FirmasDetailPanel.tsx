@@ -1,11 +1,11 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react'
-import { X, Trash2, Pencil, Send, ExternalLink } from 'lucide-react'
+import { X, Trash2, Pencil, Send, ExternalLink, ChevronDown } from 'lucide-react'
 import type { Player, ScoutingPlayer, ScoutingReport, FirmasEntry, FirmasStatus, FirmasComment } from '../../../types'
 import type { Profile } from '../../../contexts/AuthContext'
 import { ZONAS_PIPELINE as FIRMAS_ZONE_ORDER } from '../../../lib/zonas'
 import { equipoMatchKind } from '../../../lib/equipos'
 import { norm as normSearch } from '../../../lib/texto'
-import { type ShowToast, type PatchFirmasEntry, SELECT_CLS, fmtDate, todayISO, relativeDate, scoutColor } from '../helpers'
+import { type ShowToast, type PatchFirmasEntry, SELECT_CLS, fmtDate, todayISO, relativeDate, scoutColor, normConclusion, personaToName, CONCLUSION_STYLE } from '../helpers'
 import { FirmasStatusChip, FirmasLinkSearch } from './comun'
 import { FIRMAS_KIND_META, FIRMAS_ACTION_KIND_META, firmasAging } from './helpers'
 // ── Panel de detalle de una entrada del pipeline ─────────────
@@ -478,7 +478,15 @@ export function FirmasDetailPanel({
                       <X className="w-3 h-3" />
                     </button>
                   </div>
-                ) : (
+                ) : null}
+                {sp && (
+                  <UltimosInformes
+                    reports={spReports}
+                    profiles={profiles}
+                    onVerFicha={() => onOpenScoutingPlayer(sp.id)}
+                  />
+                )}
+                {!sp && (
                   <div className="mt-1">
                     <FirmasLinkSearch
                       scoutingPlayers={scoutingPlayers}
@@ -650,5 +658,90 @@ export function FirmasDetailPanel({
         </div>
       </div>
     </>
+  )
+}
+
+// ── Últimos informes del jugador vinculado ───────────────────
+// Antes había que salir a Captación para leer un informe: abrías la ficha,
+// perdías la tarjeta y volvías. Aquí caben los tres últimos con su fecha,
+// scout y veredicto; el texto se despliega en el sitio y «Ver ficha» sigue
+// estando para el resto.
+const CUANTOS_INFORMES = 3
+
+function UltimosInformes({
+  reports, profiles, onVerFicha,
+}: {
+  reports: ScoutingReport[]
+  profiles: Profile[]
+  onVerFicha: () => void
+}) {
+  const [abierto, setAbierto] = useState<string | null>(null)
+  const ultimos = reports.slice(0, CUANTOS_INFORMES)
+
+  if (reports.length === 0) {
+    return (
+      <p className="mt-1.5 text-[11px] text-slate-400">
+        Todavía no tiene informes de partido.
+      </p>
+    )
+  }
+
+  return (
+    <div className="mt-1.5">
+      <div className="flex items-center gap-2 mb-1">
+        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+          Últimos informes
+        </span>
+        {reports.length > ultimos.length && (
+          <button
+            onClick={onVerFicha}
+            className="text-[11px] font-medium text-primary hover:underline ml-auto"
+          >
+            Ver los {reports.length}
+          </button>
+        )}
+      </div>
+      <div className="border border-slate-200 rounded-lg divide-y divide-slate-100 overflow-hidden">
+        {ultimos.map(r => {
+          const conclusion = normConclusion(r.conclusion)
+          const scout = personaToName(r.persona, profiles)
+          const texto = (r.texto ?? '').trim()
+          const estaAbierto = abierto === r.id
+          return (
+            <div key={r.id} className="bg-white">
+              <button
+                onClick={() => setAbierto(estaAbierto ? null : r.id)}
+                className="w-full text-left px-2.5 py-1.5 hover:bg-slate-50 transition-colors"
+                aria-expanded={estaAbierto}
+              >
+                <span className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[11px] text-slate-500">{fmtDate(r.fecha ?? r.createdAt)}</span>
+                  {scout && <span className="text-[11px] text-slate-400">· {scout}</span>}
+                  {conclusion && (
+                    <span className={`text-[10px] px-1.5 py-px rounded font-medium ${CONCLUSION_STYLE[conclusion] ?? 'bg-slate-100 text-slate-600'}`}>
+                      {conclusion}
+                    </span>
+                  )}
+                  <ChevronDown className={`w-3 h-3 text-slate-300 ml-auto flex-shrink-0 transition-transform ${estaAbierto ? 'rotate-180' : ''}`} />
+                </span>
+                {r.titulo && (
+                  <span className="block text-[11px] font-semibold text-slate-700 truncate mt-0.5">{r.titulo}</span>
+                )}
+                {!estaAbierto && texto && (
+                  <span className="block text-[11px] text-slate-500 mt-0.5 line-clamp-2">{texto}</span>
+                )}
+              </button>
+              {estaAbierto && (
+                <div className="px-2.5 pb-2 -mt-0.5">
+                  {texto
+                    ? <p className="text-[11px] text-slate-600 whitespace-pre-wrap leading-relaxed">{texto}</p>
+                    : <p className="text-[11px] text-slate-400 italic">Informe sin texto.</p>}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
   )
 }
