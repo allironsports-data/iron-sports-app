@@ -352,6 +352,10 @@ export function Dashboard({
   const [managerFilter, setManagerFilter] = useState<string>("all");
   // quick filter from stat cards: overlays on top of the person filter
   const [quickFilter, setQuickFilter] = useState<"overdue" | "today" | "week" | "inprogress" | null>(null);
+  // Mantenimiento / Captación. Se recuerda entre pantallas como el de persona.
+  const [origenFilter, setOrigenFilter] = useState<'todas' | 'mantenimiento' | 'captacion'>(
+    () => (sessionStorage.getItem('nav_origen_filter') as 'todas' | 'mantenimiento' | 'captacion') ?? 'todas'
+  );
   const [showNotifications, setShowNotifications] = useState(false);
   // Person filter for the unified board: 'me' | 'all' | <profileId>
   const [personFilter, setPersonFilter] = useState<string>(
@@ -422,6 +426,7 @@ export function Dashboard({
 
   // Persist board preferences so refresh restores position
   useEffect(() => { sessionStorage.setItem('nav_person_filter', personFilter) }, [personFilter]);
+  useEffect(() => { sessionStorage.setItem('nav_origen_filter', origenFilter) }, [origenFilter]);
   useEffect(() => { sessionStorage.setItem('nav_group_by', groupBy) }, [groupBy]);
 
   // Fetch activities for all profiles when the Equipo tab is active.
@@ -471,8 +476,29 @@ export function Dashboard({
   const boardPersonId = personFilter === 'me' ? currentProfile.id : personFilter;
   const matchesPerson = (t: Task) =>
     personFilter === 'all' || involvesProfile(t, boardPersonId);
-  const boardTasks = visibleTasks.filter(t => t.status !== 'completada' && matchesPerson(t));
-  const boardCompleted = visibleTasks.filter(t => t.status === 'completada' && matchesPerson(t));
+
+  // ── Origen: Mantenimiento vs Captación ──────────────────────
+  // «De Captación» = la tarea la generó una próxima acción de una tarjeta de
+  // Firmar. Se sabe por el vínculo real (nextActionTaskId), no por el título
+  // ni por el tipo: así sigue clasificada bien aunque la renombres o le
+  // cambies el tipo desde el tablero.
+  const idsTareasPipeline = useMemo(
+    () => new Set((firmasEntries ?? []).map(f => f.nextActionTaskId).filter(Boolean) as string[]),
+    [firmasEntries],
+  );
+  const matchesOrigen = (t: Task) =>
+    origenFilter === 'todas' ||
+    (origenFilter === 'captacion' ? idsTareasPipeline.has(t.id) : !idsTareasPipeline.has(t.id));
+
+  const matchesBoard = (t: Task) => matchesPerson(t) && matchesOrigen(t);
+  const boardTasks = visibleTasks.filter(t => t.status !== 'completada' && matchesBoard(t));
+  const boardCompleted = visibleTasks.filter(t => t.status === 'completada' && matchesBoard(t));
+
+  // Recuentos del selector: se calculan con el filtro de persona pero SIN el de
+  // origen, para que los números no cambien según lo que tengas seleccionado
+  const abiertasPersona = visibleTasks.filter(t => t.status !== 'completada' && matchesPerson(t));
+  const nCaptacion = abiertasPersona.filter(t => idsTareasPipeline.has(t.id)).length;
+  const nMantenimiento = abiertasPersona.length - nCaptacion;
 
   // ── Tasks stats + week nav ──────────────────────────────────
   // Fecha LOCAL, no UTC: con toISOString(), entre las 00:00 y las 2:00 de la
@@ -1233,7 +1259,30 @@ export function Dashboard({
               <div className="text-[11px] text-slate-400">En progreso</div>
             </div>
           </div>
-          <div className="flex items-center gap-2 mb-4">
+          <div className="flex items-center gap-2 mb-4 flex-wrap">
+            {/* Origen: de dónde nace la tarea. Las de Captación son las próximas
+                acciones del pipeline de Firmar; el resto, Mantenimiento. */}
+            <div className="flex items-center gap-0 bg-slate-100 rounded-lg p-0.5">
+              {([
+                { id: 'todas' as const, label: 'Todas', n: abiertasPersona.length },
+                { id: 'mantenimiento' as const, label: 'Mantenimiento', n: nMantenimiento },
+                { id: 'captacion' as const, label: 'Captación', n: nCaptacion },
+              ]).map(o => (
+                <button
+                  key={o.id}
+                  onClick={() => setOrigenFilter(o.id)}
+                  title={o.id === 'captacion'
+                    ? 'Próximas acciones del pipeline de Firmar'
+                    : o.id === 'mantenimiento' ? 'Todo lo que no viene del pipeline de Firmar' : undefined}
+                  className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-colors flex items-center gap-1 ${
+                    origenFilter === o.id ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  {o.label}
+                  <span className={origenFilter === o.id ? 'text-slate-400 font-normal' : 'text-slate-400 font-normal'}>{o.n}</span>
+                </button>
+              ))}
+            </div>
             <span className="text-[11px] text-slate-400 font-medium">Filtro rápido</span>
             <select
               value={quickFilter ?? 'none'}
@@ -1255,8 +1304,18 @@ export function Dashboard({
                 {personFilter === 'me' ? 'Mis tareas'
                   : personFilter === 'all' ? 'Todas las tareas'
                   : `Tareas de ${profiles.find(p => p.id === personFilter)?.name.split(' ')[0] ?? ''}`}
+                {origenFilter !== 'todas' && (
+                  <span className="font-normal text-slate-400">
+                    {origenFilter === 'captacion' ? ' · solo Captación' : ' · solo Mantenimiento'}
+                  </span>
+                )}
                 {' '}<span className="font-normal text-slate-400">({boardTasks.length})</span>
               </p>
+              {origenFilter !== 'todas' && (
+                <button onClick={() => setOrigenFilter('todas')} className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1">
+                  <X className="w-3 h-3" /> Ver todas
+                </button>
+              )}
               {quickFilter && (
                 <button onClick={() => setQuickFilter(null)} className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1">
                   <X className="w-3 h-3" /> Limpiar filtro
