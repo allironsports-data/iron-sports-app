@@ -47,6 +47,7 @@ import {
   Sun,
   PenLine } from "lucide-react";
 import { POSITIONS, POSITION_CODES, positionLabel } from "../lib/positions";
+import { opcionesPartner, jugadorEsDePartner, PARTNER_TODOS } from "../lib/partners";
 
 const PRIMARY = "hsl(220,72%,26%)";
 
@@ -350,6 +351,11 @@ export function Dashboard({
     }
   }
   const [managerFilter, setManagerFilter] = useState<string>("all");
+  // Partner del jugador. Se recuerda entre pantallas: si estás revisando la
+  // cartera de un partner, cambiar a Tareas y volver no debería perderlo.
+  const [partnerFilter, setPartnerFilter] = useState<string>(
+    () => sessionStorage.getItem('nav_partner_filter') ?? PARTNER_TODOS
+  );
   // quick filter from stat cards: overlays on top of the person filter
   const [quickFilter, setQuickFilter] = useState<"overdue" | "today" | "week" | "inprogress" | null>(null);
   // Mantenimiento / Captación. Se recuerda entre pantallas como el de persona.
@@ -427,6 +433,7 @@ export function Dashboard({
   // Persist board preferences so refresh restores position
   useEffect(() => { sessionStorage.setItem('nav_person_filter', personFilter) }, [personFilter]);
   useEffect(() => { sessionStorage.setItem('nav_origen_filter', origenFilter) }, [origenFilter]);
+  useEffect(() => { sessionStorage.setItem('nav_partner_filter', partnerFilter) }, [partnerFilter]);
   useEffect(() => { sessionStorage.setItem('nav_group_by', groupBy) }, [groupBy]);
 
   // Fetch activities for all profiles when the Equipo tab is active.
@@ -596,7 +603,21 @@ export function Dashboard({
   const positionOptions = POSITION_CODES;
   const yearOptions = Array.from(new Set(visiblePlayers.map(p => p.birthDate?.slice(0, 4)).filter(Boolean))).sort((a, b) => Number(b) - Number(a)) as string[];
 
+  const partnerOptions = useMemo(() => opcionesPartner(visiblePlayers), [visiblePlayers]);
+  // Si el partner guardado ya no existe (se renombró, o se fue el último
+  // jugador que lo tenía) el filtro se cae a «Todos» en vez de dejar la
+  // lista vacía sin explicación
+  const partnerActivo = partnerFilter !== PARTNER_TODOS && !partnerOptions.some(o => o.key === partnerFilter)
+    ? PARTNER_TODOS
+    : partnerFilter;
+
+  const jugadoresDelPartner = useMemo(
+    () => visiblePlayers.filter(p => jugadorEsDePartner(p.partner, partnerActivo)),
+    [visiblePlayers, partnerActivo],
+  );
+
   const filtered = visiblePlayers.filter((p) => {
+    const matchPartner = jugadorEsDePartner(p.partner, partnerActivo);
     const matchSearch =
       p.name.toLowerCase().includes(search.toLowerCase()) ||
       (p.positions[0] ?? "").toLowerCase().includes(search.toLowerCase()) ||
@@ -606,7 +627,7 @@ export function Dashboard({
     const matchPos = posFilters.length === 0 || (p.positions[0] && posFilters.includes(p.positions[0]));
     const matchYear = yearFilters.length === 0 || (p.birthDate && yearFilters.includes(p.birthDate.slice(0, 4)));
     const matchActivity = !activityFilter || tasks.some(t => t.playerId === p.id && t.status !== "completada");
-    return matchSearch && matchManager && matchPos && matchYear && matchActivity;
+    return matchPartner && matchSearch && matchManager && matchPos && matchYear && matchActivity;
   });
 
 
@@ -1536,6 +1557,36 @@ export function Dashboard({
         {/* ── Jugadores section ────────────────────────────── */}
         {activeTab === 'jugadores' && (<>
 
+        {/* ── Partner ──────────────────────────────────────────
+            Va arriba del todo y en grande porque es el corte más gordo de
+            la cartera: primero decides de quién son los jugadores y luego
+            afinas con el resto de filtros. Las opciones salen de los datos,
+            así que si mañana hay un tercer partner aparece solo. */}
+        {partnerOptions.length > 1 && (
+          <div className="flex items-center gap-2 flex-wrap mb-3">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Partner</span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {[{ key: PARTNER_TODOS, label: 'Todos', count: visiblePlayers.length }, ...partnerOptions].map(o => {
+                const sel = partnerActivo === o.key;
+                return (
+                  <button
+                    key={o.key}
+                    onClick={() => setPartnerFilter(o.key)}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${
+                      sel
+                        ? 'bg-primary text-white border-primary'
+                        : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                    }`}
+                  >
+                    {o.label}
+                    <span className={`text-xs font-normal ${sel ? 'text-white/70' : 'text-slate-400'}`}>{o.count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Players list header */}
         <div className="flex flex-col gap-2 mb-3">
           <div className="flex items-center justify-between gap-2">
@@ -1575,9 +1626,12 @@ export function Dashboard({
               onChange={e => setManagerFilter(e.target.value)}
               className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 text-slate-700"
             >
-              <option value="all">Todos ({visiblePlayers.length})</option>
+              {/* Los recuentos van dentro del partner elegido: si no, el
+                  desplegable ofrecía encargados con 12 jugadores que al
+                  seleccionarlos dejaban la lista vacía */}
+              <option value="all">Todos ({jugadoresDelPartner.length})</option>
               {profiles.map((m) => {
-                const count = visiblePlayers.filter((p) => p.managedBy.includes(m.id)).length;
+                const count = jugadoresDelPartner.filter((p) => p.managedBy.includes(m.id)).length;
                 if (count === 0) return null;
                 return <option key={m.id} value={m.id}>{m.avatar} {m.name.split(" ")[0]} ({count})</option>;
               })}
