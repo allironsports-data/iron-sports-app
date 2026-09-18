@@ -173,6 +173,18 @@ export interface PlayerInfo {
 }
 
 // ---- Player ----
+
+/**
+ * Estado de la relación con el jugador. Es otra cosa que hiddenFromManagement,
+ * que significa «este no es nuestro, es de intermediación».
+ *   activo    → lo gestionamos nosotros, el día a día es nuestro
+ *   inactivo  → nos ha dejado, o el contrato de representación ha vencido
+ *   partner   → el día a día lo lleva el partner, no nosotros
+ * Ver migration_player_estado.sql. Mientras no se ejecute, todos son activo.
+ */
+export const PLAYER_ESTADOS = ['activo', 'inactivo', 'partner'] as const
+export type PlayerEstado = typeof PLAYER_ESTADOS[number]
+
 export interface Player {
   id: string;
   name: string;
@@ -185,6 +197,8 @@ export interface Player {
   partner?: string;            // partner interno responsable
   managedBy: string[];         // team member ids (encargados)
   hiddenFromManagement?: boolean;  // true = solo distribución (intermediar)
+  /** activo | inactivo | partner. Sin migrar, o sin valor, se trata como activo. */
+  estado?: PlayerEstado;
   representationContract: RepresentationContract;
   clubContract: ClubContract;
   contractHistory: { club: string; period: string; type: string }[];

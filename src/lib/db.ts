@@ -25,6 +25,9 @@ function dbToPlayer(row: Record<string, unknown>): Player {
     transfermarktUrl: (row.transfermarkt_url as string) ?? undefined,
     links: (row.links as PlayerLink[]) ?? [],
     hiddenFromManagement: (row.hidden_from_management as boolean) ?? false,
+    // undefined si la migración de estado no se ha ejecutado aún; la app lo
+    // trata como «activo» (ver lib/estadoJugador.ts)
+    estado: (row.estado as Player['estado']) ?? undefined,
     // undefined si la migración de updated_at no se ha ejecutado aún
     updatedAt: (row.updated_at as string) ?? undefined,
     performance: [],
@@ -61,7 +64,38 @@ function playerToDb(p: Partial<Player>) {
     links: p.links ?? [],
     info: p.info,
     hidden_from_management: p.hiddenFromManagement ?? false,
+    estado: p.estado ?? 'activo',
   }
+}
+
+// ── players.estado: opcional hasta migrar ────────────────────────────
+// playerToDb escribe todas las columnas, así que si la migración no se ha
+// ejecutado el guardado entero fallaría por una columna nueva. En vez de
+// bloquear la app: al primer 42703 que hable de `estado` se apaga el
+// campo y se reintenta sin él. El resto de la ficha se guarda igual.
+let playersSinEstado = false
+
+function sinEstado(fila: Record<string, unknown>): Record<string, unknown> {
+  const copia = { ...fila }
+  delete copia.estado
+  return copia
+}
+
+function faltaColumnaEstado(error: unknown): boolean {
+  if (!esColumnaInexistente(error)) return false
+  return /estado/i.test((error as { message?: string } | null)?.message ?? '')
+}
+
+function apagarEstado() {
+  if (playersSinEstado) return
+  playersSinEstado = true
+  console.warn('[db] players no tiene columna estado: se guarda sin ella (ejecuta migration_player_estado.sql)')
+}
+
+/** La fila de players lista para escribir, con `estado` solo si la base lo admite */
+function filaPlayer(p: Player): Record<string, unknown> {
+  const fila = playerToDb(p) as Record<string, unknown>
+  return playersSinEstado ? sinEstado(fila) : fila
 }
 
 // ── PASAPORTES Y CONTRATOS ───────────────────────────────────
@@ -308,14 +342,27 @@ export async function fetchPlayers(): Promise<Player[]> {
 }
 
 export async function createPlayer(p: Player): Promise<Player> {
-  const { data, error } = await supabase.from('players').insert(playerToDb(p)).select().single()
+  const insertar = (fila: Record<string, unknown>) =>
+    supabase.from('players').insert(fila).select().single()
+
+  let { data, error } = await insertar(filaPlayer(p))
+  if (error && faltaColumnaEstado(error)) {
+    apagarEstado()
+    ;({ data, error } = await insertar(sinEstado(playerToDb(p) as Record<string, unknown>)))
+  }
   if (error) throw error
   return dbToPlayer(data)
 }
 
 /** Devuelve la fila guardada (con el updated_at nuevo). Lanza ConflictError si otro la cambió antes. */
 export async function updatePlayer(p: Player): Promise<Player> {
-  return actualizarConControl('players', p.id, playerToDb(p), p.updatedAt, dbToPlayer)
+  try {
+    return await actualizarConControl('players', p.id, filaPlayer(p), p.updatedAt, dbToPlayer)
+  } catch (e) {
+    if (!faltaColumnaEstado(e)) throw e
+    apagarEstado()
+    return actualizarConControl('players', p.id, sinEstado(playerToDb(p) as Record<string, unknown>), p.updatedAt, dbToPlayer)
+  }
 }
 
 export async function deletePlayer(id: string): Promise<void> {

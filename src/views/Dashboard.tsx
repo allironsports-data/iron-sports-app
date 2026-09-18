@@ -9,7 +9,7 @@ import { useDebounce } from "../hooks/useDebounce";
 import { isValidName, isValidBirthDate } from "../lib/validate";
 import logoImg from '../assets/logo.jpeg';
 import type { Player, Task, TaskLabel, PlayerActivity, ScoutingMatch, MemberStatus, Postpartido, FirmasEntry } from "../types";
-import { calcAge, clubsLabel, TASK_LABELS } from "../types";
+import { calcAge, clubsLabel, TASK_LABELS, PLAYER_ESTADOS } from "../types";
 import { fechaLocal, hoyISO, lunesDe, esVencida, parseDia } from "../lib/fechas";
 import { createPlayerActivity, fetchActivitiesByAuthor, createScoutingMatch } from "../lib/db";
 import type { Profile } from "../contexts/AuthContext";
@@ -48,6 +48,7 @@ import {
   PenLine } from "lucide-react";
 import { POSITIONS, POSITION_CODES, positionLabel } from "../lib/positions";
 import { opcionesPartner, jugadorEsDePartner, PARTNER_TODOS } from "../lib/partners";
+import { estadoDe, jugadorEsDeEstado, contarPorEstado, ESTADO_META, ESTADO_TODOS, type FiltroEstado } from "../lib/estadoJugador";
 
 const PRIMARY = "hsl(220,72%,26%)";
 
@@ -356,6 +357,12 @@ export function Dashboard({
   const [partnerFilter, setPartnerFilter] = useState<string>(
     () => sessionStorage.getItem('nav_partner_filter') ?? PARTNER_TODOS
   );
+  // Estado del jugador. Arranca en «activo» a propósito: la cartera de
+  // trabajo son los activos, y los inactivos y los de gestión partner solo
+  // estorban en el día a día. Quien quiera verlos los pide.
+  const [estadoFilter, setEstadoFilter] = useState<FiltroEstado>(
+    () => (sessionStorage.getItem('nav_estado_filter') as FiltroEstado) ?? 'activo'
+  );
   // quick filter from stat cards: overlays on top of the person filter
   const [quickFilter, setQuickFilter] = useState<"overdue" | "today" | "week" | "inprogress" | null>(null);
   // Mantenimiento / Captación. Se recuerda entre pantallas como el de persona.
@@ -396,7 +403,12 @@ export function Dashboard({
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showCompletedMine, setShowCompletedMine] = useState(false);
-  const [playerView, setPlayerView] = useState<'grid' | 'list' | 'table'>('grid');
+  // Lista por defecto: con la cartera entera, las tarjetas obligan a hacer
+  // scroll para ver a todo el mundo. La elección se recuerda, como el resto
+  // de filtros de esta pantalla.
+  const [playerView, setPlayerView] = useState<'grid' | 'list' | 'table'>(
+    () => (sessionStorage.getItem('nav_player_view') as 'grid' | 'list' | 'table') ?? 'list'
+  );
   const [showSearch, setShowSearch] = useState(false);
   const [quickTaskPlayer, setQuickTaskPlayer] = useState<Player | null>(null);
 
@@ -434,6 +446,8 @@ export function Dashboard({
   useEffect(() => { sessionStorage.setItem('nav_person_filter', personFilter) }, [personFilter]);
   useEffect(() => { sessionStorage.setItem('nav_origen_filter', origenFilter) }, [origenFilter]);
   useEffect(() => { sessionStorage.setItem('nav_partner_filter', partnerFilter) }, [partnerFilter]);
+  useEffect(() => { sessionStorage.setItem('nav_estado_filter', estadoFilter) }, [estadoFilter]);
+  useEffect(() => { sessionStorage.setItem('nav_player_view', playerView) }, [playerView]);
   useEffect(() => { sessionStorage.setItem('nav_group_by', groupBy) }, [groupBy]);
 
   // Fetch activities for all profiles when the Equipo tab is active.
@@ -603,7 +617,17 @@ export function Dashboard({
   const positionOptions = POSITION_CODES;
   const yearOptions = Array.from(new Set(visiblePlayers.map(p => p.birthDate?.slice(0, 4)).filter(Boolean))).sort((a, b) => Number(b) - Number(a)) as string[];
 
-  const partnerOptions = useMemo(() => opcionesPartner(visiblePlayers), [visiblePlayers]);
+  // El estado es el corte de fuera: primero decides qué cartera miras
+  // (activos, por defecto) y dentro de ella van partner, encargado y el resto
+  const porEstado = useMemo(
+    () => visiblePlayers.filter(p => jugadorEsDeEstado(p, estadoFilter)),
+    [visiblePlayers, estadoFilter],
+  );
+  // Los recuentos del filtro de estado se calculan sobre TODOS: así ves
+  // cuántos inactivos hay aunque estés mirando solo los activos
+  const nPorEstado = useMemo(() => contarPorEstado(visiblePlayers), [visiblePlayers]);
+
+  const partnerOptions = useMemo(() => opcionesPartner(porEstado), [porEstado]);
   // Si el partner guardado ya no existe (se renombró, o se fue el último
   // jugador que lo tenía) el filtro se cae a «Todos» en vez de dejar la
   // lista vacía sin explicación
@@ -612,11 +636,11 @@ export function Dashboard({
     : partnerFilter;
 
   const jugadoresDelPartner = useMemo(
-    () => visiblePlayers.filter(p => jugadorEsDePartner(p.partner, partnerActivo)),
-    [visiblePlayers, partnerActivo],
+    () => porEstado.filter(p => jugadorEsDePartner(p.partner, partnerActivo)),
+    [porEstado, partnerActivo],
   );
 
-  const filtered = visiblePlayers.filter((p) => {
+  const filtered = porEstado.filter((p) => {
     const matchPartner = jugadorEsDePartner(p.partner, partnerActivo);
     const matchSearch =
       p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -1557,16 +1581,62 @@ export function Dashboard({
         {/* ── Jugadores section ────────────────────────────── */}
         {activeTab === 'jugadores' && (<>
 
+        {/* ── Estado ───────────────────────────────────────────
+            Arranca en Activos: es la cartera con la que se trabaja. Los
+            recuentos son sobre todos los jugadores, no sobre lo filtrado,
+            para que se vea cuántos hay fuera de la vista. */}
+        <div className="flex items-center gap-2 flex-wrap mb-3">
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Estado</span>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {PLAYER_ESTADOS.map(e => {
+              const sel = estadoFilter === e;
+              const meta = ESTADO_META[e];
+              return (
+                <button
+                  key={e}
+                  onClick={() => setEstadoFilter(e)}
+                  title={meta.ayuda}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${
+                    sel
+                      ? 'bg-primary text-white border-primary'
+                      : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${sel ? 'bg-white/80' : meta.punto}`} />
+                  {meta.label}
+                  <span className={`text-xs font-normal ${sel ? 'text-white/70' : 'text-slate-400'}`}>{nPorEstado[e]}</span>
+                </button>
+              );
+            })}
+            <button
+              onClick={() => setEstadoFilter(ESTADO_TODOS)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${
+                estadoFilter === ESTADO_TODOS
+                  ? 'bg-primary text-white border-primary'
+                  : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+              }`}
+            >
+              Todos
+              <span className={`text-xs font-normal ${estadoFilter === ESTADO_TODOS ? 'text-white/70' : 'text-slate-400'}`}>{visiblePlayers.length}</span>
+            </button>
+          </div>
+        </div>
+
         {/* ── Partner ──────────────────────────────────────────
             Va arriba del todo y en grande porque es el corte más gordo de
             la cartera: primero decides de quién son los jugadores y luego
             afinas con el resto de filtros. Las opciones salen de los datos,
             así que si mañana hay un tercer partner aparece solo. */}
-        {partnerOptions.length > 1 && (
+        {/* La fila se oculta si dentro del estado elegido no hay más de un
+            partner… salvo que haya un filtro puesto: un filtro que no se ve
+            pero sigue escondiendo jugadores es peor que una fila de más */}
+        {(partnerOptions.length > 1 || partnerActivo !== PARTNER_TODOS) && (
           <div className="flex items-center gap-2 flex-wrap mb-3">
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Partner</span>
             <div className="flex items-center gap-1.5 flex-wrap">
-              {[{ key: PARTNER_TODOS, label: 'Todos', count: visiblePlayers.length }, ...partnerOptions].map(o => {
+              {/* «Todos» cuenta dentro del estado elegido, no sobre la cartera
+                  entera: si no, en Activos ponía 110 y la lista daba 60 */}
+              {[{ key: PARTNER_TODOS, label: 'Todos', count: porEstado.length }, ...partnerOptions].map(o => {
                 const sel = partnerActivo === o.key;
                 return (
                   <button
@@ -1744,6 +1814,13 @@ export function Dashboard({
                   )}
 
                   <h3 className="text-base sm:text-lg font-bold text-slate-900 truncate pr-8">{player.name}</h3>
+                  {/* La chapa solo sale cuando NO es activo: si la llevaran
+                      todos, dejaría de significar nada */}
+                  {estadoDe(player) !== 'activo' && (
+                    <span className={`inline-block mt-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border ${ESTADO_META[estadoDe(player)].chip}`}>
+                      {ESTADO_META[estadoDe(player)].label}
+                    </span>
+                  )}
                   <p className="text-sm text-slate-500 truncate mt-0.5">
                     {player.positions[0]}{player.positions[1] ? ` / ${player.positions[1]}` : ''} · {clubsLabel(player.clubs)}
                   </p>
@@ -1819,6 +1896,12 @@ export function Dashboard({
                     <div className="flex items-center gap-1.5">
                       {isBday && <span className="text-sm">🎂</span>}
                       <p className="text-sm font-semibold text-slate-800 truncate">{player.name}</p>
+                      {estadoDe(player) !== 'activo' && (
+                        <span
+                          className={`w-2 h-2 rounded-full flex-shrink-0 ${ESTADO_META[estadoDe(player)].punto}`}
+                          title={ESTADO_META[estadoDe(player)].label}
+                        />
+                      )}
                     </div>
                     <p className="text-xs text-slate-400 truncate">
                       {player.positions[0]} · {clubsLabel(player.clubs)} · {age}a · {player.nationality}

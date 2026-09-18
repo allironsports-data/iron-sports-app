@@ -6,7 +6,8 @@ import type {
   DistributionEntry, ClubNegotiation, Club,
   PlayerActivity, Postpartido, ScoutingMatch,
 } from "../types";
-import { calcAge } from "../types";
+import { calcAge, PLAYER_ESTADOS, type PlayerEstado } from "../types";
+import { estadoDe, ESTADO_META } from "../lib/estadoJugador";
 import type { Profile } from "../contexts/AuthContext";
 import { uploadContractPdf, urlDocumento, fetchNotes, createNote, updateNote, deleteNote,
   fetchPlayerActivities, createPlayerActivity, createGroupActivity,
@@ -1870,6 +1871,7 @@ function EditPlayerModal({ player, profiles, onClose, onSave }: {
   const [pos2, setPos2] = useState(player.positions[1] ?? "");
   const [nationality, setNationality] = useState(player.nationality);
   const [partner, setPartner] = useState(player.partner ?? "");
+  const [estado, setEstado] = useState<PlayerEstado>(estadoDe(player));
   const [managed1, setManaged1] = useState(player.managedBy[0] ?? "");
   const [managed2, setManaged2] = useState(player.managedBy[1] ?? "");
   const [reprStart, setReprStart] = useState(player.representationContract.start ?? "");
@@ -1919,6 +1921,7 @@ function EditPlayerModal({ player, profiles, onClose, onSave }: {
         nationality,
         clubs,
         partner: partner || undefined,
+        estado,
         managedBy: [managed1, managed2].filter(Boolean),
         info: { ...player.info, phone },
         representationContract: { ...player.representationContract, start: reprStart, end: reprEnd },
@@ -2010,6 +2013,19 @@ function EditPlayerModal({ player, profiles, onClose, onSave }: {
               <ESel label="Encargado 1" value={managed1} onChange={setManaged1} options={profiles} />
               <ESel label="Encargado 2" value={managed2} onChange={setManaged2} options={profiles} />
               <EF label="Partner" value={partner} onChange={setPartner} />
+            </div>
+            <div className="mt-3">
+              <label className="block text-xs font-medium text-slate-600 mb-1">Estado</label>
+              <select
+                value={estado}
+                onChange={e => setEstado(e.target.value as PlayerEstado)}
+                className="w-full sm:w-64 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2"
+              >
+                {PLAYER_ESTADOS.map(e => (
+                  <option key={e} value={e}>{ESTADO_META[e].label}</option>
+                ))}
+              </select>
+              <p className="text-[11px] text-slate-400 mt-1">{ESTADO_META[estado].ayuda}</p>
             </div>
           </div>
 
