@@ -20,6 +20,8 @@ import { useFirmasAvisos } from '../captacion/firmas/avisos'
 //   Timeline → todo lo que se mueve, de más reciente a más antiguo
 
 export type PipelineTab = 'firmar' | 'zona' | 'encargado' | 'avisos' | 'timeline'
+const TABS: readonly PipelineTab[] = ['firmar', 'zona', 'encargado', 'avisos', 'timeline']
+const esTab = (t: unknown): t is PipelineTab => typeof t === 'string' && (TABS as readonly string[]).includes(t)
 
 export interface PipelineProps {
   firmasEntries: FirmasEntry[]
@@ -45,12 +47,15 @@ export interface PipelineProps {
   onGoToSection: (s: 'tareas' | 'jugadores' | 'distribucion' | 'captacion' | 'boulema') => void
   onLogout: () => void
   onAdmin?: () => void
+  /** Pestaña activa, si la lleva App (va en el hash: «atrás» cambia de pestaña) */
+  tab?: string
+  onTabChange?: (tab: PipelineTab) => void
 }
 
 export function Pipeline(props: PipelineProps) {
   const {
     firmasEntries, tasks, profiles, currentProfile, openEntryId, onOpenEntryConsumed,
-    onGoToSection, onLogout, onAdmin,
+    onGoToSection, onLogout, onAdmin, tab: tabProp, onTabChange,
   } = props
   const isAdmin = currentProfile.is_admin
 
@@ -67,9 +72,14 @@ export function Pipeline(props: PipelineProps) {
   })
   const { toasts, showToast, dismissToast } = useToast()
 
-  const [tabElegida, setTab] = useState<PipelineTab>(
+  // La pestaña la lleva App cuando viene por props (y entonces va en el
+  // hash). Si no viene —montado suelto— la lleva el propio componente.
+  const [tabLocal, setTabLocal] = useState<PipelineTab>(
     () => (sessionStorage.getItem('pipeline_tab') as PipelineTab) ?? 'firmar'
   )
+  // Con App al mando, un hash sin pestaña es «la de por defecto», no la local
+  const tabElegida: PipelineTab = onTabChange ? (esTab(tabProp) ? tabProp : 'firmar') : tabLocal
+  const setTab = (t: PipelineTab) => { setTabLocal(t); onTabChange?.(t) }
   // Si llega un enlace directo a una tarjeta manda el tablero, que es quien
   // sabe abrirla. Derivado en vez de un efecto: así no hay un render con la
   // pestaña equivocada ni un setState dentro de useEffect.

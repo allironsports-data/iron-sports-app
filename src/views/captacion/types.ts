@@ -51,6 +51,9 @@ export interface Props {
   /** Abrir una pestaña concreta desde fuera (botón flotante «Planificación») */
   openTab?: CaptacionTab | null
   onOpenTabConsumed?: () => void
+  /** Pestaña activa, si la lleva App (va en el hash: «atrás» cambia de pestaña) */
+  tab?: string
+  onTabChange?: (tab: CaptacionTab) => void
   /** Cuenta "solo Captación": oculta el resto de secciones y deja solo Jugadores, Partidos e Informes */
   restricted?: boolean
   /** Catálogo de equipos (pestaña Equipos) */

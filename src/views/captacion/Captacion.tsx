@@ -32,10 +32,14 @@ import { MatchDetailModal } from './partidos/MatchDetailModal'
 import { MergeMatchesModal } from './partidos/MergeMatchesModal'
 import { ActualizarPlantilla } from './partidos/ActualizarPlantilla'
 import type { MatchFormState } from './partidos/MatchFormPanel'
+import { useAtras } from '../../hooks/useAtras'
 
 export type { Props } from './types'
 
 // ── Main component ───────────────────────────────────────────
+
+const CAPT_TABS: readonly CaptacionTab[] = ['jugadores', 'conclusiones', 'contratos', 'equipos', 'informes', 'partidos', 'planificacion']
+const esCaptTab = (t: unknown): t is CaptacionTab => typeof t === 'string' && (CAPT_TABS as readonly string[]).includes(t)
 
 export function Captacion({
   scoutingPlayers,
@@ -78,6 +82,8 @@ export function Captacion({
   openTab,
   onOpenTabConsumed,
   restricted,
+  tab: tabProp,
+  onTabChange,
   equipos,
   onSaveEquipo,
   clubZonas,
@@ -92,7 +98,12 @@ export function Captacion({
   const { toasts, showToast, dismissToast } = useToast()
 
   // ── section tab ── (must be before header-height effect)
-  const [captTab, setCaptTab] = useState<CaptacionTab>('jugadores')
+  // La pestaña la lleva App cuando viene por props (y entonces va en el hash
+  // y «atrás» cambia de pestaña). Montado suelto, la lleva el componente.
+  // «firmar» ya no existe aquí (vive en Pipeline): se trata como jugadores.
+  const [captTabLocal, setCaptTabLocal] = useState<CaptacionTab>('jugadores')
+  const captTab: CaptacionTab = onTabChange ? (esCaptTab(tabProp) ? tabProp : 'jugadores') : captTabLocal
+  const setCaptTab = (t: CaptacionTab) => { setCaptTabLocal(t); onTabChange?.(t) }
   const RESTRICTED_TABS: CaptacionTab[] = ['jugadores', 'partidos', 'planificacion', 'informes']
   useEffect(() => {
     if (restricted && !RESTRICTED_TABS.includes(captTab)) setCaptTab('jugadores')
@@ -232,6 +243,12 @@ export function Captacion({
   const [detailMatchId, setDetailMatchId] = useState<string | null>(null)
   const [zonasAbierto, setZonasAbierto] = useState(false)
   const [panelEquipo, setPanelEquipo] = useState<string | null>(null)
+
+  // «Atrás» del navegador cierra el panel abierto en vez de salir de Captación.
+  // Cada uno con su clave: partido encima de ficha → primero se cierra el partido.
+  useAtras(!!panelPlayerId || !!panelEquipo, closePanel, 'capt-ficha')
+  useAtras(!!detailMatchId, () => setDetailMatchId(null), 'capt-partido')
+  useAtras(zonasAbierto, () => setZonasAbierto(false), 'capt-zonas')
   // De qué equipo veníamos al abrir un jugador, para poder volver
   const [volverAEquipo, setVolverAEquipo] = useState<string | null>(null)
   /** Abrir la ficha de un jugador. `desdeEquipo` deja el botón «← volver». */

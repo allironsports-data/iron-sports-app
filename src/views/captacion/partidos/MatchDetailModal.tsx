@@ -10,6 +10,7 @@ import { AssessmentChip, Spinner, FichaCarcasa } from '../comun'
 import { type ShowToast, type MatchScoutInfo, type ConclusionOption, type SuggestWhy, CONCLUSION_OPTIONS, normConclusion, CONCLUSION_STYLE, MONTHS_ES, birthYearFromBirthdate, personaToName, fmtDate, SUGGEST_ORDER, SUGGEST_LABEL, SEARCH_LIMIT, scoutColor } from '../helpers'
 import { PegarAlineacion } from './PegarAlineacion'
 import { MatchExpandedView } from './MatchExpandedView'
+import { useAtras } from '../../../hooks/useAtras'
 
 // ── MatchDetailModal — ficha del partido ─────────────────────
 // Todo lo del partido en una ventana: scouts asignados (varios), jugadores
@@ -132,6 +133,8 @@ export function MatchDetailModal({
   }, [match.id])
   // Vista ampliada (pantalla completa, solo lectura, con el texto de los informes)
   const [ampliado, setAmpliado] = useState(false)
+  // «Atrás» sale de la vista ampliada al partido normal, no de Captación
+  useAtras(ampliado, () => setAmpliado(false), 'partido-ampliado')
 
   // Con la vista ampliada abierta, Esc la cierra a ella (tiene su propio listener), no la ficha
   useEscapeKey(onClose, !ampliado)

@@ -5,6 +5,7 @@ import { ConfirmModal } from "../components/ConfirmModal";
 import { EmptyState } from "../components/EmptyState";
 import { useToastContext } from "../hooks/useToastContext";
 import { useEscapeKey } from "../hooks/useEscapeKey";
+import { useAtras } from "../hooks/useAtras";
 import { useDebounce } from "../hooks/useDebounce";
 import { isValidName, isValidBirthDate } from "../lib/validate";
 import logoImg from '../assets/logo.jpeg';
@@ -63,6 +64,9 @@ interface Props {
   onOpenFirmar?: (entryId: string) => void;
   /** true si hay una versión nueva de la app desplegada (detectado en App.tsx) */
   updateAvailable?: boolean;
+  /** Pestaña interna (equipo/postpartidos) si la lleva App: va en el hash. null = la del `view` */
+  tab?: string;
+  onTabChange?: (tab: 'equipo' | 'postpartidos' | null) => void;
   players: Player[];
   tasks: Task[];
   profiles: Profile[];
@@ -125,6 +129,8 @@ export function Dashboard({
   firmasEntries,
   onOpenFirmar,
   updateAvailable,
+  tab: tabProp,
+  onTabChange,
   players,
   tasks,
   profiles,
@@ -155,7 +161,14 @@ export function Dashboard({
 }: Props) {
   const { showToast } = useToastContext();
   // Internal tabs: 'equipo'/'postpartidos' se gestionan localmente; 'tareas'/'jugadores' vienen del prop `view`
-  const [internalTab, setInternalTab] = useState<'equipo' | 'postpartidos' | null>(null);
+  // La pestaña la lleva App cuando viene por props (y entonces va en el hash
+  // y «atrás» cambia de pestaña). Montado suelto, la lleva el componente.
+  const [internalTabLocal, setInternalTabLocal] = useState<'equipo' | 'postpartidos' | null>(null);
+  const internalTab: 'equipo' | 'postpartidos' | null =
+    onTabChange
+      ? (tabProp === 'equipo' || tabProp === 'postpartidos' ? tabProp : null)
+      : internalTabLocal;
+  const setInternalTab = (t: 'equipo' | 'postpartidos' | null) => { setInternalTabLocal(t); onTabChange?.(t); };
   const activeTab = internalTab ?? view;   // 'tareas' | 'jugadores' | 'equipo' | 'postpartidos'
   const [search, setSearch] = useState("");
   const [showAddPlayer, setShowAddPlayer] = useState(false);
@@ -387,6 +400,8 @@ export function Dashboard({
   const [taskSortCol, setTaskSortCol] = useState<'title' | 'player' | 'priority' | 'dueDate' | 'status'>('dueDate');
   const [taskSortDir, setTaskSortDir] = useState<'asc' | 'desc'>('asc');
   const [detailTask, setDetailTask] = useState<Task | null>(null);
+  // «Atrás» del navegador cierra el panel de la tarea en vez de salir de Mantenimiento
+  useAtras(!!detailTask, () => setDetailTask(null), 'tarea');
   // Apertura externa de una tarea (desde «Mi día»)
   useEffect(() => {
     if (!openTaskId) return;

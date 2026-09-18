@@ -14,6 +14,7 @@ import { FirmasManagers, FirmasHoverCard } from './comun'
 import { FIRMAS_STATUSES, FIRMAS_CONFIG, FIRMAS_ACTION_KIND_META, necesitaTelefono, firmasAging } from './helpers'
 import { FirmasDetailPanel } from './FirmasDetailPanel'
 import { FirmasAddModal } from './FirmasAddModal'
+import { useAtras } from '../../../hooks/useAtras'
 
 export function FirmasTab({
   entries, profiles, currentProfile, isAdmin, scoutingPlayers, scoutingReports,
@@ -83,6 +84,8 @@ export function FirmasTab({
 
   // ── panel y modales ──
   const [panelId, setPanelId] = useState<string | null>(null)
+  // «Atrás» del navegador cierra la tarjeta en vez de salir del pipeline
+  useAtras(!!panelId, () => setPanelId(null), 'firmas-tarjeta')
   const [showAdd, setShowAdd] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<FirmasEntry | null>(null)
   const [showAgenda, setShowAgenda] = useState(false)

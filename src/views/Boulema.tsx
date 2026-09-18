@@ -663,6 +663,9 @@ interface Props {
   onUpdateBoulemaPlayer: (p: BoulemaPlayer) => Promise<void>
   onDeleteBoulemaPlayer: (id: string) => Promise<void>
   onGoToSection: (s: 'tareas' | 'distribucion' | 'captacion' | 'pipeline') => void
+  /** Pestaña activa, si la lleva App (va en el hash: «atrás» cambia de pestaña) */
+  tab?: string
+  onTabChange?: (tab: 'peticiones' | 'mantenimiento') => void
   onOpenScoutingPlayer: (id: string) => void
   onLogout: () => void
   onAdmin?: () => void
@@ -687,6 +690,8 @@ export function Boulema({
   onOpenScoutingPlayer,
   onLogout,
   onAdmin,
+  tab: tabProp,
+  onTabChange,
 }: Props) {
   const { toasts, showToast, dismissToast } = useToast()
   // Antes se pintaban SIEMPRE las dos versiones de la lista (la tabla de
@@ -696,7 +701,13 @@ export function Boulema({
 
   // ── estado local ──
   // ── pestañas de la sección ──
-  const [bouTab, setBouTab] = useState<'peticiones' | 'mantenimiento'>('peticiones')
+  // La pestaña la lleva App cuando viene por props (y entonces va en el hash
+  // y «atrás» cambia de pestaña). Montado suelto, la lleva el componente.
+  const [bouTabLocal, setBouTabLocal] = useState<'peticiones' | 'mantenimiento'>('peticiones')
+  const bouTab = onTabChange
+    ? (tabProp === 'peticiones' || tabProp === 'mantenimiento' ? tabProp : 'peticiones')
+    : bouTabLocal
+  const setBouTab = (t: 'peticiones' | 'mantenimiento') => { setBouTabLocal(t); onTabChange?.(t) }
 
   // ── mantenimiento light ──
   const [mantSearch, setMantSearch] = useState('')

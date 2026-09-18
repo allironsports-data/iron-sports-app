@@ -115,7 +115,7 @@ export function PlayerPanel({
   isAdmin: boolean
   currentProfile: Profile
   profiles: Profile[]
-  setCaptTab: React.Dispatch<React.SetStateAction<CaptacionTab>>
+  setCaptTab: (t: CaptacionTab) => void
   abrirJugador: (id: string | null, desdeEquipo?: string) => void
   panelPlayerId: string | null
   panelPlayer: ScoutingPlayer | null
@@ -293,7 +293,7 @@ export function PlayerPanel({
                     firmasEntries={firmasEntries}
                     currentProfile={currentProfile}
                     onCreate={onCreateFirmasEntry}
-                    onJumpToEntry={(id) => { closePanel(); setCaptTab('firmar'); setFirmasJumpId(id) }}
+                    onJumpToEntry={(id) => { closePanel(); setFirmasJumpId(id) }}
                     showToast={showToast}
                   />
                 </div>

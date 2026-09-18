@@ -18,7 +18,7 @@ export function InformesTab({
   reportPersonas: string[]
   reportPersonaFilter: string
   setReportPersonaFilter: React.Dispatch<React.SetStateAction<string>>
-  setCaptTab: React.Dispatch<React.SetStateAction<CaptacionTab>>
+  setCaptTab: (t: CaptacionTab) => void
   abrirJugador: (id: string | null, desdeEquipo?: string) => void
 }) {
   return (

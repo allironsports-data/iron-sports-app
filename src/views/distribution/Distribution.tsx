@@ -1,8 +1,9 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import {
   ChevronRight, Check, Trash2, LogOut,
-  TrendingUp, AlertCircle, ChevronDown, Eye, Inbox,
+  TrendingUp, AlertCircle, ChevronDown, Eye, Inbox, PenLine,
 } from 'lucide-react'
+import { useAtras } from '../../hooks/useAtras'
 import logoImg from '../../assets/logo.jpeg'
 import type { Player, Club, ClubNeed, DistributionEntry, ClubNegotiation } from '../../types'
 import type { Profile } from '../../contexts/AuthContext'
@@ -38,6 +39,8 @@ import {
 // pestaña Distribución de la ficha del jugador).
 
 type TabId = 'jugadores' | 'clubes' | 'solicitudes' | 'oportunidades' | 'pipeline' | 'encargados'
+const TAB_IDS: readonly TabId[] = ['jugadores', 'clubes', 'solicitudes', 'oportunidades', 'pipeline', 'encargados']
+const esTabId = (t: unknown): t is TabId => typeof t === 'string' && (TAB_IDS as readonly string[]).includes(t)
 
 // ── props ─────────────────────────────────────────────────────
 
@@ -51,7 +54,11 @@ export interface Props {
   onBack: () => void          // go to Tareas
   onGoToJugadores?: () => void
   onGoToCaptacion?: () => void
+  onGoToPipeline?: () => void
   onGoToBoulema?: () => void
+  /** Pestaña activa, si la lleva App (va en el hash: «atrás» cambia de pestaña) */
+  tab?: string
+  onTabChange?: (tab: TabId) => void
   onLogout: () => void
   onAdmin?: () => void
   onSelectPlayer?: (id: string) => void
@@ -76,7 +83,8 @@ export interface Props {
 
 export function Distribution({
   players, clubs: clubsAll, entries, negotiations: negotiationsAll, currentProfile, profiles,
-  onBack, onGoToCaptacion, onGoToBoulema, onLogout, onAdmin, onSelectPlayer, onSelectClub,
+  onBack, onGoToCaptacion, onGoToPipeline, onGoToBoulema, onLogout, onAdmin, onSelectPlayer, onSelectClub,
+  tab: tabProp, onTabChange,
   onCreateClub, onUpdateClub, onDeleteClub,
   onCreateEntry, onUpdateEntry, onDeleteEntry,
   onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation,
@@ -106,12 +114,16 @@ export function Distribution({
     if (club && club.season !== season) setSeason(club.season)
   }, [activeClubId, clubsAll, season])
 
-  const [tab, setTab] = useState<TabId>(
+  // La pestaña la lleva App cuando viene por props (y entonces va en el hash
+  // y «atrás» cambia de pestaña). Montada suelta, la lleva el componente.
+  const [tabLocal, setTabLocal] = useState<TabId>(
     () => {
       const saved = sessionStorage.getItem('nav_dist_tab') as TabId | 'panel' | null
       return saved && saved !== 'panel' ? saved : 'jugadores'
     }
   )
+  const tab: TabId = onTabChange ? (esTabId(tabProp) ? tabProp : 'jugadores') : tabLocal
+  const setTab = (t: TabId) => { setTabLocal(t); onTabChange?.(t) }
   // Oportunidades tab
   const [oppSearch, setOppSearch] = useState('')
   const [oppPriority, setOppPriority] = useState<Priority | ''>('')
@@ -509,6 +521,8 @@ export function Distribution({
   const hasPanel = tab !== 'encargados' && (!!selectedEntry || !!selectedClub || !!selectedNeed)
   // Panel lateral ampliable (más ancho para editar cómodamente)
   const [panelExpanded, setPanelExpanded] = useState(false)
+  // «Atrás» del navegador cierra el panel lateral en vez de salir de Distribución
+  useAtras(hasPanel, closePanel, 'dist-panel')
 
   function switchTab(t: TabId) {
     setTab(t)
@@ -600,6 +614,15 @@ export function Distribution({
             <Eye className="w-3.5 h-3.5" />
             Captación
           </button>
+          {onGoToPipeline && (
+            <button
+              onClick={onGoToPipeline}
+              className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
+            >
+              <PenLine className="w-3.5 h-3.5" />
+              Pipeline
+            </button>
+          )}
           <button
             onClick={onGoToBoulema}
             className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"

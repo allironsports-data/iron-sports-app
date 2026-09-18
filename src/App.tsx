@@ -8,6 +8,10 @@ import type { Profile } from './contexts/AuthContext'
 import { LoginScreen } from './views/LoginScreen'
 import { SavingIndicator, BottomNav, GlobalSearch, SystemNotifPrompt } from './components/GlobalExtras'
 import { fireSystemNotification, type MainSection } from './components/globalExtras'
+import { construirHash, parsearHash, NOMBRE_SECCION } from './lib/rutas'
+
+// Ruta con la que se ha abierto la app (se lee una sola vez, al cargar)
+const rutaInicial = typeof window !== 'undefined' ? parsearHash(window.location.hash) : null
 import { ConflictModal } from './components/ConflictModal'
 import type { ConflictInfo } from './components/conflict'
 import { BUILD_ID } from './changelog'
@@ -95,20 +99,43 @@ export default function App() {
   const [dataLoading, setDataLoading] = useState(false)
   const [dataError, setDataError] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
-  // ── Nav state — persisted in sessionStorage so refresh restores position ──
+  // ── Nav state ──
+  // Si la URL trae una ruta (enlace compartido, recarga, atrás desde otra
+  // página), manda ella. Si no, lo último guardado en sessionStorage. Se
+  // resuelve en el estado inicial y no en un efecto para que el primer
+  // render y el hash ya estén de acuerdo: antes el efecto que escribe el
+  // hash pisaba el enlace pegado antes de que nadie lo leyera.
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(
-    () => sessionStorage.getItem('nav_playerId')
+    () => rutaInicial?.tipo === 'jugador' ? rutaInicial.id
+      : rutaInicial ? null : sessionStorage.getItem('nav_playerId')
   )
   const [selectedClubId, setSelectedClubId] = useState<string | null>(
-    () => sessionStorage.getItem('nav_clubId')
+    () => rutaInicial?.tipo === 'club' ? rutaInicial.id
+      : rutaInicial ? null : sessionStorage.getItem('nav_clubId')
   )
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(
-    () => sessionStorage.getItem('nav_profileId')
+    () => rutaInicial?.tipo === 'miembro' ? rutaInicial.id
+      : rutaInicial ? null : sessionStorage.getItem('nav_profileId')
   )
   // secciones principales (+ «Mi día»)
   const [mainSection, setMainSection] = useState<MainSection>(
-    () => (sessionStorage.getItem('nav_section') as MainSection) ?? 'tareas'
+    () => rutaInicial?.tipo === 'seccion' ? rutaInicial.seccion
+      : rutaInicial?.tipo === 'club' ? 'distribucion'
+      : (sessionStorage.getItem('nav_section') as MainSection) ?? 'tareas'
   )
+  // Pestaña de segundo nivel de cada sección (Captación → partidos, Pipeline
+  // → avisos…). Vive aquí y no en cada sección para poder ir en el hash y
+  // que «atrás» se mueva entre pestañas. Se recuerda entre visitas.
+  const [subTabs, setSubTabs] = useState<Partial<Record<MainSection, string>>>(() => {
+    let guardado: Partial<Record<MainSection, string>> = {}
+    try { guardado = JSON.parse(sessionStorage.getItem('nav_subtabs') ?? '{}') as Partial<Record<MainSection, string>> }
+    catch { /* sin nada guardado */ }
+    if (rutaInicial?.tipo === 'seccion') guardado = { ...guardado, [rutaInicial.seccion]: rutaInicial.tab ?? '' }
+    return guardado
+  })
+  const setSubTab = useCallback((seccion: MainSection, tab: string) => {
+    setSubTabs(prev => prev[seccion] === tab ? prev : { ...prev, [seccion]: tab })
+  }, [])
   // where to return after closing PlayerDetail
   const [playerReturnToClub, setPlayerReturnToClub] = useState(false)
   // club en pantalla partida ampliado a pantalla completa
@@ -254,20 +281,23 @@ export default function App() {
 
   // ── Título del documento según dónde estés ────────────────
   useEffect(() => {
-    const names: Record<string, string> = { tareas: 'Mantenimiento', jugadores: 'Jugadores', distribucion: 'Distribución', captacion: 'Captación', boulema: 'Boulema', 'mi-dia': 'Mi día' }
     const player = selectedPlayerId ? players.find(p => p.id === selectedPlayerId) : undefined
-    document.title = player ? `${player.name} · AIS` : `${names[mainSection] ?? 'AIS'} · All Iron Sports`
+    document.title = player ? `${player.name} · AIS` : `${NOMBRE_SECCION[mainSection] ?? 'AIS'} · All Iron Sports`
   }, [mainSection, selectedPlayerId, players])
 
-  // ── Rutas compartibles (hash): #/seccion, #/jugador/id, #/club/id, #/miembro/id ──
+  // ── Rutas compartibles (hash) — formatos en lib/rutas.ts ──────────
+  // La pestaña de segundo nivel va en el hash: así «atrás» te devuelve a
+  // la pestaña anterior en vez de sacarte de la sección.
   useEffect(() => {
     if (showContacts) return  // #contactos se gestiona aparte
-    const h = selectedPlayerId ? `#/jugador/${selectedPlayerId}`
-      : selectedProfileId ? `#/miembro/${selectedProfileId}`
-      : selectedClubId ? `#/club/${selectedClubId}`
-      : `#/${mainSection}`
+    const h = construirHash(
+      selectedPlayerId ? { tipo: 'jugador', id: selectedPlayerId }
+      : selectedProfileId ? { tipo: 'miembro', id: selectedProfileId }
+      : selectedClubId ? { tipo: 'club', id: selectedClubId }
+      : { tipo: 'seccion', seccion: mainSection, tab: subTabs[mainSection] }
+    )
     if (window.location.hash !== h) window.location.hash = h
-  }, [mainSection, selectedPlayerId, selectedClubId, selectedProfileId, showContacts])
+  }, [mainSection, subTabs, selectedPlayerId, selectedClubId, selectedProfileId, showContacts])
 
   // Cuenta «solo Captación»: el router de hash no debe abrir jugador/club/
   // miembro ni otras secciones aunque alguien pegue el enlace.
@@ -282,30 +312,30 @@ export default function App() {
 
   useEffect(() => {
     const apply = () => {
-      const h = window.location.hash
-      if (!h || h === '#contactos') return
-      const m = h.match(/^#\/(jugador|club|miembro)\/(.+)$/)
+      const r = parsearHash(window.location.hash)
+      if (!r || r.tipo === 'contactos') return
       if (captacionOnlyRef.current) {
         // solo Captación y Mi día
-        if (h === '#/mi-dia') setMainSection('mi-dia')
-        else if (h !== '#/captacion') setMainSection('captacion')
+        if (r.tipo === 'seccion' && r.seccion === 'mi-dia') setMainSection('mi-dia')
+        else {
+          setMainSection('captacion')
+          if (r.tipo === 'seccion' && r.seccion === 'captacion') setSubTab('captacion', r.tab ?? '')
+        }
         return
       }
-      if (m) {
-        if (m[1] === 'jugador') { setSelectedProfileId(null); setSelectedPlayerId(m[2]) }
-        else if (m[1] === 'club') { setSelectedPlayerId(null); setSelectedProfileId(null); setSelectedClubId(m[2]); setMainSection('distribucion') }
-        else { setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(m[2]) }
-        return
-      }
-      const s = h.replace('#/', '')
-      if (['tareas', 'jugadores', 'distribucion', 'captacion', 'boulema', 'mi-dia'].includes(s)) {
-        setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(null)
-        setMainSection(s as typeof mainSection)
-      }
+      if (r.tipo === 'jugador') { setSelectedProfileId(null); setSelectedPlayerId(r.id); return }
+      if (r.tipo === 'club')    { setSelectedPlayerId(null); setSelectedProfileId(null); setSelectedClubId(r.id); setMainSection('distribucion'); return }
+      if (r.tipo === 'miembro') { setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(r.id); return }
+      setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(null)
+      setMainSection(r.seccion)
+      // Sin pestaña en el hash = la de por defecto. Hay que fijarlo, no
+      // saltárselo: al volver de #/tareas/equipo a #/tareas debe cambiar.
+      setSubTab(r.seccion, r.tab ?? '')
     }
     window.addEventListener('hashchange', apply)
     apply() // enlace compartido al cargar
     return () => window.removeEventListener('hashchange', apply)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // ── Persist nav state to sessionStorage ───────────────────
@@ -324,6 +354,9 @@ export default function App() {
   useEffect(() => {
     sessionStorage.setItem('nav_section', mainSection)
   }, [mainSection])
+  useEffect(() => {
+    sessionStorage.setItem('nav_subtabs', JSON.stringify(subTabs))
+  }, [subTabs])
 
   const addNotification = useCallback((msg: string, type: AppNotification['type'], playerId?: string) => {
     setNotifications((prev) => [
@@ -1345,6 +1378,42 @@ export default function App() {
     setSelectedPlayerId(id)
   }
 
+  // Ir a una sección desde cualquier sitio. Cierra lo que hubiera abierto
+  // encima (ficha, club, miembro, admin…): antes cada enlace de cabecera
+  // hacía solo setMainSection, y con un club abierto pulsar «Captación» te
+  // dejaba en Distribución porque el club ganaba al pintar.
+  function irA(seccion: MainSection, tab?: string) {
+    setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(null)
+    setClubExpanded(false); setPlayerReturnToClub(false)
+    setShowAdmin(false); setShowOverview(false); setShowTable(false); setShowContacts(false)
+    if (tab) setSubTab(seccion, tab)
+    setMainSection(seccion)
+  }
+
+  // Abrir una tarjeta concreta del pipeline de Firmar. Antes tres sitios
+  // (Dashboard, Mi día, buscador) mandaban a Captación, donde Firmar ya no
+  // vive, y la tarjeta no se abría nunca.
+  function irAFirmas(entryId: string) {
+    setCaptacionOpenFirmasId(entryId)
+    irA('pipeline', 'firmar')
+  }
+
+  function irAFichaScouting(playerId: string) {
+    setCaptacionOpenPlayerId(playerId)
+    irA('captacion', 'jugadores')
+  }
+
+  function irATarea(taskId: string) {
+    setOpenTaskId(taskId)
+    irA('tareas')
+  }
+
+  // Admin sin cambiar de sección: al cerrarlo vuelves a donde estabas
+  function abrirAdmin() {
+    setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(null); setClubExpanded(false)
+    setShowAdmin(true)
+  }
+
   function handlePlayerBack() {
     setSelectedPlayerId(null)
     if (playerReturnToClub) {
@@ -1376,7 +1445,7 @@ export default function App() {
     setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(null)
     setShowTable(false); setShowAdmin(false); setShowContacts(false); setShowOverview(false)
     setCaptacionOpenTab('planificacion')
-    setMainSection('captacion')
+    irA('captacion', 'planificacion')
   }
   const planificacionFab = (
     <button
@@ -1419,7 +1488,7 @@ export default function App() {
       )}
       <BottomNav
         current={mainSection}
-        onGo={(s) => { setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(null); setClubExpanded(false); setMainSection(s) }}
+        onGo={(s) => irA(s)}
         onSearch={() => setSearchOpen(true)}
       />
       <SystemNotifPrompt />
@@ -1432,10 +1501,11 @@ export default function App() {
           tasks={tasksVisibles}
           onClose={() => setSearchOpen(false)}
           onOpenPlayer={(id) => navigateToPlayer(id, false)}
-          onOpenScoutingPlayer={(id) => { setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(null); setCaptacionOpenPlayerId(id); setMainSection('captacion') }}
-          onOpenFirmasEntry={(id) => { setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(null); setCaptacionOpenFirmasId(id); setMainSection('captacion') }}
+          onOpenScoutingPlayer={irAFichaScouting}
+          onOpenFirmasEntry={irAFirmas}
           onOpenClub={navigateToClub}
-          onGoTareas={() => { setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(null); setMainSection('tareas') }}
+          onGoTareas={() => irA('tareas')}
+          onOpenTask={irATarea}
         />
       )}
     </>
@@ -1454,10 +1524,12 @@ export default function App() {
       scoutingMatches={scoutingMatches}
       profiles={profiles}
       currentProfile={profile}
-      onBack={() => { if (!profile.captacion_only) setMainSection('tareas') }}
-      onGoToSection={(s) => { if (!profile.captacion_only) setMainSection(s) }}
+      onBack={() => { if (!profile.captacion_only) irA('tareas') }}
+      onGoToSection={(s) => { if (!profile.captacion_only) irA(s) }}
       onLogout={signOut}
-      onAdmin={profile.is_admin && !profile.captacion_only ? () => { setMainSection('tareas'); setShowAdmin(true) } : undefined}
+      onAdmin={profile.is_admin && !profile.captacion_only ? abrirAdmin : undefined}
+      tab={subTabs.captacion}
+      onTabChange={(t) => setSubTab('captacion', t)}
       onAddPlayer={handleAddScoutingPlayer}
       onUpdatePlayer={handleUpdateScoutingPlayer}
       onDeletePlayer={handleDeleteScoutingPlayer}
@@ -1484,7 +1556,7 @@ export default function App() {
       onSetMatchScoutMode={handleSetMatchScoutMode}
       openPlayerId={captacionOpenPlayerId}
       onOpenPlayerConsumed={() => setCaptacionOpenPlayerId(null)}
-      onOpenFirmas={(id) => { setCaptacionOpenFirmasId(id); setMainSection('pipeline') }}
+      onOpenFirmas={irAFirmas}
       openMatchId={captacionOpenMatchId}
       openTab={captacionOpenTab}
       onOpenTabConsumed={() => setCaptacionOpenTab(null)}
@@ -1518,12 +1590,14 @@ export default function App() {
       onCreateFirmasEntry={handleCreateFirmasEntry}
       onPatchFirmasEntry={handlePatchFirmasEntry}
       onDeleteFirmasEntry={handleDeleteFirmasEntry}
-      onOpenScoutingPlayer={(id) => { setCaptacionOpenPlayerId(id); setMainSection('captacion') }}
+      onOpenScoutingPlayer={irAFichaScouting}
       openEntryId={captacionOpenFirmasId}
       onOpenEntryConsumed={() => setCaptacionOpenFirmasId(null)}
-      onGoToSection={(s) => setMainSection(s)}
+      onGoToSection={(s) => irA(s)}
       onLogout={signOut}
-      onAdmin={profile.is_admin && !profile.captacion_only ? () => { setMainSection('tareas'); setShowAdmin(true) } : undefined}
+      onAdmin={profile.is_admin && !profile.captacion_only ? abrirAdmin : undefined}
+      tab={subTabs.pipeline}
+      onTabChange={(t) => setSubTab('pipeline', t)}
     />
   )
 
@@ -1540,10 +1614,10 @@ export default function App() {
       postpartidos={postpartidos}
       players={players}
       scoutingPlayers={scoutingPlayers}
-      onBack={() => setMainSection(profile.captacion_only ? 'captacion' : 'tareas')}
-      onOpenTask={(id) => { setOpenTaskId(id); setMainSection('tareas') }}
-      onOpenMatch={(id) => { setCaptacionOpenMatchId(id); setMainSection('captacion') }}
-      onOpenFirmasEntry={(id) => { setCaptacionOpenFirmasId(id); setMainSection('captacion') }}
+      onBack={() => irA(profile.captacion_only ? 'captacion' : 'tareas')}
+      onOpenTask={irATarea}
+      onOpenMatch={(id) => { setCaptacionOpenMatchId(id); irA('captacion', 'partidos') }}
+      onOpenFirmasEntry={irAFirmas}
       onOpenPlayer={(id) => navigateToPlayer(id, false)}
       onCompleteTask={async (id) => {
         const t = tasks.find(x => x.id === id)
@@ -1583,7 +1657,7 @@ export default function App() {
           <Sun className="w-3.5 h-3.5" /> Mi día
         </button>
         <button
-          onClick={() => setCaptacionOpenTab('planificacion')}
+          onClick={() => { setCaptacionOpenTab('planificacion'); setSubTab('captacion', 'planificacion') }}
           title="Planificación del fin de semana"
           aria-label="Planificación"
           className="fixed bottom-16 right-4 z-40 inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-slate-900 text-white text-xs font-semibold shadow-lg hover:bg-slate-700"
@@ -1688,7 +1762,7 @@ export default function App() {
         onUpdatePlayer={handleUpdatePlayer}
         onDeletePlayer={profile.is_admin ? handleDeletePlayer : undefined}
         onLogout={signOut}
-        onAdmin={profile.is_admin ? () => setShowAdmin(true) : undefined}
+        onAdmin={profile.is_admin ? abrirAdmin : undefined}
         distributionEntry={distEntries.find(e => e.playerId === selectedPlayer.id)}
         playerNegotiations={negotiations.filter(n => n.playerId === selectedPlayer.id)}
         clubs={clubs}
@@ -1721,7 +1795,7 @@ export default function App() {
       onExpand={() => setClubExpanded(e => !e)}
       onBack={() => { setSelectedClubId(null); setClubExpanded(false) }}
       onLogout={signOut}
-      onAdmin={profile.is_admin ? () => { setSelectedClubId(null); setClubExpanded(false); setShowAdmin(true) } : undefined}
+      onAdmin={profile.is_admin ? abrirAdmin : undefined}
       onSelectPlayer={(id) => navigateToPlayer(id, true)}
       onUpdateClub={handleUpdateClub}
       onDeleteClub={async (id) => { await handleDeleteClub(id); setSelectedClubId(null); setClubExpanded(false) }}
@@ -1748,10 +1822,12 @@ export default function App() {
         onAddBoulemaPlayer={handleAddBoulemaPlayer}
         onUpdateBoulemaPlayer={handleUpdateBoulemaPlayer}
         onDeleteBoulemaPlayer={handleDeleteBoulemaPlayer}
-        onGoToSection={(s) => setMainSection(s)}
-        onOpenScoutingPlayer={(id) => { setCaptacionOpenPlayerId(id); setMainSection('captacion') }}
+        onGoToSection={(s) => irA(s)}
+        onOpenScoutingPlayer={irAFichaScouting}
         onLogout={signOut}
-        onAdmin={profile.is_admin ? () => { setMainSection('tareas'); setShowAdmin(true) } : undefined}
+        onAdmin={profile.is_admin ? abrirAdmin : undefined}
+        tab={subTabs.boulema}
+        onTabChange={(t) => setSubTab('boulema', t)}
       />
     )
   }
@@ -1784,12 +1860,15 @@ export default function App() {
             profiles={profiles}
             splitActive={splitOpen && !clubExpanded}
             activeClubId={selectedClubId ?? undefined}
-            onBack={() => setMainSection('tareas')}
-            onGoToJugadores={() => setMainSection('jugadores')}
-            onGoToCaptacion={() => setMainSection('captacion')}
-            onGoToBoulema={() => setMainSection('boulema')}
+            onBack={() => irA('tareas')}
+            onGoToJugadores={() => irA('jugadores')}
+            onGoToCaptacion={() => irA('captacion')}
+            onGoToPipeline={() => irA('pipeline')}
+            onGoToBoulema={() => irA('boulema')}
             onLogout={signOut}
-            onAdmin={profile.is_admin ? () => { setMainSection('tareas'); setShowAdmin(true) } : undefined}
+            onAdmin={profile.is_admin ? abrirAdmin : undefined}
+            tab={subTabs.distribucion}
+            onTabChange={(t) => setSubTab('distribucion', t)}
             onSelectPlayer={(id) => navigateToPlayer(id, false)}
             onSelectClub={navigateToClub}
             onCreateClub={handleCreateClub}
@@ -1819,7 +1898,9 @@ export default function App() {
   return withExtras(
     <Dashboard
       view={mainSection === 'jugadores' ? 'jugadores' : 'tareas'}
-      onViewChange={(v) => setMainSection(v)}
+      onViewChange={(v) => irA(v)}
+      tab={subTabs[mainSection] ?? ''}
+      onTabChange={(t) => setSubTab(mainSection, t ?? '')}
       players={players}
       tasks={tasks}
       profiles={profiles}
@@ -1827,7 +1908,7 @@ export default function App() {
       onSelectPlayer={(id) => navigateToPlayer(id, false)}
       onLogout={signOut}
       onAddPlayer={handleAddPlayer}
-      onAdmin={profile.is_admin ? () => setShowAdmin(true) : undefined}
+      onAdmin={profile.is_admin ? abrirAdmin : undefined}
       onBulkDelete={profile.is_admin ? handleBulkDelete : undefined}
       onBulkAssignManager={profile.is_admin ? handleBulkAssignManager : undefined}
       onOverview={profile.is_admin ? () => setShowOverview(true) : undefined}
@@ -1848,7 +1929,7 @@ export default function App() {
       onDeletePostpartido={handleDeletePostpartido}
       onAddScoutingMatch={handleAddScoutingMatch}
       firmasEntries={firmasEntries}
-      onOpenFirmar={(id) => { setCaptacionOpenFirmasId(id); setMainSection('captacion') }}
+      onOpenFirmar={irAFirmas}
       openTaskId={openTaskId}
       onOpenTaskConsumed={() => setOpenTaskId(null)}
       updateAvailable={updateAvailable}

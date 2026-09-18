@@ -117,6 +117,8 @@ interface SearchProps {
   onOpenFirmasEntry: (id: string) => void
   onOpenClub: (id: string) => void
   onGoTareas: () => void
+  /** Abrir la tarea concreta (si no viene, solo se va a Mantenimiento) */
+  onOpenTask?: (id: string) => void
 }
 
 // Fuera de GlobalSearch: definidos dentro se recreaban en cada render y
@@ -144,7 +146,7 @@ function Row({ onClick, onClose, main, sub }: { onClick: () => void; onClose: ()
 
 export function GlobalSearch({
   players, scoutingPlayers, firmasEntries, clubs, tasks,
-  onClose, onOpenPlayer, onOpenScoutingPlayer, onOpenFirmasEntry, onOpenClub, onGoTareas,
+  onClose, onOpenPlayer, onOpenScoutingPlayer, onOpenFirmasEntry, onOpenClub, onGoTareas, onOpenTask,
 }: SearchProps) {
   const [q, setQ] = useState('')
 
@@ -231,7 +233,7 @@ export function GlobalSearch({
               {results.tasks.length > 0 && (
                 <Group title="Tareas abiertas">
                   {results.tasks.map(t => (
-                    <Row onClose={onClose} key={t.id} onClick={onGoTareas} main={t.title} sub={t.dueDate ? `límite ${t.dueDate}` : undefined} />
+                    <Row onClose={onClose} key={t.id} onClick={() => onOpenTask ? onOpenTask(t.id) : onGoTareas()} main={t.title} sub={t.dueDate ? `límite ${t.dueDate}` : undefined} />
                   ))}
                 </Group>
               )}
