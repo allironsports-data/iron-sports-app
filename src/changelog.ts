@@ -58,6 +58,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'En el mapa de Conclusiones, «× Posición» y «× Categoría» pasan a «Por posición» y «Por categoría»: ese × era un signo de multiplicar, pero parecía un botón de cerrar',
       'Accesibilidad y contraste: 14 botones que solo tenían un icono (volver, cerrar sesión, buscar, editar, eliminar, cancelar…) ya dicen qué hacen, y 24 iconos de acción que estaban en gris muy claro se ven ahora con contraste suficiente',
       'Vista ampliada de la ficha del jugador (botón ⤢): más ancha y con una barra de resumen arriba — informes de partido, cuántos son «Llamar», partidos vistos, fecha del último informe y, solo si los hay, cuántos informes de personalidad, contractuales o de mercado',
+      'Arreglado: al pulsar un informe en Captación → Informes recientes, la ficha del jugador se abría y se cerraba ella sola al momento. Pasaba también, aunque se notaba menos, al abrir una ficha desde cualquier sitio que cambia de pestaña a la vez',
     ],
     adminItems: [
       'En la consola del navegador aparece «[carga] fase 2 … ms» con el tiempo de cada tabla, ordenado de mayor a menor, para localizar la lenta',

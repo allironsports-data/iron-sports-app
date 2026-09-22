@@ -296,7 +296,14 @@ export default function App() {
       : selectedClubId ? { tipo: 'club', id: selectedClubId }
       : { tipo: 'seccion', seccion: mainSection, tab: subTabs[mainSection] }
     )
-    if (window.location.hash !== h) window.location.hash = h
+    // Ojo: NUNCA `window.location.hash = h`. Asignar el hash hace que el
+    // navegador dispare, además de «hashchange», un «popstate» (es una
+    // navegación más) — y ese popstate lo cazaba useAtras como si el
+    // usuario hubiera pulsado atrás, cerrando de golpe cualquier ficha/
+    // panel que se acabase de abrir en el mismo click (p. ej. al abrir un
+    // jugador desde «Informes recientes», que además cambia de pestaña).
+    // pushState mete la entrada sin disparar ninguno de los dos eventos.
+    if (window.location.hash !== h) window.history.pushState(null, '', h)
   }, [mainSection, subTabs, selectedPlayerId, selectedClubId, selectedProfileId, showContacts])
 
   // Cuenta «solo Captación»: el router de hash no debe abrir jugador/club/
