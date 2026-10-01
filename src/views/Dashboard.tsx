@@ -202,14 +202,6 @@ export function Dashboard({
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [showAddGeneralTask, setShowAddGeneralTask] = useState(false);
 
-  // ── Estado del equipo (automático: tarea en curso + nota opcional) ──
-  // Panel plegado por defecto para no comer pantalla; recuerda tu elección
-  const [statusPanelOpen, setStatusPanelOpen] = useState<boolean>(() => sessionStorage.getItem('dash_status_open') === '1');
-  useEffect(() => { sessionStorage.setItem('dash_status_open', statusPanelOpen ? '1' : '0'); }, [statusPanelOpen]);
-  // Nota rápida propia ("si hace falta añadir algo")
-  const [myNoteEditing, setMyNoteEditing] = useState(false);
-  const [myNoteDraft, setMyNoteDraft] = useState('');
-
   // ── Postpartidos ──
   const [showAddPostpartido, setShowAddPostpartido] = useState(false);
   const [ppMatchId, setPpMatchId] = useState('');
@@ -761,23 +753,15 @@ export function Dashboard({
   // ── Estado del equipo: datos derivados ──
   const statusProfiles = profiles.filter(p => !p.hidden_from_status);
   const hiddenStatusProfiles = profiles.filter(p => p.hidden_from_status);
-  const myStatus = memberStatuses.find(s => s.profileId === currentProfile.id);
-
-  // Tarea "en progreso" más reciente de un miembro — el panel la muestra
-  // automáticamente aunque no la haya elegido en su estado.
-  const inProgressTaskFor = (profileId: string): Task | undefined =>
-    tasks
-      .filter(t => t.status === 'en_progreso' && t.assigneeId === profileId)
-      .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))[0];
-
-  // Guardar mi nota rápida (lo único editable del panel: la tarea sale sola)
-  async function saveMyNote() {
-    setMyNoteEditing(false);
+  // Nota libre de cada miembro («en Elche hasta el jueves»): sale en el día de hoy del calendario
+  const notasEquipo = useMemo(
+    () => Object.fromEntries(memberStatuses.filter(m => m.note).map(m => [m.profileId, m.note as string])),
+    [memberStatuses],
+  );
+  async function guardarMiNota(texto: string) {
     if (!onUpdateMemberStatus) return;
-    const v = myNoteDraft.trim();
-    if (v === (myStatus?.note ?? '')) return;
     try {
-      await onUpdateMemberStatus({ profileId: currentProfile.id, note: v || undefined });
+      await onUpdateMemberStatus({ profileId: currentProfile.id, note: texto.trim() || undefined });
     } catch {
       showToast('No se pudo guardar la nota. Inténtalo de nuevo.', 'error');
     }
@@ -1446,124 +1430,6 @@ export function Dashboard({
           </div>
         </div>
 
-          {/* ── Panel de estado del equipo (plegable; sustituye a los 4 stats) ── */}
-          <div className="mb-3 bg-white border border-slate-200 rounded-xl overflow-hidden">
-            {/* Barra plegada: un vistazo del equipo en ~40px */}
-            <button
-              onClick={() => setStatusPanelOpen(v => !v)}
-              className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 transition-colors"
-              title={statusPanelOpen ? 'Plegar panel de equipo' : 'Ver estado del equipo'}
-            >
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex-shrink-0">Equipo</span>
-              <div className="flex items-center gap-2 flex-1 overflow-x-auto py-0.5">
-                {statusProfiles.map(p => {
-                  const curTask = inProgressTaskFor(p.id);
-                  return (
-                    <span
-                      key={p.id}
-                      className="relative flex-shrink-0"
-                      title={`${p.name.split(' ')[0]} · ${curTask ? `▶ ${curTask.title}` : 'sin tarea en curso'}`}
-                    >
-                      <span className="w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-bold text-white" style={{ background: PRIMARY }}>
-                        {p.avatar}
-                      </span>
-                      <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${curTask ? 'bg-blue-500' : 'bg-slate-300'}`} />
-                    </span>
-                  );
-                })}
-              </div>
-              <ChevronDown className={`w-4 h-4 text-slate-400 flex-shrink-0 transition-transform ${statusPanelOpen ? 'rotate-180' : ''}`} />
-            </button>
-
-            {/* Panel desplegado: tarjetas completas */}
-            {statusPanelOpen && (
-              <div className="border-t border-slate-100 p-2.5 bg-slate-50/60">
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2">
-                  {statusProfiles.map(p => {
-                    const s = memberStatuses.find(x => x.profileId === p.id);
-                    const curTask = inProgressTaskFor(p.id);
-                    const taskPlayer = curTask && curTask.playerId !== 'general' ? players.find(x => x.id === curTask.playerId) : undefined;
-                    const isMe = p.id === currentProfile.id;
-                    return (
-                      <div
-                        key={p.id}
-                        onClick={() => onSelectProfile?.(p.id)}
-                        className={`cursor-pointer text-left rounded-xl border px-3 py-2 transition-all hover:shadow-sm bg-white border-slate-200 hover:border-slate-300 ${isMe ? 'ring-1 ring-blue-200' : ''}`}
-                        title={`Ver detalle de ${p.name.split(' ')[0]}`}
-                      >
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="relative flex-shrink-0">
-                            <span className="w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-bold text-white" style={{ background: PRIMARY }}>
-                              {p.avatar}
-                            </span>
-                            <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${curTask ? 'bg-blue-500' : 'bg-slate-300'}`} />
-                          </span>
-                          <span className="text-xs font-bold text-slate-800 truncate flex-1">
-                            {p.name.split(' ')[0]}{isMe && <span className="font-normal text-slate-400"> (yo)</span>}
-                          </span>
-                          {onToggleStatusHidden && (
-                            <span
-                              onClick={e => {
-                                e.stopPropagation();
-                                onToggleStatusHidden(p.id, true).catch(() => showToast('No se pudo guardar. Inténtalo de nuevo.', 'error'));
-                              }}
-                              title={`Ocultar a ${p.name.split(' ')[0]} del panel`}
-                              className="p-0.5 text-slate-500 hover:text-slate-500 cursor-pointer flex-shrink-0"
-                            >
-                              <EyeOff className="w-3 h-3" />
-                            </span>
-                          )}
-                        </div>
-                        {/* Tarea en curso — automática, del tablero */}
-                        <div className={`text-[11px] truncate ${curTask ? 'text-blue-600 font-semibold' : 'text-slate-300 italic'}`}>
-                          ▶ {curTask ? `${curTask.title}${taskPlayer ? ` · ${taskPlayer.name.split(' ')[0]}` : ''}` : 'Ninguna tarea en curso'}
-                        </div>
-                        {/* Nota opcional — lo único editable (solo la tuya) */}
-                        {isMe && myNoteEditing ? (
-                          <input
-                            value={myNoteDraft}
-                            onChange={e => setMyNoteDraft(e.target.value)}
-                            onBlur={() => void saveMyNote()}
-                            onKeyDown={e => { if (e.key === 'Enter') void saveMyNote(); if (e.key === 'Escape') setMyNoteEditing(false); }}
-                            onClick={e => e.stopPropagation()}
-                            autoFocus
-                            placeholder="Nota rápida (ej. «en Elche hasta el jueves»)"
-                            className="mt-0.5 w-full text-[11px] border border-blue-200 rounded-md px-1.5 py-0.5 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                          />
-                        ) : (
-                          <div
-                            onClick={isMe && onUpdateMemberStatus ? (e) => { e.stopPropagation(); setMyNoteDraft(s?.note ?? ''); setMyNoteEditing(true); } : undefined}
-                            className={`text-[11px] truncate ${s?.note ? 'text-slate-600' : 'text-slate-500 italic'} ${isMe && onUpdateMemberStatus ? 'hover:text-slate-800' : ''}`}
-                            title={isMe && onUpdateMemberStatus ? 'Editar mi nota' : undefined}
-                          >
-                            💬 {s?.note || (isMe && onUpdateMemberStatus ? 'Añadir nota…' : '—')}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-                {/* Miembros ocultos (solo admins) */}
-                {onToggleStatusHidden && hiddenStatusProfiles.length > 0 && (
-                  <div className="mt-2 flex items-center gap-1.5 flex-wrap">
-                    <EyeOff className="w-3 h-3 text-slate-400 flex-shrink-0" />
-                    <span className="text-[11px] text-slate-400">Ocultos:</span>
-                    {hiddenStatusProfiles.map(p => (
-                      <button
-                        key={p.id}
-                        onClick={() => onToggleStatusHidden(p.id, false).catch(() => showToast('No se pudo guardar. Inténtalo de nuevo.', 'error'))}
-                        title="Volver a mostrar en el panel"
-                        className="text-[11px] bg-white border border-slate-200 hover:border-slate-400 rounded-full px-2 py-0.5 text-slate-500 transition-colors"
-                      >
-                        {p.name.split(' ')[0]} · Mostrar
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
           {vistaTareas === 'lista' && (
             <MiDiaLista
               items={agendaItems}
@@ -1839,6 +1705,8 @@ export function Dashboard({
             profiles={statusProfiles}
             currentProfile={currentProfile}
             onAbrir={agendaAbrir}
+            notas={notasEquipo}
+            onGuardarMiNota={onUpdateMemberStatus ? guardarMiNota : undefined}
             onNuevo={(que, personId, fecha) => {
               if (que === 'evento') return openAddEvent({ fecha, participantIds: [personId] });
               setTareaInicial({ assigneeId: personId, dueDate: fecha });

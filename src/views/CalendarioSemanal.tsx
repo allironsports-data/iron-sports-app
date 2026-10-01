@@ -29,6 +29,10 @@ export interface CalendarioSemanalProps {
   currentProfile: Profile
   onAbrir: (item: AgendaItem) => void
   onNuevo: (que: 'tarea' | 'evento', personId: string, fecha: string) => void
+  /** Nota libre de cada persona (profiles.id → texto): se ve en el día de hoy */
+  notas?: Record<string, string>
+  /** Si llega, la nota propia se puede editar */
+  onGuardarMiNota?: (texto: string) => Promise<void>
 }
 
 const DOW = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
@@ -38,7 +42,9 @@ const SELECT = 'text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white 
 /** Líneas que se ven en una columna de la semana antes del «+N más» */
 const MAX_COLUMNA = 14
 
-export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, currentProfile, onAbrir, onNuevo }: CalendarioSemanalProps) {
+export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, currentProfile, onAbrir, onNuevo, notas = {}, onGuardarMiNota }: CalendarioSemanalProps) {
+  // Nota propia en edición (null = no se está editando)
+  const [notaBorrador, setNotaBorrador] = useState<string | null>(null)
   const esEscritorio = useIsDesktop(768)
   const [grupo, setGrupo] = useState<string>('all')
   const [personaId, setPersonaId] = useState<string>('all')
@@ -141,6 +147,72 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
           ))}
         </span>
       </button>
+    )
+  }
+
+  // ── El equipo ese día: qué tiene cada uno (no solo «la tarea en curso») ──
+  // No depende de los filtros de arriba: es la foto del día entero.
+  const equipoDelDia = (dia: string) => {
+    // Hoy cuenta también lo que está en curso aunque tenga otra fecha (o ninguna)
+    const delDia = items.filter(it => it.fecha === dia || (dia === hoy && it.estado === 'en_progreso'))
+    const yo = profiles.find(p => p.id === currentProfile.id) ?? currentProfile
+    const guardarNota = () => {
+      if (notaBorrador !== null && notaBorrador.trim() !== (notas[yo.id] ?? '')) void onGuardarMiNota?.(notaBorrador)
+      setNotaBorrador(null)
+    }
+    return (
+      <div className="mb-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
+        {[yo, ...profiles.filter(p => p.id !== yo.id)].map(p => {
+          const suyos = delDia.filter(it => itemEsDe(it, p.id))
+          const abiertos = suyos.filter(it => it.estado !== 'completada')
+            .sort((a, b) => Number(b.estado === 'en_progreso') - Number(a.estado === 'en_progreso') || (a.hora ?? '99').localeCompare(b.hora ?? '99'))
+          const hechos = suyos.length - abiertos.length
+          const esYo = p.id === yo.id
+          const nota = notas[p.id]
+          return (
+            <div key={p.id} className={`rounded-lg border bg-white px-2.5 py-1.5 ${esYo ? 'border-blue-200' : 'border-slate-200'} ${personaId === p.id ? 'ring-1 ring-primary' : ''}`}>
+              <button onClick={() => setPersonaId(id => id === p.id ? 'all' : p.id)} title="Ver solo lo suyo" className="w-full flex items-center gap-1.5 text-left">
+                <span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white bg-primary flex-shrink-0">{p.avatar}</span>
+                <span className="text-xs font-semibold text-slate-800 truncate">{p.name.split(' ')[0]}{esYo && <span className="font-normal text-slate-400"> (yo)</span>}</span>
+                <span className="ml-auto text-[11px] text-slate-400 tabular-nums flex-shrink-0">
+                  {abiertos.length > 0 ? `${abiertos.length} pendiente${abiertos.length !== 1 ? 's' : ''}` : suyos.length > 0 ? 'todo hecho' : 'nada'}
+                  {hechos > 0 && abiertos.length > 0 && ` · ${hechos} ✓`}
+                </span>
+              </button>
+              {abiertos.slice(0, 3).map(it => {
+                const m = AGENDA_TIPO_META[it.tipo]
+                return (
+                  <button key={it.id} onClick={() => onAbrir(it)} title={it.titulo}
+                    className={`w-full flex items-center gap-1 text-left text-[11px] leading-snug hover:underline ${it.estado === 'en_progreso' ? 'text-blue-600 font-semibold' : 'text-slate-600'}`}>
+                    <m.Icon className={`w-3 h-3 flex-shrink-0 ${m.cls}`} />
+                    {it.hora && <span className="tabular-nums font-semibold">{it.hora}</span>}
+                    <span className="truncate">{it.titulo}{it.playerNombre ? ` · ${it.playerNombre.split(' ')[0]}` : ''}</span>
+                  </button>
+                )
+              })}
+              {abiertos.length > 3 && <p className="text-[11px] text-slate-400">+{abiertos.length - 3} más</p>}
+              {/* Nota libre: solo tiene sentido hoy */}
+              {dia === hoy && (esYo && onGuardarMiNota ? (
+                notaBorrador !== null ? (
+                  <input
+                    autoFocus value={notaBorrador} onChange={e => setNotaBorrador(e.target.value)}
+                    onBlur={guardarNota}
+                    onKeyDown={e => { if (e.key === 'Enter') guardarNota(); if (e.key === 'Escape') setNotaBorrador(null) }}
+                    placeholder="Nota (ej. «en Elche hasta el jueves»)"
+                    className="mt-0.5 w-full text-[11px] border border-blue-200 rounded px-1.5 py-0.5 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  />
+                ) : (
+                  <button onClick={() => setNotaBorrador(nota ?? '')} className={`mt-0.5 w-full text-left text-[11px] truncate hover:text-slate-800 ${nota ? 'text-slate-600' : 'text-slate-400 italic'}`}>
+                    💬 {nota || 'Añadir nota…'}
+                  </button>
+                )
+              ) : nota ? (
+                <p className="mt-0.5 text-[11px] text-slate-600 truncate" title={nota}>💬 {nota}</p>
+              ) : null)}
+            </div>
+          )
+        })}
+      </div>
     )
   }
 
@@ -268,6 +340,7 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
               </button>
             ))}
           </div>
+          {equipoDelDia(dias[diaIdx])}
           {solapes[diaIdx].length > 0 && (
             <p className="mb-2 flex items-center gap-1 text-[11px] font-semibold text-amber-600"><AlertTriangle className="w-3 h-3" /> Solape: {textoSolape(diaIdx)}</p>
           )}

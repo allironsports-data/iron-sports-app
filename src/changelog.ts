@@ -21,6 +21,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-01',
     items: [
+      'El panel «Equipo» que había encima de Mi día (la tarea en curso de cada uno) se muda al calendario: al ampliar un día sale una tarjeta por persona con todo lo que tiene ese día — tareas, llamadas, partidos, eventos —, lo que está en curso resaltado y cuántas le quedan. Clic en una persona filtra el día a lo suyo. La nota libre («en Elche hasta el jueves») sigue ahí, en el día de hoy',
       'Calendario más simple: siete columnas, una por día, con todo lo de ese día en una lista — primero lo que tiene hora y debajo lo demás, sin franjas. Cada línea lleva las iniciales de a quién le toca',
       'Calendario: clic en la cabecera de un día (o en «+N más») lo amplía a pantalla completa, con el título entero, el jugador, la categoría y quién lo lleva. Desde ahí se salta a otro día o se vuelve a la semana',
       'Inicio más limpio: los avisos que ocupaban la parte de arriba (novedades de la app, contratos de representación en sus últimos 6 meses, cumpleaños y partidos de hoy) ya no salen en la página. Están en la campana 🔔 de arriba a la derecha, que marca en rojo cuando hay algo nuevo',
