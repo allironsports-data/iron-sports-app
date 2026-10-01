@@ -87,7 +87,7 @@ interface Props {
   onSetMatchSeen?: (matchId: string, scout: string | undefined, visto: boolean) => Promise<void>;
   /** true si hay una versión nueva de la app desplegada (detectado en App.tsx) */
   updateAvailable?: boolean;
-  /** Pestaña interna (equipo/postpartidos) si la lleva App: va en el hash. null = la del `view` */
+  /** Pestaña interna (calendario/equipo/postpartidos) si la lleva App: va en el hash. null = la del `view` */
   tab?: string;
   onTabChange?: (tab: TabInterna | null) => void;
   /** Jugadores de Captación — para ligar un evento a uno de ellos */
@@ -123,8 +123,8 @@ interface Props {
   onAddScoutingMatch?: (m: ScoutingMatch) => void;
 }
 
-type TabInterna = 'equipo' | 'postpartidos';
-const esTabInterna = (t?: string): t is TabInterna => t === 'equipo' || t === 'postpartidos';
+type TabInterna = 'calendario' | 'equipo' | 'postpartidos';
+const esTabInterna = (t?: string): t is TabInterna => t === 'calendario' || t === 'equipo' || t === 'postpartidos';
 
 // Birthday helpers
 function isBirthdayToday(birthDate: string): boolean {
@@ -197,7 +197,7 @@ export function Dashboard({
       ? (esTabInterna(tabProp) ? tabProp : null)
       : internalTabLocal;
   const setInternalTab = (t: TabInterna | null) => { setInternalTabLocal(t); onTabChange?.(t); };
-  const activeTab = internalTab ?? view;   // 'tareas' | 'jugadores' | 'equipo' | 'postpartidos'
+  const activeTab = internalTab ?? view;   // 'tareas' | 'calendario' | 'jugadores' | 'equipo' | 'postpartidos'
   const [search, setSearch] = useState("");
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [showAddGeneralTask, setShowAddGeneralTask] = useState(false);
@@ -486,9 +486,9 @@ export function Dashboard({
   const [groupBy, setGroupBy] = useState<'estado' | 'jugador' | 'persona'>(
     () => (sessionStorage.getItem('nav_group_by') as 'estado' | 'jugador' | 'persona') ?? 'estado'
   );
-  // Tareas: mi lista (por defecto), el calendario de la semana o todas las tareas; y de quién es la lista
-  const [vistaTareas, setVistaTareas] = useState<'lista' | 'calendario' | 'tablero'>(
-    () => (sessionStorage.getItem('nav_tareas_vista') as 'lista' | 'calendario' | 'tablero') ?? 'lista'
+  // Tareas: mi lista (por defecto) o todas las tareas; y de quién es la lista
+  const [vistaTareas, setVistaTareas] = useState<'lista' | 'tablero'>(
+    () => sessionStorage.getItem('nav_tareas_vista') === 'tablero' ? 'tablero' : 'lista'
   );
   const [diaPersonaId, setDiaPersonaId] = useState(currentProfile.id);
   // Calendario: lunes (AAAA-MM-DD) de la semana visible
@@ -668,7 +668,7 @@ export function Dashboard({
   const esAdmin = !!currentProfile.is_admin;
   const diaHasta = sumarDias(todayStr, 7);
   const calDomingo = sumarDias(calLunes, 6);
-  const enCalendario = activeTab === 'tareas' && vistaTareas === 'calendario';
+  const enCalendario = activeTab === 'calendario';
   const actsDia = useActividadesRango(todayStr, diaHasta, !enCalendario, actsVersion);
   const actsCal = useActividadesRango(calLunes, calDomingo, enCalendario, actsVersion);
   const agendaBase = useMemo(() => {
@@ -1073,7 +1073,7 @@ export function Dashboard({
           </div>
         </div>
 
-        {/* Two-level nav: Mantenimiento | Distribución | Captación → Tareas | Jugadores | Equipo | Postpartidos */}
+        {/* Two-level nav: Mantenimiento | Distribución | Captación → Tareas | Calendario | Jugadores | Equipo | Postpartidos */}
         {onViewChange && (
           <>
             {/* Level 1: main sections */}
@@ -1116,6 +1116,7 @@ export function Dashboard({
             <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center bg-slate-50 border-t border-slate-100 overflow-x-auto scrollbar-none">
               {([
                 { id: 'tareas'       as const, label: 'Tareas' },
+                { id: 'calendario'   as const, label: 'Calendario' },
                 { id: 'jugadores'    as const, label: 'Jugadores' },
                 { id: 'equipo'       as const, label: 'Equipo' },
                 { id: 'postpartidos' as const, label: 'Postpartidos' },
@@ -1268,7 +1269,7 @@ export function Dashboard({
                 {item.titulo} <span className="font-mono font-bold text-emerald-700">{scouts.join(' ')}</span>
               </button>
             ))}
-            <button onClick={() => { setVistaTareas('calendario'); setInternalTab(null); onViewChange?.('tareas'); setShowNotifications(false); }} className="ml-auto text-[11px] text-emerald-700 hover:underline flex-shrink-0">Calendario →</button>
+            <button onClick={() => { setInternalTab('calendario'); setShowNotifications(false); }} className="ml-auto text-[11px] text-emerald-700 hover:underline flex-shrink-0">Calendario →</button>
           </div>
         )}
 
@@ -1380,7 +1381,6 @@ export function Dashboard({
           <div className="min-w-0">
             <h2 className="text-sm font-bold text-slate-800 truncate">
               {vistaTareas === 'tablero' ? 'Todas las tareas'
-                : vistaTareas === 'calendario' ? 'Calendario del equipo'
                 : diaPersona.id === currentProfile.id ? 'Mis tareas' : `Tareas de ${diaPersona.name.split(' ')[0]}`}
               <span className="font-normal text-slate-400"> · {tituloDia(todayStr)}</span>
             </h2>
@@ -1400,7 +1400,6 @@ export function Dashboard({
             <div className="flex items-center gap-0 bg-slate-100 rounded-lg p-0.5">
               {([
                 { id: 'lista' as const, label: 'Lista', Icono: LayoutList },
-                { id: 'calendario' as const, label: 'Calendario', Icono: Calendar },
                 { id: 'tablero' as const, label: 'Todas', Icono: Table },
               ]).map(v => (
                 <button
@@ -1447,26 +1446,6 @@ export function Dashboard({
             />
           )}
 
-
-        {/* ── Calendario semanal de toda la empresa ─────────── */}
-        {vistaTareas === 'calendario' && (
-          <CalendarioSemanal
-            items={agendaCal}
-            lunes={calLunes}
-            onLunes={setCalLunes}
-            hoy={todayStr}
-            profiles={profiles}
-            currentProfile={currentProfile}
-            onAbrir={agendaAbrir}
-            notas={notasEquipo}
-            onGuardarMiNota={onUpdateMemberStatus ? guardarMiNota : undefined}
-            onNuevo={(que, personId, fecha) => {
-              if (que === 'evento') return openAddEvent({ fecha, participantIds: [personId] });
-              setTareaInicial({ assigneeId: personId, dueDate: fecha });
-              setShowAddGeneralTask(true);
-            }}
-          />
-        )}
 
           {vistaTareas === 'tablero' && (<>
           {/* ── Estadísticas + filtro rápido de tareas ── */}
@@ -1716,6 +1695,26 @@ export function Dashboard({
           </>)}
 
         </>)}
+
+        {/* ── Calendario semanal de toda la empresa ─────────── */}
+        {activeTab === 'calendario' && (
+          <CalendarioSemanal
+            items={agendaCal}
+            lunes={calLunes}
+            onLunes={setCalLunes}
+            hoy={todayStr}
+            profiles={profiles}
+            currentProfile={currentProfile}
+            onAbrir={agendaAbrir}
+            notas={notasEquipo}
+            onGuardarMiNota={onUpdateMemberStatus ? guardarMiNota : undefined}
+            onNuevo={(que, personId, fecha) => {
+              if (que === 'evento') return openAddEvent({ fecha, participantIds: [personId] });
+              setTareaInicial({ assigneeId: personId, dueDate: fecha });
+              setShowAddGeneralTask(true);
+            }}
+          />
+        )}
 
         {/* ── Jugadores section ────────────────────────────── */}
         {activeTab === 'jugadores' && (<>

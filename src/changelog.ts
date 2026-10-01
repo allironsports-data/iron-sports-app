@@ -21,7 +21,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-01',
     items: [
-      'La pestaña «Mi día» pasa a llamarse «Tareas», y el calendario deja de ser una pestaña aparte: está dentro de Tareas, en el selector de arriba a la derecha (Lista · Calendario · Todas)',
+      'La pestaña «Mi día» pasa a llamarse «Tareas». El calendario es su propia pestaña, «Calendario», justo al lado',
       'Calendario más fácil de leer: nueva vista «Agenda» (la de por defecto) con los siete días uno debajo de otro y cada cosa a todo el ancho — hora, título entero, jugador, categoría y quién lo lleva —, sin tener que ampliar nada. La vista «Columnas» sigue ahí y ahora muestra el título completo en varias líneas y el jugador. Al pulsar en el nombre de un día se abre ese día con la tarjeta de cada persona del equipo',
       'Los cumpleaños vuelven a la página de inicio (el resto de avisos sigue en la campana)',
       'El panel «Equipo» que había encima de Mi día (la tarea en curso de cada uno) se muda al calendario: al ampliar un día sale una tarjeta por persona con todo lo que tiene ese día — tareas, llamadas, partidos, eventos —, lo que está en curso resaltado y cuántas le quedan. Clic en una persona filtra el día a lo suyo. La nota libre («en Elche hasta el jueves») sigue ahí, en el día de hoy',
