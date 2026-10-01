@@ -1,11 +1,11 @@
 // ── Calendario semanal: lógica pura ──────────────────────────────────
 //
-// Reparte la lista unificada (lib/agendaItems.ts) en una rejilla de
-// filas × 7 días. Las filas son franjas horarias (o tipos); cada cosa
-// lleva la lista de personas a las que toca, para pintar sus iniciales.
+// Reparte la lista unificada (lib/agendaItems.ts) en los 7 días de una
+// semana. Cada cosa lleva la lista de personas a las que toca, para
+// pintar sus iniciales.
 
 import { sumarDias } from './fechas'
-import type { AgendaItem, AgendaTipo } from './agendaItems'
+import type { AgendaItem } from './agendaItems'
 
 /** Lo que va en una celda: el item y de quién es (un partido con varios scouts es una sola entrada) */
 export interface EntradaCalendario {
@@ -13,29 +13,6 @@ export interface EntradaCalendario {
   personas: string[]
   /** true si para todas esas personas está hecho */
   hecha: boolean
-}
-
-export interface FilaCalendario {
-  id: string
-  /** Un array por día, de lunes a domingo */
-  dias: EntradaCalendario[][]
-  total: number
-  abiertos: number
-}
-
-export const FRANJAS = [
-  { id: 'sin-hora', label: 'Sin hora', detalle: 'tareas del día' },
-  { id: 'manana',   label: 'Mañana',   detalle: 'hasta las 14:00' },
-  { id: 'tarde',    label: 'Tarde',    detalle: '14:00 – 20:00' },
-  { id: 'noche',    label: 'Noche',    detalle: 'desde las 20:00' },
-] as const
-export type FranjaId = typeof FRANJAS[number]['id']
-
-export function franjaDe(hora?: string): FranjaId {
-  if (!hora) return 'sin-hora'
-  if (hora < '14:00') return 'manana'
-  if (hora < '20:00') return 'tarde'
-  return 'noche'
 }
 
 /** Los 7 días (AAAA-MM-DD) de la semana que empieza en `lunes` */
@@ -76,24 +53,14 @@ function orden(a: EntradaCalendario, b: EntradaCalendario): number {
   return Number(a.hecha) - Number(b.hecha) || a.item.titulo.localeCompare(b.item.titulo)
 }
 
-function fila(id: string, entradas: EntradaCalendario[], dias: string[]): FilaCalendario {
-  const porDia = dias.map(d => entradas.filter(e => e.item.fecha === d).sort(orden))
-  const todas = porDia.flat()
-  return { id, dias: porDia, total: todas.length, abiertos: todas.filter(e => !e.hecha).length }
-}
-
-/** Una fila por franja horaria; lo que no tiene hora (casi todas las tareas) va a «Sin hora» */
-export function filasPorFranja(items: AgendaItem[], lunes: string): FilaCalendario[] {
-  const dias = diasDeSemana(lunes)
+/**
+ * La semana como 7 días enteros: en cada uno, primero lo que tiene hora
+ * (por hora) y después lo que no. La mayoría de tareas no tiene hora, así
+ * que no se reparte en franjas: un día es una lista.
+ */
+export function entradasPorDia(items: AgendaItem[], lunes: string): EntradaCalendario[][] {
   const entradas = entradasDe(items)
-  return FRANJAS.map(f => fila(f.id, entradas.filter(e => franjaDe(e.item.hora) === f.id), dias))
-}
-
-/** Una fila por grupo de tipos */
-export function filasPorTipo(items: AgendaItem[], grupos: { id: string; tipos: AgendaTipo[] }[], lunes: string): FilaCalendario[] {
-  const dias = diasDeSemana(lunes)
-  const entradas = entradasDe(items)
-  return grupos.map(g => fila(g.id, entradas.filter(e => g.tipos.includes(e.item.tipo)), dias))
+  return diasDeSemana(lunes).map(d => entradas.filter(e => e.item.fecha === d).sort(orden))
 }
 
 /** Por día (0 = lunes): quién tiene dos o más partidos sin ver ese día */

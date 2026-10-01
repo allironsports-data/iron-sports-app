@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { diasDeSemana, filasPorFranja, filasPorTipo, solapesPorDia, entradasDe, franjaDe } from '../src/lib/calendario'
+import { diasDeSemana, entradasPorDia, solapesPorDia, entradasDe } from '../src/lib/calendario'
 import type { AgendaItem } from '../src/lib/agendaItems'
 
 const LUNES = '2026-09-28'
@@ -15,24 +15,19 @@ describe('calendario', () => {
     expect(diasDeSemana(LUNES)).toEqual(['2026-09-28', '2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04'])
   })
 
-  it('franjaDe', () => {
-    expect([franjaDe(undefined), franjaDe('09:30'), franjaDe('14:00'), franjaDe('19:59'), franjaDe('20:00')])
-      .toEqual(['sin-hora', 'manana', 'tarde', 'tarde', 'noche'])
-  })
-
-  it('por franja: cada cosa en su franja y su día, por hora, con la carga de la fila', () => {
-    const [sin, manana, tarde, noche] = filasPorFranja([
+  it('por día: primero lo que tiene hora (por hora), luego lo demás; lo hecho al final', () => {
+    const dias = entradasPorDia([
       item({ id: 'tarea' }),
-      item({ id: 'b', hora: '12:00' }),
+      item({ id: 'hecha', estado: 'completada' }),
+      item({ id: 'b', hora: '18:00' }),
       item({ id: 'a', hora: '09:00' }),
-      item({ id: 'c', hora: '18:00', estado: 'completada', fecha: '2026-10-01' }),
+      item({ id: 'jueves', fecha: '2026-10-01' }),
       item({ id: 'fuera', fecha: '2026-10-05' }),
       item({ id: 'sin-fecha', fecha: undefined }),
     ], LUNES)
-    expect(sin.dias[0].map(e => e.item.id)).toEqual(['tarea'])
-    expect(manana.dias[0].map(e => e.item.id)).toEqual(['a', 'b'])
-    expect(tarde.dias[3].map(e => e.item.id)).toEqual(['c'])
-    expect([tarde.total, tarde.abiertos, noche.total]).toEqual([1, 0, 0])
+    expect(dias[0].map(e => e.item.id)).toEqual(['a', 'b', 'tarea', 'hecha'])
+    expect(dias[3].map(e => e.item.id)).toEqual(['jueves'])
+    expect(dias.flat()).toHaveLength(5)
   })
 
   it('un partido con varios scouts es una entrada con todos; hecha solo si lo han visto todos', () => {
@@ -45,13 +40,6 @@ describe('calendario', () => {
   it('las personas de una entrada: responsable y luego watchers/participantes, sin repetir', () => {
     const [e] = entradasDe([item({ id: 'x', otrosIds: ['otro', 'yo'] })])
     expect(e.personas).toEqual(['yo', 'otro'])
-  })
-
-  it('por tipo', () => {
-    const [partidos, tareas] = filasPorTipo(
-      [partido('m1', 'NB', 'nb'), partido('m1', 'PP', 'pp'), item({ id: 't1' })],
-      [{ id: 'partidos', tipos: ['partido'] }, { id: 'tareas', tipos: ['tarea'] }], LUNES)
-    expect([partidos.total, tareas.total]).toEqual([1, 1])
   })
 
   it('solapes: dos partidos sin ver el mismo día para la misma persona', () => {

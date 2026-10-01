@@ -13,7 +13,7 @@ export const AGENDA_TIPO_META: Record<AgendaTipo, { Icon: typeof ListTodo; cls: 
   evento:      { Icon: CalendarDays,  cls: 'text-slate-400',   chip: 'bg-sky-50 border-sky-200 text-sky-800',             label: 'Evento' },
 }
 
-/** Filas del calendario «por tipo» y chips de filtro */
+/** Grupos de tipos del filtro del calendario */
 export const GRUPOS_TIPO: { id: string; label: string; tipos: AgendaTipo[] }[] = [
   { id: 'partidos',     label: 'Partidos',             tipos: ['partido'] },
   { id: 'llamadas',     label: 'Llamadas y reuniones', tipos: ['llamada', 'telefono', 'reunion'] },
