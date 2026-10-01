@@ -1480,6 +1480,13 @@ function dbToFirmasEntry(row: Record<string, unknown>): FirmasEntry {
   }
 }
 
+/** Una tarjeta tal como está AHORA en la base (para no pisar cambios ajenos al guardar). null si ya no existe. */
+export async function fetchFirmasEntry(id: string): Promise<FirmasEntry | null> {
+  const { data, error } = await supabase.from('captacion_firmas').select('*').eq('id', id).maybeSingle()
+  if (error) throw error
+  return data ? dbToFirmasEntry(data as Record<string, unknown>) : null
+}
+
 export async function fetchFirmasEntries(): Promise<FirmasEntry[]> {
   // try/catch: la tabla puede no existir aún (migración pendiente) — la app no debe romper
   try {
@@ -1995,6 +2002,20 @@ export async function deleteAgendaEvento(id: string): Promise<void> {
   const { error } = await supabase.from('agenda_eventos').delete().eq('id', id)
   if (error) throw error
 }
+
+// ── Realtime fila a fila ─────────────────────────────────────────────
+// Cómo convertir la fila cruda que trae un evento de realtime en el objeto
+// de la app, para las tablas grandes. Así un informe nuevo se añade al
+// estado tal cual llega, en vez de volver a descargar los ~12.000.
+export const FILA_REALTIME = {
+  tasks: dbToTask,
+  scouting_players: dbToScoutingPlayer,
+  scouting_reports: dbToScoutingReport,
+  scouting_infos: dbToScoutingInfo,
+  scouting_matches: dbToScoutingMatch,
+  scouting_match_players: dbToMatchPlayer,
+  scouting_match_scouts: dbToMatchScout,
+} as const
 
 // ── ZONAS DE CLUBES ──────────────────────────────────────────────────
 // La app trae una clasificación por defecto (src/lib/zonas.ts). Aquí solo

@@ -19,6 +19,7 @@ import { esZona, type Zona } from './lib/zonas'
 import { teamsAlike } from './lib/equipos'
 import { hoyISO } from './lib/fechas'
 import { siguienteFecha } from './lib/recurrencia'
+import { reconciliarFirmas } from './lib/firmasMerge'
 import { BajoCapa } from './components/BajoCapa'
 import { useToastContext } from './hooks/useToastContext'
 import type { ReactNode } from 'react'
@@ -693,14 +694,48 @@ export default function App() {
   }, [])
 
   // Supabase realtime: sincronización de datos entre usuarios.
-  // Cualquier cambio (insert/update/delete) en las tablas clave hace un refetch
-  // con debounce, así todos ven los cambios sin recargar la página.
+  // Cualquier cambio (insert/update/delete) en las tablas clave se refleja solo,
+  // así todos ven los cambios sin recargar la página.
   useEffect(() => {
     if (!user) return
     const timers: Record<string, ReturnType<typeof setTimeout>> = {}
     let channel = supabase.channel('data-sync')
+    // Tablas grandes: el evento ya trae la fila, así que se aplica al estado
+    // tal cual (alta, cambio o baja) sin volver a descargar la tabla. Antes un
+    // solo informe nuevo hacía que CADA navegador abierto volviera a pedir
+    // los ~12.000. El resync al volver a la pestaña sigue pidiéndolo todo:
+    // es la red de seguridad por si se pierde algún evento.
+    type Cambio = { eventType: 'INSERT' | 'UPDATE' | 'DELETE'; new: Record<string, unknown> | null; old: Record<string, unknown> | null }
+    const aplicar = <T extends { id: string }>(
+      set: React.Dispatch<React.SetStateAction<T[]>>,
+      mapear: (fila: Record<string, unknown>) => T,
+    ) => (c: Cambio): boolean => {
+      if (c.eventType === 'DELETE') {
+        const id = c.old?.id
+        if (typeof id !== 'string') return false
+        set(prev => prev.filter(x => x.id !== id))
+        return true
+      }
+      if (!c.new || typeof c.new.id !== 'string') return false
+      const item = mapear(c.new)
+      set(prev => prev.some(x => x.id === item.id) ? prev.map(x => x.id === item.id ? item : x) : [item, ...prev])
+      return true
+    }
+    const filaAFila: Partial<Record<(typeof SYNC_TABLES)[number], (c: Cambio) => boolean>> = {
+      tasks: aplicar(setTasks, db.FILA_REALTIME.tasks),
+      scouting_players: aplicar(setScoutingPlayers, db.FILA_REALTIME.scouting_players),
+      scouting_reports: aplicar(setScoutingReports, db.FILA_REALTIME.scouting_reports),
+      scouting_infos: aplicar(setScoutingInfos, db.FILA_REALTIME.scouting_infos),
+      scouting_matches: aplicar(setScoutingMatches, db.FILA_REALTIME.scouting_matches),
+      scouting_match_players: aplicar(setMatchPlayers, db.FILA_REALTIME.scouting_match_players),
+      scouting_match_scouts: aplicar(setMatchScouts, db.FILA_REALTIME.scouting_match_scouts),
+    }
     for (const t of SYNC_TABLES) {
-      channel = channel.on('postgres_changes', { event: '*', schema: 'public', table: t }, () => {
+      channel = channel.on('postgres_changes', { event: '*', schema: 'public', table: t }, (payload: unknown) => {
+        try {
+          if (filaAFila[t]?.(payload as Cambio)) return
+        } catch (err) { console.error(`[realtime] ${t}: no se pudo aplicar la fila, se recarga la tabla`, err) }
+        // El resto de tablas (pequeñas), o un evento que no trae la fila: recarga con debounce
         clearTimeout(timers[t])
         timers[t] = setTimeout(() => refetchTable(t), 800)
       })
@@ -996,8 +1031,9 @@ export default function App() {
           comments: [...fe.comments, log],
         }
         try {
-          await db.updateFirmasEntry(cleared)
-          setFirmasEntries(prev => prev.map(x => x.id === cleared.id ? cleared : x))
+          const final = await sobreLaDelServidor(fe, cleared)
+          await db.updateFirmasEntry(final)
+          setFirmasEntries(prev => prev.map(x => x.id === final.id ? final : x))
         } catch (err) { console.error(err) }
       }
     }
@@ -1345,6 +1381,17 @@ export default function App() {
    * segundo guardado borre las notas del primero. Optimista: la UI cambia
    * al momento y se revierte si falla. Los parches al mismo id van en cola.
    */
+  /** `despues` aplicado sobre la versión que hay ahora en la base (si se puede leer) */
+  const sobreLaDelServidor = async (antes: FirmasEntry, despues: FirmasEntry): Promise<FirmasEntry> => {
+    try {
+      const servidor = await db.fetchFirmasEntry(antes.id)
+      return servidor ? reconciliarFirmas(antes, despues, servidor) : despues
+    } catch (err) {
+      console.error('No se pudo leer la tarjeta antes de guardar; se guarda la copia local:', err)
+      return despues
+    }
+  }
+
   const handlePatchFirmasEntry = async (
     id: string,
     changes: Partial<FirmasEntry> | ((e: FirmasEntry) => FirmasEntry),
@@ -1361,10 +1408,13 @@ export default function App() {
       // nada que haya cambiado entre medias.
       setFirmasEntries(prev => prev.map(x => x.id === id ? aplicarCambio(x) : x))
       try {
-        const final = await syncFirmasActionTask(before, merged)
+        const conTarea = await syncFirmasActionTask(before, merged)
+        // La tarjeta se escribe entera: antes de hacerlo se mira cómo está AHORA
+        // en la base y solo se aplica encima lo que ha cambiado este usuario.
+        // Así la nota que otro apuntó hace un segundo no desaparece.
+        const final = await sobreLaDelServidor(before, conTarea)
         await db.updateFirmasEntry(final)
-        // si ha creado/quitado tarea, el id de tarea también va al estado
-        if (final !== merged) setFirmasEntries(prev => prev.map(x => x.id === id ? { ...x, nextActionTaskId: final.nextActionTaskId } : x))
+        setFirmasEntries(prev => prev.map(x => x.id === id ? final : x))
       } catch (err) {
         setFirmasEntries(prev => prev.map(x => x.id === id ? before : x))
         throw err
