@@ -51,6 +51,13 @@ export interface Props {
   /** Abrir una pestaña concreta desde fuera (botón flotante «Planificación») */
   openTab?: CaptacionTab | null
   onOpenTabConsumed?: () => void
+  /**
+   * Modo flotante: no se pinta la sección, solo la ficha de ese partido o de
+   * ese jugador encima de la pantalla en la que esté el usuario (calendario,
+   * tareas, pipeline…). Al cerrarla se llama a onCerrarSolo.
+   */
+  solo?: { partidoId?: string; jugadorId?: string }
+  onCerrarSolo?: () => void
   /** Pestaña activa, si la lleva App (va en el hash: «atrás» cambia de pestaña) */
   tab?: string
   onTabChange?: (tab: CaptacionTab) => void

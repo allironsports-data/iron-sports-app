@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef, lazy } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, lazy, cloneElement, Suspense, type ReactNode as Nodo } from 'react'
 import { CalendarDays, Sun } from 'lucide-react'
 import { useAuth } from './hooks/useAuth'
 import type { Player, Task, ScoutingPlayer, ScoutingReport, ScoutingInfo, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchOurPlayer, ScoutingMatchScout, BoulemaPeticion, MemberStatus, Postpartido, FirmasEntry, BoulemaPlayer } from './types'
@@ -19,6 +19,7 @@ import { esZona, type Zona } from './lib/zonas'
 import { teamsAlike } from './lib/equipos'
 import { hoyISO } from './lib/fechas'
 import { siguienteFecha } from './lib/recurrencia'
+import { BajoCapa } from './components/BajoCapa'
 import { useToastContext } from './hooks/useToastContext'
 import type { ReactNode } from 'react'
 import type { Club, DistributionEntry, ClubNegotiation } from './types'
@@ -37,6 +38,7 @@ const Pipeline         = lazy(() => import('./views/pipeline/Pipeline').then(m =
 const Contactos        = lazy(() => import('./views/Contactos').then(m => ({ default: m.Contactos })))
 const TeamMemberDetail = lazy(() => import('./views/TeamMemberDetail').then(m => ({ default: m.TeamMemberDetail })))
 const Boulema          = lazy(() => import('./views/Boulema').then(m => ({ default: m.Boulema })))
+const FirmasFlotante   = lazy(() => import('./views/pipeline/FirmasFlotante').then(m => ({ default: m.FirmasFlotante })))
 const MiDia            = lazy(() => import('./views/MiDia').then(m => ({ default: m.MiDia })))
 
 export interface AppNotification {
@@ -184,6 +186,9 @@ export default function App() {
   const [captacionOpenMatchId, setCaptacionOpenMatchId] = useState<string | null>(null)
   // Abrir una tarea concreta en el tablero (desde «Mi día»)
   const [openTaskId, setOpenTaskId] = useState<string | null>(null)
+  // Ficha flotante abierta encima de la pantalla actual (partido, tarjeta de
+  // Firmar o jugador de Captación): se abre sin sacar al usuario de donde está.
+  const [flotante, setFlotante] = useState<{ tipo: 'partido' | 'firmar' | 'scouting'; id: string } | null>(null)
 
   // Captación state
   const [scoutingPlayers, setScoutingPlayers] = useState<ScoutingPlayer[]>([])
@@ -1410,6 +1415,7 @@ export default function App() {
   // ── helpers ─────────────────────────────────────────────────
 
   function navigateToPlayer(id: string, fromClub = false) {
+    setFlotante(null)
     setPlayerReturnToClub(fromClub)
     setSelectedPlayerId(id)
   }
@@ -1419,6 +1425,7 @@ export default function App() {
   // hacía solo setMainSection, y con un club abierto pulsar «Captación» te
   // dejaba en Distribución porque el club ganaba al pintar.
   function irA(seccion: MainSection, tab?: string) {
+    setFlotante(null)
     setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(null)
     setClubExpanded(false); setPlayerReturnToClub(false)
     setShowAdmin(false); setShowOverview(false); setShowTable(false); setShowContacts(false)
@@ -1498,6 +1505,7 @@ export default function App() {
   const withExtras = (node: ReactNode) => (
     <>
       {node}
+      {flotanteNode}
       {planificacionFab}
       <SavingIndicator />
       {conflictNode}
@@ -1626,7 +1634,7 @@ export default function App() {
       onCreateFirmasEntry={handleCreateFirmasEntry}
       onPatchFirmasEntry={handlePatchFirmasEntry}
       onDeleteFirmasEntry={handleDeleteFirmasEntry}
-      onOpenScoutingPlayer={irAFichaScouting}
+      onOpenScoutingPlayer={(id) => setFlotante({ tipo: 'scouting', id })}
       openEntryId={captacionOpenFirmasId}
       onOpenEntryConsumed={() => setCaptacionOpenFirmasId(null)}
       onGoToSection={(s) => irA(s)}
@@ -1635,6 +1643,39 @@ export default function App() {
       tab={subTabs.pipeline}
       onTabChange={(t) => setSubTab('pipeline', t)}
     />
+  )
+
+  // ── Fichas flotantes ──
+  // Se pintan encima de la sección en la que esté el usuario. La de partido y
+  // la de jugador de Captación son la propia Captación en modo «solo» (misma
+  // ficha, mismas acciones); la de Firmar, el panel de detalle del pipeline.
+  const flotanteNode: Nodo = !flotante ? null : (
+    <Suspense fallback={null}>
+      {flotante.tipo === 'firmar' ? (
+        <FirmasFlotante
+          key={`firmar-${flotante.id}`}
+          entryId={flotante.id}
+          entries={firmasEntries}
+          profiles={profiles}
+          currentProfile={profile}
+          scoutingPlayers={scoutingPlayers}
+          scoutingReports={scoutingReports}
+          players={players}
+          onCreatePlayer={handleAddPlayer}
+          onPatch={handlePatchFirmasEntry}
+          onDelete={handleDeleteFirmasEntry}
+          onOpenScoutingPlayer={(id) => setFlotante({ tipo: 'scouting', id })}
+          onClose={() => setFlotante(null)}
+        />
+      ) : cloneElement(captacionNode, {
+        key: `solo-${flotante.tipo}-${flotante.id}`,
+        solo: flotante.tipo === 'partido' ? { partidoId: flotante.id } : { jugadorId: flotante.id },
+        onCerrarSolo: () => setFlotante(null),
+        onOpenFirmas: (id: string) => setFlotante({ tipo: 'firmar', id }),
+        // nada de navegación de sección: ni pestaña en el hash ni aperturas pendientes
+        tab: undefined, onTabChange: undefined, openPlayerId: null, openMatchId: null, openTab: null,
+      })}
+    </Suspense>
   )
 
   // «Mi día»: agenda personal de hoy. También para la cuenta solo-Captación.
@@ -1764,10 +1805,14 @@ export default function App() {
     )
   }
 
+  // Fichas a página completa (miembro del equipo, jugador). No sustituyen a
+  // la sección: se pintan encima y la sección queda montada debajo, escondida
+  // (ver BajoCapa). Al volver, sigues donde estabas.
+  let encima: Nodo = null
   if (selectedProfileId) {
     const selectedProfileData = profiles.find(p => p.id === selectedProfileId)
     if (selectedProfileData) {
-      return withExtras(
+      encima = (
         <TeamMemberDetail
           profile={selectedProfileData}
           allProfiles={profiles}
@@ -1781,9 +1826,9 @@ export default function App() {
     }
   }
 
-  if (selectedPlayer) {
+  if (!encima && selectedPlayer) {
     const playerTasks = tasksVisibles.filter((t) => t.playerId === selectedPlayer.id)
-    return withExtras(
+    encima = (
       <PlayerDetail
         player={selectedPlayer}
         players={players}
@@ -1841,151 +1886,159 @@ export default function App() {
     />
   ) : null
 
-  if (mainSection === 'boulema') {
-    return withExtras(
-      <Boulema
+  const seccion = ((): Nodo => {
+    if (mainSection === 'boulema') {
+      return (
+        <Boulema
+          profiles={profiles}
+          currentProfile={profile}
+          scoutingPlayers={scoutingPlayers}
+          scoutingReports={scoutingReports}
+          boulemaPeticiones={boulemaPeticiones}
+          onAddBoulemaPeticion={handleAddBoulemaPeticion}
+          onUpdateBoulemaPeticion={handleUpdateBoulemaPeticion}
+          onDeleteBoulemaPeticion={handleDeleteBoulemaPeticion}
+          onAddPlayer={handleAddScoutingPlayer}
+          onAddReport={handleAddScoutingReport}
+          boulemaPlayers={boulemaPlayers}
+          onAddBoulemaPlayer={handleAddBoulemaPlayer}
+          onUpdateBoulemaPlayer={handleUpdateBoulemaPlayer}
+          onDeleteBoulemaPlayer={handleDeleteBoulemaPlayer}
+          onGoToSection={(s) => irA(s)}
+          onOpenScoutingPlayer={irAFichaScouting}
+          onLogout={signOut}
+          onAdmin={profile.is_admin ? abrirAdmin : undefined}
+          tab={subTabs.boulema}
+          onTabChange={(t) => setSubTab('boulema', t)}
+        />
+      )
+    }
+
+    if (mainSection === 'captacion') return (captacionNode)
+    if (mainSection === 'pipeline') return (pipelineNode)
+
+    if (mainSection === 'mi-dia') return (miDiaNode)
+
+    if (mainSection === 'distribucion' || selectedClub) {
+      const splitOpen = !!selectedClub
+      return (
+        <div className="flex h-screen overflow-hidden">
+          {/* Lista (se oculta en móvil cuando hay club abierto, y al ampliar) */}
+          <div
+            className={
+              !splitOpen
+                ? 'flex-1 min-w-0 h-screen overflow-y-auto'
+                : clubExpanded
+                  ? 'hidden'
+                  : 'hidden lg:block lg:w-[44%] xl:w-[40%] flex-shrink-0 h-screen overflow-y-auto border-r border-slate-200'
+            }
+          >
+            <Distribution
+              players={players}
+              clubs={clubs}
+              entries={distEntries}
+              negotiations={negotiations}
+              currentProfile={profile}
+              profiles={profiles}
+              splitActive={splitOpen && !clubExpanded}
+              activeClubId={selectedClubId ?? undefined}
+              onBack={() => irA('tareas')}
+              onGoToJugadores={() => irA('jugadores')}
+              onGoToCaptacion={() => irA('captacion')}
+              onGoToPipeline={() => irA('pipeline')}
+              onGoToBoulema={() => irA('boulema')}
+              onLogout={signOut}
+              onAdmin={profile.is_admin ? abrirAdmin : undefined}
+              tab={subTabs.distribucion}
+              onTabChange={(t) => setSubTab('distribucion', t)}
+              onSelectPlayer={(id) => navigateToPlayer(id, false)}
+              onSelectClub={navigateToClub}
+              onCreateClub={handleCreateClub}
+              onUpdateClub={handleUpdateClub}
+              onDeleteClub={handleDeleteClub}
+              onCreateEntry={handleCreateEntry}
+              onUpdateEntry={handleUpdateEntry}
+              onDeleteEntry={handleDeleteEntry}
+              onCreateNegotiation={handleCreateNegotiation}
+              onUpdateNegotiation={handleUpdateNegotiation}
+              onDeleteNegotiation={handleDeleteNegotiation}
+              onCreatePlayer={handleAddPlayer}
+            />
+          </div>
+
+          {/* Panel del club */}
+          {splitOpen && (
+            <div className="flex-1 min-w-0 h-screen overflow-y-auto bg-white">
+              {clubDetailNode}
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    // 'tareas' and 'jugadores' both use Dashboard with a view prop
+    return (
+      <Dashboard
+        view={mainSection === 'jugadores' ? 'jugadores' : 'tareas'}
+        onViewChange={(v) => irA(v)}
+        tab={subTabs[mainSection] ?? ''}
+        onTabChange={(t) => setSubTab(mainSection, t ?? '')}
+        players={players}
+        tasks={tasks}
         profiles={profiles}
         currentProfile={profile}
-        scoutingPlayers={scoutingPlayers}
-        scoutingReports={scoutingReports}
-        boulemaPeticiones={boulemaPeticiones}
-        onAddBoulemaPeticion={handleAddBoulemaPeticion}
-        onUpdateBoulemaPeticion={handleUpdateBoulemaPeticion}
-        onDeleteBoulemaPeticion={handleDeleteBoulemaPeticion}
-        onAddPlayer={handleAddScoutingPlayer}
-        onAddReport={handleAddScoutingReport}
-        boulemaPlayers={boulemaPlayers}
-        onAddBoulemaPlayer={handleAddBoulemaPlayer}
-        onUpdateBoulemaPlayer={handleUpdateBoulemaPlayer}
-        onDeleteBoulemaPlayer={handleDeleteBoulemaPlayer}
-        onGoToSection={(s) => irA(s)}
-        onOpenScoutingPlayer={irAFichaScouting}
+        onSelectPlayer={(id) => navigateToPlayer(id, false)}
         onLogout={signOut}
+        onAddPlayer={handleAddPlayer}
         onAdmin={profile.is_admin ? abrirAdmin : undefined}
-        tab={subTabs.boulema}
-        onTabChange={(t) => setSubTab('boulema', t)}
+        onBulkDelete={profile.is_admin ? handleBulkDelete : undefined}
+        onBulkAssignManager={profile.is_admin ? handleBulkAssignManager : undefined}
+        onOverview={profile.is_admin ? () => setShowOverview(true) : undefined}
+        notifications={notifications}
+        onDismissNotification={dismissNotification}
+        onAddGeneralTask={handleAddTask}
+        onUpdateGeneralTask={handleUpdateTask}
+        onUpdateTask={handleUpdateTask}
+        onDeleteGeneralTask={handleDeleteTask}
+        onSelectProfile={(id) => setSelectedProfileId(id)}
+        scoutingMatches={scoutingMatches}
+        memberStatuses={memberStatuses}
+        onUpdateMemberStatus={handleUpdateMemberStatus}
+        onToggleStatusHidden={profile.is_admin ? handleToggleStatusHidden : undefined}
+        postpartidos={postpartidos}
+        onCreatePostpartido={handleCreatePostpartido}
+        onUpdatePostpartido={handleUpdatePostpartido}
+        onDeletePostpartido={handleDeletePostpartido}
+        onAddScoutingMatch={handleAddScoutingMatch}
+        firmasEntries={firmasEntries}
+        onOpenFirmar={(id) => setFlotante({ tipo: 'firmar', id })}
+        onPatchFirmasEntry={handlePatchFirmasEntry}
+        matchScouts={matchScouts}
+        scoutingPlayers={scoutingPlayers}
+        informesPartido={informesPartido}
+        onAddMatchScout={handleAddMatchScout}
+        onOpenMatch={(id) => setFlotante({ tipo: 'partido', id })}
+        onSetMatchSeen={async (id, scout, visto) => {
+          const status = visto ? 'visto' as const : 'pendiente' as const
+          if (scout) return handleSetMatchScoutStatus(id, scout, status)
+          // sin filas de scouts: el estado vive en el propio partido
+          const m = scoutingMatches.find(x => x.id === id)
+          if (!m) return
+          const actualizado = { ...m, status }
+          await db.updateScoutingMatch(actualizado)
+          handleUpdateScoutingMatch(actualizado)
+        }}
+        openTaskId={openTaskId}
+        onOpenTaskConsumed={() => setOpenTaskId(null)}
+        updateAvailable={updateAvailable}
       />
     )
-  }
+  })()
 
-  if (mainSection === 'captacion') return withExtras(captacionNode)
-  if (mainSection === 'pipeline') return withExtras(pipelineNode)
-
-  if (mainSection === 'mi-dia') return withExtras(miDiaNode)
-
-  if (mainSection === 'distribucion' || selectedClub) {
-    const splitOpen = !!selectedClub
-    return withExtras(
-      <div className="flex h-screen overflow-hidden">
-        {/* Lista (se oculta en móvil cuando hay club abierto, y al ampliar) */}
-        <div
-          className={
-            !splitOpen
-              ? 'flex-1 min-w-0 h-screen overflow-y-auto'
-              : clubExpanded
-                ? 'hidden'
-                : 'hidden lg:block lg:w-[44%] xl:w-[40%] flex-shrink-0 h-screen overflow-y-auto border-r border-slate-200'
-          }
-        >
-          <Distribution
-            players={players}
-            clubs={clubs}
-            entries={distEntries}
-            negotiations={negotiations}
-            currentProfile={profile}
-            profiles={profiles}
-            splitActive={splitOpen && !clubExpanded}
-            activeClubId={selectedClubId ?? undefined}
-            onBack={() => irA('tareas')}
-            onGoToJugadores={() => irA('jugadores')}
-            onGoToCaptacion={() => irA('captacion')}
-            onGoToPipeline={() => irA('pipeline')}
-            onGoToBoulema={() => irA('boulema')}
-            onLogout={signOut}
-            onAdmin={profile.is_admin ? abrirAdmin : undefined}
-            tab={subTabs.distribucion}
-            onTabChange={(t) => setSubTab('distribucion', t)}
-            onSelectPlayer={(id) => navigateToPlayer(id, false)}
-            onSelectClub={navigateToClub}
-            onCreateClub={handleCreateClub}
-            onUpdateClub={handleUpdateClub}
-            onDeleteClub={handleDeleteClub}
-            onCreateEntry={handleCreateEntry}
-            onUpdateEntry={handleUpdateEntry}
-            onDeleteEntry={handleDeleteEntry}
-            onCreateNegotiation={handleCreateNegotiation}
-            onUpdateNegotiation={handleUpdateNegotiation}
-            onDeleteNegotiation={handleDeleteNegotiation}
-            onCreatePlayer={handleAddPlayer}
-          />
-        </div>
-
-        {/* Panel del club */}
-        {splitOpen && (
-          <div className="flex-1 min-w-0 h-screen overflow-y-auto bg-white">
-            {clubDetailNode}
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  // 'tareas' and 'jugadores' both use Dashboard with a view prop
   return withExtras(
-    <Dashboard
-      view={mainSection === 'jugadores' ? 'jugadores' : 'tareas'}
-      onViewChange={(v) => irA(v)}
-      tab={subTabs[mainSection] ?? ''}
-      onTabChange={(t) => setSubTab(mainSection, t ?? '')}
-      players={players}
-      tasks={tasks}
-      profiles={profiles}
-      currentProfile={profile}
-      onSelectPlayer={(id) => navigateToPlayer(id, false)}
-      onLogout={signOut}
-      onAddPlayer={handleAddPlayer}
-      onAdmin={profile.is_admin ? abrirAdmin : undefined}
-      onBulkDelete={profile.is_admin ? handleBulkDelete : undefined}
-      onBulkAssignManager={profile.is_admin ? handleBulkAssignManager : undefined}
-      onOverview={profile.is_admin ? () => setShowOverview(true) : undefined}
-      notifications={notifications}
-      onDismissNotification={dismissNotification}
-      onAddGeneralTask={handleAddTask}
-      onUpdateGeneralTask={handleUpdateTask}
-      onUpdateTask={handleUpdateTask}
-      onDeleteGeneralTask={handleDeleteTask}
-      onSelectProfile={(id) => setSelectedProfileId(id)}
-      scoutingMatches={scoutingMatches}
-      memberStatuses={memberStatuses}
-      onUpdateMemberStatus={handleUpdateMemberStatus}
-      onToggleStatusHidden={profile.is_admin ? handleToggleStatusHidden : undefined}
-      postpartidos={postpartidos}
-      onCreatePostpartido={handleCreatePostpartido}
-      onUpdatePostpartido={handleUpdatePostpartido}
-      onDeletePostpartido={handleDeletePostpartido}
-      onAddScoutingMatch={handleAddScoutingMatch}
-      firmasEntries={firmasEntries}
-      onOpenFirmar={irAFirmas}
-      onPatchFirmasEntry={handlePatchFirmasEntry}
-      matchScouts={matchScouts}
-      scoutingPlayers={scoutingPlayers}
-      informesPartido={informesPartido}
-      onAddMatchScout={handleAddMatchScout}
-      onOpenMatch={(id) => { setCaptacionOpenMatchId(id); irA('captacion', 'partidos') }}
-      onSetMatchSeen={async (id, scout, visto) => {
-        const status = visto ? 'visto' as const : 'pendiente' as const
-        if (scout) return handleSetMatchScoutStatus(id, scout, status)
-        // sin filas de scouts: el estado vive en el propio partido
-        const m = scoutingMatches.find(x => x.id === id)
-        if (!m) return
-        const actualizado = { ...m, status }
-        await db.updateScoutingMatch(actualizado)
-        handleUpdateScoutingMatch(actualizado)
-      }}
-      openTaskId={openTaskId}
-      onOpenTaskConsumed={() => setOpenTaskId(null)}
-      updateAvailable={updateAvailable}
-    />
+    <>
+      <BajoCapa oculta={!!encima}>{seccion}</BajoCapa>
+      {encima}
+    </>
   )
 }
-

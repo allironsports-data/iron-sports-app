@@ -31,7 +31,7 @@ import { ContratosTab } from './ContratosTab'
 import { MatchDetailModal } from './partidos/MatchDetailModal'
 import { MergeMatchesModal } from './partidos/MergeMatchesModal'
 import { ActualizarPlantilla } from './partidos/ActualizarPlantilla'
-import type { MatchFormState } from './partidos/MatchFormPanel'
+import { MatchFormPanel, type MatchFormState } from './partidos/MatchFormPanel'
 import { useAtras } from '../../hooks/useAtras'
 
 export type { Props } from './types'
@@ -81,6 +81,8 @@ export function Captacion({
   onOpenMatchConsumed,
   openTab,
   onOpenTabConsumed,
+  solo,
+  onCerrarSolo,
   restricted,
   tab: tabProp,
   onTabChange,
@@ -218,7 +220,7 @@ export function Captacion({
   useEffect(() => { sessionStorage.setItem('capt_jugadores_view', jugadoresView) }, [jugadoresView])
 
   // ── panel state ──
-  const [panelPlayerId, setPanelPlayerId] = useState<string | null>(null)
+  const [panelPlayerId, setPanelPlayerId] = useState<string | null>(solo?.jugadorId ?? null)
   const [fullscreen, setFullscreen] = useState(false)
   const [showAddPlayer, setShowAddPlayer] = useState(false)
   const [showEditPlayer, setShowEditPlayer] = useState(false)
@@ -240,7 +242,7 @@ export function Captacion({
   const [showAddMatch, setShowAddMatch] = useState(false)
   const [editingMatch, setEditingMatch] = useState<ScoutingMatch | null>(null)
   /** Ficha de partido abierta en ventana */
-  const [detailMatchId, setDetailMatchId] = useState<string | null>(null)
+  const [detailMatchId, setDetailMatchId] = useState<string | null>(solo?.partidoId ?? null)
   const [zonasAbierto, setZonasAbierto] = useState(false)
   const [panelEquipo, setPanelEquipo] = useState<string | null>(null)
 
@@ -1214,6 +1216,130 @@ export function Captacion({
   const anchoPanel = 480
   const pantallaPartida = hasPanel && isDesktop && !fullscreen
 
+  // La ficha lateral (jugador / equipo) y los estilos de formulario se pintan
+  // igual dentro de la sección y en modo flotante («solo»).
+  const panelNode = hasPanel && (
+        <PlayerPanel
+          fullscreen={fullscreen} setFullscreen={setFullscreen}
+          isDesktop={isDesktop}
+          headerHeight={headerHeight}
+          closePanel={closePanel}
+          showToast={showToast}
+          isAdmin={isAdmin}
+          currentProfile={currentProfile}
+          profiles={profiles}
+          setCaptTab={setCaptTab}
+          abrirJugador={abrirJugador}
+          panelPlayerId={panelPlayerId} panelPlayer={panelPlayer} setPanelPlayerId={setPanelPlayerId}
+          panelEquipo={panelEquipo} setPanelEquipo={setPanelEquipo}
+          volverAEquipo={volverAEquipo} setVolverAEquipo={setVolverAEquipo}
+          showAddPlayer={showAddPlayer} setShowAddPlayer={setShowAddPlayer}
+          showEditPlayer={showEditPlayer} setShowEditPlayer={setShowEditPlayer}
+          editTarget={editTarget}
+          filaEquipoAbierta={filaEquipoAbierta}
+          renombrando={renombrando} setRenombrando={setRenombrando} guardarRenombre={guardarRenombre}
+          onSaveEquipo={onSaveEquipo}
+          setZonasAbierto={setZonasAbierto}
+          setDetailMatchId={setDetailMatchId}
+          categoriasConocidas={categoriasConocidas}
+          equiposOrdenados={equiposOrdenados}
+          equipos={equipos}
+          scoutingMatches={scoutingMatches}
+          form={form} setForm={setForm} emptyForm={emptyForm}
+          playerNameError={playerNameError} setPlayerNameError={setPlayerNameError}
+          jugadoresParecidos={jugadoresParecidos} setOcultarParecidos={setOcultarParecidos}
+          reportCountByPlayer={reportCountByPlayer}
+          handleSavePlayer={handleSavePlayer} savingPlayer={savingPlayer}
+          firmasEntries={firmasEntries}
+          onCreateFirmasEntry={onCreateFirmasEntry}
+          setFirmasJumpId={onOpenFirmas}
+          handleQuickAssessment={handleQuickAssessment}
+          openEditPlayer={openEditPlayer}
+          confirmDeletePlayer={confirmDeletePlayer} setConfirmDeletePlayer={setConfirmDeletePlayer}
+          handleDeletePlayer={handleDeletePlayer}
+          panelReports={panelReports}
+          panelSortedMatches={panelSortedMatches}
+          showAddReportForm={showAddReportForm} setShowAddReportForm={setShowAddReportForm}
+          reportTitle={reportTitle} setReportTitle={setReportTitle}
+          reportText={reportText} setReportText={setReportText}
+          reportConclusion={reportConclusion} setReportConclusion={setReportConclusion}
+          reportMatchId={reportMatchId} setReportMatchId={setReportMatchId}
+          reportMatchSuggestions={reportMatchSuggestions}
+          matchSearchInput={matchSearchInput} setMatchSearchInput={setMatchSearchInput}
+          matchSearchOpen={matchSearchOpen} setMatchSearchOpen={setMatchSearchOpen}
+          savingReport={savingReport}
+          handleAddReport={handleAddReport}
+          borradorRecuperado={borradorRecuperado} descartarBorrador={descartarBorrador}
+          confirmDeleteReport={confirmDeleteReport} setConfirmDeleteReport={setConfirmDeleteReport}
+          handleDeleteReport={handleDeleteReport} handleUpdateReport={handleUpdateReport}
+          handleReportEditingChange={handleReportEditingChange}
+          matchPlayers={matchPlayers}
+          onRemoveMatchPlayer={onRemoveMatchPlayer}
+          panelInfos={panelInfos}
+          onAddScoutingInfo={onAddScoutingInfo}
+          onUpdateScoutingInfo={onUpdateScoutingInfo}
+          onDeleteScoutingInfo={onDeleteScoutingInfo}
+          handleQuickContract={handleQuickContract}
+        />
+  )
+  const estilosNode = (
+    <style>{`
+        .field {
+          width: 100%;
+          padding: 6px 10px;
+          font-size: 0.75rem;
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          background: white;
+          outline: none;
+        }
+        .field:focus {
+          border-color: #93c5fd;
+          box-shadow: 0 0 0 3px rgba(147,197,253,0.2);
+        }
+        select.field { cursor: pointer; }
+        .line-clamp-2 {
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+      `}</style>
+  )
+
+  // ── Modo flotante: solo la ficha, encima de la pantalla en la que esté el usuario ──
+  const soloVacio = !!solo && !detailMatchId && !hasPanel
+  useEffect(() => {
+    if (soloVacio) onCerrarSolo?.()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [soloVacio])
+  if (solo) {
+    return (
+      <>
+        {renderFichaPartido('modal')}
+        {panelNode}
+        {showAddMatch && (
+          <div className="fixed inset-0 z-[60] flex items-start sm:items-center justify-center bg-black/40 px-3 py-6 overflow-y-auto" onClick={() => { setShowAddMatch(false); setEditingMatch(null) }}>
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl p-3" onClick={e => e.stopPropagation()}>
+              <MatchFormPanel
+                key={editingMatch?.id ?? 'new'}
+                initial={editingMatch ?? undefined}
+                profiles={profiles}
+                onSave={handleSaveMatch}
+                onCancel={() => { setShowAddMatch(false); setEditingMatch(null) }}
+                showToast={showToast}
+                partidos={scoutingMatches}
+                onOpenExisting={id => { setShowAddMatch(false); setEditingMatch(null); setDetailMatchId(id) }}
+              />
+            </div>
+          </div>
+        )}
+        <ToastStack toasts={toasts} onDismiss={dismissToast} />
+        {estilosNode}
+      </>
+    )
+  }
+
   return (
     <div
       className="min-h-screen bg-slate-50 flex flex-col transition-[padding] duration-150"
@@ -1487,70 +1613,7 @@ export function Captacion({
 
       {/* ── BOULEMA TAB ──────────────────────────────────────── */}
       {/* ── Side panel (persists across tabs) ─────────────────── */}
-      {hasPanel && (
-        <PlayerPanel
-          fullscreen={fullscreen} setFullscreen={setFullscreen}
-          isDesktop={isDesktop}
-          headerHeight={headerHeight}
-          closePanel={closePanel}
-          showToast={showToast}
-          isAdmin={isAdmin}
-          currentProfile={currentProfile}
-          profiles={profiles}
-          setCaptTab={setCaptTab}
-          abrirJugador={abrirJugador}
-          panelPlayerId={panelPlayerId} panelPlayer={panelPlayer} setPanelPlayerId={setPanelPlayerId}
-          panelEquipo={panelEquipo} setPanelEquipo={setPanelEquipo}
-          volverAEquipo={volverAEquipo} setVolverAEquipo={setVolverAEquipo}
-          showAddPlayer={showAddPlayer} setShowAddPlayer={setShowAddPlayer}
-          showEditPlayer={showEditPlayer} setShowEditPlayer={setShowEditPlayer}
-          editTarget={editTarget}
-          filaEquipoAbierta={filaEquipoAbierta}
-          renombrando={renombrando} setRenombrando={setRenombrando} guardarRenombre={guardarRenombre}
-          onSaveEquipo={onSaveEquipo}
-          setZonasAbierto={setZonasAbierto}
-          setDetailMatchId={setDetailMatchId}
-          categoriasConocidas={categoriasConocidas}
-          equiposOrdenados={equiposOrdenados}
-          equipos={equipos}
-          scoutingMatches={scoutingMatches}
-          form={form} setForm={setForm} emptyForm={emptyForm}
-          playerNameError={playerNameError} setPlayerNameError={setPlayerNameError}
-          jugadoresParecidos={jugadoresParecidos} setOcultarParecidos={setOcultarParecidos}
-          reportCountByPlayer={reportCountByPlayer}
-          handleSavePlayer={handleSavePlayer} savingPlayer={savingPlayer}
-          firmasEntries={firmasEntries}
-          onCreateFirmasEntry={onCreateFirmasEntry}
-          setFirmasJumpId={onOpenFirmas}
-          handleQuickAssessment={handleQuickAssessment}
-          openEditPlayer={openEditPlayer}
-          confirmDeletePlayer={confirmDeletePlayer} setConfirmDeletePlayer={setConfirmDeletePlayer}
-          handleDeletePlayer={handleDeletePlayer}
-          panelReports={panelReports}
-          panelSortedMatches={panelSortedMatches}
-          showAddReportForm={showAddReportForm} setShowAddReportForm={setShowAddReportForm}
-          reportTitle={reportTitle} setReportTitle={setReportTitle}
-          reportText={reportText} setReportText={setReportText}
-          reportConclusion={reportConclusion} setReportConclusion={setReportConclusion}
-          reportMatchId={reportMatchId} setReportMatchId={setReportMatchId}
-          reportMatchSuggestions={reportMatchSuggestions}
-          matchSearchInput={matchSearchInput} setMatchSearchInput={setMatchSearchInput}
-          matchSearchOpen={matchSearchOpen} setMatchSearchOpen={setMatchSearchOpen}
-          savingReport={savingReport}
-          handleAddReport={handleAddReport}
-          borradorRecuperado={borradorRecuperado} descartarBorrador={descartarBorrador}
-          confirmDeleteReport={confirmDeleteReport} setConfirmDeleteReport={setConfirmDeleteReport}
-          handleDeleteReport={handleDeleteReport} handleUpdateReport={handleUpdateReport}
-          handleReportEditingChange={handleReportEditingChange}
-          matchPlayers={matchPlayers}
-          onRemoveMatchPlayer={onRemoveMatchPlayer}
-          panelInfos={panelInfos}
-          onAddScoutingInfo={onAddScoutingInfo}
-          onUpdateScoutingInfo={onUpdateScoutingInfo}
-          onDeleteScoutingInfo={onDeleteScoutingInfo}
-          handleQuickContract={handleQuickContract}
-        />
-      )}
+      {panelNode}
 
       {/* ── Barra de fusión ── */}
       {mergeMode && (
@@ -1614,28 +1677,7 @@ export function Captacion({
       {/* Toasts globales de la vista */}
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
-      <style>{`
-        .field {
-          width: 100%;
-          padding: 6px 10px;
-          font-size: 0.75rem;
-          border: 1px solid #e2e8f0;
-          border-radius: 8px;
-          background: white;
-          outline: none;
-        }
-        .field:focus {
-          border-color: #93c5fd;
-          box-shadow: 0 0 0 3px rgba(147,197,253,0.2);
-        }
-        select.field { cursor: pointer; }
-        .line-clamp-2 {
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-        }
-      `}</style>
+{estilosNode}
     </div>
   )
 }

@@ -21,6 +21,9 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-01',
     items: [
+      'Abrir cosas ya no te saca de donde estás. Desde el calendario o desde Tareas, un partido abre su ficha flotante encima (la misma de Captación, con scouts, informes y alineación), y una llamada o reunión de Firmar abre la tarjeta del pipeline como panel lateral. Al cerrarlas sigues en el mismo día y con los mismos filtros',
+      'Pipeline: al pulsar en la ficha de Captación de un jugador desde su tarjeta, la ficha se abre encima sin salir del pipeline',
+      'Ficha de jugador y ficha de miembro del equipo: al volver atrás, la pantalla de la que venías está tal cual la dejaste — misma pestaña, mismos filtros, misma semana del calendario y a la misma altura de la página —, en vez de empezar de cero',
       'Nuevo evento → «Partido»: el partido se crea igual que desde Captación (primer scout como responsable, vídeo por defecto) y, si falla la asignación de algún scout, el partido se queda creado y se avisa, en vez de dejar el formulario abierto y arriesgarse a crearlo dos veces',
       'Partidos en el calendario y en Tareas: ya no salen tachados ni en rojo cuando pasan, porque no son tareas. Lo único que llevan es un tick verde junto a las iniciales del scout que ya ha metido su informe de ese partido',
       'Corregido: los eventos pasados (visitas, reuniones, comidas…) salían tachados y como «hecha», como si fueran tareas. Un evento no se completa ni vence: ahora se ve siempre normal, y en el recuento del día va aparte de las tareas',
@@ -62,6 +65,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'El tablero de siempre (kanban, compacto, tabla, semana, agrupar por jugador o persona) sigue ahí: botón «Tablero» arriba a la derecha. Jugadores, Equipo y Postpartidos no cambian',
     ],
     adminItems: [
+      'App.tsx: las fichas a página completa (jugador, miembro) ya no sustituyen a la sección; la sección queda montada y escondida debajo (components/BajoCapa). Captación tiene un modo «solo» que pinta únicamente la ficha de un partido o de un jugador; lo usa App para las fichas flotantes',
       'Lugar de los eventos: necesita la columna agenda_eventos.lugar (migration_agenda_eventos_lugar.sql). Hasta ejecutarla, el lugar se ignora al guardar',
       'Tareas que se repiten: necesitan la columna tasks.recurrence (migration_tasks_recurrence.sql). Hasta ejecutarla, «Repetir» se ignora al guardar. La prioridad no necesita migración: tasks.priority ya existía',
       'Eventos sin jugador: necesitan la tabla nueva agenda_eventos (migration_agenda_eventos.sql). Hasta ejecutarla, solo se guardan los eventos con jugador de Mantenimiento, como antes',
