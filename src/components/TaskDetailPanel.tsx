@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { X, Trash2, ChevronRight, Send } from "lucide-react";
 import { TASK_LABELS, type Task, type Player, type TaskLabel } from "../types";
 import { parseDia, esVencida } from "../lib/fechas";
+import { RECURRENCIAS, RECURRENCIA_LABEL, type Recurrencia } from "../lib/recurrencia";
 import type { Profile } from "../contexts/AuthContext";
 import * as db from "../lib/db";
 import { ConfirmModal } from "./ConfirmModal";
@@ -36,6 +37,10 @@ export function TaskDetailPanel({
   const [playerId, setPlayerId]     = useState(task.playerId === "general" ? "" : task.playerId);
   const [label, setLabel]           = useState<TaskLabel | "">(task.label ?? "");
   const [watchers, setWatchers]     = useState<string[]>(task.watchers ?? []);
+  const [dueDate, setDueDate]       = useState(task.dueDate?.slice(0, 10) ?? "");
+  // Prioridad simple: alta o normal (las antiguas «media» y «baja» son normal)
+  const [alta, setAlta]             = useState(task.priority === "alta");
+  const [recurrence, setRecurrence] = useState<Recurrencia | "">(task.recurrence ?? "");
   const [commentText, setCommentText] = useState("");
   const [localComments, setLocalComments] = useState(task.comments ?? []);
   const [sendingComment, setSendingComment] = useState(false);
@@ -80,12 +85,21 @@ export function TaskDetailPanel({
 
   const effectivePlayerId = playerId || "general";
 
+  /** La tarea con lo que hay ahora en el formulario */
+  const editada = (): Task => ({
+    ...task, playerId: effectivePlayerId, title, description, assigneeId, label: label || undefined, watchers,
+    dueDate: dueDate || undefined,
+    // No se pisa «baja» con «media» si nadie ha tocado la prioridad
+    priority: alta ? "alta" : task.priority === "alta" ? "media" : task.priority,
+    recurrence: recurrence || undefined,
+  });
+
   const handleSave = async () => {
     setActionError(null);
     setSaving(true);
     try {
       await Promise.resolve(
-        onSaveAndClose({ ...task, playerId: effectivePlayerId, title, description, status, assigneeId, label: label || undefined, watchers })
+        onSaveAndClose({ ...editada(), status })
       );
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -98,7 +112,7 @@ export function TaskDetailPanel({
 
   const handleStatusChange = (newStatus: Task["status"]) => {
     setStatus(newStatus);
-    onUpdate({ ...task, playerId: effectivePlayerId, title, description, status: newStatus, assigneeId, label: label || undefined, watchers });
+    onUpdate({ ...editada(), status: newStatus });
   };
 
   const toggleWatcher = (profileId: string) => {
@@ -317,7 +331,17 @@ export function TaskDetailPanel({
                   {/* Due date */}
                   <div className="bg-slate-50 rounded-xl p-3">
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Fecha límite</p>
-                    {task.dueDate ? (
+                    {canEdit ? (
+                      <>
+                        <input
+                          type="date"
+                          value={dueDate}
+                          onChange={e => setDueDate(e.target.value)}
+                          className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+                        />
+                        {isOverdue && <p className="text-[11px] text-red-500 mt-0.5">Vencida</p>}
+                      </>
+                    ) : task.dueDate ? (
                       <>
                         <p className={`text-sm font-medium ${isOverdue ? "text-red-600" : "text-slate-700"}`}>
                           {parseDia(task.dueDate).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" })}
@@ -332,12 +356,41 @@ export function TaskDetailPanel({
                   {/* Priority */}
                   <div className="bg-slate-50 rounded-xl p-3">
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Prioridad</p>
-                    <span
-                      className="text-xs font-semibold px-2 py-0.5 rounded-full"
-                      style={{ background: priorityBadge.bg, color: priorityBadge.color }}
-                    >
-                      {task.priority === "alta" ? "Alta" : task.priority === "media" ? "Media" : "Baja"}
-                    </span>
+                    {canEdit ? (
+                      <select
+                        value={alta ? "alta" : "normal"}
+                        onChange={e => setAlta(e.target.value === "alta")}
+                        className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+                      >
+                        <option value="normal">Normal</option>
+                        <option value="alta">Alta</option>
+                      </select>
+                    ) : (
+                      <span
+                        className="text-xs font-semibold px-2 py-0.5 rounded-full"
+                        style={{ background: priorityBadge.bg, color: priorityBadge.color }}
+                      >
+                        {task.priority === "alta" ? "Alta" : "Normal"}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Repetir */}
+                  <div className="bg-slate-50 rounded-xl p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Repetir</p>
+                    {canEdit ? (
+                      <select
+                        value={recurrence}
+                        onChange={e => setRecurrence(e.target.value as Recurrencia | "")}
+                        title="Al completarla se crea la siguiente con la fecha que toque"
+                        className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+                      >
+                        <option value="">No se repite</option>
+                        {RECURRENCIAS.map(r => <option key={r} value={r}>{RECURRENCIA_LABEL[r]}</option>)}
+                      </select>
+                    ) : (
+                      <p className="text-xs text-slate-600">{task.recurrence ? RECURRENCIA_LABEL[task.recurrence] : "No se repite"}</p>
+                    )}
                   </div>
 
                   {/* Label / Tipo */}

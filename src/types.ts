@@ -57,6 +57,8 @@ export interface Task {
   completedAt?: string;       // ISO — se rellena al pasar a "completada"
   comments: TaskComment[];
   adminOnly?: boolean;        // si true, solo visible para admins
+  /** Se repite: al completarla se crea la siguiente (ver lib/recurrencia.ts). Opcional hasta migrar. */
+  recurrence?: 'semanal' | 'mensual';
 }
 
 // ---- Contracts ----

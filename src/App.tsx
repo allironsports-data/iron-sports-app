@@ -18,6 +18,7 @@ import { BUILD_ID } from './changelog'
 import { esZona, type Zona } from './lib/zonas'
 import { teamsAlike } from './lib/equipos'
 import { hoyISO } from './lib/fechas'
+import { siguienteFecha } from './lib/recurrencia'
 import { useToastContext } from './hooks/useToastContext'
 import type { ReactNode } from 'react'
 import type { Club, DistributionEntry, ClubNegotiation } from './types'
@@ -940,6 +941,21 @@ export default function App() {
       : { ...updated, completedAt: undefined }
     await db.updateTask(withCompleted)
     setTasks((prev) => prev.map((t) => (t.id === withCompleted.id ? withCompleted : t)))
+
+    // Tarea recurrente: al completarla nace la siguiente, con la fecha calculada
+    if (withCompleted.recurrence && withCompleted.status === 'completada' && previous?.status !== 'completada') {
+      try {
+        await handleAddTask({
+          ...withCompleted,
+          id: 'tmp',
+          status: 'pendiente',
+          completedAt: undefined,
+          dueDate: siguienteFecha(withCompleted.dueDate, withCompleted.recurrence, hoyISO()),
+          createdAt: new Date().toISOString(),
+          comments: [],
+        })
+      } catch (err) { console.error('No se pudo crear la siguiente repetición:', err) }
+    }
 
     // Firmar ⇄ Tareas: si esta tarea era la próxima acción de un jugador del
     // pipeline y se acaba de completar, se marca hecha también en Firmar

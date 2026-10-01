@@ -403,7 +403,14 @@ export async function assignManagerToPlayers(playerIds: string[], managerId: str
 
 // ── TASKS ────────────────────────────────────────────────────
 
+// ── tasks.recurrence: opcional hasta migrar ──────────────────────────
+// Si la fila leída trae la columna, existe y se escribe siempre (también
+// para quitar la repetición). Si no, solo se manda cuando alguien la pone;
+// y si la base la rechaza (42703), se guarda la tarea sin ella.
+let tasksConRecurrence = false
+
 function dbToTask(row: Record<string, unknown>): Task {
+  if ('recurrence' in row) tasksConRecurrence = true
   return {
     id: row.id as string,
     playerId: (row.player_id as string) ?? 'general',
@@ -420,7 +427,36 @@ function dbToTask(row: Record<string, unknown>): Task {
     completedAt: (row.completed_at as string) ?? undefined,
     comments: [],
     adminOnly: (row.admin_only as boolean) ?? false,
+    recurrence: (row.recurrence as Task['recurrence']) ?? undefined,
   }
+}
+
+function taskToDb(t: Task): Record<string, unknown> {
+  const isGeneral = !t.playerId || t.playerId === 'general'
+  const fila: Record<string, unknown> = {
+    player_id: isGeneral ? null : t.playerId,
+    title: t.title,
+    description: t.description,
+    assignee_id: t.assigneeId || null,
+    watchers: t.watchers ?? [],
+    depends_on_id: t.dependsOnId || null,
+    status: t.status,
+    priority: t.priority,
+    label: t.label ?? null,
+    due_date: t.dueDate || null,
+    completed_at: t.completedAt ?? null,
+    admin_only: t.adminOnly ?? false,
+  }
+  if (tasksConRecurrence || t.recurrence) fila.recurrence = t.recurrence ?? null
+  return fila
+}
+
+function faltaColumnaRecurrence(error: unknown, fila: Record<string, unknown>): boolean {
+  if (!('recurrence' in fila) || !esColumnaInexistente(error)) return false
+  console.warn('[db] tasks no tiene columna recurrence: se guarda sin ella (ejecuta migration_tasks_recurrence.sql)')
+  tasksConRecurrence = false
+  delete fila.recurrence
+  return true
 }
 
 export async function fetchTasks(playerId?: string): Promise<Task[]> {
@@ -442,42 +478,18 @@ export async function fetchTasks(playerId?: string): Promise<Task[]> {
 }
 
 export async function createTask(t: Task): Promise<Task> {
-  const isGeneral = !t.playerId || t.playerId === 'general'
-  const { data, error } = await supabase.from('tasks').insert({
-    player_id: isGeneral ? null : t.playerId,
-    title: t.title,
-    description: t.description,
-    assignee_id: t.assigneeId || null,
-    watchers: t.watchers ?? [],
-    depends_on_id: t.dependsOnId || null,
-    status: t.status,
-    priority: t.priority,
-    label: t.label ?? null,
-    due_date: t.dueDate || null,
-    completed_at: t.completedAt ?? null,
-    admin_only: t.adminOnly ?? false,
-  }).select().single()
-  if (error) throw error
-  return dbToTask(data)
+  const fila = taskToDb(t)
+  let r = await supabase.from('tasks').insert(fila).select().single()
+  if (r.error && faltaColumnaRecurrence(r.error, fila)) r = await supabase.from('tasks').insert(fila).select().single()
+  if (r.error) throw r.error
+  return dbToTask(r.data)
 }
 
 export async function updateTask(t: Task): Promise<void> {
-  const isGeneral = !t.playerId || t.playerId === 'general'
-  const { error } = await supabase.from('tasks').update({
-    player_id: isGeneral ? null : t.playerId,
-    title: t.title,
-    description: t.description,
-    assignee_id: t.assigneeId || null,
-    watchers: t.watchers ?? [],
-    depends_on_id: t.dependsOnId || null,
-    status: t.status,
-    priority: t.priority,
-    label: t.label ?? null,
-    due_date: t.dueDate || null,
-    completed_at: t.completedAt ?? null,
-    admin_only: t.adminOnly ?? false,
-  }).eq('id', t.id)
-  if (error) throw error
+  const fila = taskToDb(t)
+  let r = await supabase.from('tasks').update(fila).eq('id', t.id)
+  if (r.error && faltaColumnaRecurrence(r.error, fila)) r = await supabase.from('tasks').update(fila).eq('id', t.id)
+  if (r.error) throw r.error
 }
 
 export async function deleteTask(id: string): Promise<void> {

@@ -9,11 +9,12 @@
 // quien monta la vista: cada tipo de item se guarda en un sitio distinto.
 
 import { useMemo, useState } from 'react'
-import { ChevronDown, Search, X, Sun, CalendarClock } from 'lucide-react'
+import { ChevronDown, Search, X, Sun, CalendarClock, Plus } from 'lucide-react'
 import type { Profile } from '../contexts/AuthContext'
-import { parseDia } from '../lib/fechas'
+import { parseDia, sumarDias } from '../lib/fechas'
+import { parsearAltaRapida, type AltaRapida } from '../lib/altaRapida'
 import {
-  itemEsDe, seccionesDelDia, categoriasDe, coincideTexto, permisosItem,
+  itemEsDe, seccionesDelDia, categoriasDe, coincideTexto, permisosItem, lunesSiguiente,
   type AgendaItem, type AgendaEstado,
 } from '../lib/agendaItems'
 import { AgendaRow } from '../components/agenda/AgendaRow'
@@ -35,6 +36,8 @@ export interface MiDiaListaProps {
   onReprogramar: (item: AgendaItem, fecha: string | undefined) => void | Promise<void>
   onReasignar: (item: AgendaItem, profileId: string) => void | Promise<void>
   onOpenPlayer: (playerId: string) => void
+  /** Alta rápida en una línea; si no llega, no se pinta */
+  onCrear?: (alta: AltaRapida) => Promise<void>
 }
 
 type SeccionId = 'vencidas' | 'hoy' | 'proximos' | 'masAdelante' | 'sinFecha' | 'hechasHoy'
@@ -44,8 +47,15 @@ function tituloDiaCorto(iso: string): string {
 }
 
 export function MiDiaLista({
-  items, hoy, personaId, esYo, profiles, onAbrir, onEstado, onReprogramar, onReasignar, onOpenPlayer,
+  items, hoy, personaId, esYo, profiles, onAbrir, onEstado, onReprogramar, onReasignar, onOpenPlayer, onCrear,
 }: MiDiaListaProps) {
+  // Alta rápida
+  const [nueva, setNueva] = useState('')
+  const [creando, setCreando] = useState(false)
+  const alta = useMemo(() => parsearAltaRapida(nueva, { hoy, profiles }), [nueva, hoy, profiles])
+  // Selección múltiple de vencidas
+  const [seleccionando, setSeleccionando] = useState(false)
+  const [seleccion, setSeleccion] = useState<Set<string>>(new Set())
   const [q, setQ] = useState('')
   const [categorias, setCategorias] = useState<Set<string>>(new Set())
   // Plegadas de entrada: lo ya hecho y lo que queda lejos
@@ -78,14 +88,39 @@ export function MiDiaLista({
     return n
   })
 
-  async function moverVencidasAHoy() {
-    setConfirmarMover(false)
+  // De una en una: cada guardado parte del estado que dejó el anterior
+  async function moverVarias(its: AgendaItem[], fecha: string) {
     setMoviendo(true)
     try {
-      // De una en una: cada guardado parte del estado que dejó el anterior
-      for (const it of vencidasMovibles) await onReprogramar(it, hoy)
+      for (const it of its) await onReprogramar(it, fecha)
     } finally {
       setMoviendo(false)
+    }
+  }
+  async function moverVencidasAHoy() {
+    setConfirmarMover(false)
+    await moverVarias(vencidasMovibles, hoy)
+  }
+  const seleccionadas = vencidasMovibles.filter(it => seleccion.has(it.id))
+  const salirDeSeleccion = () => { setSeleccionando(false); setSeleccion(new Set()) }
+  async function moverSeleccion(fecha: string) {
+    await moverVarias(seleccionadas, fecha)
+    salirDeSeleccion()
+  }
+  const alternarSeleccion = (it: AgendaItem) => setSeleccion(prev => {
+    const n = new Set(prev)
+    if (n.has(it.id)) n.delete(it.id); else n.add(it.id)
+    return n
+  })
+
+  async function crear() {
+    if (!onCrear || !alta.titulo || creando) return
+    setCreando(true)
+    try {
+      await onCrear(alta)
+      setNueva('')
+    } catch { /* quien crea ya avisa; el texto se queda para reintentar */ } finally {
+      setCreando(false)
     }
   }
 
@@ -117,9 +152,45 @@ export function MiDiaLista({
   const lista = (its: AgendaItem[]) => (
     <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100">{its.map(fila)}</div>
   )
+  // Vencidas en modo selección: casilla delante de las que se pueden mover
+  const filaVencida = (it: AgendaItem) => seleccionando && permisosItem(it).reprogramar
+    ? <AgendaRow key={it.id} item={it} hoy={hoy} profiles={profiles} onAbrir={alternarSeleccion}
+        seleccionada={seleccion.has(it.id)} onSeleccionar={alternarSeleccion} />
+    : fila(it)
+  const personaAlta = alta.assigneeId ? profiles.find(p => p.id === alta.assigneeId) : undefined
 
   return (
     <div>
+      {/* Alta rápida: título @persona #categoría fecha ! */}
+      {onCrear && (
+        <div className="mb-3">
+          <div className="relative">
+            <Plus className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+            <input
+              value={nueva} onChange={e => setNueva(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') void crear(); if (e.key === 'Escape') setNueva('') }}
+              disabled={creando}
+              placeholder="Nueva tarea…  @persona  #categoría  mañana · viernes · 15/10  !  — Enter para crear"
+              aria-label="Alta rápida de tarea"
+              className="w-full pl-7 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-60"
+            />
+          </div>
+          {nueva.trim() && (
+            <div className="mt-1 flex items-center gap-1.5 flex-wrap text-[11px] text-slate-500">
+              <span className="text-slate-400">Se creará:</span>
+              <span className="font-semibold text-slate-700">
+                {alta.prioridadAlta && <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 mr-1 align-middle" />}
+                {alta.titulo || '(falta el título)'}
+              </span>
+              {personaAlta && <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200">@{personaAlta.name.split(' ')[0]}</span>}
+              {alta.label && <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200">#{alta.label}</span>}
+              {alta.dueDate && <span className="px-1.5 py-0.5 rounded bg-blue-50 border border-blue-100 text-blue-700">{tituloDiaCorto(alta.dueDate)}</span>}
+              {alta.sinResolver.length > 0 && <span className="text-amber-600">No reconozco {alta.sinResolver.join(', ')}</span>}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Buscador + chips de categoría */}
       <div className="flex items-center gap-1.5 flex-wrap mb-3">
         <div className="relative w-full sm:w-56">
@@ -165,13 +236,23 @@ export function MiDiaLista({
           />
         </div>
       ) : (<>
-        {seccion('vencidas', 'Vencidas', s.vencidas.length, lista(s.vencidas), {
+        {seccion('vencidas', 'Vencidas', s.vencidas.length, (
+          <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100">{s.vencidas.map(filaVencida)}</div>
+        ), {
           rojo: true,
           extra: vencidasMovibles.length > 0 && (
-            <button onClick={() => setConfirmarMover(true)} disabled={moviendo}
-              className="ml-auto inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800 disabled:opacity-50">
-              <CalendarClock className="w-3 h-3" /> {moviendo ? 'Moviendo…' : 'Mover todo a hoy'}
-            </button>
+            <div className="ml-auto flex items-center gap-3">
+              <button onClick={() => seleccionando ? salirDeSeleccion() : setSeleccionando(true)} disabled={moviendo}
+                className="text-[11px] font-semibold text-slate-500 hover:text-slate-800 disabled:opacity-50">
+                {seleccionando ? 'Cancelar selección' : 'Seleccionar'}
+              </button>
+              {!seleccionando && (
+                <button onClick={() => setConfirmarMover(true)} disabled={moviendo}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800 disabled:opacity-50">
+                  <CalendarClock className="w-3 h-3" /> {moviendo ? 'Moviendo…' : 'Mover todo a hoy'}
+                </button>
+              )}
+            </div>
           ),
         })}
         {seccion('hoy', 'Hoy', s.hoy.length, lista(s.hoy))}
@@ -191,6 +272,24 @@ export function MiDiaLista({
         {seccion('masAdelante', 'Más adelante', s.masAdelante.length, lista(s.masAdelante))}
         {seccion('hechasHoy', 'Hechas hoy', s.hechasHoy.length, lista(s.hechasHoy))}
       </>)}
+
+      {/* Acciones en masa: por encima de la barra inferior del móvil (z-30) */}
+      {seleccionando && seleccionadas.length > 0 && (
+        <div className="fixed inset-x-0 z-40 bg-white border-t border-slate-200 shadow-lg bottom-[calc(3.25rem+env(safe-area-inset-bottom))] sm:bottom-0">
+          <div className="px-3 sm:px-6 py-2.5 flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-semibold text-slate-700 mr-auto">
+              {seleccionadas.length} seleccionada{seleccionadas.length !== 1 ? 's' : ''} · mover a
+            </span>
+            {([['Hoy', hoy], ['Mañana', sumarDias(hoy, 1)], ['Próxima semana', lunesSiguiente(hoy)]] as const).map(([txt, f]) => (
+              <button key={txt} onClick={() => void moverSeleccion(f)} disabled={moviendo}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-primary hover:bg-primary/90 disabled:opacity-50 transition-colors">
+                {txt}
+              </button>
+            ))}
+            <button onClick={salirDeSeleccion} disabled={moviendo} className="px-2 py-1.5 text-xs text-slate-500 hover:text-slate-700">Cancelar</button>
+          </div>
+        </div>
+      )}
 
       <ConfirmModal
         open={confirmarMover}

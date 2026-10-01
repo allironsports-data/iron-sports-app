@@ -21,6 +21,12 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-01',
     items: [
+      'Mi día: alta rápida en una línea encima de la lista. Escribe la tarea y pulsa Enter; «@» asigna a una persona (@nb, @nacho), «#» pone la categoría (#informe, #negociación), la fecha se entiende en texto (hoy, mañana, pasado mañana, viernes, 15/10) y «!» la marca como prioridad alta. Debajo se ve cómo se va a crear antes de pulsar Enter',
+      'Mi día: en «Vencidas», botón «Seleccionar» para marcar varias y moverlas de golpe a hoy, a mañana o a la próxima semana',
+      'Tareas que se repiten: en la tarea (y al crearla, en «Más opciones») se puede elegir «Repetir: cada semana / cada mes». Al completarla se crea sola la siguiente, con la fecha que toque',
+      'Prioridad más simple: normal o alta. Las de prioridad alta llevan un punto rojo delante del título. En el panel de la tarea ya se pueden cambiar la prioridad y la fecha límite',
+      'Las tareas completadas hace más de 30 días se archivan solas: dejan de salir en las listas (siguen contando en las estadísticas)',
+      'Móvil: la barra de acciones en masa (seleccionar jugadores, mover vencidas) ya no queda tapada por la barra inferior',
       'Mantenimiento: nueva pestaña «Calendario» (entre Mi día y Jugadores). Una semana de toda la empresa de un vistazo: una fila por persona y una columna por día, con un chip por cada tarea, llamada o reunión de Firmar, postpartido, partido de Captación y evento, con su icono y su hora. Los partidos con varios scouts salen en la fila de cada uno',
       'Calendario: semana anterior / siguiente / Hoy, filtros por tipo y por persona, «Ocultar completadas», y dos modos — «Por persona» y «Por tipo» (partidos, llamadas y reuniones, postpartidos, tareas, eventos). Tu fila va arriba y resaltada; al final de cada fila, la carga de la semana (abiertas / total); y si alguien tiene dos partidos el mismo día, aviso de solape',
       'Calendario: clic en un chip lo abre; clic en un hueco da de alta una tarea o un evento con la persona y el día ya puestos. En el móvil se ve un día por pantalla (se pasa deslizando) con las personas plegables',
@@ -34,6 +40,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'El tablero de siempre (kanban, compacto, tabla, semana, agrupar por jugador o persona) sigue ahí: botón «Tablero» arriba a la derecha. Jugadores, Equipo y Postpartidos no cambian',
     ],
     adminItems: [
+      'Tareas que se repiten: necesitan la columna tasks.recurrence (migration_tasks_recurrence.sql). Hasta ejecutarla, «Repetir» se ignora al guardar. La prioridad no necesita migración: tasks.priority ya existía',
       'Eventos sin jugador: necesitan la tabla nueva agenda_eventos (migration_agenda_eventos.sql). Hasta ejecutarla, solo se guardan los eventos con jugador de Mantenimiento, como antes',
       'Mi día: los admin tienen arriba a la derecha un selector de persona para ver «El día de X» en la misma pantalla',
       'lib/agendaItems.ts: lista unificada (tareas + Firmar + postpartidos + partidos + eventos) con tests; components/agenda/AgendaRow.tsx: la fila, pensada para reutilizarse en calendario, home y ficha de jugador',

@@ -12,7 +12,9 @@ import logoImg from '../assets/logo.jpeg';
 import type { Player, Task, TaskLabel, PlayerActivity, ScoutingMatch, ScoutingMatchScout, ScoutingPlayer, MemberStatus, Postpartido, FirmasEntry, AgendaEvento } from "../types";
 import { calcAge, clubsLabel, TASK_LABELS, PLAYER_ESTADOS } from "../types";
 import { fechaLocal, hoyISO, lunesDe, esVencida, parseDia, sumarDias } from "../lib/fechas";
-import { construirAgenda, type AgendaItem, type AgendaEstado } from "../lib/agendaItems";
+import { construirAgenda, estaArchivada, type AgendaItem, type AgendaEstado } from "../lib/agendaItems";
+import { RECURRENCIAS, RECURRENCIA_LABEL, type Recurrencia } from "../lib/recurrencia";
+import type { AltaRapida } from "../lib/altaRapida";
 import { tituloDia } from "../lib/miDia";
 import { MiDiaLista } from "./MiDiaLista";
 import { CalendarioSemanal } from "./CalendarioSemanal";
@@ -593,7 +595,8 @@ export function Dashboard({
 
   const matchesBoard = (t: Task) => matchesPerson(t) && matchesOrigen(t);
   const boardTasks = visibleTasks.filter(t => t.status !== 'completada' && matchesBoard(t));
-  const boardCompleted = visibleTasks.filter(t => t.status === 'completada' && matchesBoard(t));
+  // Las completadas hace más de 30 días se archivan solas: no salen en las listas
+  const boardCompleted = visibleTasks.filter(t => t.status === 'completada' && matchesBoard(t) && !estaArchivada(t, hoyISO()));
 
   // Recuentos del selector: se calculan con el filtro de persona pero SIN el de
   // origen, para que los números no cambien según lo que tengas seleccionado
@@ -906,6 +909,27 @@ export function Dashboard({
         }));
       }
     } catch { fallo(); }
+  }
+
+  // Alta rápida de «Mi día»: sin @persona, la tarea es de quien se está mirando
+  async function crearTareaRapida(a: AltaRapida) {
+    if (!onAddGeneralTask) return;
+    try {
+      await Promise.resolve(onAddGeneralTask({
+        id: 't' + Date.now(),
+        playerId: 'general',
+        title: a.titulo,
+        description: '',
+        assigneeId: a.assigneeId ?? diaPersona.id,
+        watchers: [],
+        priority: a.prioridadAlta ? 'alta' : 'media',
+        status: 'pendiente',
+        label: a.label,
+        dueDate: a.dueDate,
+        createdAt: new Date().toISOString(),
+        comments: [],
+      }));
+    } catch (err) { fallo(); throw err; }
   }
 
   async function agendaReprogramar(it: AgendaItem, fecha: string | undefined) {
@@ -1511,6 +1535,7 @@ export function Dashboard({
               onReprogramar={agendaReprogramar}
               onReasignar={agendaReasignar}
               onOpenPlayer={onSelectPlayer}
+              onCrear={onAddGeneralTask ? crearTareaRapida : undefined}
             />
           )}
 
@@ -2781,7 +2806,7 @@ export function Dashboard({
 
       {/* Bulk action toolbar */}
       {selectMode && selected.size > 0 && (
-        <div className="fixed bottom-0 inset-x-0 z-20 bg-white border-t border-slate-200 shadow-lg">
+        <div className="fixed inset-x-0 z-40 bg-white border-t border-slate-200 shadow-lg bottom-[calc(3.25rem+env(safe-area-inset-bottom))] sm:bottom-0">
           <div className="max-w-6xl mx-auto px-3 sm:px-6 py-3 flex items-center justify-between gap-3">
             <span className="text-sm font-medium text-slate-700">{selected.size} seleccionado{selected.size > 1 ? "s" : ""}</span>
             <div className="flex items-center gap-2">
@@ -3821,7 +3846,8 @@ function AddGeneralTaskModal({ profiles, players, currentProfileId, inicial, onC
   const [description, setDescription] = useState("");
   const [assigneeId, setAssigneeId] = useState(inicial?.assigneeId ?? currentProfileId ?? "");
   const [selectedPlayerId, setSelectedPlayerId] = useState("");
-  const [priority, setPriority] = useState<"alta" | "media" | "baja">("media");
+  const [priority, setPriority] = useState<"alta" | "media">("media");
+  const [recurrence, setRecurrence] = useState<Recurrencia | "">("");
   const [label, setLabel] = useState<TaskLabel | "">("");
   const [dueDate, setDueDate] = useState(inicial?.dueDate ?? "");
   const [adminOnly, setAdminOnly] = useState(false);
@@ -3844,6 +3870,7 @@ function AddGeneralTaskModal({ profiles, players, currentProfileId, inicial, onC
       createdAt: new Date().toISOString(),
       comments: [],
       adminOnly,
+      recurrence: recurrence || undefined,
     });
   };
 
@@ -3894,10 +3921,9 @@ function AddGeneralTaskModal({ profiles, players, currentProfileId, inicial, onC
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Prioridad</label>
-              <select value={priority} onChange={(e) => setPriority(e.target.value as "alta" | "media" | "baja")}
+              <select value={priority} onChange={(e) => setPriority(e.target.value as "alta" | "media")}
                 className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
-                <option value="baja">Baja</option>
-                <option value="media">Media</option>
+                <option value="media">Normal</option>
                 <option value="alta">Alta</option>
               </select>
             </div>
@@ -3912,7 +3938,18 @@ function AddGeneralTaskModal({ profiles, players, currentProfileId, inicial, onC
               </select>
             </div>
           </div>
-          <F label="Fecha de vencimiento" value={dueDate} onChange={setDueDate} type="date" />
+          <div className="grid grid-cols-2 gap-3">
+            <F label="Fecha de vencimiento" value={dueDate} onChange={setDueDate} type="date" />
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Repetir</label>
+              <select value={recurrence} onChange={(e) => setRecurrence(e.target.value as Recurrencia | "")}
+                title="Al completarla se crea la siguiente con la fecha que toque"
+                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
+                <option value="">No se repite</option>
+                {RECURRENCIAS.map(r => <option key={r} value={r}>{RECURRENCIA_LABEL[r]}</option>)}
+              </select>
+            </div>
+          </div>
           {/* Admin-only toggle */}
           <label className="flex items-center gap-2.5 cursor-pointer select-none py-1">
             <input
@@ -4023,9 +4060,8 @@ function QuickTaskModal({ player, profiles, currentProfileId, onClose, onAdd }: 
               <label className="block text-xs text-slate-500 mb-1">Prioridad</label>
               <select value={priority} onChange={(e) => setPriority(e.target.value as typeof priority)}
                 className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-200">
-                <option value="baja">Baja</option>
-                <option value="media">Media</option>
-                <option value="alta">Alta ⚡</option>
+                <option value="media">Normal</option>
+                <option value="alta">Alta</option>
               </select>
             </div>
           </div>
