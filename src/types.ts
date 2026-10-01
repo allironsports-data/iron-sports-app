@@ -480,6 +480,34 @@ export interface Postpartido {
   createdAt: string
 }
 
+// ── EVENTOS DE AGENDA ───────────────────────────────────────
+// Citas, reuniones, videollamadas, sesiones de análisis… con o sin jugador,
+// de Mantenimiento, de Captación o generales. Tabla agenda_eventos (ver
+// migration_agenda_eventos.sql). Si llevan jugadores de Mantenimiento se
+// apuntan además en su actividad (player_activities), como siempre.
+export const EVENTO_TIPOS = [
+  'Reunión', 'Videollamada', 'Cita', 'Llamada', 'Sesión de análisis', 'Partido', 'Visita presencial',
+  'Comida', 'Viaje', 'Reunión con jugador', 'Comunicación con club', 'Email', 'Transferencia', 'Nota general',
+] as const
+export type EventoAmbito = 'mantenimiento' | 'captacion' | 'general'
+
+export interface AgendaEvento {
+  id: string
+  titulo: string
+  tipo: string                 // uno de EVENTO_TIPOS o texto libre
+  fecha: string                // "YYYY-MM-DD" (puede ser pasada: registrar algo que ya ocurrió)
+  hora?: string                // "HH:MM"
+  ambito: EventoAmbito
+  playerIds: string[]          // jugadores de Mantenimiento
+  scoutingPlayerId?: string    // jugador de Captación
+  participantIds: string[]     // profiles.id de quienes asisten (además del autor)
+  notas?: string
+  authorId?: string
+  /** id (o group_id) de las filas de player_activities que generó, para no contarlo dos veces */
+  activityRef?: string
+  createdAt: string
+}
+
 // ── ESTADO DEL EQUIPO (panel "¿con qué está cada uno?") ─────
 export interface MemberStatus {
   profileId: string

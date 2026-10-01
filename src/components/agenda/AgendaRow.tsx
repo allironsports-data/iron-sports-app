@@ -9,26 +9,14 @@
 // derecha = hecha, a la izquierda = reprogramar; tocar = abrir.
 
 import { useRef, useState } from 'react'
-import {
-  ListTodo, Phone, Smartphone, Handshake, ClipboardList, Trophy, CalendarDays,
-  Check, CalendarClock, UserRound, ExternalLink,
-} from 'lucide-react'
+import { Check, CalendarClock, UserRound, ExternalLink } from 'lucide-react'
 import type { Profile } from '../../contexts/AuthContext'
 import { parseDia, sumarDias } from '../../lib/fechas'
 import {
   permisosItem, siguienteEstado, lunesSiguiente,
-  type AgendaItem, type AgendaTipo, type AgendaEstado,
+  type AgendaItem, type AgendaEstado,
 } from '../../lib/agendaItems'
-
-const AGENDA_TIPO_META: Record<AgendaTipo, { Icon: typeof ListTodo; cls: string; label: string }> = {
-  tarea:       { Icon: ListTodo,      cls: 'text-slate-400',   label: 'Tarea' },
-  llamada:     { Icon: Phone,         cls: 'text-amber-500',   label: 'Llamada (Firmar)' },
-  telefono:    { Icon: Smartphone,    cls: 'text-amber-500',   label: 'Conseguir teléfono (Firmar)' },
-  reunion:     { Icon: Handshake,     cls: 'text-violet-500',  label: 'Reunión' },
-  postpartido: { Icon: ClipboardList, cls: 'text-blue-500',    label: 'Postpartido' },
-  partido:     { Icon: Trophy,        cls: 'text-emerald-500', label: 'Partido de Captación' },
-  evento:      { Icon: CalendarDays,  cls: 'text-slate-400',   label: 'Evento' },
-}
+import { AGENDA_TIPO_META } from './tipoMeta'
 
 const UMBRAL_SWIPE = 72
 
@@ -43,6 +31,9 @@ export interface AgendaRowProps {
   onReprogramar?: (item: AgendaItem, fecha: string | undefined) => void
   onReasignar?: (item: AgendaItem, profileId: string) => void
   onOpenPlayer?: (playerId: string) => void
+  /** Selección múltiple: si llega, sale una casilla delante */
+  seleccionada?: boolean
+  onSeleccionar?: (item: AgendaItem) => void
 }
 
 function fechaCorta(iso: string): string {
@@ -51,6 +42,7 @@ function fechaCorta(iso: string): string {
 
 export function AgendaRow({
   item, hoy, profiles, onAbrir, onEstado, onReprogramar, onReasignar, onOpenPlayer,
+  seleccionada, onSeleccionar,
 }: AgendaRowProps) {
   const [menu, setMenu] = useState<null | 'fecha' | 'persona'>(null)
   const [dx, setDx] = useState(0)
@@ -114,6 +106,13 @@ export function AgendaRow({
         style={dx ? { transform: `translateX(${dx}px)` } : undefined}
         className={`group relative flex items-center gap-2 px-2.5 py-1.5 cursor-pointer ${vencida ? 'bg-red-50 hover:bg-red-100/70' : 'bg-white hover:bg-slate-50'} ${dx ? '' : 'transition-transform'}`}
       >
+        {onSeleccionar && (
+          <input
+            type="checkbox" checked={!!seleccionada}
+            onChange={() => onSeleccionar(item)} onClick={e => e.stopPropagation()}
+            aria-label="Seleccionar" className="w-3.5 h-3.5 rounded flex-shrink-0"
+          />
+        )}
         <span title={label} className="flex-shrink-0"><Icon className={`w-3.5 h-3.5 ${cls}`} /></span>
         {/* Estado: pendiente → en curso → hecha */}
         <button

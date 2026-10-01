@@ -13,7 +13,7 @@
 // Firmar o un postpartido NO se repite como tarea suelta; es su estado.
 
 import type {
-  Task, ScoutingMatch, ScoutingMatchScout, FirmasEntry, Postpartido, Player, PlayerActivity,
+  Task, ScoutingMatch, ScoutingMatchScout, FirmasEntry, Postpartido, Player, PlayerActivity, AgendaEvento,
 } from '../types'
 import { fechaLocal, sumarDias } from './fechas'
 import { norm } from './texto'
@@ -29,6 +29,7 @@ export type AgendaDestino =
   | { tipo: 'postpartido'; postpartidoId: string; taskId?: string }
   | { tipo: 'partido'; matchId: string }
   | { tipo: 'jugador'; playerId: string }
+  | { tipo: 'evento'; eventoId: string }
 
 export interface AgendaItem {
   /** Único en la lista: origen + id (y scout, en partidos con varios) */
@@ -62,6 +63,7 @@ export interface AgendaItem {
     /** iniciales del scout (partidos con filas en scouting_match_scouts) */
     scout?: string
     activityId?: string
+    eventoId?: string
   }
 }
 
@@ -77,6 +79,10 @@ export interface AgendaInput {
   profiles: { id: string; avatar: string }[]
   players: Player[]
   activities?: PlayerActivity[]
+  /** Eventos de agenda (tabla agenda_eventos) */
+  eventos?: AgendaEvento[]
+  /** Nombres de jugadores de Captación, para los eventos que apuntan a uno */
+  nombreScouting?: (id: string) => string | undefined
   /**
    * Ventana de días (ambos incluidos) para partidos y eventos. Hay miles de
    * partidos históricos y un partido pasado sin marcar no es una «tarea
@@ -107,6 +113,25 @@ function tipoDeTarea(t: Task): AgendaTipo {
   return 'tarea'
 }
 
+/** Tipo de item de un evento de agenda: decide el icono y la fila del calendario */
+export function tipoDeEvento(tipo: string): AgendaTipo {
+  const t = norm(tipo)
+  if (t.startsWith('llamada')) return 'llamada'
+  if (t.startsWith('partido')) return 'partido'
+  if (/^(reunion|videollamada|cita|comida)/.test(t)) return 'reunion'
+  return 'evento'
+}
+
+/** Días que una tarea completada sigue saliendo en las listas antes de archivarse sola */
+export const DIAS_ARCHIVO = 30
+
+/** Completada hace más de 30 días: se oculta de las listas (sigue en la base y en las estadísticas) */
+export function estaArchivada(t: Pick<Task, 'status' | 'completedAt' | 'createdAt'>, hoy: string): boolean {
+  if (t.status !== 'completada') return false
+  const dia = diaDe(t.completedAt ?? t.createdAt)
+  return !!dia && dia < sumarDias(hoy, -DIAS_ARCHIVO)
+}
+
 /** Día local de un ISO completo (completedAt) */
 function diaDe(iso?: string): string | undefined {
   if (!iso) return undefined
@@ -115,7 +140,13 @@ function diaDe(iso?: string): string | undefined {
 }
 
 export function construirAgenda(input: AgendaInput): AgendaItem[] {
-  const { tasks, firmasEntries, postpartidos, scoutingMatches, matchScouts, profiles, players, activities = [], rango } = input
+  const { hoy, firmasEntries, postpartidos, scoutingMatches, matchScouts, profiles, players, activities = [], eventos = [], rango } = input
+  const archivadas = new Set<string>()
+  const tasks = input.tasks.filter(t => {
+    if (!estaArchivada(t, hoy)) return true
+    archivadas.add(t.id)
+    return false
+  })
   const items: AgendaItem[] = []
   const tareasPorId = new Map(tasks.map(t => [t.id, t]))
   const jugadoresPorId = new Map(players.map(p => [p.id, p]))
@@ -148,6 +179,8 @@ export function construirAgenda(input: AgendaInput): AgendaItem[] {
   const partidosPorId = new Map(scoutingMatches.map(m => [m.id, m]))
   for (const pp of postpartidos) {
     const task = pp.taskId ? tareasPorId.get(pp.taskId) : undefined
+    // Su tarea está archivada (completada hace más de 30 días): el postpartido tampoco sale
+    if (pp.taskId && archivadas.has(pp.taskId)) continue
     if (task) usadas.add(task.id)
     const match = pp.matchId ? partidosPorId.get(pp.matchId) : undefined
     const jugador = pp.playerId ? jugadoresPorId.get(pp.playerId) : undefined
@@ -238,8 +271,11 @@ export function construirAgenda(input: AgendaInput): AgendaItem[] {
 
   // ── Eventos (player_activities). Un evento de grupo es una fila por
   //    jugador con el mismo groupId: aquí sale una sola vez. ──
+  // Las actividades que nacieron de un evento de agenda ya salen como evento.
+  const yaComoEvento = new Set(eventos.map(e => e.activityRef).filter(Boolean) as string[])
   const grupos = new Set<string>()
   for (const a of activities) {
+    if (yaComoEvento.has(a.groupId ?? a.id)) continue
     if (!a.date || a.date < rango.desde || a.date > rango.hasta) continue
     if (a.groupId) {
       if (grupos.has(a.groupId)) continue
@@ -259,11 +295,38 @@ export function construirAgenda(input: AgendaInput): AgendaItem[] {
       playerNombre: jugador ? (mas > 0 ? `${jugador.name} +${mas}` : jugador.name) : undefined,
       categoria: 'Evento',
       // Un evento no se «hace»: pasa. Lo de antes de hoy cuenta como pasado.
-      estado: a.date.slice(0, 10) < input.hoy ? 'completada' : 'pendiente',
+      estado: a.date.slice(0, 10) < hoy ? 'completada' : 'pendiente',
       prioridadAlta: false,
       origen: 'evento',
       abrir: { tipo: 'jugador', playerId: a.playerId },
       ref: { activityId: a.id },
+    })
+  }
+
+  // ── Eventos de agenda (con o sin jugador) ──
+  for (const e of eventos) {
+    if (e.fecha < rango.desde || e.fecha > rango.hasta) continue
+    const jugador = e.playerIds.length > 0 ? jugadoresPorId.get(e.playerIds[0]) : undefined
+    const mas = e.playerIds.length - 1
+    const nombre = jugador
+      ? (mas > 0 ? `${jugador.name} +${mas}` : jugador.name)
+      : e.scoutingPlayerId ? input.nombreScouting?.(e.scoutingPlayerId) : undefined
+    items.push({
+      id: `evento:${e.id}`,
+      tipo: tipoDeEvento(e.tipo),
+      titulo: e.titulo || e.tipo,
+      personId: e.authorId ?? e.participantIds[0] ?? '',
+      otrosIds: e.participantIds,
+      fecha: e.fecha,
+      hora: e.hora,
+      playerId: jugador?.id,
+      playerNombre: nombre,
+      categoria: e.tipo,
+      estado: e.fecha < hoy ? 'completada' : 'pendiente',
+      prioridadAlta: false,
+      origen: 'evento',
+      abrir: { tipo: 'evento', eventoId: e.id },
+      ref: { eventoId: e.id },
     })
   }
 

@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 import { dedupePorId } from './coleccion'
-import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation, ScoutingPlayer, ScoutingReport, ScoutingInfo, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchOurPlayer, ScoutingMatchScout, BoulemaPeticion, ClubLog, PlayerMeeting, PlayerActivity, MemberStatus, Postpartido, FirmasEntry, BoulemaPlayer } from '../types'
+import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation, ScoutingPlayer, ScoutingReport, ScoutingInfo, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchOurPlayer, ScoutingMatchScout, BoulemaPeticion, ClubLog, PlayerMeeting, PlayerActivity, MemberStatus, Postpartido, FirmasEntry, BoulemaPlayer, AgendaEvento } from '../types'
 
 // ── helpers ──────────────────────────────────────────────────
 
@@ -1886,6 +1886,82 @@ export async function fetchActivitiesByAuthor(authorId: string): Promise<PlayerA
       .or(`author_id.eq.${authorId},participant_profile_ids.cs.{${authorId}}`)
       .order('date', { ascending: false }).order('id').range(d, h))
   return filas.map(row => dbToPlayerActivity(row))
+}
+
+/** Actividades de TODO el equipo entre dos días (ambos incluidos): para el calendario y «Mi día». */
+export async function fetchActivitiesEntre(desde: string, hasta: string): Promise<PlayerActivity[]> {
+  const filas = await leerTodo<Record<string, unknown>>('player_activities', (d, h) =>
+    supabase.from('player_activities').select('*')
+      .gte('date', desde).lte('date', hasta)
+      .order('date', { ascending: false }).order('id').range(d, h))
+  return filas.map(row => dbToPlayerActivity(row))
+}
+
+// ── EVENTOS DE AGENDA ────────────────────────────────────────────────
+// Tabla opcional hasta ejecutar migration_agenda_eventos.sql.
+
+/** true si el error es «esa tabla no existe» (Postgres 42P01 o la caché de PostgREST) */
+export function esMigracionPendiente(error: unknown): boolean {
+  const code = (error as { code?: string } | null)?.code
+  return code === '42P01' || code === 'PGRST205'
+}
+
+function dbToAgendaEvento(row: Record<string, unknown>): AgendaEvento {
+  return {
+    id: row.id as string,
+    titulo: (row.titulo as string) ?? '',
+    tipo: (row.tipo as string) ?? 'Reunión',
+    fecha: row.fecha as string,
+    hora: (row.hora as string) ?? undefined,
+    ambito: ((row.ambito as string) ?? 'general') as AgendaEvento['ambito'],
+    playerIds: (row.player_ids as string[]) ?? [],
+    scoutingPlayerId: (row.scouting_player_id as string) ?? undefined,
+    participantIds: (row.participant_ids as string[]) ?? [],
+    notas: (row.notas as string) ?? undefined,
+    authorId: (row.author_id as string) ?? undefined,
+    activityRef: (row.activity_ref as string) ?? undefined,
+    createdAt: row.created_at as string,
+  }
+}
+
+function agendaEventoToDb(e: Omit<AgendaEvento, 'id' | 'createdAt'>): Record<string, unknown> {
+  return {
+    titulo: e.titulo,
+    tipo: e.tipo,
+    fecha: e.fecha,
+    hora: e.hora || null,
+    ambito: e.ambito,
+    player_ids: e.playerIds,
+    scouting_player_id: e.scoutingPlayerId ?? null,
+    participant_ids: e.participantIds,
+    notas: e.notas ?? null,
+    author_id: e.authorId ?? null,
+    activity_ref: e.activityRef ?? null,
+  }
+}
+
+/** Lanza si la tabla no existe: quien llama decide cómo seguir sin ella. */
+export async function fetchAgendaEventos(): Promise<AgendaEvento[]> {
+  const filas = await leerTodo<Record<string, unknown>>('agenda_eventos', (d, h) =>
+    supabase.from('agenda_eventos').select('*')
+      .order('fecha', { ascending: false }).order('id').range(d, h))
+  return filas.map(dbToAgendaEvento)
+}
+
+export async function createAgendaEvento(e: Omit<AgendaEvento, 'id' | 'createdAt'>): Promise<AgendaEvento> {
+  const { data, error } = await supabase.from('agenda_eventos').insert(agendaEventoToDb(e)).select().single()
+  if (error) throw error
+  return dbToAgendaEvento(data as Record<string, unknown>)
+}
+
+export async function updateAgendaEvento(e: AgendaEvento): Promise<void> {
+  const { error } = await supabase.from('agenda_eventos').update(agendaEventoToDb(e)).eq('id', e.id)
+  if (error) throw error
+}
+
+export async function deleteAgendaEvento(id: string): Promise<void> {
+  const { error } = await supabase.from('agenda_eventos').delete().eq('id', id)
+  if (error) throw error
 }
 
 // ── ZONAS DE CLUBES ──────────────────────────────────────────────────
