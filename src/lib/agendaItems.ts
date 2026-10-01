@@ -426,8 +426,10 @@ export function construirAgenda(input: AgendaInput): AgendaItem[] {
       id: `evento:${e.id}`,
       tipo: tipoDeEvento(e.tipo),
       titulo: e.titulo || e.tipo,
-      personId: e.authorId ?? e.participantIds[0] ?? '',
-      otrosIds: e.participantIds,
+      // El evento es de quienes asisten, no de quien lo apunta: si lo creo para
+      // otros dos, sale a su nombre y no en mi lista. Sin asistentes, del autor.
+      personId: e.participantIds[0] ?? e.authorId ?? '',
+      otrosIds: e.participantIds.slice(1),
       fecha: e.fecha,
       hora: e.hora,
       playerId: jugador?.id,

@@ -178,10 +178,14 @@ describe('construirAgenda · eventos de agenda', () => {
     const [it0] = construirAgenda(base({ eventos: [ev({ id: 'e1', tipo: 'Videollamada', titulo: 'Con el club', hora: '17:30', participantIds: [OTRO] })] }))
     expect(it0).toMatchObject({
       id: 'evento:e1', tipo: 'reunion', titulo: 'Con el club', hora: '17:30', categoria: 'Videollamada',
-      origen: 'evento', personId: YO, abrir: { tipo: 'evento', eventoId: 'e1' },
+      origen: 'evento', personId: OTRO, abrir: { tipo: 'evento', eventoId: 'e1' },
     })
     expect(it0.playerNombre).toBeUndefined()
+    // Lo apunté yo, pero para otro: es suyo y no sale en mi lista
     expect(itemEsDe(it0, OTRO)).toBe(true)
+    expect(itemEsDe(it0, YO)).toBe(false)
+    // Sin asistentes marcados, es de quien lo apunta
+    expect(construirAgenda(base({ eventos: [ev({ id: 'e2' })] }))[0].personId).toBe(YO)
   })
 
   it('con jugadores de Mantenimiento o uno de Captación', () => {

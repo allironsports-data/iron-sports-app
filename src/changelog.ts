@@ -21,6 +21,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-01',
     items: [
+      'Corregido: un evento que apuntabas para otras personas salía a tu nombre y en tu lista. Ahora un evento es de quienes asisten, no de quien lo crea; solo si no marcas a nadie queda a tu nombre',
       'Tareas que nacen del pipeline: al abrir la tarea de una próxima acción de Firmar, debajo de los comentarios se ve el historial de la tarjeta del jugador (los últimos apuntes) y un botón «Abrir tarjeta»',
       'Viajes en el calendario: botón «Viaje» para planear una salida de varios días (destino, ida, vuelta y quién va). El viaje sale en el calendario cada uno de sus días, arriba del todo, a la vista de todo el equipo y a nombre de quienes viajan',
       'Viajes → a quién visitar: al abrir un viaje, la app sugiere los jugadores del pipeline de Firmar a los que puedes visitar — primero los que juegan en la ciudad de destino y después los del resto de la zona —, con los calientes y los que llevan más tiempo sin tocar delante. Desde cada uno puedes abrir su tarjeta o dejar la visita apuntada en un día del viaje: queda en el calendario y en el historial de su tarjeta',
