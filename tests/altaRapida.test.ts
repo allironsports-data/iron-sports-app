@@ -41,7 +41,8 @@ describe('parsearAltaRapida', () => {
     expect(p('x @pablo').assigneeId).toBeUndefined()
   })
   it('categoría por principio del nombre, sin acentos', () => {
-    expect(p('x #reunion').label).toBe('Reunión/Comida')
+    expect(p('x #reunion').label).toBe('Reunión')
+    expect(p('x #llamada').label).toBe('Llamada')
     expect(p('x #info').label).toBe('Informe')
     expect(p('x #nada')).toMatchObject({ titulo: 'x #nada', sinResolver: ['#nada'] })
   })

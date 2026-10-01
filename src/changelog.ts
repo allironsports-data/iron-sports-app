@@ -21,6 +21,8 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-01',
     items: [
+      'De tarea a evento: al marcar como hecha una tarea de tipo Llamada, Reunión o Visita, la app pregunta «¿qué pasó?» (en las llamadas, además, contestó / no contestó). Al aceptar, la tarea se completa y queda un evento con la fecha de hoy en el calendario, en la ficha del jugador y, si está en el pipeline, en su tarjeta. Con «Solo completar» se cierra sin dejar nada',
+      'Tipos de tarea: nuevos «Llamada» y «Visita», y «Reunión/Comida» pasa a llamarse «Reunión», para que el tipo de la tarea y el del evento se llamen igual. Las tareas que ya tenías como «Reunión/Comida» se ven como «Reunión»',
       '¿Tarea o evento? Ahora es la misma ventana, y arriba se elige cuál es, con la diferencia escrita: una TAREA es algo que hay que hacer (se marca como hecha y puede vencer); un EVENTO es algo que ocurre un día, o ya ocurrió (reunión, visita, llamada, viaje…) y no se completa. En las listas, los eventos ya no llevan el círculo de «hecha»',
       'Nueva tarea, rehecha: lo primero es qué hay que hacer; después con quién está relacionada — general, un jugador nuestro o un jugador de Captación, con buscador en vez de una lista interminable —, quién la hace y para cuándo (con atajos Hoy / Mañana / Próxima semana / Sin fecha). Tipo, prioridad y repetir están a la vista, sin tener que abrir «Más opciones»',
       'Tareas de jugadores de Captación: se pueden crear desde Tareas y desde el calendario. Quedan ligadas a su ficha de scouting (el nombre en la fila la abre) y, si el jugador está en el pipeline, apuntadas en el historial de su tarjeta de Firmar',

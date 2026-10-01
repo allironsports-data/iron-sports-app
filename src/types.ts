@@ -38,8 +38,16 @@ export interface TaskComment {
 }
 
 /** Tipos de tarea. ÚNICA lista: los <select> de tipo deben iterar TASK_LABELS, no copiarla. */
-export const TASK_LABELS = ['General', 'Scouting', 'Distribución', 'Negociación', 'Reunión/Comida', 'Administrativa', 'Seguimiento', 'Informe', 'Marketing', 'Comunicación', 'Videoanálisis', 'Postpartido'] as const
+export const TASK_LABELS = ['General', 'Llamada', 'Reunión', 'Visita', 'Scouting', 'Distribución', 'Negociación', 'Administrativa', 'Seguimiento', 'Informe', 'Marketing', 'Comunicación', 'Videoanálisis', 'Postpartido'] as const
 export type TaskLabel = typeof TASK_LABELS[number]
+
+/**
+ * Tareas «de contacto»: al completarlas la app pregunta qué pasó y lo deja
+ * registrado como evento. A qué tipo de evento corresponde cada una.
+ */
+export const EVENTO_DE_TAREA: Partial<Record<TaskLabel, string>> = {
+  'Llamada': 'Llamada', 'Reunión': 'Reunión', 'Visita': 'Visita presencial',
+}
 
 export interface Task {
   id: string;

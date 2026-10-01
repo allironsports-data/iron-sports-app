@@ -466,7 +466,8 @@ function dbToTask(row: Record<string, unknown>): Task {
     dependsOnId: row.depends_on_id as string | undefined,
     status: row.status as Task['status'],
     priority: row.priority as Task['priority'],
-    label: (row.label as Task['label']) ?? undefined,
+    // «Reunión/Comida» pasó a llamarse «Reunión»: las antiguas se leen ya con el nombre nuevo
+    label: (row.label === 'Reunión/Comida' ? 'Reunión' : (row.label as Task['label'])) ?? undefined,
     dueDate: (row.due_date as string) ?? undefined,
     createdAt: row.created_at as string,
     completedAt: (row.completed_at as string) ?? undefined,

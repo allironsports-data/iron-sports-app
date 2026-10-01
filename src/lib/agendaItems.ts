@@ -123,7 +123,8 @@ function tipoDeTarea(t: Task): AgendaTipo {
     const hit = EMOJI_TIPO.find(([e]) => t.title.startsWith(e))
     if (hit) return hit[1]
   }
-  if (t.label === 'Reunión/Comida') return 'reunion'
+  if (t.label === 'Llamada') return 'llamada'
+  if (t.label === 'Reunión' || t.label === 'Visita') return 'reunion'
   return 'tarea'
 }
 

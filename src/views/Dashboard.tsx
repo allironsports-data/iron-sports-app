@@ -9,7 +9,7 @@ import { useAtras } from "../hooks/useAtras";
 import { isValidName, isValidBirthDate } from "../lib/validate";
 import logoImg from '../assets/logo.jpeg';
 import type { Player, Task, PlayerActivity, ScoutingMatch, ScoutingMatchScout, ScoutingPlayer, MemberStatus, Postpartido, FirmasEntry, AgendaEvento } from "../types";
-import { calcAge, clubsLabel, PLAYER_ESTADOS } from "../types";
+import { calcAge, clubsLabel, PLAYER_ESTADOS, EVENTO_DE_TAREA } from "../types";
 import { fechaLocal, hoyISO, lunesDe, esVencida, parseDia, sumarDias } from "../lib/fechas";
 import { construirAgenda, estaArchivada, type AgendaItem, type AgendaEstado } from "../lib/agendaItems";
 import type { AltaRapida } from "../lib/altaRapida";
@@ -22,6 +22,7 @@ import { CalendarioSemanal } from "./CalendarioSemanal";
 import { EventoModal, type EventoBorrador } from "../components/agenda/EventoModal";
 import { ViajeModal } from "../components/agenda/ViajeModal";
 import { TareaModal } from "../components/agenda/TareaModal";
+import { RegistroContactoModal, type RegistroContacto } from "../components/agenda/RegistroContactoModal";
 import { TipoNuevo } from "../components/agenda/TipoNuevo";
 import { useActividadesRango } from "../hooks/useActividadesRango";
 import {
@@ -350,6 +351,8 @@ export function Dashboard({
   const [actsVersion, setActsVersion] = useState(0);
   // Modal de evento: valores de partida y, si se edita, el evento original
   const [eventoModal, setEventoModal] = useState<{ inicial: Partial<EventoBorrador>; original?: AgendaEvento } | null>(null);
+  // Tarea de contacto que se está completando: antes de cerrarla se pregunta qué pasó
+  const [registro, setRegistro] = useState<Task | null>(null);
   // Viaje abierto (id): enseña a qué jugadores del pipeline se puede visitar
   const [viajeId, setViajeId] = useState<string | null>(null);
   useAtras(!!viajeId, () => setViajeId(null), 'viaje');
@@ -462,6 +465,56 @@ export function Dashboard({
       showToast(`Visita a ${tarjeta.playerName} apuntada`, 'success');
     } catch {
       showToast('No se pudo apuntar la visita. Inténtalo de nuevo.', 'error');
+    }
+  }
+
+  // ── Tarea de contacto → evento ──
+  // «Llamar a X» es tarea mientras está pendiente; hecha, lo que queda es el
+  // evento (se le llamó ese día y qué dijo). Las tareas que nacen de Firmar ya
+  // dejan su apunte en la tarjeta: a esas no se les pregunta.
+  const pideRegistro = (antes: Task, despues: Task) =>
+    despues.status === 'completada' && antes.status !== 'completada' &&
+    !!antes.label && !!EVENTO_DE_TAREA[antes.label] &&
+    !(firmasEntries ?? []).some(f => f.nextActionTaskId === antes.id);
+
+  /** Guarda la tarea; si es de contacto y se está completando, antes pregunta qué pasó. true = guardada ya. */
+  async function guardarTareaOPreguntar(antes: Task, despues: Task): Promise<boolean> {
+    if (pideRegistro(antes, despues)) { setRegistro(despues); return false; }
+    if (guardarTarea) await Promise.resolve(guardarTarea(despues));
+    return true;
+  }
+
+  async function completarRegistrando(task: Task, r: RegistroContacto | null) {
+    try {
+      if (guardarTarea) await Promise.resolve(guardarTarea(task));
+      setRegistro(null);
+      if (detailTask?.id === task.id) setDetailTask(null);
+      if (!r) { showToast('Tarea hecha', 'success'); return; }
+      const jugador = task.playerId && task.playerId !== 'general' ? players.find(p => p.id === task.playerId) : undefined;
+      const e: EventoBorrador = {
+        titulo: task.title,
+        tipo: EVENTO_DE_TAREA[task.label!] ?? 'Nota general',
+        fecha: hoyISO(),
+        ambito: jugador ? 'mantenimiento' : task.scoutingPlayerId ? 'captacion' : 'general',
+        playerIds: jugador ? [jugador.id] : [],
+        scoutingPlayerId: jugador ? undefined : task.scoutingPlayerId,
+        participantIds: [task.assigneeId || currentProfile.id],
+        notas: [r.contesto === undefined ? '' : r.contesto ? 'Contestó' : 'No contestó', r.texto].filter(Boolean).join(' — ') || undefined,
+        authorId: currentProfile.id,
+      };
+      const activityRef = await crearActividades(e);
+      try {
+        const creado = await createAgendaEvento({ ...e, activityRef });
+        setEventos(prev => [creado, ...prev]);
+        await apuntarEnPipeline(creado);
+      } catch (err) {
+        // Sin la tabla de eventos, el contacto con un jugador nuestro queda igualmente en su actividad
+        if (!(esMigracionPendiente(err) && activityRef)) throw err;
+      }
+      setActsVersion(v => v + 1);
+      showToast('Tarea hecha y registrada', 'success');
+    } catch {
+      showToast('No se pudo guardar. Inténtalo de nuevo.', 'error');
     }
   }
 
@@ -951,11 +1004,7 @@ export function Dashboard({
     };
     const updated = { ...task, status: next[task.status] ?? "pendiente" };
     try {
-      if (task.playerId === "general" || task.playerId === "") {
-        if (onUpdateGeneralTask) await Promise.resolve(onUpdateGeneralTask(updated));
-      } else {
-        if (onUpdateTask) await Promise.resolve(onUpdateTask(updated));
-      }
+      await guardarTareaOPreguntar(task, updated);
     } catch {
       showToast("No se pudo guardar. Inténtalo de nuevo.", "error");
     }
@@ -1002,7 +1051,7 @@ export function Dashboard({
       }
       if (task) {
         // Si es la tarea de una acción de Firmar, App la marca hecha también allí
-        if (guardarTarea) await Promise.resolve(guardarTarea({ ...task, status: estado }));
+        if (!(await guardarTareaOPreguntar(task, { ...task, status: estado }))) return;
         // Completar es un gesto fácil de hacer sin querer (deslizar, un toque): se puede deshacer.
         // Solo en tareas normales: una acción de Firmar o una tarea que se repite ya han hecho más cosas.
         if (estado === 'completada' && it.origen === 'tarea' && !task.recurrence && guardarTarea) {
@@ -2824,6 +2873,19 @@ export function Dashboard({
       )}
 
 
+      {/* ── Tarea de contacto completada: ¿qué pasó? ── */}
+      {registro && (
+        <RegistroContactoModal
+          task={registro}
+          conQuien={registro.playerId && registro.playerId !== 'general'
+            ? players.find(p => p.id === registro.playerId)?.name
+            : registro.scoutingPlayerId ? scoutingPlayers.find(p => p.id === registro.scoutingPlayerId)?.fullName : undefined}
+          onRegistrar={(r) => completarRegistrando(registro, r)}
+          onSoloCompletar={() => completarRegistrando(registro, null)}
+          onClose={() => setRegistro(null)}
+        />
+      )}
+
       {/* ── Viaje: a quién visitar ── */}
       {(() => {
         const viaje = viajeId ? eventos.find(x => x.id === viajeId) : undefined;
@@ -2887,8 +2949,7 @@ export function Dashboard({
             try {
               // Un único handler: ambos props apuntan al mismo updater en App;
               // llamar a los dos provocaba una doble escritura en la BD.
-              const update = onUpdateTask ?? onUpdateGeneralTask;
-              if (update) await Promise.resolve(update(updated));
+              await guardarTareaOPreguntar(detailTask, updated);
             } catch {
               showToast("No se pudo guardar. Inténtalo de nuevo.", "error");
             }
