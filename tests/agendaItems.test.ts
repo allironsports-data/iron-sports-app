@@ -208,6 +208,18 @@ describe('construirAgenda · eventos de agenda', () => {
     expect(items.map(i => i.id)).toEqual(['evento:act2', 'evento:a'])
   })
 
+  it('un evento pasado no es una tarea: ni hecha, ni vencida', () => {
+    const items = construirAgenda(base({
+      rango: { desde: '2026-09-20', hasta: HOY },
+      eventos: [ev({ id: 'pasado', fecha: '2026-09-24' })],
+      activities: [evento({ id: 'act', date: '2026-09-24' })],
+    }))
+    expect(items.map(i => i.estado)).toEqual(['pendiente', 'pendiente'])
+    const s = seccionesDelDia(items, HOY)
+    expect(s.vencidas).toEqual([])
+    expect(s.hechasHoy).toEqual([])
+  })
+
   it('tipoDeEvento', () => {
     expect(tipoDeEvento('Reunión con jugador')).toBe('reunion')
     expect(tipoDeEvento('Cita')).toBe('reunion')

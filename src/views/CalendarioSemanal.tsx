@@ -139,7 +139,7 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
             {it.titulo}
           </span>
           <span className="block text-[11px] text-slate-400">
-            {[m.label, it.playerNombre, it.categoria && it.categoria !== m.label ? it.categoria : undefined, it.estado === 'en_progreso' ? 'en curso' : hecha ? 'hecha' : undefined]
+            {[m.label, it.playerNombre, it.categoria && it.categoria !== m.label ? it.categoria : undefined, it.lugar ? `📍 ${it.lugar}` : undefined, it.estado === 'en_progreso' ? 'en curso' : hecha ? 'hecha' : undefined]
               .filter(Boolean).join(' · ')}
           </span>
         </span>
@@ -171,6 +171,7 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
           const abiertos = suyos.filter(it => it.estado !== 'completada')
             .sort((a, b) => Number(b.estado === 'en_progreso') - Number(a.estado === 'en_progreso') || (a.hora ?? '99').localeCompare(b.hora ?? '99'))
           const hechos = suyos.length - abiertos.length
+          const nPend = abiertos.filter(it => it.origen !== 'evento').length
           const esYo = p.id === yo.id
           const nota = notas[p.id]
           return (
@@ -179,7 +180,7 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
                 <span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white bg-primary flex-shrink-0">{p.avatar}</span>
                 <span className="text-xs font-semibold text-slate-800 truncate">{p.name.split(' ')[0]}{esYo && <span className="font-normal text-slate-400"> (yo)</span>}</span>
                 <span className="ml-auto text-[11px] text-slate-400 tabular-nums flex-shrink-0">
-                  {abiertos.length > 0 ? `${abiertos.length} pendiente${abiertos.length !== 1 ? 's' : ''}` : suyos.length > 0 ? 'todo hecho' : 'nada'}
+                  {nPend > 0 ? `${nPend} pendiente${nPend !== 1 ? 's' : ''}` : abiertos.length > 0 ? `${abiertos.length} evento${abiertos.length !== 1 ? 's' : ''}` : suyos.length > 0 ? 'todo hecho' : 'nada'}
                   {hechos > 0 && abiertos.length > 0 && ` · ${hechos} ✓`}
                 </span>
               </button>
@@ -221,8 +222,15 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
   }
 
   const carga = (es: EntradaCalendario[]) => {
-    const abiertas = es.filter(e => !e.hecha).length
-    return <span className="font-normal text-slate-400 tabular-nums" title="Abiertas / total del día">{abiertas}/{es.length}</span>
+    // Los eventos no se «hacen»: la carga cuenta solo lo que es tarea, llamada, postpartido o partido
+    const tareas = es.filter(e => e.item.origen !== 'evento')
+    const abiertas = tareas.filter(e => !e.hecha).length
+    const eventos = es.length - tareas.length
+    return (
+      <span className="font-normal text-slate-400 tabular-nums" title="Abiertas / total del día (los eventos van aparte)">
+        {tareas.length > 0 && `${abiertas}/${tareas.length}`}{eventos > 0 && `${tareas.length > 0 ? ' · ' : ''}${eventos} ev.`}
+      </span>
+    )
   }
 
   return (

@@ -14,7 +14,14 @@ import type { Profile } from '../../contexts/AuthContext'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { norm } from '../../lib/texto'
 
-export type EventoBorrador = Omit<AgendaEvento, 'id' | 'createdAt' | 'activityRef'>
+export type EventoBorrador = Omit<AgendaEvento, 'id' | 'createdAt' | 'activityRef'> & {
+  /**
+   * Solo al crear con tipo «Partido»: en vez de un evento suelto se da de
+   * alta un partido de Captación (sale en Captación → Partidos) y quienes
+   * asisten quedan como scouts.
+   */
+  partido?: { local: string; visitante: string; competicion?: string; viewMode?: 'campo' | 'video' }
+}
 
 interface Props {
   players: Player[]
@@ -54,13 +61,20 @@ export function EventoModal({ players, scoutingPlayers, profiles, currentProfile
   const [scoutingPlayerId, setScoutingPlayerId] = useState(inicial?.scoutingPlayerId ?? '')
   const [participantIds, setParticipantIds] = useState<string[]>(inicial?.participantIds ?? [])
   const [notas, setNotas] = useState(inicial?.notas ?? '')
+  const [lugar, setLugar] = useState(inicial?.lugar ?? '')
+  // Partido de Captación (solo al crear)
+  const [local, setLocal] = useState('')
+  const [visitante, setVisitante] = useState('')
+  const [competicion, setCompeticion] = useState('')
+  const [viewMode, setViewMode] = useState<'' | 'campo' | 'video'>('')
   const [q, setQ] = useState('')
   const [guardando, setGuardando] = useState(false)
 
   useEscapeKey(onClose)
 
   const tipoFinal = tipo === 'custom' ? tipoLibre.trim() : tipo
-  const valido = !!fecha && !!tipoFinal
+  const esPartido = tipo === 'Partido' && !editando
+  const valido = !!fecha && !!tipoFinal && (!esPartido || (!!local.trim() && !!visitante.trim()))
 
   // Buscador de jugador: solo con texto, que en Captación hay miles
   const nq = norm(q)
@@ -92,6 +106,10 @@ export function EventoModal({ players, scoutingPlayers, profiles, currentProfile
         scoutingPlayerId: ambito === 'captacion' && scoutingPlayerId ? scoutingPlayerId : undefined,
         participantIds,
         notas: notas.trim() || undefined,
+        lugar: !esPartido && lugar.trim() ? lugar.trim() : undefined,
+        partido: esPartido
+          ? { local: local.trim(), visitante: visitante.trim(), competicion: competicion.trim() || undefined, viewMode: viewMode || undefined }
+          : undefined,
         authorId: inicial?.authorId ?? currentProfile.id,
       })
     } finally {
@@ -115,10 +133,17 @@ export function EventoModal({ players, scoutingPlayers, profiles, currentProfile
                 <option value="custom">Otro…</option>
               </select>
             </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Título <span className="text-slate-400 font-normal">(opcional)</span></label>
-              <input value={titulo} onChange={e => setTitulo(e.target.value)} placeholder={tipoFinal || 'Ej. Reunión con el padre'} className={CAMPO} />
-            </div>
+            {esPartido ? (
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Competición <span className="text-slate-400 font-normal">(opcional)</span></label>
+                <input value={competicion} onChange={e => setCompeticion(e.target.value)} placeholder="Ej. División de Honor" className={CAMPO} />
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Título <span className="text-slate-400 font-normal">(opcional)</span></label>
+                <input value={titulo} onChange={e => setTitulo(e.target.value)} placeholder={tipoFinal || 'Ej. Reunión con el padre'} className={CAMPO} />
+              </div>
+            )}
           </div>
           {tipo === 'custom' && (
             <input autoFocus value={tipoLibre} onChange={e => setTipoLibre(e.target.value)} placeholder="Tipo de evento (ej. Firma de contrato)" className={CAMPO} />
@@ -135,8 +160,40 @@ export function EventoModal({ players, scoutingPlayers, profiles, currentProfile
             </div>
           </div>
 
+          {esPartido && (<>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Local <span className="text-red-400">*</span></label>
+                <input value={local} onChange={e => setLocal(e.target.value)} placeholder="Equipo local" className={CAMPO} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Visitante <span className="text-red-400">*</span></label>
+                <input value={visitante} onChange={e => setVisitante(e.target.value)} placeholder="Equipo visitante" className={CAMPO} />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Cómo se ve <span className="text-slate-400 font-normal">(opcional)</span></label>
+              <div className="flex items-center gap-0 bg-slate-100 rounded-lg p-0.5 w-fit">
+                {([['', 'Sin decidir'], ['campo', 'En el campo'], ['video', 'Por vídeo']] as const).map(([v, txt]) => (
+                  <button key={v} type="button" onClick={() => setViewMode(v)}
+                    className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-colors ${viewMode === v ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                    {txt}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <p className="text-[11px] text-emerald-700">Se da de alta como partido en Captación → Partidos, con quienes marques abajo como scouts.</p>
+          </>)}
+
+          {!esPartido && (
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Lugar <span className="text-slate-400 font-normal">(opcional)</span></label>
+              <input value={lugar} onChange={e => setLugar(e.target.value)} placeholder="Ej. Oficina, Lezama, restaurante…" className={CAMPO} />
+            </div>
+          )}
+
           {/* Ámbito: decide a qué jugador se puede ligar */}
-          <div className="space-y-1">
+          {!esPartido && <div className="space-y-1">
             <label className="text-xs font-medium text-slate-600">Relacionado con</label>
             <div className="flex items-center gap-0 bg-slate-100 rounded-lg p-0.5 w-fit">
               {AMBITOS.map(a => (
@@ -146,9 +203,9 @@ export function EventoModal({ players, scoutingPlayers, profiles, currentProfile
                 </button>
               ))}
             </div>
-          </div>
+          </div>}
 
-          {ambito !== 'general' && (
+          {!esPartido && ambito !== 'general' && (
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-slate-600">
                 {ambito === 'mantenimiento' ? 'Jugadores' : 'Jugador de Captación'} <span className="text-slate-400 font-normal">(opcional)</span>
@@ -201,7 +258,7 @@ export function EventoModal({ players, scoutingPlayers, profiles, currentProfile
           {/* Quién asiste: una fila de iniciales; el evento sale en el calendario de cada uno */}
           <div className="flex items-center gap-2">
             <label className="text-xs font-medium text-slate-600 flex items-center gap-1.5 flex-shrink-0">
-              <Users className="w-3.5 h-3.5 text-slate-400" /> Asisten
+              <Users className="w-3.5 h-3.5 text-slate-400" /> {esPartido ? 'Scouts' : 'Asisten'}
             </label>
             <div className="flex flex-wrap gap-1">
               {profiles.map(p => {
@@ -240,7 +297,7 @@ export function EventoModal({ players, scoutingPlayers, profiles, currentProfile
             <button onClick={onClose} className="flex-1 py-2.5 sm:py-2 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">Cancelar</button>
             <button onClick={guardar} disabled={!valido || guardando}
               className="flex-1 py-2.5 sm:py-2 text-xs rounded-lg text-white disabled:opacity-50 transition-colors bg-primary hover:bg-primary/90">
-              {guardando ? 'Guardando…' : editando ? 'Guardar cambios' : 'Guardar evento'}
+              {guardando ? 'Guardando…' : editando ? 'Guardar cambios' : esPartido ? 'Crear partido' : 'Guardar evento'}
             </button>
           </div>
         </div>

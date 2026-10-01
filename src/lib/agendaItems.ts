@@ -48,6 +48,8 @@ export interface AgendaItem {
   playerId?: string
   playerNombre?: string
   categoria?: string
+  /** Dónde es (eventos con lugar) */
+  lugar?: string
   estado: AgendaEstado
   /** Día (AAAA-MM-DD local) en que se completó, si se sabe */
   hechaEl?: string
@@ -294,8 +296,8 @@ export function construirAgenda(input: AgendaInput): AgendaItem[] {
       playerId: jugador?.id,
       playerNombre: jugador ? (mas > 0 ? `${jugador.name} +${mas}` : jugador.name) : undefined,
       categoria: 'Evento',
-      // Un evento no se «hace»: pasa. Lo de antes de hoy cuenta como pasado.
-      estado: a.date.slice(0, 10) < hoy ? 'completada' : 'pendiente',
+      // Un evento no se «hace» ni vence: no es una tarea. Nunca sale tachado.
+      estado: 'pendiente',
       prioridadAlta: false,
       origen: 'evento',
       abrir: { tipo: 'jugador', playerId: a.playerId },
@@ -322,7 +324,8 @@ export function construirAgenda(input: AgendaInput): AgendaItem[] {
       playerId: jugador?.id,
       playerNombre: nombre,
       categoria: e.tipo,
-      estado: e.fecha < hoy ? 'completada' : 'pendiente',
+      lugar: e.lugar,
+      estado: 'pendiente',
       prioridadAlta: false,
       origen: 'evento',
       abrir: { tipo: 'evento', eventoId: e.id },
@@ -396,12 +399,14 @@ export function seccionesDelDia(items: AgendaItem[], hoy: string): SeccionesDia 
   const porDia = new Map<string, AgendaItem[]>()
   for (const it of items) {
     if (it.estado === 'completada') {
-      // Un evento pasado no es algo «hecho hoy»
-      if (it.origen !== 'evento' && it.hechaEl === hoy) s.hechasHoy.push(it)
+      if (it.hechaEl === hoy) s.hechasHoy.push(it)
       continue
     }
     if (!it.fecha) { s.sinFecha.push(it); continue }
-    if (it.fecha < hoy) s.vencidas.push(it)
+    if (it.fecha < hoy) {
+      // Un evento pasado no es una tarea vencida: simplemente ya ocurrió
+      if (it.origen !== 'evento') s.vencidas.push(it)
+    }
     else if (it.fecha === hoy) s.hoy.push(it)
     else if (it.fecha <= limite) {
       const arr = porDia.get(it.fecha)

@@ -81,6 +81,8 @@ interface Props {
   onPatchFirmasEntry?: (id: string, changes: Partial<FirmasEntry> | ((e: FirmasEntry) => FirmasEntry)) => Promise<void>;
   /** Scouts asignados a cada partido — para los partidos de «Mi día» */
   matchScouts?: ScoutingMatchScout[];
+  /** Asigna un scout (iniciales) a un partido de Captación */
+  onAddMatchScout?: (matchId: string, scout: string, viewMode?: 'campo' | 'video') => Promise<void>;
   /** Abre la ficha de un partido de Captación */
   onOpenMatch?: (matchId: string) => void;
   /** Marca un partido como visto/pendiente. `scout` = iniciales si el partido tiene scouts propios */
@@ -154,6 +156,7 @@ export function Dashboard({
   onPatchFirmasEntry,
   matchScouts = [],
   scoutingPlayers = [],
+  onAddMatchScout,
   onOpenMatch,
   onSetMatchSeen,
   updateAvailable,
@@ -394,7 +397,7 @@ export function Dashboard({
       const t = ev.tipo.toLowerCase();
       const apunte = {
         id: idApunte(ev.id),
-        text: [`📅 ${ev.tipo}${ev.titulo ? `: ${ev.titulo}` : ''}`, futuro ? `programado para el ${cuando}` : undefined, ev.notas].filter(Boolean).join(' — '),
+        text: [`📅 ${ev.tipo}${ev.titulo ? `: ${ev.titulo}` : ''}`, futuro ? `programado para el ${cuando}` : undefined, ev.lugar ? `en ${ev.lugar}` : undefined, ev.notas].filter(Boolean).join(' — '),
         // El historial se ordena por fecha: lo ya ocurrido va en su día; lo futuro, cuando se apunta
         date: futuro ? new Date().toISOString() : new Date(`${ev.fecha}T${ev.hora || '12:00'}:00`).toISOString(),
         author: currentProfile.name,
@@ -408,6 +411,23 @@ export function Dashboard({
   async function guardarEvento(e: EventoBorrador) {
     const original = eventoModal?.original;
     try {
+      if (e.partido && !original) {
+        // Un «Partido» no es un evento suelto: es un partido de Captación, con sus scouts
+        const partido = await createScoutingMatch({
+          date: e.fecha, time: e.hora,
+          homeTeam: e.partido.local, awayTeam: e.partido.visitante,
+          competition: e.partido.competicion, viewMode: e.partido.viewMode,
+          notes: e.notas, status: 'pendiente',
+        });
+        onAddScoutingMatch?.(partido);
+        for (const pid of e.participantIds) {
+          const avatar = profiles.find(p => p.id === pid)?.avatar;
+          if (avatar) await onAddMatchScout?.(partido.id, avatar, e.partido.viewMode);
+        }
+        showToast('Partido creado (visible en Captación → Partidos)', 'success');
+        setEventoModal(null);
+        return;
+      }
       if (original) {
         await borrarActividades(original.activityRef);
         const activityRef = await crearActividades(e);

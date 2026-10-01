@@ -504,6 +504,7 @@ export interface AgendaEvento {
   scoutingPlayerId?: string    // jugador de Captación
   participantIds: string[]     // profiles.id de quienes asisten (además del autor)
   notas?: string
+  lugar?: string               // dónde es (reuniones, visitas, comidas…). Opcional hasta migrar.
   authorId?: string
   /** id (o group_id) de las filas de player_activities que generó, para no contarlo dos veces */
   activityRef?: string

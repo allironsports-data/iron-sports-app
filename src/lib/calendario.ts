@@ -11,7 +11,7 @@ import type { AgendaItem } from './agendaItems'
 export interface EntradaCalendario {
   item: AgendaItem
   personas: string[]
-  /** true si para todas esas personas está hecho */
+  /** true si para todas esas personas está hecho. Los eventos nunca: no son tareas. */
   hecha: boolean
 }
 

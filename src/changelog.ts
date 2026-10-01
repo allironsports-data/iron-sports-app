@@ -21,6 +21,9 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-01',
     items: [
+      'Corregido: los eventos pasados (visitas, reuniones, comidas…) salían tachados y como «hecha», como si fueran tareas. Un evento no se completa ni vence: ahora se ve siempre normal, y en el recuento del día va aparte de las tareas',
+      'Nuevo evento → tipo «Partido»: ya no crea un evento suelto, da de alta un partido de verdad en Captación → Partidos. Pide local, visitante, competición y si se ve en el campo o por vídeo, y quienes marques quedan como scouts del partido',
+      'Eventos (reuniones, visitas, comidas…): nuevo campo opcional «Lugar», que se ve en el calendario',
       'Tareas de un jugador: al crearla (o al ligarla a un jugador desde el panel), sus encargados entran por defecto como «Adjuntos», para que les aparezca también a ellos. Se pueden quitar a mano',
       'La pestaña «Mi día» pasa a llamarse «Tareas». El calendario es su propia pestaña, «Calendario», justo al lado',
       'Calendario más fácil de leer: nueva vista «Agenda» (la de por defecto) con los siete días uno debajo de otro y cada cosa a todo el ancho — hora, título entero, jugador, categoría y quién lo lleva —, sin tener que ampliar nada. La vista «Columnas» sigue ahí y ahora muestra el título completo en varias líneas y el jugador. Al pulsar en el nombre de un día se abre ese día con la tarjeta de cada persona del equipo',
@@ -57,6 +60,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'El tablero de siempre (kanban, compacto, tabla, semana, agrupar por jugador o persona) sigue ahí: botón «Tablero» arriba a la derecha. Jugadores, Equipo y Postpartidos no cambian',
     ],
     adminItems: [
+      'Lugar de los eventos: necesita la columna agenda_eventos.lugar (migration_agenda_eventos_lugar.sql). Hasta ejecutarla, el lugar se ignora al guardar',
       'Tareas que se repiten: necesitan la columna tasks.recurrence (migration_tasks_recurrence.sql). Hasta ejecutarla, «Repetir» se ignora al guardar. La prioridad no necesita migración: tasks.priority ya existía',
       'Eventos sin jugador: necesitan la tabla nueva agenda_eventos (migration_agenda_eventos.sql). Hasta ejecutarla, solo se guardan los eventos con jugador de Mantenimiento, como antes',
       'Mi día: los admin tienen arriba a la derecha un selector de persona para ver «El día de X» en la misma pantalla',
