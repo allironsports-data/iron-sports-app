@@ -21,6 +21,7 @@ import { itemEsDe, seccionesDelDia } from "../lib/agendaItems";
 import { resumenSemanal } from "../lib/resumenSemanal";
 import { CalendarioSemanal } from "./CalendarioSemanal";
 import { EventoModal, type EventoBorrador } from "../components/agenda/EventoModal";
+import { ViajeModal } from "../components/agenda/ViajeModal";
 import { useActividadesRango } from "../hooks/useActividadesRango";
 import {
   createPlayerActivity, createGroupActivity, deletePlayerActivity, deleteGroupActivity, fetchActivitiesByAuthor, createScoutingMatch,
@@ -345,6 +346,9 @@ export function Dashboard({
   const [actsVersion, setActsVersion] = useState(0);
   // Modal de evento: valores de partida y, si se edita, el evento original
   const [eventoModal, setEventoModal] = useState<{ inicial: Partial<EventoBorrador>; original?: AgendaEvento } | null>(null);
+  // Viaje abierto (id): enseña a qué jugadores del pipeline se puede visitar
+  const [viajeId, setViajeId] = useState<string | null>(null);
+  useAtras(!!viajeId, () => setViajeId(null), 'viaje');
   // Valores de partida de «Nueva tarea» cuando se abre desde una celda del calendario
   const [tareaInicial, setTareaInicial] = useState<{ assigneeId?: string; dueDate?: string }>({});
   useEffect(() => {
@@ -432,6 +436,29 @@ export function Dashboard({
         kind: 'nota' as const,
       }],
     })).catch(err => console.error('No se pudo apuntar el comentario en la tarjeta de Firmar:', err));
+  }
+
+  // Desde un viaje: deja apuntada la visita a un jugador del pipeline un día concreto
+  async function crearVisitaDeViaje(viaje: AgendaEvento, tarjeta: FirmasEntry, dia: string) {
+    try {
+      const creado = await createAgendaEvento({
+        titulo: `Visita · ${tarjeta.playerName}`,
+        tipo: 'Visita presencial',
+        fecha: dia,
+        ambito: 'captacion',
+        playerIds: [],
+        scoutingPlayerId: tarjeta.scoutingPlayerId,
+        participantIds: viaje.participantIds,
+        lugar: viaje.lugar,
+        notas: `Durante el viaje a ${viaje.lugar ?? 'destino'}`,
+        authorId: currentProfile.id,
+      });
+      setEventos(prev => [creado, ...prev]);
+      await apuntarEnPipeline(creado);
+      showToast(`Visita a ${tarjeta.playerName} apuntada`, 'success');
+    } catch {
+      showToast('No se pudo apuntar la visita. Inténtalo de nuevo.', 'error');
+    }
   }
 
   async function guardarEvento(e: EventoBorrador) {
@@ -945,7 +972,10 @@ export function Dashboard({
     if (d.tipo === 'boulema') return onViewChange?.('boulema');
     if (d.tipo === 'evento') {
       const ev = eventos.find(x => x.id === d.eventoId);
-      if (ev) setEventoModal({ inicial: ev, original: ev });
+      if (!ev) return;
+      // Un viaje abre sus sugerencias de visita; el resto, el formulario
+      if (ev.tipo === 'Viaje') setViajeId(ev.id);
+      else setEventoModal({ inicial: ev, original: ev });
       return;
     }
     const t = d.taskId ? tasks.find(x => x.id === d.taskId) : undefined;
@@ -1769,6 +1799,7 @@ export function Dashboard({
             notas={notasEquipo}
             onGuardarMiNota={onUpdateMemberStatus ? guardarMiNota : undefined}
             onNuevo={(que, personId, fecha) => {
+              if (que === 'viaje') return openAddEvent({ tipo: 'Viaje', fecha, participantIds: [personId] });
               if (que === 'evento') return openAddEvent({ fecha, participantIds: [personId] });
               setTareaInicial({ assigneeId: personId, dueDate: fecha });
               setShowAddGeneralTask(true);
@@ -2763,6 +2794,26 @@ export function Dashboard({
         />
       )}
 
+
+      {/* ── Viaje: a quién visitar ── */}
+      {(() => {
+        const viaje = viajeId ? eventos.find(x => x.id === viajeId) : undefined;
+        if (!viaje) return null;
+        return (
+          <ViajeModal
+            viaje={viaje}
+            hoy={todayStr}
+            firmasEntries={firmasEntries ?? []}
+            scoutingPlayers={scoutingPlayers}
+            eventos={eventos}
+            profiles={profiles}
+            onClose={() => setViajeId(null)}
+            onEditar={() => { setViajeId(null); setEventoModal({ inicial: viaje, original: viaje }); }}
+            onAbrirTarjeta={(id) => onOpenFirmar?.(id)}
+            onCrearVisita={(tarjeta, dia) => crearVisitaDeViaje(viaje, tarjeta, dia)}
+          />
+        );
+      })()}
 
       {/* ── Evento: alta y edición ── */}
       {eventoModal && (

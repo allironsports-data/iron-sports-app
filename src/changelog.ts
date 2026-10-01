@@ -21,6 +21,8 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-01',
     items: [
+      'Viajes en el calendario: botón «Viaje» para planear una salida de varios días (destino, ida, vuelta y quién va). El viaje sale en el calendario cada uno de sus días, arriba del todo, a la vista de todo el equipo y a nombre de quienes viajan',
+      'Viajes → a quién visitar: al abrir un viaje, la app sugiere los jugadores del pipeline de Firmar a los que puedes visitar — primero los que juegan en la ciudad de destino y después los del resto de la zona —, con los calientes y los que llevan más tiempo sin tocar delante. Desde cada uno puedes abrir su tarjeta o dejar la visita apuntada en un día del viaje: queda en el calendario y en el historial de su tarjeta',
       'Boulema: un informe que te han pedido y aún no has escrito sale en tu lista de Tareas como pendiente («Informe Boulema — jugador»). Al pulsarlo te lleva a Boulema, y desaparece solo cuando escribes el informe',
       'Calendario: usa todo el ancho de la pantalla (antes se quedaba en una columna central estrecha) y, en la vista Columnas, los días sin nada se encogen para dejar sitio a los que tienen cosas',
       'Videoanálisis conectado: las sesiones que apuntas en la ficha del jugador (Rendimiento → Vídeoanálisis) salen en el calendario ese día, a nombre de sus encargados. Hay un tipo de tarea nuevo, «Videoanálisis», y las tareas de ese tipo de un jugador aparecen también en su ficha, en Rendimiento → Vídeoanálisis',
@@ -81,6 +83,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'El tablero de siempre (kanban, compacto, tabla, semana, agrupar por jugador o persona) sigue ahí: botón «Tablero» arriba a la derecha. Jugadores, Equipo y Postpartidos no cambian',
     ],
     adminItems: [
+      'Viajes: necesitan dos columnas nuevas en agenda_eventos, fecha_fin y zona (migration_agenda_viajes.sql). Hasta ejecutarlo, un viaje se guarda como evento de un solo día y sin zona. La ciudad de cada club sale de una tabla interna (lib/viajes.ts) con las ciudades principales; lo que no esté ahí cae en «la zona»',
       'Calendario (solo admins): salen los fines de contrato, de representación y con el club, el día que vencen',
       'Seguridad: dos SQL nuevos por ejecutar — seguridad_agenda_eventos.sql (candados de cuenta activa y solo-Captación en la tabla de eventos) y seguridad_tareas_solo_admin.sql (las tareas «solo admin» pasan a estar protegidas en la base, no solo ocultas en pantalla)',
       'App.tsx: las fichas a página completa (jugador, miembro) ya no sustituyen a la sección; la sección queda montada y escondida debajo (components/BajoCapa). Captación tiene un modo «solo» que pinta únicamente la ficha de un partido o de un jugador; lo usa App para las fichas flotantes',

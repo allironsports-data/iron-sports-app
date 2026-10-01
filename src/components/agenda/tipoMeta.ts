@@ -1,4 +1,4 @@
-import { ListTodo, Phone, Smartphone, Handshake, ClipboardList, Trophy, CalendarDays } from 'lucide-react'
+import { ListTodo, Phone, Smartphone, Handshake, ClipboardList, Trophy, CalendarDays, Plane } from 'lucide-react'
 import type { AgendaTipo } from '../../lib/agendaItems'
 
 // Icono, color y nombre de cada tipo de item: la fila de «Mi día» y los
@@ -10,6 +10,7 @@ export const AGENDA_TIPO_META: Record<AgendaTipo, { Icon: typeof ListTodo; cls: 
   reunion:     { Icon: Handshake,     cls: 'text-violet-500',  chip: 'bg-violet-50 border-violet-200 text-violet-800',    label: 'Reunión' },
   postpartido: { Icon: ClipboardList, cls: 'text-blue-500',    chip: 'bg-blue-50 border-blue-200 text-blue-800',          label: 'Postpartido' },
   partido:     { Icon: Trophy,        cls: 'text-emerald-500', chip: 'bg-emerald-50 border-emerald-200 text-emerald-800', label: 'Partido' },
+  viaje:       { Icon: Plane,         cls: 'text-sky-600',     chip: 'bg-sky-50 border-sky-200 text-sky-800',             label: 'Viaje' },
   evento:      { Icon: CalendarDays,  cls: 'text-slate-400',   chip: 'bg-sky-50 border-sky-200 text-sky-800',             label: 'Evento' },
 }
 
@@ -19,5 +20,5 @@ export const GRUPOS_TIPO: { id: string; label: string; tipos: AgendaTipo[] }[] =
   { id: 'llamadas',     label: 'Llamadas y reuniones', tipos: ['llamada', 'telefono', 'reunion'] },
   { id: 'postpartidos', label: 'Postpartidos',         tipos: ['postpartido'] },
   { id: 'tareas',       label: 'Tareas',               tipos: ['tarea'] },
-  { id: 'eventos',      label: 'Eventos',              tipos: ['evento'] },
+  { id: 'eventos',      label: 'Eventos',              tipos: ['evento', 'viaje'] },
 ]

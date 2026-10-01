@@ -16,9 +16,10 @@ import type {
   Task, ScoutingMatch, ScoutingMatchScout, FirmasEntry, Postpartido, Player, PlayerActivity, AgendaEvento,
 } from '../types'
 import { fechaLocal, sumarDias } from './fechas'
+import { diasDeViaje } from './viajes'
 import { norm } from './texto'
 
-export type AgendaTipo = 'tarea' | 'llamada' | 'telefono' | 'reunion' | 'postpartido' | 'partido' | 'evento'
+export type AgendaTipo = 'tarea' | 'llamada' | 'telefono' | 'reunion' | 'postpartido' | 'partido' | 'evento' | 'viaje'
 export type AgendaOrigen = 'tarea' | 'firmar' | 'postpartido' | 'captacion' | 'evento' | 'boulema'
 export type AgendaEstado = Task['status']
 
@@ -392,6 +393,29 @@ export function construirAgenda(input: AgendaInput): AgendaItem[] {
 
   // ── Eventos de agenda (con o sin jugador) ──
   for (const e of eventos) {
+    // Un viaje dura varios días: sale en cada uno, a nombre de quienes viajan
+    if (norm(e.tipo) === 'viaje') {
+      const dias = diasDeViaje(e.fecha, e.fechaFin)
+      dias.forEach((dia, i) => {
+        if (dia < rango.desde || dia > rango.hasta) return
+        items.push({
+          id: `evento:${e.id}:${dia}`,
+          tipo: 'viaje',
+          titulo: `${e.titulo || 'Viaje'}${e.lugar ? ` · ${e.lugar}` : ''}${dias.length > 1 ? ` (día ${i + 1} de ${dias.length})` : ''}`,
+          personId: e.participantIds[0] ?? e.authorId ?? '',
+          otrosIds: e.participantIds.slice(1),
+          fecha: dia,
+          categoria: 'Viaje',
+          lugar: e.lugar,
+          estado: 'pendiente',
+          prioridadAlta: false,
+          origen: 'evento',
+          abrir: { tipo: 'evento', eventoId: e.id },
+          ref: { eventoId: e.id },
+        })
+      })
+      continue
+    }
     if (e.fecha < rango.desde || e.fecha > rango.hasta) continue
     const jugador = e.playerIds.length > 0 ? jugadoresPorId.get(e.playerIds[0]) : undefined
     const mas = e.playerIds.length - 1
@@ -429,8 +453,8 @@ export function itemEsDe(it: AgendaItem, profileId: string): boolean {
 /** Lo que se puede cambiar de cada item desde la lista */
 export function permisosItem(it: AgendaItem): { estado: boolean; enCurso: boolean; reprogramar: boolean; reasignar: boolean } {
   switch (it.origen) {
+    // Un evento no se «hace»; y un informe de Boulema se completa escribiéndolo en Boulema, no desde aquí
     case 'evento':
-    // Un informe de Boulema se «completa» escribiéndolo en Boulema, no desde aquí
     case 'boulema':    return { estado: false, enCurso: false, reprogramar: false, reasignar: false }
     // La fecha y los scouts de un partido se cambian en Captación; aquí solo «visto»
     case 'captacion':  return { estado: true, enCurso: false, reprogramar: false, reasignar: false }

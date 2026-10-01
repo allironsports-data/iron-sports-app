@@ -322,7 +322,9 @@ export class ConflictError extends Error {
 
 /** 42703 = «column does not exist»: la migración de updated_at no se ha ejecutado aún. */
 function esColumnaInexistente(error: unknown): boolean {
-  return (error as { code?: string } | null)?.code === '42703'
+  // 42703 lo da Postgres; PGRST204 lo da PostgREST cuando la columna no está en su caché de esquema
+  const code = (error as { code?: string } | null)?.code
+  return code === '42703' || code === 'PGRST204'
 }
 
 const avisadoSinUpdatedAt = new Set<string>()
@@ -1970,7 +1972,7 @@ export function esMigracionPendiente(error: unknown): boolean {
 }
 
 function dbToAgendaEvento(row: Record<string, unknown>): AgendaEvento {
-  if ('lugar' in row) eventosConLugar = true
+  for (const c of COLUMNAS_OPCIONALES_EVENTO) if (c in row) columnasEvento.add(c)
   return {
     id: row.id as string,
     titulo: (row.titulo as string) ?? '',
@@ -1983,28 +1985,31 @@ function dbToAgendaEvento(row: Record<string, unknown>): AgendaEvento {
     participantIds: (row.participant_ids as string[]) ?? [],
     notas: (row.notas as string) ?? undefined,
     lugar: (row.lugar as string) ?? undefined,
+    fechaFin: (row.fecha_fin as string) ?? undefined,
+    zona: (row.zona as string) ?? undefined,
     authorId: (row.author_id as string) ?? undefined,
     activityRef: (row.activity_ref as string) ?? undefined,
     createdAt: row.created_at as string,
   }
 }
 
-// agenda_eventos.lugar: opcional hasta migrar (migration_agenda_eventos_lugar.sql).
-// Solo se manda si la columna existe (se ve al leer) o si alguien pone un lugar;
-// si la base la rechaza (42703) el evento se guarda sin ella.
-let eventosConLugar = false
+// Columnas de agenda_eventos añadidas después de crear la tabla: lugar
+// (migration_agenda_eventos_lugar.sql), fecha_fin y zona (migration_agenda_viajes.sql).
+// Cada una se manda solo si existe (se ve al leer) o si trae valor; y si la
+// base rechaza alguna (42703), el evento se guarda sin ellas.
+const COLUMNAS_OPCIONALES_EVENTO = ['lugar', 'fecha_fin', 'zona'] as const
+const columnasEvento = new Set<string>()
 
-function faltaColumnaLugar(error: unknown, fila: Record<string, unknown>): boolean {
-  if (!('lugar' in fila) || !esColumnaInexistente(error)) return false
-  console.warn('[db] agenda_eventos no tiene columna lugar: se guarda sin ella (ejecuta migration_agenda_eventos_lugar.sql)')
-  eventosConLugar = false
-  delete fila.lugar
+function faltaColumnaEvento(error: unknown, fila: Record<string, unknown>): boolean {
+  if (!esColumnaInexistente(error) || !COLUMNAS_OPCIONALES_EVENTO.some(c => c in fila)) return false
+  console.warn('[db] a agenda_eventos le falta alguna columna (lugar, fecha_fin, zona): se guarda sin ellas. Ejecuta migration_agenda_eventos_lugar.sql y migration_agenda_viajes.sql')
+  for (const c of COLUMNAS_OPCIONALES_EVENTO) { columnasEvento.delete(c); delete fila[c] }
   return true
 }
 
 function agendaEventoToDb(e: Omit<AgendaEvento, 'id' | 'createdAt'>): Record<string, unknown> {
-  return {
-    ...(eventosConLugar || e.lugar ? { lugar: e.lugar ?? null } : {}),
+  const opcionales: Record<string, unknown> = { lugar: e.lugar, fecha_fin: e.fechaFin, zona: e.zona }
+  const fila: Record<string, unknown> = {
     titulo: e.titulo,
     tipo: e.tipo,
     fecha: e.fecha,
@@ -2017,6 +2022,10 @@ function agendaEventoToDb(e: Omit<AgendaEvento, 'id' | 'createdAt'>): Record<str
     author_id: e.authorId ?? null,
     activity_ref: e.activityRef ?? null,
   }
+  for (const c of COLUMNAS_OPCIONALES_EVENTO) {
+    if (columnasEvento.has(c) || opcionales[c]) fila[c] = opcionales[c] ?? null
+  }
+  return fila
 }
 
 /** Lanza si la tabla no existe: quien llama decide cómo seguir sin ella. */
@@ -2030,7 +2039,7 @@ export async function fetchAgendaEventos(): Promise<AgendaEvento[]> {
 export async function createAgendaEvento(e: Omit<AgendaEvento, 'id' | 'createdAt'>): Promise<AgendaEvento> {
   const fila = agendaEventoToDb(e)
   let r = await supabase.from('agenda_eventos').insert(fila).select().single()
-  if (r.error && faltaColumnaLugar(r.error, fila)) r = await supabase.from('agenda_eventos').insert(fila).select().single()
+  if (r.error && faltaColumnaEvento(r.error, fila)) r = await supabase.from('agenda_eventos').insert(fila).select().single()
   if (r.error) throw r.error
   return dbToAgendaEvento(r.data as Record<string, unknown>)
 }
@@ -2038,7 +2047,7 @@ export async function createAgendaEvento(e: Omit<AgendaEvento, 'id' | 'createdAt
 export async function updateAgendaEvento(e: AgendaEvento): Promise<void> {
   const fila = agendaEventoToDb(e)
   let r = await supabase.from('agenda_eventos').update(fila).eq('id', e.id)
-  if (r.error && faltaColumnaLugar(r.error, fila)) r = await supabase.from('agenda_eventos').update(fila).eq('id', e.id)
+  if (r.error && faltaColumnaEvento(r.error, fila)) r = await supabase.from('agenda_eventos').update(fila).eq('id', e.id)
   if (r.error) throw r.error
 }
 

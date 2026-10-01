@@ -10,7 +10,7 @@
 // semana: se ve siempre un día y se pasa de uno a otro deslizando.
 
 import { useMemo, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Maximize2, CalendarDays, Check } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Maximize2, CalendarDays, Check, Plane } from 'lucide-react'
 import type { Profile } from '../contexts/AuthContext'
 import { parseDia, sumarDias, fechaLocal, lunesDe } from '../lib/fechas'
 import { itemEsDe, type AgendaItem } from '../lib/agendaItems'
@@ -28,7 +28,7 @@ export interface CalendarioSemanalProps {
   profiles: Profile[]
   currentProfile: Profile
   onAbrir: (item: AgendaItem) => void
-  onNuevo: (que: 'tarea' | 'evento', personId: string, fecha: string) => void
+  onNuevo: (que: 'tarea' | 'evento' | 'viaje', personId: string, fecha: string) => void
   /** Nota libre de cada persona (profiles.id → texto): se ve en el día de hoy */
   notas?: Record<string, string>
   /** Si llega, la nota propia se puede editar */
@@ -274,6 +274,11 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
         <button onClick={() => onNuevo('evento', personaAlta, diaIdx !== null ? dias[diaIdx] : esEstaSemana ? hoy : dias[0])}
           className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-primary text-primary bg-white hover:bg-blue-50 transition-colors">
           <Plus className="w-3 h-3" /> Evento
+        </button>
+        <button onClick={() => onNuevo('viaje', personaAlta, diaIdx !== null ? dias[diaIdx] : esEstaSemana ? hoy : dias[0])}
+          title="Planear un viaje: la app sugiere a qué jugadores del pipeline visitar"
+          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-sky-300 text-sky-700 bg-white hover:bg-sky-50 transition-colors">
+          <Plane className="w-3 h-3" /> Viaje
         </button>
       </div>
 

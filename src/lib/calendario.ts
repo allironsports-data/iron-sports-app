@@ -49,6 +49,9 @@ export function entradasDe(items: AgendaItem[]): EntradaCalendario[] {
 }
 
 function orden(a: EntradaCalendario, b: EntradaCalendario): number {
+  // Un viaje marca el día entero: arriba del todo
+  const viaje = Number(b.item.tipo === 'viaje') - Number(a.item.tipo === 'viaje')
+  if (viaje) return viaje
   if (a.item.hora !== b.item.hora) {
     if (!a.item.hora) return 1
     if (!b.item.hora) return -1

@@ -13,6 +13,8 @@ import { EVENTO_TIPOS } from '../../types'
 import type { Profile } from '../../contexts/AuthContext'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { norm } from '../../lib/texto'
+import { ZONAS } from '../../lib/zonas'
+import { CIUDADES_CONOCIDAS, zonaDeCiudad } from '../../lib/viajes'
 
 export type EventoBorrador = Omit<AgendaEvento, 'id' | 'createdAt' | 'activityRef'> & {
   /**
@@ -62,6 +64,9 @@ export function EventoModal({ players, scoutingPlayers, profiles, currentProfile
   const [participantIds, setParticipantIds] = useState<string[]>(inicial?.participantIds ?? [])
   const [notas, setNotas] = useState(inicial?.notas ?? '')
   const [lugar, setLugar] = useState(inicial?.lugar ?? '')
+  // Viaje: último día y zona del destino
+  const [fechaFin, setFechaFin] = useState(inicial?.fechaFin ?? '')
+  const [zona, setZona] = useState(inicial?.zona ?? '')
   // Partido de Captación (solo al crear)
   const [local, setLocal] = useState('')
   const [visitante, setVisitante] = useState('')
@@ -74,7 +79,10 @@ export function EventoModal({ players, scoutingPlayers, profiles, currentProfile
 
   const tipoFinal = tipo === 'custom' ? tipoLibre.trim() : tipo
   const esPartido = tipo === 'Partido' && !editando
-  const valido = !!fecha && !!tipoFinal && (!esPartido || (!!local.trim() && !!visitante.trim()))
+  const esViaje = tipo === 'Viaje'
+  // Si la ciudad es conocida la zona sale sola; si no, se elige a mano
+  const zonaViaje = zona || zonaDeCiudad(lugar) || ''
+  const valido = !!fecha && !!tipoFinal && (!esPartido || (!!local.trim() && !!visitante.trim())) && (tipo !== 'Viaje' || !!lugar.trim())
 
   // Buscador de jugador: solo con texto, que en Captación hay miles
   const nq = norm(q)
@@ -101,12 +109,14 @@ export function EventoModal({ players, scoutingPlayers, profiles, currentProfile
         tipo: tipoFinal,
         fecha,
         hora: hora || undefined,
-        ambito,
-        playerIds: ambito === 'mantenimiento' ? playerIds : [],
-        scoutingPlayerId: ambito === 'captacion' && scoutingPlayerId ? scoutingPlayerId : undefined,
+        ambito: esViaje ? 'general' : ambito,
+        playerIds: !esViaje && ambito === 'mantenimiento' ? playerIds : [],
+        scoutingPlayerId: !esViaje && ambito === 'captacion' && scoutingPlayerId ? scoutingPlayerId : undefined,
         participantIds,
         notas: notas.trim() || undefined,
         lugar: !esPartido && lugar.trim() ? lugar.trim() : undefined,
+        fechaFin: esViaje && fechaFin && fechaFin >= fecha ? fechaFin : undefined,
+        zona: esViaje && zonaViaje ? zonaViaje : undefined,
         partido: esPartido
           ? { local: local.trim(), visitante: visitante.trim(), competicion: competicion.trim() || undefined, viewMode: viewMode || undefined }
           : undefined,
@@ -151,13 +161,20 @@ export function EventoModal({ players, scoutingPlayers, profiles, currentProfile
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Fecha <span className="text-slate-400 font-normal">(vale una pasada)</span></label>
+              <label className="text-xs font-medium text-slate-600">{esViaje ? 'Salida' : <>Fecha <span className="text-slate-400 font-normal">(vale una pasada)</span></>}</label>
               <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} className={CAMPO} />
             </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Hora <span className="text-slate-400 font-normal">(opcional)</span></label>
-              <input type="time" value={hora} onChange={e => setHora(e.target.value)} className={CAMPO} />
-            </div>
+            {esViaje ? (
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Vuelta</label>
+                <input type="date" value={fechaFin} min={fecha} onChange={e => setFechaFin(e.target.value)} className={CAMPO} />
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Hora <span className="text-slate-400 font-normal">(opcional)</span></label>
+                <input type="time" value={hora} onChange={e => setHora(e.target.value)} className={CAMPO} />
+              </div>
+            )}
           </div>
 
           {esPartido && (<>
@@ -185,7 +202,26 @@ export function EventoModal({ players, scoutingPlayers, profiles, currentProfile
             <p className="text-[11px] text-emerald-700">Se da de alta como partido en Captación → Partidos, con quienes marques abajo como scouts.</p>
           </>)}
 
-          {!esPartido && (
+          {esViaje && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Destino (ciudad)</label>
+                <input value={lugar} onChange={e => { setLugar(e.target.value); setZona('') }} list="ciudades-viaje" placeholder="Ej. Sevilla" className={CAMPO} />
+                <datalist id="ciudades-viaje">{CIUDADES_CONOCIDAS.map(c => <option key={c} value={c} />)}</datalist>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Zona</label>
+                <select value={zonaViaje} onChange={e => setZona(e.target.value)} className={CAMPO}>
+                  <option value="">— Sin zona —</option>
+                  {ZONAS.map(z => <option key={z} value={z}>{z}</option>)}
+                </select>
+              </div>
+              <p className="col-span-2 text-[11px] text-sky-700">
+                Al guardar, abre el viaje desde el calendario: te sugiere a qué jugadores del pipeline puedes visitar{lugar.trim() ? ` en ${lugar.trim()}` : ''}{zonaViaje ? ` y en su zona (${zonaViaje})` : ''}.
+              </p>
+            </div>
+          )}
+          {!esPartido && !esViaje && (
             <div className="space-y-1">
               <label className="text-xs font-medium text-slate-600">Lugar <span className="text-slate-400 font-normal">(opcional)</span></label>
               <input value={lugar} onChange={e => setLugar(e.target.value)} placeholder="Ej. Oficina, Lezama, restaurante…" className={CAMPO} />
@@ -193,7 +229,7 @@ export function EventoModal({ players, scoutingPlayers, profiles, currentProfile
           )}
 
           {/* Ámbito: decide a qué jugador se puede ligar */}
-          {!esPartido && <div className="space-y-1">
+          {!esPartido && !esViaje && <div className="space-y-1">
             <label className="text-xs font-medium text-slate-600">Relacionado con</label>
             <div className="flex items-center gap-0 bg-slate-100 rounded-lg p-0.5 w-fit">
               {AMBITOS.map(a => (
@@ -205,7 +241,7 @@ export function EventoModal({ players, scoutingPlayers, profiles, currentProfile
             </div>
           </div>}
 
-          {!esPartido && ambito !== 'general' && (
+          {!esPartido && !esViaje && ambito !== 'general' && (
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-slate-600">
                 {ambito === 'mantenimiento' ? 'Jugadores' : 'Jugador de Captación'} <span className="text-slate-400 font-normal">(opcional)</span>
@@ -258,7 +294,7 @@ export function EventoModal({ players, scoutingPlayers, profiles, currentProfile
           {/* Quién asiste: una fila de iniciales; el evento sale en el calendario de cada uno */}
           <div className="flex items-center gap-2">
             <label className="text-xs font-medium text-slate-600 flex items-center gap-1.5 flex-shrink-0">
-              <Users className="w-3.5 h-3.5 text-slate-400" /> {esPartido ? 'Scouts' : 'Asisten'}
+              <Users className="w-3.5 h-3.5 text-slate-400" /> {esPartido ? 'Scouts' : esViaje ? 'Viajan' : 'Asisten'}
             </label>
             <div className="flex flex-wrap gap-1">
               {profiles.map(p => {
