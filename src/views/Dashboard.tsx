@@ -415,20 +415,32 @@ export function Dashboard({
     const original = eventoModal?.original;
     try {
       if (e.partido && !original) {
-        // Un «Partido» no es un evento suelto: es un partido de Captación, con sus scouts
+        // Un «Partido» no es un evento suelto: es un partido de Captación, con sus scouts.
+        // Mismo convenio que Captación → Partidos: el primer scout va también en
+        // assignedTo, y el modo por defecto es vídeo.
+        const scouts = e.participantIds
+          .map(pid => profiles.find(p => p.id === pid)?.avatar)
+          .filter((a): a is string => !!a);
+        const viewMode = e.partido.viewMode ?? 'video';
         const partido = await createScoutingMatch({
-          date: e.fecha, time: e.hora,
+          date: e.fecha, time: e.hora || undefined,
           homeTeam: e.partido.local, awayTeam: e.partido.visitante,
-          competition: e.partido.competicion, viewMode: e.partido.viewMode,
+          competition: e.partido.competicion, assignedTo: scouts[0], viewMode,
           notes: e.notas, status: 'pendiente',
         });
         onAddScoutingMatch?.(partido);
-        for (const pid of e.participantIds) {
-          const avatar = profiles.find(p => p.id === pid)?.avatar;
-          if (avatar) await onAddMatchScout?.(partido.id, avatar, e.partido.viewMode);
+        // El partido ya existe: si falla un scout no se pierde ni se deja el
+        // formulario abierto (reintentar crearía el partido dos veces).
+        let fallos = 0;
+        for (const scout of scouts) {
+          try { await onAddMatchScout?.(partido.id, scout, viewMode); } catch (err) { fallos++; console.error(err); }
         }
-        showToast('Partido creado (visible en Captación → Partidos)', 'success');
         setEventoModal(null);
+        showToast(
+          fallos > 0
+            ? 'Partido creado, pero no se pudo asignar algún scout. Revísalo en Captación → Partidos.'
+            : 'Partido creado (visible en Captación → Partidos)',
+          fallos > 0 ? 'error' : 'success');
         return;
       }
       if (original) {

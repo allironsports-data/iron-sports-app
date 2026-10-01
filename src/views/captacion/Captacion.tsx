@@ -425,7 +425,9 @@ export function Captacion({
   // ── scouts por partido (tabla nueva + assigned_to legacy) ──
   const scoutsByMatch = useMemo(() => {
     const map: Record<string, MatchScoutInfo[]> = {}
-    const modoDe = (id: string) => scoutingMatches.find(m => m.id === id)?.viewMode ?? 'video'
+    // Mapa, no un find por cada scout: con miles de partidos y de scouts eran millones de comparaciones en cada cambio
+    const modos = new Map(scoutingMatches.map(m => [m.id, m.viewMode]))
+    const modoDe = (id: string) => modos.get(id) ?? 'video'
     for (const ms of matchScouts) {
       if (!map[ms.matchId]) map[ms.matchId] = []
       map[ms.matchId].push({ scout: ms.scout, status: ms.status, viewMode: ms.viewMode ?? modoDe(ms.matchId) })
