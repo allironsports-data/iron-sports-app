@@ -3530,6 +3530,7 @@ function AddPlayerModal({ profiles, onClose, onAdd }: {
   const [pos1, setPos1] = useState("");
   const [pos2, setPos2] = useState("");
   const [nationality, setNationality] = useState("");
+  const [nationality2, setNationality2] = useState("");
   const [club1, setClub1] = useState("");
   const [club2, setClub2] = useState("");
   const [isLoan, setIsLoan] = useState(false);
@@ -3567,7 +3568,8 @@ function AddPlayerModal({ profiles, onClose, onAdd }: {
     }
     onAdd({
       id: "p" + Date.now(), name, birthDate, positions: [pos1, pos2].filter(Boolean),
-      nationality, photo: "", clubs,
+      // Las dos nacionalidades van juntas en el mismo campo, «Primera/Segunda»
+      nationality: [nationality.trim(), nationality2.trim()].filter(Boolean).join("/"), photo: "", clubs,
       managedBy: [managed1, managed2].filter(Boolean),
       representationContract: { start: reprStart, end: reprEnd },
       clubContract: { endDate: clubEnd, optionalYears: optYears ? parseInt(optYears) : undefined },
@@ -3585,9 +3587,12 @@ function AddPlayerModal({ profiles, onClose, onAdd }: {
         </div>
         <form onSubmit={handleSubmit} className="p-4 space-y-3 pb-8 safe-area-bottom">
           <F label="Nombre completo" value={name} onChange={(v) => { setName(v); if (errors.name) setErrors(prev => ({ ...prev, name: undefined })); }} required error={errors.name} />
-          <div className="grid grid-cols-2 gap-3">
+          <div>
             <F label="Fecha de nacimiento" value={birthDate} onChange={(v) => { setBirthDate(v); if (errors.birthDate) setErrors(prev => ({ ...prev, birthDate: undefined })); }} type="date" required error={errors.birthDate} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
             <F label="Nacionalidad" value={nationality} onChange={setNationality} required />
+            <F label="Segunda nacionalidad" value={nationality2} onChange={setNationality2} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

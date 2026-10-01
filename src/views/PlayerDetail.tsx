@@ -1869,11 +1869,14 @@ function EditPlayerModal({ player, profiles, onClose, onSave }: {
             <EF label="Nombre completo" value={name} onChange={setName} />
             {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <EF label="Fecha de nacimiento" value={birthDate} onChange={setBirthDate} type="date" />
               {errors.birthDate && <p className="text-xs text-red-500 mt-1">{errors.birthDate}</p>}
             </div>
+            <EF label="Teléfono" value={phone} onChange={setPhone} type="tel" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
             <EF label="Nacionalidad" value={nationality} onChange={setNationality} />
             <EF label="Segunda nacionalidad" value={nationality2} onChange={setNationality2} />
           </div>
@@ -1895,7 +1898,6 @@ function EditPlayerModal({ player, profiles, onClose, onSave }: {
               </select>
             </div>
           </div>
-          <EF label="Teléfono" value={phone} onChange={setPhone} type="tel" />
 
           <div className="pt-1 border-t border-slate-100">
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Club(s)</p>
