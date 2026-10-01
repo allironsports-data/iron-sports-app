@@ -21,6 +21,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-01',
     items: [
+      'Inicio más limpio: los avisos que ocupaban la parte de arriba (novedades de la app, contratos de representación en sus últimos 6 meses, cumpleaños y partidos de hoy) ya no salen en la página. Están en la campana 🔔 de arriba a la derecha, que marca en rojo cuando hay algo nuevo',
       'Calendario: ya no va por persona sino por franja horaria — Sin hora (las tareas del día), Mañana, Tarde y Noche —, con las iniciales de a quién le toca al final de cada línea. Un partido con varios scouts sale una sola vez con todos. Si una celda tiene muchas cosas se ven las primeras y un «+N más». El aviso de solape (dos partidos el mismo día) sale en la cabecera del día. Sigue el modo «Por tipo»',
       'Filtros: fuera las filas de botones. En Mi día (categoría), el calendario (tipo), la lista de todas las tareas (persona y origen) y Jugadores (estado y partner) ahora son desplegables',
       'Inicio: el aviso de contratos de representación se puede descartar con la ✕ y no vuelve a salir hasta que entre otro contrato en sus últimos 6 meses. El aviso de «acciones de Firmar para hoy» desaparece: esas acciones ya salen en el calendario y en Mi día como llamadas y reuniones',
