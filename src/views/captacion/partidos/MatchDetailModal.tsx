@@ -3,6 +3,7 @@ import { Search, X, Plus, Pencil, Maximize2, AlertTriangle } from 'lucide-react'
 import type { ScoutingPlayer, ScoutingReport, ScoutingMatch } from '../../../types'
 import type { Profile } from '../../../contexts/AuthContext'
 import * as db from '../../../lib/db'
+import { guardarBorrador, leerBorrador, borrarBorrador, encolar, esErrorDeRed } from '../../../lib/colaInformes'
 import { useEscapeKey } from '../../../hooks/useEscapeKey'
 import { teamMatchKind, teamsAlike, avisoEquipoPartido } from '../../../lib/equipos'
 import { POS_GROUPS, grupoDe as posGroupOf, type PosGroup } from '../../../lib/campo'
@@ -268,23 +269,37 @@ export function MatchDetailModal({
   async function saveQuickReport() {
     if (!reportFormFor || !quickText.trim() || savingQuick) return
     setSavingQuick(true)
-    try {
-      const saved = await db.createScoutingReport({
-        playerId: reportFormFor,
-        fecha: new Date().toISOString(),
-        texto: quickText.trim(),
-        persona: currentProfile.avatar,
-        conclusion: quickConclusion || undefined,
-        matchId: match.id,
-        authorId: currentProfile.id,
-      })
-      onAddReport(saved)
+    const playerId = reportFormFor
+    const datos = {
+      playerId,
+      fecha: new Date().toISOString(),
+      texto: quickText.trim(),
+      persona: currentProfile.avatar,
+      conclusion: quickConclusion || undefined,
+      matchId: match.id,
+      authorId: currentProfile.id,
+    }
+    const limpiar = () => {
+      borrarBorrador(playerId)
       setReportFormFor(null)
       setQuickText('')
       setQuickConclusion('')
+    }
+    try {
+      const saved = await db.createScoutingReport(datos)
+      onAddReport(saved)
+      limpiar()
       showToast?.('Informe guardado — visible en la ficha del jugador')
-    } catch {
-      showToast?.('Error al guardar el informe', 'error')
+    } catch (err) {
+      if (esErrorDeRed(err)) {
+        // En el campo sin señal: a la cola, y se manda solo cuando vuelva
+        encolar({ playerId, report: datos, matchId: match.id })
+        limpiar()
+        showToast?.('Sin conexión: el informe se enviará cuando vuelva la señal', 'info')
+      } else {
+        // El texto no se pierde: queda en el formulario y en el borrador del jugador
+        showToast?.('Error al guardar el informe', 'error')
+      }
     } finally {
       setSavingQuick(false)
     }
@@ -648,8 +663,10 @@ export function MatchDetailModal({
                         <button
                           onClick={() => {
                             setReportFormFor(isFormOpen ? null : p.id)
-                            setQuickText('')
-                            setQuickConclusion('')
+                            // Si había algo a medias de este jugador (se fue la señal, se cerró la ficha…), vuelve
+                            const b = isFormOpen ? null : leerBorrador(p.id)
+                            setQuickText(b?.text ?? '')
+                            setQuickConclusion((b?.conclusion ?? '') as ConclusionOption)
                           }}
                           className="text-[11px] font-bold border border-primary text-primary bg-white hover:bg-blue-50 px-2.5 py-1 rounded-lg transition-colors"
                         >
@@ -666,7 +683,10 @@ export function MatchDetailModal({
                       <div className="mt-2 bg-blue-50 border border-blue-200 rounded-lg p-2.5 space-y-2">
                         <textarea
                           value={quickText}
-                          onChange={e => setQuickText(e.target.value)}
+                          onChange={e => {
+                            setQuickText(e.target.value)
+                            if (reportFormFor) guardarBorrador(reportFormFor, { title: '', text: e.target.value, conclusion: quickConclusion, matchId: match.id })
+                          }}
                           rows={3}
                           autoFocus
                           placeholder={`Informe corto de ${p.fullName.split(' ')[0]} en este partido…`}

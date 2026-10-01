@@ -2015,6 +2015,7 @@ export default function App() {
         onPatchFirmasEntry={handlePatchFirmasEntry}
         matchScouts={matchScouts}
         scoutingPlayers={scoutingPlayers}
+        onOpenSearch={() => setSearchOpen(true)}
         informesPartido={informesPartido}
         onAddMatchScout={handleAddMatchScout}
         onOpenMatch={(id) => setFlotante({ tipo: 'partido', id })}

@@ -21,6 +21,8 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-01',
     items: [
+      'Informe rápido desde la ficha de un partido (y desde su vista ampliada): si te quedas sin señal ya no se pierde. Se guarda en la cola y se envía solo cuando vuelve la conexión; y lo que vas escribiendo queda como borrador del jugador, así que si cierras la ficha lo recuperas al volver a abrir el informe',
+      'Buscar (⌘K): en Mantenimiento se abrían dos buscadores a la vez. Ahora es uno solo, el mismo que en el resto de la app',
       'Abrir cosas ya no te saca de donde estás. Desde el calendario o desde Tareas, un partido abre su ficha flotante encima (la misma de Captación, con scouts, informes y alineación), y una llamada o reunión de Firmar abre la tarjeta del pipeline como panel lateral. Al cerrarlas sigues en el mismo día y con los mismos filtros',
       'Pipeline: al pulsar en la ficha de Captación de un jugador desde su tarjeta, la ficha se abre encima sin salir del pipeline',
       'Ficha de jugador y ficha de miembro del equipo: al volver atrás, la pantalla de la que venías está tal cual la dejaste — misma pestaña, mismos filtros, misma semana del calendario y a la misma altura de la página —, en vez de empezar de cero',
@@ -65,6 +67,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'El tablero de siempre (kanban, compacto, tabla, semana, agrupar por jugador o persona) sigue ahí: botón «Tablero» arriba a la derecha. Jugadores, Equipo y Postpartidos no cambian',
     ],
     adminItems: [
+      'Seguridad: dos SQL nuevos por ejecutar — seguridad_agenda_eventos.sql (candados de cuenta activa y solo-Captación en la tabla de eventos) y seguridad_tareas_solo_admin.sql (las tareas «solo admin» pasan a estar protegidas en la base, no solo ocultas en pantalla)',
       'App.tsx: las fichas a página completa (jugador, miembro) ya no sustituyen a la sección; la sección queda montada y escondida debajo (components/BajoCapa). Captación tiene un modo «solo» que pinta únicamente la ficha de un partido o de un jugador; lo usa App para las fichas flotantes',
       'Lugar de los eventos: necesita la columna agenda_eventos.lugar (migration_agenda_eventos_lugar.sql). Hasta ejecutarla, el lugar se ignora al guardar',
       'Tareas que se repiten: necesitan la columna tasks.recurrence (migration_tasks_recurrence.sql). Hasta ejecutarla, «Repetir» se ignora al guardar. La prioridad no necesita migración: tasks.priority ya existía',

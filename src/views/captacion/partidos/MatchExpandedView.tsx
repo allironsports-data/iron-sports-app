@@ -6,6 +6,7 @@ import type { Profile } from '../../../contexts/AuthContext'
 import { useEscapeKey } from '../../../hooks/useEscapeKey'
 import { teamMatchKind } from '../../../lib/equipos'
 import * as db from '../../../lib/db'
+import { guardarBorrador, leerBorrador, borrarBorrador, encolar, esErrorDeRed } from '../../../lib/colaInformes'
 import { AssessmentChip, ReportCard } from '../comun'
 import { type MatchScoutInfo, type ShowToast, type ConclusionOption, CONCLUSION_OPTIONS, CONCLUSION_STYLE, MONTHS_ES, birthYearFromBirthdate, personaToName, fmtDate, normConclusion, scoutColor } from '../helpers'
 
@@ -49,21 +50,31 @@ export function MatchExpandedView({
   async function guardarInforme() {
     if (!formPara || !texto.trim() || guardando) return
     setGuardando(true)
+    const playerId = formPara
+    const datos = {
+      playerId,
+      fecha: new Date().toISOString(),
+      texto: texto.trim(),
+      persona: currentProfile.avatar,
+      conclusion: veredicto || undefined,
+      matchId: match.id,
+      authorId: currentProfile.id,
+    }
+    const limpiar = () => { borrarBorrador(playerId); setFormPara(null); setTexto(''); setVeredicto('') }
     try {
-      const saved = await db.createScoutingReport({
-        playerId: formPara,
-        fecha: new Date().toISOString(),
-        texto: texto.trim(),
-        persona: currentProfile.avatar,
-        conclusion: veredicto || undefined,
-        matchId: match.id,
-        authorId: currentProfile.id,
-      })
+      const saved = await db.createScoutingReport(datos)
       onAddReport(saved)
-      setFormPara(null); setTexto(''); setVeredicto('')
+      limpiar()
       showToast?.('Informe guardado — visible en la ficha del jugador')
-    } catch {
-      showToast?.('Error al guardar el informe', 'error')
+    } catch (err) {
+      if (esErrorDeRed(err)) {
+        // Sin señal: a la cola, y se manda solo cuando vuelva
+        encolar({ playerId, report: datos, matchId: match.id })
+        limpiar()
+        showToast?.('Sin conexión: el informe se enviará cuando vuelva la señal', 'info')
+      } else {
+        showToast?.('Error al guardar el informe', 'error')
+      }
     } finally {
       setGuardando(false)
     }
@@ -414,7 +425,11 @@ export function MatchExpandedView({
                         {/* Cada scout escribe SU informe: el botón solo desaparece si ya escribí yo */}
                         {!mio && formPara !== p.id && (
                           <button
-                            onClick={() => { setFormPara(p.id); setTexto(''); setVeredicto('') }}
+                            onClick={() => {
+                              // Recupera lo que hubiera a medias de este jugador
+                              const b = leerBorrador(p.id)
+                              setFormPara(p.id); setTexto(b?.text ?? ''); setVeredicto((b?.conclusion ?? '') as ConclusionOption)
+                            }}
                             className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold border border-primary text-primary bg-white hover:bg-blue-50 px-2.5 py-1 rounded-lg transition-colors"
                           >
                             <Plus className="w-3 h-3" /> {infs.length > 0 ? 'Mi informe' : 'Informe'}
@@ -424,7 +439,10 @@ export function MatchExpandedView({
                           <div className="mt-2 bg-blue-50 border border-blue-200 rounded-lg p-2.5 space-y-2">
                             <textarea
                               value={texto}
-                              onChange={e => setTexto(e.target.value)}
+                              onChange={e => {
+                                setTexto(e.target.value)
+                                if (formPara) guardarBorrador(formPara, { title: '', text: e.target.value, conclusion: veredicto, matchId: match.id })
+                              }}
                               rows={4}
                               autoFocus
                               placeholder={`Informe de ${p.fullName.split(' ')[0]} en este partido…`}

@@ -6,7 +6,6 @@ import { EmptyState } from "../components/EmptyState";
 import { useToastContext } from "../hooks/useToastContext";
 import { useEscapeKey } from "../hooks/useEscapeKey";
 import { useAtras } from "../hooks/useAtras";
-import { useDebounce } from "../hooks/useDebounce";
 import { isValidName, isValidBirthDate } from "../lib/validate";
 import logoImg from '../assets/logo.jpeg';
 import type { Player, Task, TaskLabel, PlayerActivity, ScoutingMatch, ScoutingMatchScout, ScoutingPlayer, MemberStatus, Postpartido, FirmasEntry, AgendaEvento } from "../types";
@@ -94,6 +93,8 @@ interface Props {
   /** Pestaña interna (calendario/equipo/postpartidos) si la lleva App: va en el hash. null = la del `view` */
   tab?: string;
   onTabChange?: (tab: TabInterna | null) => void;
+  /** Abre el buscador global de la app (⌘K): el mismo en todas las secciones */
+  onOpenSearch?: () => void;
   /** Jugadores de Captación — para ligar un evento a uno de ellos */
   scoutingPlayers?: ScoutingPlayer[];
   players: Player[];
@@ -158,6 +159,7 @@ export function Dashboard({
   onPatchFirmasEntry,
   matchScouts = [],
   scoutingPlayers = [],
+  onOpenSearch,
   informesPartido,
   onAddMatchScout,
   onOpenMatch,
@@ -562,7 +564,6 @@ export function Dashboard({
   const [playerView, setPlayerView] = useState<'grid' | 'list' | 'table'>(
     () => (sessionStorage.getItem('nav_player_view') as 'grid' | 'list' | 'table') ?? 'list'
   );
-  const [showSearch, setShowSearch] = useState(false);
   const [quickTaskPlayer, setQuickTaskPlayer] = useState<Player | null>(null);
 
   // Jugadores advanced filters
@@ -572,15 +573,6 @@ export function Dashboard({
 
 
 
-  // Cmd+K / Ctrl+K global search
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") { e.preventDefault(); setShowSearch(true); }
-      if (e.key === "Escape") { setShowSearch(false); }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, []);
 
   // App-level notification toasts (birthday / task alerts from the server)
   const [notifToasts, setNotifToasts] = useState<AppNotification[]>([]);
@@ -1063,7 +1055,7 @@ export function Dashboard({
           <div className="flex items-center gap-0.5 sm:gap-2 min-w-0">
             {/* Global search */}
             <button
-              onClick={() => setShowSearch(true)}
+              onClick={() => onOpenSearch?.()}
               className="flex items-center gap-1.5 px-2 py-2 sm:py-1 rounded-md text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors flex-shrink-0"
               title="Buscar (⌘K)"
               aria-label="Buscar (⌘K)"
@@ -2738,16 +2730,6 @@ export function Dashboard({
         />
       )}
 
-      {showSearch && (
-        <GlobalSearch
-          players={players}
-          tasks={visibleTasks}
-          profiles={profiles}
-          onSelectPlayer={(id) => { onSelectPlayer(id); setShowSearch(false); }}
-          onSelectTask={(t) => { setDetailTask(t); setShowSearch(false); }}
-          onClose={() => setShowSearch(false)}
-        />
-      )}
 
       {/* ── Evento: alta y edición ── */}
       {eventoModal && (
@@ -3735,134 +3717,6 @@ function QuickTaskModal({ player, profiles, currentProfileId, onClose, onAdd }: 
           >
             Crear tarea
           </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── GLOBAL SEARCH ────────────────────────────────────────────
-function GlobalSearch({ players, tasks, profiles, onSelectPlayer, onSelectTask, onClose }: {
-  players: Player[]; tasks: Task[]; profiles: Profile[];
-  onSelectPlayer: (id: string) => void;
-  onSelectTask: (task: Task) => void;
-  onClose: () => void;
-}) {
-  const [query, setQuery] = useState("");
-  const inputRef = useState<HTMLInputElement | null>(null);
-  const debouncedQuery = useDebounce(query, 200);
-
-  const q = debouncedQuery.toLowerCase().trim();
-
-  const allMatchedPlayers = q.length < 1 ? [] : players.filter(p =>
-    p.name.toLowerCase().includes(q) ||
-    p.positions.some(pos => pos.toLowerCase().includes(q)) ||
-    p.clubs.some(c => c.name.toLowerCase().includes(q)) ||
-    p.nationality.toLowerCase().includes(q)
-  );
-  const matchedPlayers = allMatchedPlayers.slice(0, 5);
-  const morePlayers = allMatchedPlayers.length - matchedPlayers.length;
-
-  const allMatchedTasks = q.length < 1 ? [] : tasks.filter(t =>
-    t.title.toLowerCase().includes(q) ||
-    (t.description ?? "").toLowerCase().includes(q)
-  );
-  const matchedTasks = allMatchedTasks.slice(0, 5);
-  const moreTasks = allMatchedTasks.length - matchedTasks.length;
-
-  const hasResults = matchedPlayers.length > 0 || matchedTasks.length > 0;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh] bg-black/40 px-4" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden" onClick={e => e.stopPropagation()}>
-        {/* Search input */}
-        <div className="flex items-center gap-2.5 px-4 py-3 border-b border-slate-100">
-          <Search className="w-4 h-4 text-slate-400 flex-shrink-0" />
-          <input
-            ref={el => { inputRef[1](el); if (el) el.focus(); }}
-            type="text" value={query} onChange={e => setQuery(e.target.value)}
-            placeholder="Buscar jugadores, tareas…"
-            className="flex-1 text-sm text-slate-800 bg-transparent focus:outline-none placeholder-slate-400"
-            autoFocus
-          />
-          {query && (
-            <button onClick={() => setQuery("")} aria-label="Limpiar búsqueda" className="text-slate-500 hover:text-slate-700 p-2 -m-1.5 sm:p-0 sm:m-0 flex-shrink-0"><X className="w-3.5 h-3.5" /></button>
-          )}
-          <button onClick={onClose} className="text-xs text-slate-400 border border-slate-200 rounded px-1.5 py-1 sm:py-0.5 hover:bg-slate-50 flex-shrink-0">Esc</button>
-        </div>
-
-        {/* Results */}
-        <div className="max-h-[60vh] overflow-y-auto">
-          {!hasResults && q.length > 0 && (
-            <div className="py-8 text-center text-sm text-slate-400">Sin resultados para "{query}"</div>
-          )}
-          {!hasResults && q.length === 0 && (
-            <div className="py-8 text-center text-sm text-slate-400">Empieza a escribir para buscar…</div>
-          )}
-
-          {matchedPlayers.length > 0 && (
-            <div>
-              <p className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400 bg-slate-50 border-b border-slate-100">Jugadores</p>
-              {matchedPlayers.map(player => {
-                const pendingCount = tasks.filter(t => t.playerId === player.id && t.status !== "completada").length;
-                return (
-                  <button key={player.id} onClick={() => onSelectPlayer(player.id)}
-                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-blue-50 transition-colors border-b border-slate-50 text-left">
-                    <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white"
-                      style={{ background: PRIMARY }}>
-                      {player.name.split(" ").map(n => n[0]).join("").slice(0, 2)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-800 truncate">{player.name}</p>
-                      <p className="text-xs text-slate-400 truncate">{player.positions[0]} · {clubsLabel(player.clubs)}</p>
-                    </div>
-                    {pendingCount > 0 && (
-                      <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100 flex-shrink-0">
-                        {pendingCount} tareas
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-              {morePlayers > 0 && (
-                <p className="px-4 py-2 text-xs text-slate-400">+{morePlayers} resultado{morePlayers > 1 ? "s" : ""} más</p>
-              )}
-            </div>
-          )}
-
-          {matchedTasks.length > 0 && (
-            <div>
-              <p className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400 bg-slate-50 border-b border-slate-100">Tareas</p>
-              {matchedTasks.map(task => {
-                const taskPlayer = players.find(p => p.id === task.playerId);
-                const assignee = profiles.find(p => p.id === task.assigneeId);
-                return (
-                  <button key={task.id} onClick={() => onSelectTask(task)}
-                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-blue-50 transition-colors border-b border-slate-50 text-left">
-                    <div className={`w-2 h-2 rounded-full flex-shrink-0 mt-1 ${
-                      task.priority === "alta" ? "bg-red-500" : task.priority === "media" ? "bg-amber-400" : "bg-slate-300"
-                    }`} />
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm font-medium truncate ${task.status === "completada" ? "line-through text-slate-400" : "text-slate-800"}`}>{task.title}</p>
-                      <p className="text-xs text-slate-400 truncate">
-                        {taskPlayer ? taskPlayer.name : "General"}{assignee ? ` · ${assignee.name.split(" ")[0]}` : ""}
-                      </p>
-                    </div>
-                    <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded border flex-shrink-0 ${
-                      task.status === "completada" ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                      : task.status === "en_progreso" ? "bg-blue-50 text-blue-700 border-blue-200"
-                      : "bg-slate-50 text-slate-500 border-slate-200"
-                    }`}>
-                      {task.status === "completada" ? "✓" : task.status === "en_progreso" ? "→" : "·"}
-                    </span>
-                  </button>
-                );
-              })}
-              {moreTasks > 0 && (
-                <p className="px-4 py-2 text-xs text-slate-400">+{moreTasks} resultado{moreTasks > 1 ? "s" : ""} más</p>
-              )}
-            </div>
-          )}
         </div>
       </div>
     </div>
