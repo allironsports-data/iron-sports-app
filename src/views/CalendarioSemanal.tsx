@@ -306,7 +306,11 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
         </div>
       ) : diaIdx === null ? (
         /* ── Columnas: 7 días enteros, lado a lado ── */
-        <div className="bg-white border border-slate-200 rounded-lg grid grid-cols-7 divide-x divide-slate-100">
+        // Los días vacíos se encogen y ceden su sitio a los que tienen cosas
+        <div
+          className="bg-white border border-slate-200 rounded-lg grid divide-x divide-slate-100"
+          style={{ gridTemplateColumns: porDia.map(es => es.length === 0 ? 'minmax(5rem, 0.35fr)' : 'minmax(0, 1fr)').join(' ') }}
+        >
           {dias.map((d, i) => {
             const es = porDia[i]
             const resto = es.length - MAX_COLUMNA

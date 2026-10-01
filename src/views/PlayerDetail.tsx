@@ -1023,6 +1023,8 @@ function PerformanceTab({ player, profiles, onUpdate, postpartidos = [], scoutin
   }, [player.id]);
 
   const videos = [...(player.videoSessions ?? [])].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const tareasVideo = allTasks.filter(t => t.playerId === player.id && t.label === 'Videoanálisis')
+    .sort((a, b) => Number(a.status === 'completada') - Number(b.status === 'completada') || (a.dueDate ?? '9').localeCompare(b.dueDate ?? '9'));
   const notes = [...dbNotes].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   return (
@@ -1031,7 +1033,7 @@ function PerformanceTab({ player, profiles, onUpdate, postpartidos = [], scoutin
       <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
         {([
           { id: "informes", label: "Informes", icon: <BookOpen className="w-3.5 h-3.5" />, count: notesLoading ? undefined : notes.length },
-          { id: "video", label: "Vídeoanalisis", icon: <Video className="w-3.5 h-3.5" />, count: videos.length },
+          { id: "video", label: "Vídeoanalisis", icon: <Video className="w-3.5 h-3.5" />, count: videos.length + tareasVideo.length },
           { id: "postpartidos", label: "Postpartidos", icon: <ClipboardList className="w-3.5 h-3.5" />, count: postpartidos.length },
         ] as const).map(s => (
           <button key={s.id} onClick={() => setSection(s.id)}
@@ -1117,6 +1119,25 @@ function PerformanceTab({ player, profiles, onUpdate, postpartidos = [], scoutin
               <Plus className="w-3.5 h-3.5" />Nueva sesión
             </button>
           </div>
+          {/* Tareas de tipo «Videoanálisis» de este jugador: lo pendiente y lo ya hecho */}
+          {tareasVideo.length > 0 && (
+            <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100">
+              <p className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">Tareas de videoanálisis</p>
+              {tareasVideo.map(t => (
+                <div key={t.id} className="flex items-center gap-2 px-3 py-1.5">
+                  <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${t.status === 'completada' ? 'bg-emerald-500' : t.status === 'en_progreso' ? 'bg-blue-500' : 'border-2 border-slate-300'}`} />
+                  <span className={`flex-1 min-w-0 truncate text-xs font-medium ${t.status === 'completada' ? 'line-through text-slate-400' : 'text-slate-800'}`} title={t.title}>{t.title}</span>
+                  <span className="text-[11px] text-slate-400 flex-shrink-0">
+                    {t.status === 'completada' ? 'hecha' : t.status === 'en_progreso' ? 'en curso' : 'pendiente'}
+                    {t.dueDate ? ` · ${parseDia(t.dueDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}` : ''}
+                  </span>
+                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white bg-primary flex-shrink-0">
+                    {profiles.find(p => p.id === t.assigneeId)?.avatar ?? '?'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
           {videos.length === 0 && (
             <div className="text-center py-10 text-sm text-slate-400 bg-white border border-slate-200 rounded-lg">
               Sin sesiones registradas

@@ -413,6 +413,24 @@ export function Dashboard({
     } catch (err) { console.error('No se pudo apuntar el evento en la tarjeta de Firmar:', err); }
   }
 
+  // Tarea ⇄ pipeline: un comentario en la tarea de una próxima acción de Firmar
+  // («conseguir el contacto»…) queda también en el historial de su tarjeta.
+  function comentarioAFirmar(task: Task, texto: string) {
+    const tarjeta = (firmasEntries ?? []).find(f => f.nextActionTaskId === task.id);
+    if (!tarjeta || !onPatchFirmasEntry) return;
+    onPatchFirmasEntry(tarjeta.id, f => ({
+      ...f,
+      comments: [...f.comments, {
+        id: crypto.randomUUID(),
+        text: `💬 ${texto}`,
+        date: new Date().toISOString(),
+        author: currentProfile.name,
+        authorId: currentProfile.id,
+        kind: 'nota' as const,
+      }],
+    })).catch(err => console.error('No se pudo apuntar el comentario en la tarjeta de Firmar:', err));
+  }
+
   async function guardarEvento(e: EventoBorrador) {
     const original = eventoModal?.original;
     try {
@@ -1335,7 +1353,8 @@ export function Dashboard({
         </div>
       )}
 
-      <main className="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6 pb-20 sm:pb-6">
+      {/* El calendario usa todo el ancho de la pantalla: siete columnas en 1150px quedaban estrechas */}
+      <main className={`${activeTab === 'calendario' ? 'max-w-[1900px]' : 'max-w-6xl'} mx-auto px-3 sm:px-6 py-4 sm:py-6 pb-20 sm:pb-6`}>
         {/* Birthday alerts */}
         {(birthdaysToday.length > 0 || birthdaysSoon.length > 0) && (
           <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
@@ -2764,6 +2783,7 @@ export function Dashboard({
           profiles={profiles}
           currentProfile={currentProfile}
           onGoToPlayer={onSelectPlayer}
+          onComment={comentarioAFirmar}
           onClose={() => setDetailTask(null)}
           onUpdate={async (updated) => {
             try {

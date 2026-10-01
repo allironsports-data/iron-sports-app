@@ -21,6 +21,9 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-01',
     items: [
+      'Calendario: usa todo el ancho de la pantalla (antes se quedaba en una columna central estrecha) y, en la vista Columnas, los días sin nada se encogen para dejar sitio a los que tienen cosas',
+      'Videoanálisis conectado: las sesiones que apuntas en la ficha del jugador (Rendimiento → Vídeoanálisis) salen en el calendario ese día, a nombre de sus encargados. Hay un tipo de tarea nuevo, «Videoanálisis», y las tareas de ese tipo de un jugador aparecen también en su ficha, en Rendimiento → Vídeoanálisis',
+      'Pipeline ⇄ Tareas: si comentas en la tarea que nació de una próxima acción de Firmar («conseguir el contacto»…), el comentario queda también en el historial de la tarjeta del jugador en el pipeline',
       'Más filtros de botones convertidos en desplegables: zona y categoría en Equipos (con la cobertura de cada una), liga en Fin de contrato, veredicto en la vista ampliada de un partido, año y posición al afinar los sugeridos de un partido, prioridad en Oportunidades, y estatus en Firmar desde el móvil',
       'Firmar: si dos personas apuntan algo en la misma tarjeta casi a la vez, ya no se pierde ninguna de las dos notas. Al guardar solo se escribe lo que has cambiado tú, sobre la versión que hay en ese momento',
       'Tareas, jugadores de Captación y partidos: al guardar solo se escribe lo que has cambiado. Antes se guardaba la ficha entera y podía llevarse por delante un cambio que otra persona acababa de hacer en otro campo (por ejemplo, activar el campograma borraba la valoración recién puesta por otro scout)',

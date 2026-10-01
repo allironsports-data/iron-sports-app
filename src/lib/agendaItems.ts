@@ -311,6 +311,31 @@ export function construirAgenda(input: AgendaInput): AgendaItem[] {
     })
   }
 
+  // ── Sesiones de videoanálisis de la ficha del jugador (Rendimiento → Vídeo) ──
+  // Viven dentro del jugador; aquí salen como evento, a nombre de sus encargados.
+  for (const p of players) {
+    for (const v of p.videoSessions ?? []) {
+      const dia = v.date?.slice(0, 10)
+      if (!dia || dia < rango.desde || dia > rango.hasta) continue
+      items.push({
+        id: `video:${p.id}:${v.id}`,
+        tipo: 'evento',
+        titulo: v.description ? `Videoanálisis — ${v.description}` : 'Sesión de videoanálisis',
+        personId: p.managedBy?.[0] ?? '',
+        otrosIds: p.managedBy?.slice(1) ?? [],
+        fecha: dia,
+        playerId: p.id,
+        playerNombre: p.name,
+        categoria: 'Videoanálisis',
+        estado: 'pendiente',
+        prioridadAlta: false,
+        origen: 'evento',
+        abrir: { tipo: 'jugador', playerId: p.id },
+        ref: {},
+      })
+    }
+  }
+
   // ── Eventos de agenda (con o sin jugador) ──
   for (const e of eventos) {
     if (e.fecha < rango.desde || e.fecha > rango.hasta) continue

@@ -228,6 +228,21 @@ describe('construirAgenda · eventos de agenda', () => {
   })
 })
 
+describe('construirAgenda · sesiones de videoanálisis del jugador', () => {
+  it('salen como evento del día, a nombre de sus encargados, y abren la ficha', () => {
+    const p = { ...jugador('j1', 'Iker'), managedBy: [OTRO, YO], videoSessions: [
+      { id: 'v1', date: HOY, videoUrl: '', description: 'Salida de balón' },
+      { id: 'v0', date: '2026-08-01', videoUrl: '', description: 'vieja' },
+    ] } as Player
+    const items = construirAgenda(base({ players: [p] }))
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({
+      id: 'video:j1:v1', tipo: 'evento', origen: 'evento', categoria: 'Videoanálisis', titulo: 'Videoanálisis — Salida de balón',
+      personId: OTRO, otrosIds: [YO], playerId: 'j1', abrir: { tipo: 'jugador', playerId: 'j1' }, estado: 'pendiente',
+    })
+  })
+})
+
 describe('archivo automático', () => {
   it('las completadas hace más de 30 días no salen; las recientes y las abiertas sí', () => {
     const items = construirAgenda(base({

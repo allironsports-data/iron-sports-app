@@ -21,11 +21,13 @@ interface Props {
   onSaveAndClose: (task: Task) => void;
   onDelete: (taskId: string) => void;
   onGoToPlayer?: (playerId: string) => void;
+  /** Se llama tras guardar un comentario (p. ej. para apuntarlo también en la tarjeta de Firmar de la que nace la tarea) */
+  onComment?: (task: Task, texto: string) => void;
 }
 
 export function TaskDetailPanel({
   task, player, players, profiles, currentProfile,
-  onClose, onUpdate, onSaveAndClose, onDelete, onGoToPlayer,
+  onClose, onUpdate, onSaveAndClose, onDelete, onGoToPlayer, onComment,
 }: Props) {
   const canEdit = currentProfile.is_admin || task.assigneeId === currentProfile.id
     || (task.watchers ?? []).includes(currentProfile.id);
@@ -126,8 +128,10 @@ export function TaskDetailPanel({
     if (!commentText.trim()) return;
     setSendingComment(true);
     try {
-      const newComment = await db.createComment(task.id, currentProfile.id, commentText.trim());
+      const texto = commentText.trim();
+      const newComment = await db.createComment(task.id, currentProfile.id, texto);
       setLocalComments(prev => [...prev, newComment]);
+      onComment?.(task, texto);
       setCommentText("");
     } catch (e) {
       console.error("Error enviando comentario:", e);
