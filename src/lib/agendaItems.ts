@@ -48,6 +48,8 @@ export interface AgendaItem {
   hora?: string
   /** Jugador de Mantenimiento: el chip abre su ficha */
   playerId?: string
+  /** Jugador de Captación: el chip abre su ficha de scouting */
+  scoutingPlayerId?: string
   playerNombre?: string
   categoria?: string
   /** Partidos: esa persona ya ha metido su informe del partido */
@@ -227,7 +229,8 @@ export function construirAgenda(input: AgendaInput): AgendaItem[] {
       otrosIds: t.watchers ?? [],
       fecha: t.dueDate?.slice(0, 10),
       playerId: jugador?.id,
-      playerNombre: jugador?.name,
+      scoutingPlayerId: jugador ? undefined : t.scoutingPlayerId,
+      playerNombre: jugador?.name ?? (t.scoutingPlayerId ? input.nombreScouting?.(t.scoutingPlayerId) : undefined),
       categoria: t.label,
       estado: t.status,
       hechaEl: diaDe(t.completedAt),

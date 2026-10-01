@@ -449,10 +449,12 @@ export async function assignManagerToPlayers(playerIds: string[], managerId: str
 // Si la fila leída trae la columna, existe y se escribe siempre (también
 // para quitar la repetición). Si no, solo se manda cuando alguien la pone;
 // y si la base la rechaza (42703), se guarda la tarea sin ella.
-let tasksConRecurrence = false
+// Lo mismo vale para tasks.scouting_player_id (migration_tasks_scouting_player.sql).
+const COLUMNAS_OPCIONALES_TAREA = ['recurrence', 'scouting_player_id'] as const
+const columnasTarea = new Set<string>()
 
 function dbToTask(row: Record<string, unknown>): Task {
-  if ('recurrence' in row) tasksConRecurrence = true
+  for (const c of COLUMNAS_OPCIONALES_TAREA) if (c in row) columnasTarea.add(c)
   recordarFila('tasks', row)
   return {
     id: row.id as string,
@@ -471,6 +473,7 @@ function dbToTask(row: Record<string, unknown>): Task {
     comments: [],
     adminOnly: (row.admin_only as boolean) ?? false,
     recurrence: (row.recurrence as Task['recurrence']) ?? undefined,
+    scoutingPlayerId: (row.scouting_player_id as string) ?? undefined,
   }
 }
 
@@ -490,15 +493,17 @@ function taskToDb(t: Task): Record<string, unknown> {
     completed_at: t.completedAt ?? null,
     admin_only: t.adminOnly ?? false,
   }
-  if (tasksConRecurrence || t.recurrence) fila.recurrence = t.recurrence ?? null
+  const opcionales: Record<string, unknown> = { recurrence: t.recurrence, scouting_player_id: t.scoutingPlayerId }
+  for (const c of COLUMNAS_OPCIONALES_TAREA) {
+    if (columnasTarea.has(c) || opcionales[c]) fila[c] = opcionales[c] ?? null
+  }
   return fila
 }
 
 function faltaColumnaRecurrence(error: unknown, fila: Record<string, unknown>): boolean {
-  if (!('recurrence' in fila) || !esColumnaInexistente(error)) return false
-  console.warn('[db] tasks no tiene columna recurrence: se guarda sin ella (ejecuta migration_tasks_recurrence.sql)')
-  tasksConRecurrence = false
-  delete fila.recurrence
+  if (!esColumnaInexistente(error) || !COLUMNAS_OPCIONALES_TAREA.some(c => c in fila)) return false
+  console.warn('[db] a tasks le falta alguna columna (recurrence, scouting_player_id): se guarda sin ellas. Ejecuta migration_tasks_recurrence.sql y migration_tasks_scouting_player.sql')
+  for (const c of COLUMNAS_OPCIONALES_TAREA) { columnasTarea.delete(c); delete fila[c] }
   return true
 }
 

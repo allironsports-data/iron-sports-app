@@ -2078,6 +2078,7 @@ export default function App() {
         matchScouts={matchScouts}
         scoutingPlayers={scoutingPlayers}
         onOpenSearch={() => setSearchOpen(true)}
+        onOpenScoutingPlayer={(id) => setFlotante({ tipo: 'scouting', id })}
         informesPartido={informesPartido}
         peticionesBoulema={peticionesBoulemaPendientes}
         onAddMatchScout={handleAddMatchScout}

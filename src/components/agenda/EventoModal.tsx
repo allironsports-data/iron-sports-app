@@ -6,7 +6,7 @@
 // fecha puede ser pasada (apuntar algo que ya ocurrió). Lo abren «Mi día»
 // y el calendario semanal (con persona y día ya puestos).
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { X, Users } from 'lucide-react'
 import type { Player, ScoutingPlayer, AgendaEvento, EventoAmbito } from '../../types'
 import { EVENTO_TIPOS } from '../../types'
@@ -36,6 +36,8 @@ interface Props {
   editando?: boolean
   onClose: () => void
   onSave: (e: EventoBorrador) => Promise<void>
+  /** Selector Tarea / Evento, encima del formulario (solo al crear) */
+  cabecera?: ReactNode
   /** Solo al editar: borra el evento */
   onDelete?: () => Promise<void>
   /** Estatus en el pipeline Firmar del jugador de Captación elegido, si está en él */
@@ -50,7 +52,7 @@ const AMBITOS: { id: EventoAmbito; label: string }[] = [
 
 const CAMPO = 'w-full text-xs border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-blue-200'
 
-export function EventoModal({ players, scoutingPlayers, profiles, currentProfile, inicial, editando, onClose, onSave, onDelete, estatusPipeline }: Props) {
+export function EventoModal({ players, scoutingPlayers, profiles, currentProfile, inicial, editando, onClose, onSave, onDelete, estatusPipeline, cabecera }: Props) {
   const tipoInicial = inicial?.tipo ?? EVENTO_TIPOS[0]
   const esTipoDeLista = (EVENTO_TIPOS as readonly string[]).includes(tipoInicial)
   const [tipo, setTipo] = useState<string>(esTipoDeLista ? tipoInicial : 'custom')
@@ -135,6 +137,7 @@ export function EventoModal({ players, scoutingPlayers, profiles, currentProfile
           <button onClick={onClose} aria-label="Cerrar" className="text-slate-500 hover:text-slate-700 p-1"><X className="w-4 h-4" /></button>
         </div>
         <div className="p-4 space-y-3">
+          {cabecera}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-medium text-slate-600">Tipo</label>

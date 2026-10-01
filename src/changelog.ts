@@ -21,6 +21,9 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-01',
     items: [
+      '¿Tarea o evento? Ahora es la misma ventana, y arriba se elige cuál es, con la diferencia escrita: una TAREA es algo que hay que hacer (se marca como hecha y puede vencer); un EVENTO es algo que ocurre un día, o ya ocurrió (reunión, visita, llamada, viaje…) y no se completa. En las listas, los eventos ya no llevan el círculo de «hecha»',
+      'Nueva tarea, rehecha: lo primero es qué hay que hacer; después con quién está relacionada — general, un jugador nuestro o un jugador de Captación, con buscador en vez de una lista interminable —, quién la hace y para cuándo (con atajos Hoy / Mañana / Próxima semana / Sin fecha). Tipo, prioridad y repetir están a la vista, sin tener que abrir «Más opciones»',
+      'Tareas de jugadores de Captación: se pueden crear desde Tareas y desde el calendario. Quedan ligadas a su ficha de scouting (el nombre en la fila la abre) y, si el jugador está en el pipeline, apuntadas en el historial de su tarjeta de Firmar',
       'Calendario → día ampliado: las tarjetas del equipo separan ahora dos cosas que antes iban mezcladas — «En curso» (en lo que está cada uno ahora: sus tareas marcadas en curso, tengan la fecha que tengan) y «Para hoy» (lo que tiene con fecha de ese día) —, con un texto que lo explica',
       'Sesiones de videoanálisis (ficha del jugador → Rendimiento): ahora se les puede poner hora, lugar y encargado, y salen en el calendario a esa hora, con el lugar y a nombre del encargado (por defecto quien la apunta, que suele ser el analista, y no el gestor del jugador). El enlace al vídeo pasa a ser opcional, para poder dejar la sesión agendada antes de tener el vídeo',
       'Corregido: un evento que apuntabas para otras personas salía a tu nombre y en tu lista. Ahora un evento es de quienes asisten, no de quien lo crea; solo si no marcas a nadie queda a tu nombre',
@@ -87,6 +90,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'El tablero de siempre (kanban, compacto, tabla, semana, agrupar por jugador o persona) sigue ahí: botón «Tablero» arriba a la derecha. Jugadores, Equipo y Postpartidos no cambian',
     ],
     adminItems: [
+      'Tareas de Captación: el vínculo con la ficha de scouting necesita la columna tasks.scouting_player_id (migration_tasks_scouting_player.sql). Hasta ejecutarla, la tarea se guarda sin vínculo, con el nombre del jugador en la descripción',
       'Viajes: necesitan dos columnas nuevas en agenda_eventos, fecha_fin y zona (migration_agenda_viajes.sql). Hasta ejecutarlo, un viaje se guarda como evento de un solo día y sin zona. La ciudad de cada club sale de una tabla interna (lib/viajes.ts) con las ciudades principales; lo que no esté ahí cae en «la zona»',
       'Calendario (solo admins): salen los fines de contrato, de representación y con el club, el día que vencen',
       'Seguridad: dos SQL nuevos por ejecutar — seguridad_agenda_eventos.sql (candados de cuenta activa y solo-Captación en la tabla de eventos) y seguridad_tareas_solo_admin.sql (las tareas «solo admin» pasan a estar protegidas en la base, no solo ocultas en pantalla)',

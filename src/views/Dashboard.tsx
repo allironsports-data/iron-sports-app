@@ -8,11 +8,10 @@ import { useEscapeKey } from "../hooks/useEscapeKey";
 import { useAtras } from "../hooks/useAtras";
 import { isValidName, isValidBirthDate } from "../lib/validate";
 import logoImg from '../assets/logo.jpeg';
-import type { Player, Task, TaskLabel, PlayerActivity, ScoutingMatch, ScoutingMatchScout, ScoutingPlayer, MemberStatus, Postpartido, FirmasEntry, AgendaEvento } from "../types";
-import { calcAge, clubsLabel, TASK_LABELS, PLAYER_ESTADOS } from "../types";
+import type { Player, Task, PlayerActivity, ScoutingMatch, ScoutingMatchScout, ScoutingPlayer, MemberStatus, Postpartido, FirmasEntry, AgendaEvento } from "../types";
+import { calcAge, clubsLabel, PLAYER_ESTADOS } from "../types";
 import { fechaLocal, hoyISO, lunesDe, esVencida, parseDia, sumarDias } from "../lib/fechas";
 import { construirAgenda, estaArchivada, type AgendaItem, type AgendaEstado } from "../lib/agendaItems";
-import { RECURRENCIAS, RECURRENCIA_LABEL, type Recurrencia } from "../lib/recurrencia";
 import type { AltaRapida } from "../lib/altaRapida";
 import { tituloDia } from "../lib/miDia";
 import { MiDiaLista } from "./MiDiaLista";
@@ -22,6 +21,8 @@ import { resumenSemanal } from "../lib/resumenSemanal";
 import { CalendarioSemanal } from "./CalendarioSemanal";
 import { EventoModal, type EventoBorrador } from "../components/agenda/EventoModal";
 import { ViajeModal } from "../components/agenda/ViajeModal";
+import { TareaModal } from "../components/agenda/TareaModal";
+import { TipoNuevo } from "../components/agenda/TipoNuevo";
 import { useActividadesRango } from "../hooks/useActividadesRango";
 import {
   createPlayerActivity, createGroupActivity, deletePlayerActivity, deleteGroupActivity, fetchActivitiesByAuthor, createScoutingMatch,
@@ -96,6 +97,8 @@ interface Props {
   /** Pestaña interna (calendario/equipo/postpartidos) si la lleva App: va en el hash. null = la del `view` */
   tab?: string;
   onTabChange?: (tab: TabInterna | null) => void;
+  /** Abre la ficha de Captación de un jugador encima de la pantalla */
+  onOpenScoutingPlayer?: (scoutingPlayerId: string) => void;
   /** Abre el buscador global de la app (⌘K): el mismo en todas las secciones */
   onOpenSearch?: () => void;
   /** Jugadores de Captación — para ligar un evento a uno de ellos */
@@ -163,6 +166,7 @@ export function Dashboard({
   matchScouts = [],
   scoutingPlayers = [],
   onOpenSearch,
+  onOpenScoutingPlayer,
   informesPartido,
   peticionesBoulema,
   onAddMatchScout,
@@ -1456,7 +1460,7 @@ export function Dashboard({
                 {deHoy.slice(0, 5).map(it => (
                   <AgendaRow key={it.id} item={it} hoy={todayStr} profiles={profiles}
                     onAbrir={agendaAbrir} onEstado={agendaEstado} onReprogramar={agendaReprogramar} onReasignar={agendaReasignar}
-                    onOpenPlayer={onSelectPlayer} />
+                    onOpenPlayer={onSelectPlayer} onOpenScoutingPlayer={onOpenScoutingPlayer} />
                 ))}
               </div>
             </div>
@@ -1532,6 +1536,7 @@ export function Dashboard({
               onReprogramar={agendaReprogramar}
               onReasignar={agendaReasignar}
               onOpenPlayer={onSelectPlayer}
+              onOpenScoutingPlayer={onOpenScoutingPlayer}
               onCrear={onAddGeneralTask ? crearTareaRapida : undefined}
             />
           )}
@@ -2762,14 +2767,38 @@ export function Dashboard({
       )}
 
       {showAddGeneralTask && onAddGeneralTask && (
-        <AddGeneralTaskModal profiles={profiles} players={players} currentProfileId={currentProfile.id}
+        <TareaModal
+          profiles={profiles} players={players} scoutingPlayers={scoutingPlayers} currentProfileId={currentProfile.id}
           inicial={tareaInicial}
+          estatusPipeline={(id) => tarjetaDe(id)?.status}
+          // Tarea y evento comparten ventana: arriba se elige cuál es
+          cabecera={<TipoNuevo valor="tarea" onCambiar={() => {
+            setShowAddGeneralTask(false);
+            openAddEvent({ fecha: tareaInicial.dueDate || hoyISO(), participantIds: [tareaInicial.assigneeId ?? currentProfile.id] });
+          }} />}
           onClose={() => setShowAddGeneralTask(false)}
           onAdd={async (t) => {
             try {
               await Promise.resolve(onAddGeneralTask(t));
               setShowAddGeneralTask(false);
               showToast("Tarea creada", "success");
+              // Tarea de un jugador de Captación que está en el pipeline: queda apuntada en su tarjeta
+              const tarjeta = tarjetaDe(t.scoutingPlayerId);
+              if (tarjeta && onPatchFirmasEntry) {
+                const para = profiles.find(pr => pr.id === t.assigneeId)?.name.split(' ')[0];
+                onPatchFirmasEntry(tarjeta.id, f => ({
+                  ...f,
+                  comments: [...f.comments, {
+                    id: crypto.randomUUID(),
+                    text: [`📌 Tarea: ${t.title}`, para ? `para ${para}` : undefined,
+                      t.dueDate ? `el ${parseDia(t.dueDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}` : undefined].filter(Boolean).join(' · '),
+                    date: new Date().toISOString(),
+                    author: currentProfile.name,
+                    authorId: currentProfile.id,
+                    kind: 'nota' as const,
+                  }],
+                })).catch(err => console.error('No se pudo apuntar la tarea en la tarjeta de Firmar:', err));
+              }
             } catch {
               showToast("No se pudo guardar. Inténtalo de nuevo.", "error");
             }
@@ -2829,6 +2858,13 @@ export function Dashboard({
           onSave={guardarEvento}
           onDelete={eventoModal.original ? borrarEvento : undefined}
           estatusPipeline={(id) => tarjetaDe(id)?.status}
+          cabecera={!eventoModal.original && onAddGeneralTask ? (
+            <TipoNuevo valor="evento" onCambiar={() => {
+              setTareaInicial({ assigneeId: eventoModal.inicial.participantIds?.[0], dueDate: eventoModal.inicial.fecha });
+              setEventoModal(null);
+              setShowAddGeneralTask(true);
+            }} />
+          ) : undefined}
         />
       )}
 
@@ -3553,148 +3589,6 @@ function AddPlayerModal({ profiles, onClose, onAdd }: {
             <button type="submit" disabled={!name || !pos1 || !birthDate}
               className="w-full rounded-md text-white text-sm font-medium py-2.5 disabled:opacity-40 transition-colors bg-primary hover:bg-primary/90">
               Añadir jugador
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-function AddGeneralTaskModal({ profiles, players, currentProfileId, inicial, onClose, onAdd }: {
-  profiles: Profile[]; players: Player[]; currentProfileId?: string;
-  /** Persona y fecha ya puestas (alta desde una celda del calendario) */
-  inicial?: { assigneeId?: string; dueDate?: string };
-  onClose: () => void; onAdd: (task: Task) => void;
-}) {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [assigneeId, setAssigneeId] = useState(inicial?.assigneeId ?? currentProfileId ?? "");
-  const [selectedPlayerId, setSelectedPlayerId] = useState("");
-  const [priority, setPriority] = useState<"alta" | "media">("media");
-  const [recurrence, setRecurrence] = useState<Recurrencia | "">("");
-  const [label, setLabel] = useState<TaskLabel | "">("");
-  const [dueDate, setDueDate] = useState(inicial?.dueDate ?? "");
-  const [adminOnly, setAdminOnly] = useState(false);
-  const [showMore, setShowMore] = useState(!!inicial?.dueDate);
-
-  useEscapeKey(onClose);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onAdd({
-      id: "t" + Date.now(),
-      title,
-      description,
-      playerId: selectedPlayerId || "general",
-      assigneeId,
-      priority,
-      label: label || undefined,
-      status: "pendiente",
-      dueDate: dueDate || undefined,
-      createdAt: new Date().toISOString(),
-      comments: [],
-      adminOnly,
-      recurrence: recurrence || undefined,
-    });
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-0 sm:p-4">
-      <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-sm max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white">
-          <h2 className="text-sm font-semibold text-slate-800">Nueva tarea</h2>
-          <button onClick={onClose} aria-label="Cerrar" className="text-slate-500 hover:text-slate-700 p-2 -m-2 sm:p-0 sm:m-0"><X className="w-4 h-4" /></button>
-        </div>
-        <form onSubmit={handleSubmit} className="p-4 space-y-3 pb-8 safe-area-bottom">
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Jugador (opcional)</label>
-            <select value={selectedPlayerId} onChange={(e) => setSelectedPlayerId(e.target.value)}
-              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
-              <option value="">— Tarea general —</option>
-              {[...players].sort((a, b) => a.name.localeCompare(b.name)).map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-          </div>
-          <F label="Título" value={title} onChange={setTitle} required />
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Asignado a</label>
-            <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}
-              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
-              <option value="">— Sin asignar —</option>
-              {profiles.map((m) => <option key={m.id} value={m.id}>{m.avatar} {m.name}</option>)}
-            </select>
-          </div>
-
-          {/* Más opciones — plegado por defecto */}
-          <button
-            type="button"
-            onClick={() => setShowMore(v => !v)}
-            className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 font-medium"
-          >
-            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showMore ? 'rotate-180' : ''}`} />
-            Más opciones {!showMore && '(descripción, prioridad, tipo, fecha…)'}
-          </button>
-
-          {showMore && (<>
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Descripción</label>
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)}
-              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none h-20" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Prioridad</label>
-              <select value={priority} onChange={(e) => setPriority(e.target.value as "alta" | "media")}
-                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
-                <option value="media">Normal</option>
-                <option value="alta">Alta</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Tipo</label>
-              <select value={label} onChange={(e) => setLabel(e.target.value as TaskLabel | "")}
-                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
-                <option value="">— Sin tipo —</option>
-                {TASK_LABELS.map(l => (
-                  <option key={l} value={l}>{l}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <F label="Fecha de vencimiento" value={dueDate} onChange={setDueDate} type="date" />
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Repetir</label>
-              <select value={recurrence} onChange={(e) => setRecurrence(e.target.value as Recurrencia | "")}
-                title="Al completarla se crea la siguiente con la fecha que toque"
-                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
-                <option value="">No se repite</option>
-                {RECURRENCIAS.map(r => <option key={r} value={r}>{RECURRENCIA_LABEL[r]}</option>)}
-              </select>
-            </div>
-          </div>
-          {/* Admin-only toggle */}
-          <label className="flex items-center gap-2.5 cursor-pointer select-none py-1">
-            <input
-              type="checkbox"
-              checked={adminOnly}
-              onChange={(e) => setAdminOnly(e.target.checked)}
-              className="w-4 h-4 rounded accent-blue-600 cursor-pointer"
-            />
-            <span className="text-sm text-slate-700 font-medium">Solo para admins</span>
-            {adminOnly && (
-              <span className="ml-auto text-[11px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 border border-amber-200 rounded px-1.5 py-0.5">
-                Admin
-              </span>
-            )}
-          </label>
-          </>)}
-          <div className="pt-2">
-            <button type="submit" disabled={!title}
-              className="w-full rounded-md text-white text-sm font-medium py-2.5 disabled:opacity-40 transition-colors bg-primary hover:bg-primary/90">
-              Crear tarea
             </button>
           </div>
         </form>

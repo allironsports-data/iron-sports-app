@@ -36,6 +36,7 @@ export interface MiDiaListaProps {
   onReprogramar: (item: AgendaItem, fecha: string | undefined) => void | Promise<void>
   onReasignar: (item: AgendaItem, profileId: string) => void | Promise<void>
   onOpenPlayer: (playerId: string) => void
+  onOpenScoutingPlayer?: (scoutingPlayerId: string) => void
   /** Alta rápida en una línea; si no llega, no se pinta */
   onCrear?: (alta: AltaRapida) => Promise<void>
 }
@@ -47,7 +48,7 @@ function tituloDiaCorto(iso: string): string {
 }
 
 export function MiDiaLista({
-  items, hoy, personaId, esYo, profiles, onAbrir, onEstado, onReprogramar, onReasignar, onOpenPlayer, onCrear,
+  items, hoy, personaId, esYo, profiles, onAbrir, onEstado, onReprogramar, onReasignar, onOpenPlayer, onOpenScoutingPlayer, onCrear,
 }: MiDiaListaProps) {
   // Alta rápida
   const [nueva, setNueva] = useState('')
@@ -121,7 +122,7 @@ export function MiDiaLista({
   const fila = (it: AgendaItem) => (
     <AgendaRow key={it.id} item={it} hoy={hoy} profiles={profiles}
       onAbrir={onAbrir} onEstado={onEstado} onReprogramar={onReprogramar} onReasignar={onReasignar}
-      onOpenPlayer={onOpenPlayer} />
+      onOpenPlayer={onOpenPlayer} onOpenScoutingPlayer={onOpenScoutingPlayer} />
   )
 
   function seccion(id: SeccionId, titulo: string, n: number, cuerpo: React.ReactNode, opts: { rojo?: boolean; extra?: React.ReactNode } = {}) {

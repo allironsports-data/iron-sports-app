@@ -32,6 +32,8 @@ export interface AgendaRowProps {
   onReprogramar?: (item: AgendaItem, fecha: string | undefined) => void
   onReasignar?: (item: AgendaItem, profileId: string) => void
   onOpenPlayer?: (playerId: string) => void
+  /** Abre la ficha de Captación del jugador (tareas ligadas a un jugador de scouting) */
+  onOpenScoutingPlayer?: (scoutingPlayerId: string) => void
   /** Selección múltiple: si llega, sale una casilla delante */
   seleccionada?: boolean
   onSeleccionar?: (item: AgendaItem) => void
@@ -42,7 +44,7 @@ function fechaCorta(iso: string): string {
 }
 
 export function AgendaRow({
-  item, hoy, profiles, onAbrir, onEstado, onReprogramar, onReasignar, onOpenPlayer,
+  item, hoy, profiles, onAbrir, onEstado, onReprogramar, onReasignar, onOpenPlayer, onOpenScoutingPlayer,
   seleccionada, onSeleccionar,
 }: AgendaRowProps) {
   const [menu, setMenu] = useState<null | 'fecha' | 'persona'>(null)
@@ -125,18 +127,21 @@ export function AgendaRow({
         )}
         <span title={label} className="flex-shrink-0"><Icon className={`w-3.5 h-3.5 ${cls}`} /></span>
         {/* Estado: pendiente → en curso → hecha */}
-        <button
-          onClick={e => { e.stopPropagation(); if (puedeEstado) onEstado!(item, siguienteEstado(item)) }}
-          disabled={!puedeEstado}
-          title={tituloEstado}
-          aria-label="Cambiar estado"
-          className="relative flex-shrink-0 p-1 -m-1 rounded-full disabled:cursor-default enabled:hover:bg-slate-200 transition-colors before:absolute before:-inset-2 before:content-[''] sm:before:hidden"
-        >
-          <span
-            className={`block w-3.5 h-3.5 rounded-full border-2 ${colorEstado ? '' : 'border-slate-300'} ${puedeEstado ? '' : 'opacity-40'}`}
-            style={colorEstado ? { background: colorEstado, borderColor: colorEstado } : undefined}
-          />
-        </button>
+        {/* Solo lo que se puede completar lleva círculo: un evento no es una tarea */}
+        {p.estado ? (
+          <button
+            onClick={e => { e.stopPropagation(); if (puedeEstado) onEstado!(item, siguienteEstado(item)) }}
+            disabled={!puedeEstado}
+            title={tituloEstado}
+            aria-label="Cambiar estado"
+            className="relative flex-shrink-0 p-1 -m-1 rounded-full disabled:cursor-default enabled:hover:bg-slate-200 transition-colors before:absolute before:-inset-2 before:content-[''] sm:before:hidden"
+          >
+            <span
+              className={`block w-3.5 h-3.5 rounded-full border-2 ${colorEstado ? '' : 'border-slate-300'} ${puedeEstado ? '' : 'opacity-40'}`}
+              style={colorEstado ? { background: colorEstado, borderColor: colorEstado } : undefined}
+            />
+          </button>
+        ) : <span className="w-3.5 flex-shrink-0" />}
         <span className={`flex-1 min-w-0 line-clamp-2 sm:line-clamp-1 break-words text-xs font-medium ${tachar ? 'line-through text-slate-400' : 'text-slate-800'}`} title={item.titulo}>
           {item.prioridadAlta && !hecha && <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 mr-1.5 align-middle" title="Prioridad alta" />}
           {item.titulo}
@@ -148,6 +153,14 @@ export function AgendaRow({
               onClick={e => { e.stopPropagation(); onOpenPlayer(item.playerId!) }}
               title={`Abrir la ficha de ${item.playerNombre}`}
               className="flex-shrink-0 max-w-[5.5rem] sm:max-w-[11rem] truncate text-[11px] font-medium px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100 hover:bg-blue-100 transition-colors"
+            >
+              {item.playerNombre}
+            </button>
+          ) : item.scoutingPlayerId && onOpenScoutingPlayer ? (
+            <button
+              onClick={e => { e.stopPropagation(); onOpenScoutingPlayer(item.scoutingPlayerId!) }}
+              title={`Abrir la ficha de Captación de ${item.playerNombre}`}
+              className="flex-shrink-0 max-w-[5.5rem] sm:max-w-[11rem] truncate text-[11px] font-medium px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-100 hover:bg-emerald-100 transition-colors"
             >
               {item.playerNombre}
             </button>
