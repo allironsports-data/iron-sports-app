@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
   construirAgenda, seccionesDelDia, itemEsDe, permisosItem, siguienteEstado, categoriasDe,
-  coincideTexto, lunesSiguiente, tipoDeAccionFirmar, type AgendaInput,
+  coincideTexto, lunesSiguiente, tipoDeAccionFirmar, tipoDeEvento, estaArchivada, type AgendaInput,
 } from '../src/lib/agendaItems'
-import type { Task, ScoutingMatch, ScoutingMatchScout, FirmasEntry, Postpartido, Player, PlayerActivity } from '../src/types'
+import type { Task, ScoutingMatch, ScoutingMatchScout, FirmasEntry, Postpartido, Player, PlayerActivity, AgendaEvento } from '../src/types'
 
 const HOY = '2026-10-01' // jueves
 const YO = 'p-nb'
@@ -90,7 +90,7 @@ describe('construirAgenda · Firmar', () => {
   })
 
   it('la tarea de una acción ya completada conserva el tipo por el icono del título', () => {
-    const [it0] = construirAgenda(base({ tasks: [task({ id: 't1', title: '🤝 Reunión · Unai', label: 'Scouting', status: 'completada' })] }))
+    const [it0] = construirAgenda(base({ tasks: [task({ id: 't1', title: '🤝 Reunión · Unai', label: 'Scouting', status: 'completada', completedAt: '2026-09-30T10:00:00Z' })] }))
     expect(it0.tipo).toBe('reunion')
   })
 })
@@ -169,9 +169,75 @@ describe('construirAgenda · eventos', () => {
   })
 })
 
+describe('construirAgenda · eventos de agenda', () => {
+  const ev = (o: Partial<AgendaEvento> & { id: string }): AgendaEvento => ({
+    titulo: '', tipo: 'Reunión', fecha: HOY, ambito: 'general', playerIds: [], participantIds: [], authorId: YO, createdAt: '', ...o,
+  })
+
+  it('sin jugador: sale con su hora, su tipo y sus asistentes', () => {
+    const [it0] = construirAgenda(base({ eventos: [ev({ id: 'e1', tipo: 'Videollamada', titulo: 'Con el club', hora: '17:30', participantIds: [OTRO] })] }))
+    expect(it0).toMatchObject({
+      id: 'evento:e1', tipo: 'reunion', titulo: 'Con el club', hora: '17:30', categoria: 'Videollamada',
+      origen: 'evento', personId: YO, abrir: { tipo: 'evento', eventoId: 'e1' },
+    })
+    expect(it0.playerNombre).toBeUndefined()
+    expect(itemEsDe(it0, OTRO)).toBe(true)
+  })
+
+  it('con jugadores de Mantenimiento o uno de Captación', () => {
+    const items = construirAgenda(base({
+      players: [jugador('j1', 'Iker'), jugador('j2', 'Unai')],
+      nombreScouting: id => id === 's1' ? 'Promesa' : undefined,
+      eventos: [
+        ev({ id: 'a', ambito: 'mantenimiento', playerIds: ['j1', 'j2'], tipo: 'Sesión de análisis' }),
+        ev({ id: 'b', ambito: 'captacion', scoutingPlayerId: 's1', tipo: 'Llamada' }),
+      ],
+    }))
+    expect(items.map(i => [i.tipo, i.titulo, i.playerNombre, i.playerId])).toEqual([
+      ['evento', 'Sesión de análisis', 'Iker +1', 'j1'],
+      ['llamada', 'Llamada', 'Promesa', undefined],
+    ])
+  })
+
+  it('la actividad que generó el evento no sale por duplicado; fuera de rango no sale', () => {
+    const items = construirAgenda(base({
+      players: [jugador('j1', 'Iker')],
+      eventos: [ev({ id: 'a', playerIds: ['j1'], activityRef: 'act1' }), ev({ id: 'viejo', fecha: '2026-08-01' })],
+      activities: [evento({ id: 'act1' }), evento({ id: 'act2' })],
+    }))
+    expect(items.map(i => i.id)).toEqual(['evento:act2', 'evento:a'])
+  })
+
+  it('tipoDeEvento', () => {
+    expect(tipoDeEvento('Reunión con jugador')).toBe('reunion')
+    expect(tipoDeEvento('Cita')).toBe('reunion')
+    expect(tipoDeEvento('Partido')).toBe('partido')
+    expect(tipoDeEvento('Firma de contrato')).toBe('evento')
+  })
+})
+
+describe('archivo automático', () => {
+  it('las completadas hace más de 30 días no salen; las recientes y las abiertas sí', () => {
+    const items = construirAgenda(base({
+      tasks: [
+        task({ id: 'vieja', status: 'completada', completedAt: '2026-08-15T10:00:00Z' }),
+        task({ id: 'reciente', status: 'completada', completedAt: '2026-09-20T10:00:00Z' }),
+        task({ id: 'abierta-antigua', createdAt: '2025-01-01T00:00:00Z' }),
+      ],
+      postpartidos: [pp({ id: 'pp-viejo', taskId: 'vieja', videoUrl: 'https://x' })],
+    }))
+    expect(items.map(i => i.id)).toEqual(['tarea:reciente', 'tarea:abierta-antigua'])
+  })
+  it('estaArchivada: el límite son 30 días', () => {
+    expect(estaArchivada({ status: 'completada', completedAt: '2026-09-01T12:00:00', createdAt: '' }, HOY)).toBe(false)
+    expect(estaArchivada({ status: 'completada', completedAt: '2026-08-31T12:00:00', createdAt: '' }, HOY)).toBe(true)
+    expect(estaArchivada({ status: 'pendiente', createdAt: '2020-01-01T00:00:00Z' }, HOY)).toBe(false)
+  })
+})
+
 describe('siguienteEstado', () => {
   it('pendiente → en curso → hecha → pendiente', () => {
-    const de = (status: Task['status']) => construirAgenda(base({ tasks: [task({ id: 't', status })] }))[0]
+    const de = (status: Task['status']) => construirAgenda(base({ tasks: [task({ id: 't', status, completedAt: status === 'completada' ? '2026-09-30T10:00:00Z' : undefined })] }))[0]
     expect(siguienteEstado(de('pendiente'))).toBe('en_progreso')
     expect(siguienteEstado(de('en_progreso'))).toBe('completada')
     expect(siguienteEstado(de('completada'))).toBe('pendiente')

@@ -21,6 +21,11 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-01',
     items: [
+      'Mantenimiento: nueva pestaña «Calendario» (entre Mi día y Jugadores). Una semana de toda la empresa de un vistazo: una fila por persona y una columna por día, con un chip por cada tarea, llamada o reunión de Firmar, postpartido, partido de Captación y evento, con su icono y su hora. Los partidos con varios scouts salen en la fila de cada uno',
+      'Calendario: semana anterior / siguiente / Hoy, filtros por tipo y por persona, «Ocultar completadas», y dos modos — «Por persona» y «Por tipo» (partidos, llamadas y reuniones, postpartidos, tareas, eventos). Tu fila va arriba y resaltada; al final de cada fila, la carga de la semana (abiertas / total); y si alguien tiene dos partidos el mismo día, aviso de solape',
+      'Calendario: clic en un chip lo abre; clic en un hueco da de alta una tarea o un evento con la persona y el día ya puestos. En el móvil se ve un día por pantalla (se pasa deslizando) con las personas plegables',
+      'Eventos: «Evento» ya no obliga a elegir un jugador. Se puede apuntar cualquier cita, reunión, videollamada, sesión de análisis, comida, viaje o partido — general, ligado a jugadores de Mantenimiento o a un jugador de Captación —, con hora opcional, quién asiste y con fecha pasada para registrar lo que ya ocurrió. Se crean desde Mi día y desde el calendario, y se pueden editar y borrar',
+      'Inicio: aviso con los partidos de hoy de todo el equipo (hora, partido y scouts), que sale de la misma lista que el calendario',
       'Mantenimiento: la pestaña «Tareas» pasa a ser «Mi día». En vez del tablero de tarjetas, una lista de una línea por cosa pendiente que junta todo lo tuyo: tareas, llamadas y reuniones del pipeline Firmar, postpartidos, partidos de Captación que tienes asignados (hoy y los próximos 7 días) y eventos',
       'Mi día: secciones plegables con contador — Vencidas (con botón «Mover todo a hoy»), Hoy (primero lo que tiene hora), Próximos 7 días agrupado por día, Sin fecha, Más adelante y Hechas hoy',
       'Mi día: cada fila lleva el icono del tipo, un círculo de estado que al pulsarlo pasa de pendiente a en curso y a hecha, el jugador (clic → su ficha), la categoría, la fecha y el responsable. Al pasar el ratón salen las acciones: hecha, reprogramar (hoy / mañana / próxima semana / elegir fecha), reasignar y abrir. En el móvil: deslizar a la derecha = hecha, a la izquierda = reprogramar',
@@ -29,6 +34,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'El tablero de siempre (kanban, compacto, tabla, semana, agrupar por jugador o persona) sigue ahí: botón «Tablero» arriba a la derecha. Jugadores, Equipo y Postpartidos no cambian',
     ],
     adminItems: [
+      'Eventos sin jugador: necesitan la tabla nueva agenda_eventos (migration_agenda_eventos.sql). Hasta ejecutarla, solo se guardan los eventos con jugador de Mantenimiento, como antes',
       'Mi día: los admin tienen arriba a la derecha un selector de persona para ver «El día de X» en la misma pantalla',
       'lib/agendaItems.ts: lista unificada (tareas + Firmar + postpartidos + partidos + eventos) con tests; components/agenda/AgendaRow.tsx: la fila, pensada para reutilizarse en calendario, home y ficha de jugador',
     ],
