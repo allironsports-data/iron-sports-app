@@ -9,13 +9,19 @@ import { useAtras } from "../hooks/useAtras";
 import { useDebounce } from "../hooks/useDebounce";
 import { isValidName, isValidBirthDate } from "../lib/validate";
 import logoImg from '../assets/logo.jpeg';
-import type { Player, Task, TaskLabel, PlayerActivity, ScoutingMatch, ScoutingMatchScout, MemberStatus, Postpartido, FirmasEntry } from "../types";
+import type { Player, Task, TaskLabel, PlayerActivity, ScoutingMatch, ScoutingMatchScout, ScoutingPlayer, MemberStatus, Postpartido, FirmasEntry, AgendaEvento } from "../types";
 import { calcAge, clubsLabel, TASK_LABELS, PLAYER_ESTADOS } from "../types";
 import { fechaLocal, hoyISO, lunesDe, esVencida, parseDia, sumarDias } from "../lib/fechas";
 import { construirAgenda, type AgendaItem, type AgendaEstado } from "../lib/agendaItems";
 import { tituloDia } from "../lib/miDia";
 import { MiDiaLista } from "./MiDiaLista";
-import { createPlayerActivity, fetchActivitiesByAuthor, createScoutingMatch } from "../lib/db";
+import { CalendarioSemanal } from "./CalendarioSemanal";
+import { EventoModal, type EventoBorrador } from "../components/agenda/EventoModal";
+import { useActividadesRango } from "../hooks/useActividadesRango";
+import {
+  createPlayerActivity, createGroupActivity, deletePlayerActivity, deleteGroupActivity, fetchActivitiesByAuthor, createScoutingMatch,
+  fetchAgendaEventos, createAgendaEvento, updateAgendaEvento, deleteAgendaEvento, esMigracionPendiente,
+} from "../lib/db";
 import type { Profile } from "../contexts/AuthContext";
 import type { AppNotification } from "../App";
 import {
@@ -75,9 +81,11 @@ interface Props {
   onSetMatchSeen?: (matchId: string, scout: string | undefined, visto: boolean) => Promise<void>;
   /** true si hay una versión nueva de la app desplegada (detectado en App.tsx) */
   updateAvailable?: boolean;
-  /** Pestaña interna (equipo/postpartidos) si la lleva App: va en el hash. null = la del `view` */
+  /** Pestaña interna (calendario/equipo/postpartidos) si la lleva App: va en el hash. null = la del `view` */
   tab?: string;
-  onTabChange?: (tab: 'equipo' | 'postpartidos' | null) => void;
+  onTabChange?: (tab: TabInterna | null) => void;
+  /** Jugadores de Captación — para ligar un evento a uno de ellos */
+  scoutingPlayers?: ScoutingPlayer[];
   players: Player[];
   tasks: Task[];
   profiles: Profile[];
@@ -109,6 +117,9 @@ interface Props {
   onAddScoutingMatch?: (m: ScoutingMatch) => void;
 }
 
+type TabInterna = 'calendario' | 'equipo' | 'postpartidos';
+const esTabInterna = (t?: string): t is TabInterna => t === 'calendario' || t === 'equipo' || t === 'postpartidos';
+
 // Birthday helpers
 function isBirthdayToday(birthDate: string): boolean {
   const today = new Date();
@@ -126,11 +137,6 @@ function isBirthdaySoon(birthDate: string, days: number): boolean {
   return diff > 0 && diff <= days;
 }
 
-const ACTIVITY_TYPES_DASH = [
-  'Comunicación con club', 'Reunión con jugador', 'Llamada',
-  'Email', 'Visita presencial', 'Partido', 'Transferencia', 'Nota general',
-] as const;
-
 // ── Estado del equipo: la tarea en curso sale sola del tablero ──
 export function Dashboard({
   view = 'tareas',
@@ -141,6 +147,7 @@ export function Dashboard({
   onOpenFirmar,
   onPatchFirmasEntry,
   matchScouts = [],
+  scoutingPlayers = [],
   onOpenMatch,
   onSetMatchSeen,
   updateAvailable,
@@ -178,13 +185,13 @@ export function Dashboard({
   // Internal tabs: 'equipo'/'postpartidos' se gestionan localmente; 'tareas'/'jugadores' vienen del prop `view`
   // La pestaña la lleva App cuando viene por props (y entonces va en el hash
   // y «atrás» cambia de pestaña). Montado suelto, la lleva el componente.
-  const [internalTabLocal, setInternalTabLocal] = useState<'equipo' | 'postpartidos' | null>(null);
-  const internalTab: 'equipo' | 'postpartidos' | null =
+  const [internalTabLocal, setInternalTabLocal] = useState<TabInterna | null>(null);
+  const internalTab: TabInterna | null =
     onTabChange
-      ? (tabProp === 'equipo' || tabProp === 'postpartidos' ? tabProp : null)
+      ? (esTabInterna(tabProp) ? tabProp : null)
       : internalTabLocal;
-  const setInternalTab = (t: 'equipo' | 'postpartidos' | null) => { setInternalTabLocal(t); onTabChange?.(t); };
-  const activeTab = internalTab ?? view;   // 'tareas' | 'jugadores' | 'equipo' | 'postpartidos'
+  const setInternalTab = (t: TabInterna | null) => { setInternalTabLocal(t); onTabChange?.(t); };
+  const activeTab = internalTab ?? view;   // 'tareas' | 'calendario' | 'jugadores' | 'equipo' | 'postpartidos'
   const [search, setSearch] = useState("");
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [showFirmasToday, setShowFirmasToday] = useState(false);
@@ -324,60 +331,95 @@ export function Dashboard({
     }
   }
 
-  // Add event modal state
-  const [showAddEvent, setShowAddEvent]           = useState(false);
-  const [evtPlayer, setEvtPlayer]                 = useState("");
-  const [evtPlayerQ, setEvtPlayerQ]               = useState("");
-  const [evtDate, setEvtDate]                     = useState("");
-  const [evtType, setEvtType]                     = useState<string>(ACTIVITY_TYPES_DASH[0]);
-  const [evtCustomType, setEvtCustomType]         = useState("");
-  const [evtNotes, setEvtNotes]                   = useState("");
-  const [evtExtraPlayers, setEvtExtraPlayers]     = useState<string[]>([]); // additional player IDs
-  const [evtExtraPlayerQ, setEvtExtraPlayerQ]     = useState("");
-  const [evtParticipants, setEvtParticipants]     = useState<string[]>([]); // staff profile IDs
-  const [evtParticipantQ, setEvtParticipantQ]     = useState("");
-  const [evtSaving, setEvtSaving]                 = useState(false);
+  // ── Eventos de agenda (tabla agenda_eventos; opcional hasta migrar) ──
+  const [eventos, setEventos] = useState<AgendaEvento[]>([]);
+  // Sube al crear/editar/borrar un evento: invalida las actividades cacheadas
+  const [actsVersion, setActsVersion] = useState(0);
+  // Modal de evento: valores de partida y, si se edita, el evento original
+  const [eventoModal, setEventoModal] = useState<{ inicial: Partial<EventoBorrador>; original?: AgendaEvento } | null>(null);
+  // Valores de partida de «Nueva tarea» cuando se abre desde una celda del calendario
+  const [tareaInicial, setTareaInicial] = useState<{ assigneeId?: string; dueDate?: string }>({});
+  useEffect(() => {
+    let vivo = true;
+    fetchAgendaEventos()
+      .then(evs => { if (vivo) setEventos(evs); })
+      .catch(() => {}); // tabla sin migrar: el calendario funciona con lo demás
+    return () => { vivo = false; };
+  }, []);
 
-  function openAddEvent() {
-    setEvtPlayer("");
-    setEvtPlayerQ("");
-    setEvtDate(fechaLocal(new Date()));
-    setEvtType(ACTIVITY_TYPES_DASH[0]);
-    setEvtCustomType("");
-    setEvtNotes("");
-    setEvtExtraPlayers([]);
-    setEvtExtraPlayerQ("");
-    setEvtParticipants([]);
-    setEvtParticipantQ("");
-    setShowAddEvent(true);
+  function openAddEvent(inicial: Partial<EventoBorrador> = {}) {
+    setEventoModal({ inicial: { fecha: fechaLocal(new Date()), participantIds: [currentProfile.id], ...inicial } });
   }
 
-  async function handleSaveEvent() {
-    const resolvedType = evtType === 'custom' ? evtCustomType.trim() : evtType;
-    if (!evtPlayer || !evtDate || !resolvedType) return;
-    setEvtSaving(true);
+  // Los eventos con jugadores de Mantenimiento se apuntan además en su
+  // actividad (player_activities), que es lo que lee la ficha del jugador.
+  async function crearActividades(e: EventoBorrador): Promise<string | undefined> {
+    if (e.playerIds.length === 0) return undefined;
+    const input = {
+      date: e.fecha, type: e.tipo,
+      notes: [e.titulo, e.notas].filter(Boolean).join(' — ') || undefined,
+      authorId: e.authorId ?? currentProfile.id,
+      participantProfileIds: e.participantIds.length > 0 ? e.participantIds : undefined,
+    };
+    if (e.playerIds.length > 1) {
+      const filas = await createGroupActivity(e.playerIds, input);
+      return filas[0]?.groupId;
+    }
+    return (await createPlayerActivity(e.playerIds[0], input)).id;
+  }
+  async function borrarActividades(ref?: string) {
+    if (!ref) return;
+    // activity_ref es el id de una fila o el group_id de varias: se prueba con los dos
+    await deleteGroupActivity(ref).catch(() => {});
+    await deletePlayerActivity(ref).catch(() => {});
+  }
+
+  async function guardarEvento(e: EventoBorrador) {
+    const original = eventoModal?.original;
     try {
-      const input = {
-        date: evtDate, type: resolvedType,
-        notes: evtNotes.trim() || undefined,
-        authorId: currentProfile.id,
-        participantProfileIds: evtParticipants.length > 0 ? evtParticipants : undefined,
-      };
-      const allPlayerIds = [evtPlayer, ...evtExtraPlayers.filter(id => id !== evtPlayer)];
-      if (allPlayerIds.length > 1) {
-        const { createGroupActivity } = await import("../lib/db");
-        await createGroupActivity(allPlayerIds, input);
+      if (original) {
+        await borrarActividades(original.activityRef);
+        const activityRef = await crearActividades(e);
+        const actualizado: AgendaEvento = { ...original, ...e, activityRef };
+        await updateAgendaEvento(actualizado);
+        setEventos(prev => prev.map(x => x.id === actualizado.id ? actualizado : x));
+        showToast('Evento actualizado', 'success');
       } else {
-        await createPlayerActivity(evtPlayer, input);
+        const activityRef = await crearActividades(e);
+        try {
+          const creado = await createAgendaEvento({ ...e, activityRef });
+          setEventos(prev => [creado, ...prev]);
+        } catch (err) {
+          // Sin la tabla nueva, un evento con jugador sigue quedando en su actividad (como antes)
+          if (!(esMigracionPendiente(err) && activityRef)) throw err;
+        }
+        showToast('Evento guardado', 'success');
       }
-      setShowAddEvent(false);
-      setAgendaActs({}); // el evento nuevo tiene que salir en «Mi día»
-      const playerName = players.find(p => p.id === evtPlayer)?.name ?? 'jugador';
-      showToast(`Evento registrado para ${playerName}`, "success");
+      setActsVersion(v => v + 1);
+      setEventoModal(null);
+    } catch (err) {
+      showToast(
+        esMigracionPendiente(err)
+          ? (currentProfile.is_admin
+            ? 'Falta ejecutar migration_agenda_eventos.sql: hasta entonces solo se pueden guardar eventos con jugador de Mantenimiento.'
+            : 'De momento solo se pueden guardar eventos con un jugador de Mantenimiento.')
+          : 'No se pudo guardar el evento. Inténtalo de nuevo.',
+        'error');
+    }
+  }
+
+  async function borrarEvento() {
+    const original = eventoModal?.original;
+    if (!original) return;
+    try {
+      await deleteAgendaEvento(original.id);
+      await borrarActividades(original.activityRef);
+      setEventos(prev => prev.filter(x => x.id !== original.id));
+      setActsVersion(v => v + 1);
+      setEventoModal(null);
+      showToast('Evento eliminado', 'info');
     } catch {
-      showToast("No se pudo guardar el evento", "error");
-    } finally {
-      setEvtSaving(false);
+      showToast('No se pudo eliminar. Inténtalo de nuevo.', 'error');
     }
   }
   const [managerFilter, setManagerFilter] = useState<string>("all");
@@ -412,8 +454,8 @@ export function Dashboard({
     () => (sessionStorage.getItem('nav_tareas_vista') as 'lista' | 'tablero') ?? 'lista'
   );
   const [diaPersonaId, setDiaPersonaId] = useState(currentProfile.id);
-  // Eventos por persona para «Mi día» (se piden al mirar su día y se guardan)
-  const [agendaActs, setAgendaActs] = useState<Record<string, PlayerActivity[]>>({});
+  // Calendario: lunes (AAAA-MM-DD) de la semana visible
+  const [calLunes, setCalLunes] = useState(() => fechaLocal(lunesDe(new Date())));
   const [weekOffset, setWeekOffset] = useState(0);
   // Activities per profile for the Equipo workload view (cached — week nav does NOT refetch)
   const [teamActivities, setTeamActivities] = useState<Record<string, PlayerActivity[]>>({});
@@ -456,8 +498,6 @@ export function Dashboard({
   const [activityFilter, setActivityFilter] = useState(false);
 
 
-  // ESC cierra el modal de evento
-  useEscapeKey(() => setShowAddEvent(false), showAddEvent);
 
   // Cmd+K / Ctrl+K global search
   useEffect(() => {
@@ -488,16 +528,6 @@ export function Dashboard({
   useEffect(() => { sessionStorage.setItem('nav_player_view', playerView) }, [playerView]);
   useEffect(() => { sessionStorage.setItem('nav_group_by', groupBy) }, [groupBy]);
   useEffect(() => { sessionStorage.setItem('nav_tareas_vista', vistaTareas) }, [vistaTareas]);
-
-  // Eventos de la persona cuyo día se está mirando (paginado en db.ts)
-  useEffect(() => {
-    if (activeTab !== 'tareas' || vistaTareas !== 'lista' || agendaActs[diaPersonaId]) return;
-    let vivo = true;
-    fetchActivitiesByAuthor(diaPersonaId)
-      .then(acts => { if (vivo) setAgendaActs(prev => ({ ...prev, [diaPersonaId]: acts })); })
-      .catch(() => {}); // sin eventos la lista sigue siendo útil
-    return () => { vivo = false; };
-  }, [activeTab, vistaTareas, diaPersonaId, agendaActs]);
 
   // Fetch activities for all profiles when the Equipo tab is active.
   // Loaded once and cached: navigating between weeks reuses the same data.
@@ -593,17 +623,35 @@ export function Dashboard({
   const thisSunday = finDeSemana(thisMonday);
 
   // ── Lista unificada (tareas + Firmar + postpartidos + partidos + eventos) ──
-  // Partidos y eventos: de hoy a 7 días. Un partido pasado sin marcar no es
-  // una tarea vencida, y hay miles en el histórico.
+  // Partidos y eventos van por ventana de días: un partido pasado sin marcar
+  // no es una tarea vencida, y hay miles en el histórico. «Mi día» mira de
+  // hoy a 7 días; el calendario, la semana visible.
   const esAdmin = !!currentProfile.is_admin;
-  const agendaItems = useMemo(() => construirAgenda({
-    hoy: todayStr,
-    tasks: tasks.filter(t => !(t.adminOnly && !esAdmin)),
-    firmasEntries: firmasEntries ?? [],
-    postpartidos, scoutingMatches, matchScouts, profiles, players,
-    activities: agendaActs[diaPersonaId] ?? [],
-    rango: { desde: todayStr, hasta: sumarDias(todayStr, 7) },
-  }), [todayStr, tasks, esAdmin, firmasEntries, postpartidos, scoutingMatches, matchScouts, profiles, players, agendaActs, diaPersonaId]);
+  const diaHasta = sumarDias(todayStr, 7);
+  const calDomingo = sumarDias(calLunes, 6);
+  const actsDia = useActividadesRango(todayStr, diaHasta, activeTab !== 'calendario', actsVersion);
+  const actsCal = useActividadesRango(calLunes, calDomingo, activeTab === 'calendario', actsVersion);
+  const agendaBase = useMemo(() => {
+    const porId = new Map(scoutingPlayers.map(p => [p.id, p.fullName]));
+    return {
+      hoy: todayStr,
+      tasks: tasks.filter(t => !(t.adminOnly && !esAdmin)),
+      firmasEntries: firmasEntries ?? [],
+      postpartidos, scoutingMatches, matchScouts, profiles, players, eventos,
+      nombreScouting: (id: string) => porId.get(id),
+    };
+  }, [todayStr, tasks, esAdmin, firmasEntries, postpartidos, scoutingMatches, matchScouts, profiles, players, eventos, scoutingPlayers]);
+  const agendaItems = useMemo(
+    () => construirAgenda({ ...agendaBase, activities: actsDia, rango: { desde: todayStr, hasta: diaHasta } }),
+    [agendaBase, actsDia, todayStr, diaHasta],
+  );
+  // Solo se calcula con el calendario abierto
+  const agendaCal = useMemo(
+    () => activeTab === 'calendario'
+      ? construirAgenda({ ...agendaBase, activities: actsCal, rango: { desde: calLunes, hasta: calDomingo } })
+      : [],
+    [activeTab, agendaBase, actsCal, calLunes, calDomingo],
+  );
   const diaPersona = profiles.find(p => p.id === diaPersonaId) ?? currentProfile;
 
   const boardOverdue = boardTasks.filter(t => t.dueDate && t.dueDate < todayStr);
@@ -800,6 +848,11 @@ export function Dashboard({
     if (d.tipo === 'firmar') return onOpenFirmar?.(d.entryId);
     if (d.tipo === 'partido') return onOpenMatch?.(d.matchId);
     if (d.tipo === 'jugador') return onSelectPlayer(d.playerId);
+    if (d.tipo === 'evento') {
+      const ev = eventos.find(x => x.id === d.eventoId);
+      if (ev) setEventoModal({ inicial: ev, original: ev });
+      return;
+    }
     const t = d.taskId ? tasks.find(x => x.id === d.taskId) : undefined;
     if (t) setDetailTask(t);
     else if (d.tipo === 'postpartido') setInternalTab('postpartidos');
@@ -999,6 +1052,7 @@ export function Dashboard({
             <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center bg-slate-50 border-t border-slate-100 overflow-x-auto scrollbar-none">
               {([
                 { id: 'tareas'       as const, label: 'Mi día' },
+                { id: 'calendario'   as const, label: 'Calendario' },
                 { id: 'jugadores'    as const, label: 'Jugadores' },
                 { id: 'equipo'       as const, label: 'Equipo' },
                 { id: 'postpartidos' as const, label: 'Postpartidos' },
@@ -1011,7 +1065,7 @@ export function Dashboard({
                   <button
                     key={tab.id}
                     onClick={() => {
-                      if (tab.id === 'equipo' || tab.id === 'postpartidos') {
+                      if (esTabInterna(tab.id)) {
                         setInternalTab(tab.id);
                       } else {
                         setInternalTab(null);
@@ -1276,14 +1330,14 @@ export function Dashboard({
               ))}
             </div>
             <button
-              onClick={openAddEvent}
+              onClick={() => openAddEvent()}
               className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
             >
               <Activity className="w-3 h-3" /> Evento
             </button>
             {onAddGeneralTask && (
               <button
-                onClick={() => setShowAddGeneralTask(true)}
+                onClick={() => { setTareaInicial({}); setShowAddGeneralTask(true); }}
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-primary text-primary hover:bg-blue-50 transition-colors"
               >
                 <Plus className="w-3 h-3" /> Nueva tarea
@@ -1773,6 +1827,24 @@ export function Dashboard({
           </>)}
 
         </>)}
+
+        {/* ── Calendario semanal de toda la empresa ─────────── */}
+        {activeTab === 'calendario' && (
+          <CalendarioSemanal
+            items={agendaCal}
+            lunes={calLunes}
+            onLunes={setCalLunes}
+            hoy={todayStr}
+            profiles={statusProfiles}
+            currentProfile={currentProfile}
+            onAbrir={agendaAbrir}
+            onNuevo={(que, personId, fecha) => {
+              if (que === 'evento') return openAddEvent({ fecha, participantIds: [personId] });
+              setTareaInicial({ assigneeId: personId, dueDate: fecha });
+              setShowAddGeneralTask(true);
+            }}
+          />
+        )}
 
         {/* ── Jugadores section ────────────────────────────── */}
         {activeTab === 'jugadores' && (<>
@@ -2726,6 +2798,7 @@ export function Dashboard({
 
       {showAddGeneralTask && onAddGeneralTask && (
         <AddGeneralTaskModal profiles={profiles} players={players} currentProfileId={currentProfile.id}
+          inicial={tareaInicial}
           onClose={() => setShowAddGeneralTask(false)}
           onAdd={async (t) => {
             try {
@@ -2767,248 +2840,20 @@ export function Dashboard({
         />
       )}
 
-      {/* ── Add Event Modal ──────────────────────────────────── */}
-      {showAddEvent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-4 sm:p-6 space-y-4 max-h-[90vh] overflow-y-auto">
-            <h4 className="text-sm font-semibold text-slate-800">Nuevo evento de actividad</h4>
-
-            {/* Player selector — combobox */}
-            {(() => {
-              const selectedPlayer = players.find(p => p.id === evtPlayer);
-              const filteredEvtPlayers = [...players]
-                .filter(p => p.name.toLowerCase().includes(evtPlayerQ.toLowerCase()))
-                .sort((a, b) => a.name.localeCompare(b.name));
-              const showEvtDrop = evtPlayerQ.length > 0 && filteredEvtPlayers.length > 0 && !selectedPlayer;
-              return (
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-600">Jugador <span className="text-red-400">*</span></label>
-                  {selectedPlayer ? (
-                    <div className="flex items-center gap-2 px-3 py-2 border border-blue-300 rounded-lg bg-blue-50">
-                      <span className="flex-1 text-xs font-medium text-slate-800">{selectedPlayer.name}</span>
-                      <button
-                        type="button"
-                        onClick={() => { setEvtPlayer(""); setEvtPlayerQ(""); }}
-                        aria-label="Quitar jugador"
-                        className="text-slate-500 hover:text-slate-700 leading-none text-sm"
-                      >×</button>
-                    </div>
-                  ) : (
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={evtPlayerQ}
-                        onChange={e => setEvtPlayerQ(e.target.value)}
-                        placeholder="Buscar jugador…"
-                        className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200"
-                      />
-                      {showEvtDrop && (
-                        <div className="absolute left-0 top-full mt-1 z-20 w-full bg-white border border-slate-200 rounded-xl shadow-lg py-1 max-h-48 overflow-y-auto">
-                          {filteredEvtPlayers.map(p => (
-                            <button
-                              key={p.id}
-                              type="button"
-                              onMouseDown={e => {
-                                e.preventDefault();
-                                setEvtPlayer(p.id);
-                                setEvtPlayerQ("");
-                              }}
-                              className="w-full text-left flex items-center justify-between px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 transition-colors"
-                            >
-                              <span>{p.name}</span>
-                              <span className="text-slate-400">{calcAge(p.birthDate)} años</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-600">Fecha</label>
-                <input type="date" value={evtDate} onChange={e => setEvtDate(e.target.value)}
-                  className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-600">Tipo</label>
-                <select value={evtType} onChange={e => setEvtType(e.target.value)}
-                  className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200">
-                  {ACTIVITY_TYPES_DASH.map(t => <option key={t} value={t}>{t}</option>)}
-                  <option value="custom">Personalizado…</option>
-                </select>
-              </div>
-            </div>
-
-            {evtType === 'custom' && (
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-600">Tipo personalizado</label>
-                <input type="text" value={evtCustomType} onChange={e => setEvtCustomType(e.target.value)}
-                  placeholder="Ej: Reunión con padre, Contrato preliminar…"
-                  className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200" />
-              </div>
-            )}
-
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Notas <span className="text-slate-400">(opcional)</span></label>
-              <textarea value={evtNotes} onChange={e => setEvtNotes(e.target.value)}
-                placeholder="Detalles del evento…" rows={3}
-                className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-blue-200" />
-            </div>
-
-            {/* Additional players — combobox */}
-            {(() => {
-              const availablePlayers = [...players]
-                .filter(p => p.id !== evtPlayer && !evtExtraPlayers.includes(p.id))
-                .filter(p => p.name.toLowerCase().includes(evtExtraPlayerQ.toLowerCase()))
-                .sort((a, b) => a.name.localeCompare(b.name));
-              const showDrop = evtExtraPlayerQ.length > 0 && availablePlayers.length > 0;
-              return (
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-slate-600 flex items-center gap-1.5">
-                    <Users className="w-3.5 h-3.5 text-slate-400" />
-                    Jugadores adicionales <span className="text-slate-400 font-normal">(opcional)</span>
-                  </label>
-
-                  {/* Selected player tags */}
-                  {evtExtraPlayers.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {evtExtraPlayers.map(pid => {
-                        const pl = players.find(p => p.id === pid);
-                        if (!pl) return null;
-                        return (
-                          <span key={pid} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 border border-green-200 text-green-800">
-                            {pl.name}
-                            <button
-                              type="button"
-                              onClick={() => setEvtExtraPlayers(prev => prev.filter(id => id !== pid))}
-                              aria-label={`Quitar a ${pl.name}`}
-                              className="ml-0.5 text-green-600 hover:text-green-800 leading-none"
-                            >×</button>
-                          </span>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Search input */}
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={evtExtraPlayerQ}
-                      onChange={e => setEvtExtraPlayerQ(e.target.value)}
-                      placeholder="Buscar jugador…"
-                      className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200"
-                    />
-                    {showDrop && (
-                      <div className="absolute left-0 top-full mt-1 z-10 w-full bg-white border border-slate-200 rounded-xl shadow-lg py-1 max-h-40 overflow-y-auto">
-                        {availablePlayers.map(p => (
-                          <button
-                            key={p.id}
-                            type="button"
-                            onMouseDown={e => {
-                              e.preventDefault();
-                              setEvtExtraPlayers(prev => [...prev, p.id]);
-                              setEvtExtraPlayerQ('');
-                            }}
-                            className="w-full text-left flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 transition-colors"
-                          >
-                            {p.name}
-                            <span className="ml-auto text-slate-400">{calcAge(p.birthDate)} años</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Participant profiles — combobox */}
-            {(() => {
-              const otherProfiles = profiles.filter(p => p.id !== currentProfile.id);
-              const filteredProfiles = otherProfiles.filter(p =>
-                !evtParticipants.includes(p.id) &&
-                p.name.toLowerCase().includes(evtParticipantQ.toLowerCase())
-              );
-              const showDropdown = evtParticipantQ.length > 0 && filteredProfiles.length > 0;
-              return (
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-slate-600 flex items-center gap-1.5">
-                    <Users className="w-3.5 h-3.5 text-slate-400" />
-                    También estaba… <span className="text-slate-400 font-normal">(opcional)</span>
-                  </label>
-
-                  {/* Selected tags */}
-                  {evtParticipants.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {evtParticipants.map(pid => {
-                        const prof = profiles.find(p => p.id === pid);
-                        if (!prof) return null;
-                        return (
-                          <span key={pid} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 border border-blue-200 text-blue-700">
-                            <span className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0"
-                              style={{ background: PRIMARY }}>
-                              {prof.avatar}
-                            </span>
-                            {prof.name.split(' ')[0]}
-                            <button onClick={() => setEvtParticipants(prev => prev.filter(id => id !== pid))} aria-label={`Quitar a ${prof.name}`} className="ml-0.5 text-blue-500 hover:text-blue-700 leading-none">×</button>
-                          </span>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Search input */}
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={evtParticipantQ}
-                      onChange={e => setEvtParticipantQ(e.target.value)}
-                      placeholder="Buscar compañero…"
-                      className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-200"
-                    />
-                    {showDropdown && (
-                      <div className="absolute left-0 top-full mt-1 z-10 w-full bg-white border border-slate-200 rounded-xl shadow-lg py-1 max-h-40 overflow-y-auto">
-                        {filteredProfiles.map(p => (
-                          <button
-                            key={p.id}
-                            type="button"
-                            onMouseDown={e => { e.preventDefault(); setEvtParticipants(prev => [...prev, p.id]); setEvtParticipantQ(''); }}
-                            className="w-full text-left flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 transition-colors"
-                          >
-                            <span className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0"
-                              style={{ background: PRIMARY }}>
-                              {p.avatar}
-                            </span>
-                            {p.name}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
-
-            <div className="flex gap-2 pt-1 safe-area-bottom">
-              <button onClick={() => setShowAddEvent(false)}
-                className="flex-1 py-2.5 sm:py-2 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
-                Cancelar
-              </button>
-              <button
-                onClick={handleSaveEvent}
-                disabled={evtSaving || !evtPlayer || !evtDate || (evtType === 'custom' && !evtCustomType.trim())}
-                className="flex-1 py-2.5 sm:py-2 text-xs rounded-lg text-white disabled:opacity-50 transition-colors bg-primary hover:bg-primary/90"
-              >
-                {evtSaving ? 'Guardando…' : 'Guardar evento'}
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* ── Evento: alta y edición ── */}
+      {eventoModal && (
+        <EventoModal
+          key={eventoModal.original?.id ?? 'nuevo'}
+          players={players}
+          scoutingPlayers={scoutingPlayers}
+          profiles={profiles}
+          currentProfile={currentProfile}
+          inicial={eventoModal.inicial}
+          editando={!!eventoModal.original}
+          onClose={() => setEventoModal(null)}
+          onSave={guardarEvento}
+          onDelete={eventoModal.original ? borrarEvento : undefined}
+        />
       )}
 
       {detailTask && (
@@ -3931,18 +3776,21 @@ function AddPlayerModal({ profiles, onClose, onAdd }: {
   );
 }
 
-function AddGeneralTaskModal({ profiles, players, currentProfileId, onClose, onAdd }: {
-  profiles: Profile[]; players: Player[]; currentProfileId?: string; onClose: () => void; onAdd: (task: Task) => void;
+function AddGeneralTaskModal({ profiles, players, currentProfileId, inicial, onClose, onAdd }: {
+  profiles: Profile[]; players: Player[]; currentProfileId?: string;
+  /** Persona y fecha ya puestas (alta desde una celda del calendario) */
+  inicial?: { assigneeId?: string; dueDate?: string };
+  onClose: () => void; onAdd: (task: Task) => void;
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [assigneeId, setAssigneeId] = useState(currentProfileId ?? "");
+  const [assigneeId, setAssigneeId] = useState(inicial?.assigneeId ?? currentProfileId ?? "");
   const [selectedPlayerId, setSelectedPlayerId] = useState("");
   const [priority, setPriority] = useState<"alta" | "media" | "baja">("media");
   const [label, setLabel] = useState<TaskLabel | "">("");
-  const [dueDate, setDueDate] = useState("");
+  const [dueDate, setDueDate] = useState(inicial?.dueDate ?? "");
   const [adminOnly, setAdminOnly] = useState(false);
-  const [showMore, setShowMore] = useState(false);
+  const [showMore, setShowMore] = useState(!!inicial?.dueDate);
 
   useEscapeKey(onClose);
 

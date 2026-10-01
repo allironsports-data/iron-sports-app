@@ -1939,6 +1939,7 @@ export default function App() {
       onOpenFirmar={irAFirmas}
       onPatchFirmasEntry={handlePatchFirmasEntry}
       matchScouts={matchScouts}
+      scoutingPlayers={scoutingPlayers}
       onOpenMatch={(id) => { setCaptacionOpenMatchId(id); irA('captacion', 'partidos') }}
       onSetMatchSeen={async (id, scout, visto) => {
         const status = visto ? 'visto' as const : 'pendiente' as const
