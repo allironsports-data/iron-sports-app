@@ -218,6 +218,10 @@ export interface Player {
   partner?: string;            // partner interno responsable
   managedBy: string[];         // team member ids (encargados)
   hiddenFromManagement?: boolean;  // true = solo distribución (intermediar)
+  /** Partner externo que ha traído al jugador (undefined = es nuestro). No confundir con `partner`. */
+  partnerOrigen?: string;
+  /** Jugador nuestro que los partners externos pueden ver (ficha reducida) y mover */
+  sharedWithPartners?: boolean;
   /** activo | inactivo | partner. Sin migrar, o sin valor, se trata como activo. */
   estado?: PlayerEstado;
   representationContract: RepresentationContract;

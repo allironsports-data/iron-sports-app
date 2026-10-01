@@ -61,7 +61,12 @@ export function PlayerPanel({
   selectedEntry, playersById, negotiations, clubs, profiles, currentProfile, panelExpanded,
   onTogglePanelExpanded, onClose, onSelectPlayer, onSelectClub, onEditEntry, onRequestDeleteEntry,
   onAddClub, onAssignLeague, onUpdateNegotiation, onDeleteNegotiation, showToast,
+  soloLectura = false, onSetShared,
 }: {
+  /** Cuenta de partner sobre un jugador que no es suyo: no puede editar ni quitar la entrada */
+  soloLectura?: boolean
+  /** Compartir (o dejar de compartir) el jugador con los partners externos. Solo cuentas nuestras. */
+  onSetShared?: (playerId: string, shared: boolean) => Promise<void>
   selectedEntry: DistributionEntry
   playersById: DistributionIndexes['playersById']
   negotiations: ClubNegotiation[]
@@ -95,7 +100,10 @@ export function PlayerPanel({
         <Avatar name={player.name} photo={player.photo} size="md" />
         <div className="flex-1 min-w-0">
           <div className="font-semibold text-slate-800 text-sm">{player.name}</div>
-          <div className="text-xs text-slate-500">{player.positions[0]}</div>
+          <div className="text-xs text-slate-500">
+            {player.positions[0]}
+            {player.partnerOrigen && <span className="ml-1.5 text-teal-700">· Partner: {player.partnerOrigen}</span>}
+          </div>
         </div>
         <PanelExpandBtn expanded={panelExpanded} onToggle={() => onTogglePanelExpanded()} />
         <button
@@ -121,7 +129,7 @@ export function PlayerPanel({
               {selectedEntry.transferFee}
             </span>
           )}
-          <div className="ml-auto flex items-center gap-1">
+          {!soloLectura && <div className="ml-auto flex items-center gap-1">
             <button
               onClick={() => onEditEntry(selectedEntry)}
               className="p-2 sm:p-1 text-slate-400 hover:text-slate-600 rounded hover:bg-slate-100"
@@ -138,10 +146,23 @@ export function PlayerPanel({
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>
-          </div>
+          </div>}
         </div>
         {selectedEntry.notes && (
           <p className="text-xs text-slate-500 mt-2">{selectedEntry.notes}</p>
+        )}
+        {onSetShared && !player.partnerOrigen && (
+          <label className="mt-2 flex items-center gap-2 text-xs text-slate-600 cursor-pointer"
+            title="Los partners externos verán a este jugador en Distribución (solo datos deportivos básicos) y podrán moverlo con clubes">
+            <input type="checkbox" checked={!!player.sharedWithPartners}
+              onChange={e => {
+                const v = e.target.checked
+                onSetShared(player.id, v)
+                  .then(() => showToast(v ? 'Compartido con partners' : 'Ya no se comparte con partners'))
+                  .catch(() => showToast('No se pudo cambiar. ¿Está ejecutada la migración de partners?', 'error'))
+              }} />
+            Compartir con partners externos
+          </label>
         )}
       </div>
 
@@ -171,12 +192,14 @@ export function PlayerPanel({
         >
           Cerrar
         </button>
-        <button
-          onClick={() => onRequestDeleteEntry(selectedEntry.id)}
-          className="text-xs text-red-500 hover:text-red-600 flex items-center gap-1"
-        >
-          <Trash2 className="w-3.5 h-3.5" /> Quitar de distribución
-        </button>
+        {!soloLectura && (
+          <button
+            onClick={() => onRequestDeleteEntry(selectedEntry.id)}
+            className="text-xs text-red-500 hover:text-red-600 flex items-center gap-1"
+          >
+            <Trash2 className="w-3.5 h-3.5" /> Quitar de distribución
+          </button>
+        )}
       </div>
     </div>
   )

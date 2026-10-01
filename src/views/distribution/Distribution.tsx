@@ -73,6 +73,10 @@ export interface Props {
   onUpdateNegotiation: (n: ClubNegotiation) => Promise<void>
   onDeleteNegotiation: (id: string) => Promise<void>
   onCreatePlayer?: (p: Player) => Promise<Player>
+  /** Cuenta de partner externo: sin navegación a otras secciones ni pestaña Encargados; solo edita lo suyo */
+  restricted?: boolean
+  /** Compartir un jugador nuestro con los partners externos (solo cuentas nuestras) */
+  onSetShared?: (playerId: string, shared: boolean) => Promise<void>
   /** Pantalla partida: la lista va en media pantalla → menos columnas */
   splitActive?: boolean
   /** Club abierto en el panel (para resaltarlo en la lista) */
@@ -88,8 +92,10 @@ export function Distribution({
   onCreateClub, onUpdateClub, onDeleteClub,
   onCreateEntry, onUpdateEntry, onDeleteEntry,
   onCreateNegotiation, onUpdateNegotiation, onDeleteNegotiation,
-  onCreatePlayer, activeClubId,
+  onCreatePlayer, activeClubId, restricted = false, onSetShared,
 }: Props) {
+  /** ¿Es de mi partner? (solo tiene sentido en una cuenta de partner) */
+  const esMio = useCallback((p?: Player) => !!p?.partnerOrigen && p.partnerOrigen === currentProfile.partner_name, [currentProfile.partner_name])
   // ── Jugador CERRADO = fuera de la UX de Distribución ────────
   // Si un jugador ya firmó en algún club (alguna negociación «cerrado»),
   // sus negociaciones abiertas en OTROS clubes están muertas: se ocultan
@@ -122,7 +128,9 @@ export function Distribution({
       return saved && saved !== 'panel' ? saved : 'jugadores'
     }
   )
-  const tab: TabId = onTabChange ? (esTabId(tabProp) ? tabProp : 'jugadores') : tabLocal
+  const tabPedida: TabId = onTabChange ? (esTabId(tabProp) ? tabProp : 'jugadores') : tabLocal
+  // Encargados es de uso interno: una cuenta de partner no la tiene
+  const tab: TabId = restricted && tabPedida === 'encargados' ? 'jugadores' : tabPedida
   const setTab = (t: TabId) => { setTabLocal(t); onTabChange?.(t) }
   // Oportunidades tab
   const [oppSearch, setOppSearch] = useState('')
@@ -596,7 +604,7 @@ export function Distribution({
         </div>
 
         {/* Level 1: main sections */}
-        <div className="max-w-6xl mx-auto px-3 sm:px-6 hidden sm:flex items-center border-t border-slate-100 overflow-x-auto scrollbar-none">
+        <div className={`max-w-6xl mx-auto px-3 sm:px-6 items-center border-t border-slate-100 overflow-x-auto scrollbar-none ${restricted ? 'hidden' : 'hidden sm:flex'}`}>
           <button
             onClick={onBack}
             className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
@@ -634,7 +642,7 @@ export function Distribution({
 
         {/* Sub-tabs — inside header so they stay sticky */}
         <div className="max-w-6xl mx-auto px-3 sm:px-6 flex gap-1 border-t border-slate-100 overflow-x-auto scrollbar-none">
-          {(['jugadores', 'clubes', 'solicitudes', 'oportunidades', 'pipeline', 'encargados'] as const).map(t => (
+          {(['jugadores', 'clubes', 'solicitudes', 'oportunidades', 'pipeline', 'encargados'] as const).filter(t => !restricted || t !== 'encargados').map(t => (
             <button
               key={t}
               onClick={() => switchTab(t)}
@@ -839,7 +847,7 @@ export function Distribution({
           )}
 
           {/* ── ENCARGADOS TAB ── */}
-          {tab === 'encargados' && (
+          {tab === 'encargados' && !restricted && (
             <EncargadosTab
               seasonEntries={seasonEntries} playersById={playersById} negsByPlayer={negsByPlayer}
               profiles={profiles} clubs={clubs} negotiations={negotiations} currentProfile={currentProfile}
@@ -868,6 +876,8 @@ export function Distribution({
                 onAssignLeague={setBulkAssignPlayerId}
                 onUpdateNegotiation={onUpdateNegotiation} onDeleteNegotiation={onDeleteNegotiation}
                 showToast={showToast}
+                soloLectura={restricted && !esMio(playersById.get(selectedEntry.playerId))}
+                onSetShared={restricted ? undefined : onSetShared}
               />
             )}
 
@@ -898,7 +908,8 @@ export function Distribution({
 
       {showAddPlayer && (
         <AddPlayerModal
-          players={players}
+          players={restricted ? players.filter(esMio) : players}
+          partner={restricted}
           existingPlayerIds={seasonEntries.map(e => e.playerId)}
           season={season}
           onClose={() => setShowAddPlayer(false)}

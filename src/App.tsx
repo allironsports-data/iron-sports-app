@@ -33,6 +33,7 @@ const AdminPanel       = lazy(() => import('./views/AdminPanel').then(m => ({ de
 const OverviewPanel    = lazy(() => import('./views/OverviewPanel').then(m => ({ default: m.OverviewPanel })))
 const PlayersTable     = lazy(() => import('./views/PlayersTable').then(m => ({ default: m.PlayersTable })))
 const Distribution     = lazy(() => import('./views/Distribution').then(m => ({ default: m.Distribution })))
+const FichaPartner     = lazy(() => import('./views/distribution/FichaPartner').then(m => ({ default: m.FichaPartner })))
 const ClubDetail       = lazy(() => import('./views/ClubDetail').then(m => ({ default: m.ClubDetail })))
 const Captacion        = lazy(() => import('./views/Captacion').then(m => ({ default: m.Captacion })))
 const Pipeline         = lazy(() => import('./views/pipeline/Pipeline').then(m => ({ default: m.Pipeline })))
@@ -89,7 +90,17 @@ export default function App() {
 
   const [players, setPlayers] = useState<Player[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
-  const [profiles, setProfiles] = useState<Profile[]>([])
+  // Todas las cuentas, incluidas las de partners externos (para Admin)
+  const [todosPerfiles, setProfiles] = useState<Profile[]>([])
+  // El equipo: sin los partners externos, que no son asignables a tareas,
+  // partidos ni jugadores. Una cuenta de partner sí ve a todos (los nombres
+  // de quien lleva cada club o negociación).
+  const profiles = useMemo(
+    () => profile?.partner_only ? todosPerfiles : todosPerfiles.filter(p => !p.partner_only),
+    [todosPerfiles, profile?.partner_only],
+  )
+  // Cuenta de partner: ficha reducida abierta (id del jugador)
+  const [fichaPartnerId, setFichaPartnerId] = useState<string | null>(null)
   const profilesRef = useRef<Profile[]>([])
   // Refs con el estado actual para los handlers de realtime. Antes leían el
   // estado con setX(prev => { ...avisos...; return prev }): un updater debe
@@ -342,10 +353,29 @@ export default function App() {
     }
   }, [profile?.captacion_only])
 
+  // Cuenta de partner externo: solo Distribución. Igual que arriba, el hash
+  // no abre nada más. Al saberlo se vuelven a leer los jugadores, porque los
+  // nuestros compartidos le llegan por otra vía (vista de ficha reducida).
+  const partnerOnlyRef = useRef(false)
+  useEffect(() => {
+    partnerOnlyRef.current = !!profile?.partner_only
+    db.setModoPartner(!!profile?.partner_only)
+    if (profile?.partner_only) {
+      setSelectedPlayerId(null); setSelectedClubId(null); setSelectedProfileId(null)
+      setMainSection('distribucion')
+      db.fetchPlayers().then(setPlayers).catch(() => {})
+    }
+  }, [profile?.partner_only])
+
   useEffect(() => {
     const apply = () => {
       const r = parsearHash(window.location.hash)
       if (!r || r.tipo === 'contactos') return
+      if (partnerOnlyRef.current) {
+        setMainSection('distribucion')
+        if (r.tipo === 'seccion' && r.seccion === 'distribucion') setSubTab('distribucion', r.tab ?? '')
+        return
+      }
       if (captacionOnlyRef.current) {
         // solo Captación y Mi día
         if (r.tipo === 'seccion' && r.seccion === 'mi-dia') setMainSection('mi-dia')
@@ -1145,7 +1175,8 @@ export default function App() {
   const handleUpdateNegotiation = async (n: ClubNegotiation) => {
     const antes = negotiations.find(x => x.id === n.id)
     await guardarNegociacion(n)
-    if (antes && antes.status !== 'cerrado' && n.status === 'cerrado') {
+    // (una cuenta de partner no tiene acceso a las fichas: ahí no se anota nada)
+    if (antes && antes.status !== 'cerrado' && n.status === 'cerrado' && !profile?.partner_only) {
       const club = clubs.find(c => c.id === n.clubId)
       try {
         await db.createPlayerActivity(n.playerId, {
@@ -1782,6 +1813,66 @@ export default function App() {
     />
   )
 
+  // ── Cuenta de partner externo: solo Distribución ───────────────────
+  // La seguridad está en la base de datos (migration_partners.sql); aquí
+  // solo se evita enseñar botones que no le van a funcionar.
+  if (profile.partner_only) {
+    const miPartner = profile.partner_name
+    const esMio = (playerId: string) => {
+      const j = players.find(x => x.id === playerId)
+      return !!j?.partnerOrigen && j.partnerOrigen === miPartner
+    }
+    const soloLoMio = (playerId: string | undefined) => {
+      if (!playerId || !esMio(playerId)) throw new Error('Solo puedes cambiar esto en tus propios jugadores')
+    }
+    const fichaPartner = fichaPartnerId ? players.find(x => x.id === fichaPartnerId) : undefined
+    return (
+      <>
+        <Distribution
+          restricted
+          players={players}
+          clubs={clubs}
+          entries={distEntries}
+          negotiations={negotiations}
+          currentProfile={profile}
+          profiles={profiles}
+          onBack={() => {}}
+          onLogout={signOut}
+          tab={subTabs.distribucion}
+          onTabChange={(t) => setSubTab('distribucion', t)}
+          onSelectPlayer={setFichaPartnerId}
+          onCreateClub={handleCreateClub}
+          onUpdateClub={handleUpdateClub}
+          onDeleteClub={async () => { throw new Error('Una cuenta de partner no puede borrar clubes') }}
+          onCreateEntry={async (e) => { soloLoMio(e.playerId); return handleCreateEntry(e) }}
+          onUpdateEntry={async (e) => { soloLoMio(e.playerId); return handleUpdateEntry(e) }}
+          onDeleteEntry={async (id) => { soloLoMio(distEntries.find(x => x.id === id)?.playerId); return handleDeleteEntry(id) }}
+          onCreateNegotiation={handleCreateNegotiation}
+          onUpdateNegotiation={handleUpdateNegotiation}
+          onDeleteNegotiation={async () => { throw new Error('Una cuenta de partner no puede borrar negociaciones: márcala como descartada') }}
+          onCreatePlayer={(p) => {
+            if (!miPartner) throw new Error('La cuenta no tiene partner asignado')
+            return handleAddPlayer({ ...p, partnerOrigen: miPartner, hiddenFromManagement: true, sharedWithPartners: false })
+          }}
+        />
+        <Suspense fallback={null}>
+        {fichaPartner && (
+          <FichaPartner
+            player={fichaPartner}
+            editable={esMio(fichaPartner.id)}
+            onClose={() => setFichaPartnerId(null)}
+            onSave={async (p) => {
+              const saved = await db.updatePlayer(p)
+              setPlayers(prev => prev.map(x => x.id === saved.id ? saved : x))
+            }}
+          />
+        )}
+        </Suspense>
+        <SavingIndicator />{conflictNode}
+      </>
+    )
+  }
+
   if (profile.captacion_only) {
     if (mainSection === 'mi-dia') return <>{miDiaNode}<SavingIndicator />{conflictNode}</>
     // Sin bottom nav: acceso a «Mi día» con un botón flotante
@@ -1850,7 +1941,7 @@ export default function App() {
   if (showAdmin && profile.is_admin) {
     return (
       <AdminPanel
-        profiles={profiles}
+        profiles={todosPerfiles}
         tasks={tasks}
         players={players}
         scoutingPlayers={scoutingPlayers}
@@ -2025,6 +2116,10 @@ export default function App() {
               onUpdateNegotiation={handleUpdateNegotiation}
               onDeleteNegotiation={handleDeleteNegotiation}
               onCreatePlayer={handleAddPlayer}
+              onSetShared={async (id, shared) => {
+                await db.setPlayerShared(id, shared)
+                setPlayers(prev => prev.map(x => x.id === id ? { ...x, sharedWithPartners: shared } : x))
+              }}
             />
           </div>
 

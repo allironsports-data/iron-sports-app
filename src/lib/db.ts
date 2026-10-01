@@ -25,6 +25,8 @@ function dbToPlayer(row: Record<string, unknown>): Player {
     transfermarktUrl: (row.transfermarkt_url as string) ?? undefined,
     links: (row.links as PlayerLink[]) ?? [],
     hiddenFromManagement: (row.hidden_from_management as boolean) ?? false,
+    partnerOrigen: (row.partner_origen as string) || undefined,
+    sharedWithPartners: (row.shared_with_partners as boolean) ?? false,
     // undefined si la migración de estado no se ha ejecutado aún; la app lo
     // trata como «activo» (ver lib/estadoJugador.ts)
     estado: (row.estado as Player['estado']) ?? undefined,
@@ -65,37 +67,38 @@ function playerToDb(p: Partial<Player>) {
     info: p.info,
     hidden_from_management: p.hiddenFromManagement ?? false,
     estado: p.estado ?? 'activo',
+    partner_origen: p.partnerOrigen ?? null,
+    shared_with_partners: p.sharedWithPartners ?? false,
   }
 }
 
-// ── players.estado: opcional hasta migrar ────────────────────────────
-// playerToDb escribe todas las columnas, así que si la migración no se ha
+// ── players: columnas opcionales hasta migrar ────────────────────────
+// playerToDb escribe todas las columnas, así que si una migración no se ha
 // ejecutado el guardado entero fallaría por una columna nueva. En vez de
-// bloquear la app: al primer 42703 que hable de `estado` se apaga el
-// campo y se reintenta sin él. El resto de la ficha se guarda igual.
-let playersSinEstado = false
+// bloquear la app: al primer error de columna inexistente que hable de una
+// de estas, se apaga esa columna y se reintenta sin ella. El resto de la
+// ficha se guarda igual.
+//   · estado                                → migration_player_estado.sql
+//   · partner_origen, shared_with_partners  → migration_partners.sql
+const COLUMNAS_OPCIONALES_PLAYER = ['estado', 'partner_origen', 'shared_with_partners'] as const
+const playersSinColumna = new Set<string>()
 
-function sinEstado(fila: Record<string, unknown>): Record<string, unknown> {
-  const copia = { ...fila }
-  delete copia.estado
-  return copia
-}
-
-function faltaColumnaEstado(error: unknown): boolean {
+/** Apaga la columna opcional de la que se queja el error. false si el error no va de eso. */
+function apagarColumnaPlayer(error: unknown): boolean {
   if (!esColumnaInexistente(error)) return false
-  return /estado/i.test((error as { message?: string } | null)?.message ?? '')
+  const msg = (error as { message?: string } | null)?.message ?? ''
+  const col = COLUMNAS_OPCIONALES_PLAYER.find(c => !playersSinColumna.has(c) && msg.includes(c))
+  if (!col) return false
+  playersSinColumna.add(col)
+  console.warn(`[db] players no tiene columna ${col}: se guarda sin ella (falta ejecutar su migración)`)
+  return true
 }
 
-function apagarEstado() {
-  if (playersSinEstado) return
-  playersSinEstado = true
-  console.warn('[db] players no tiene columna estado: se guarda sin ella (ejecuta migration_player_estado.sql)')
-}
-
-/** La fila de players lista para escribir, con `estado` solo si la base lo admite */
+/** La fila de players lista para escribir, solo con las columnas opcionales que la base admite */
 function filaPlayer(p: Player): Record<string, unknown> {
   const fila = playerToDb(p) as Record<string, unknown>
-  return playersSinEstado ? sinEstado(fila) : fila
+  for (const c of playersSinColumna) delete fila[c]
+  return fila
 }
 
 // ── PASAPORTES Y CONTRATOS ───────────────────────────────────
@@ -380,31 +383,55 @@ export async function fetchPlayers(): Promise<Player[]> {
     supabase.from('players').select('*').order('name')
       .order('id').range(desde, hasta),
   { contar: () => supabase.from('players').select('*', { count: 'exact', head: true }) })
-  return filas.map(dbToPlayer)
+  const jugadores = filas.map(dbToPlayer)
+  if (!modoPartner) return jugadores
+  // Cuenta de partner: la tabla solo le entrega los jugadores de partners.
+  // Los nuestros compartidos llegan aparte, por la vista de ficha reducida.
+  const compartidos = await fetchPlayersCompartidos()
+  const ids = new Set(jugadores.map(j => j.id))
+  return [...jugadores, ...compartidos.filter(c => !ids.has(c.id))]
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+// ── Cuenta de partner externo ────────────────────────────────────────
+// Lo activa App al saber que el perfil es de partner. La seguridad NO
+// depende de esto (la pone la base de datos, migration_partners.sql): solo
+// decide de dónde se leen los jugadores compartidos.
+let modoPartner = false
+export function setModoPartner(v: boolean) { modoPartner = v }
+
+/** Jugadores nuestros compartidos con partners: ficha reducida (vista players_compartidos) */
+async function fetchPlayersCompartidos(): Promise<Player[]> {
+  const filas = await leerTodo<Record<string, unknown>>('players_compartidos', (desde, hasta) =>
+    supabase.from('players_compartidos').select('*').order('name').order('id').range(desde, hasta))
+  return filas.map(f => ({ ...dbToPlayer(f), sharedWithPartners: true }))
 }
 
 export async function createPlayer(p: Player): Promise<Player> {
-  const insertar = (fila: Record<string, unknown>) =>
-    supabase.from('players').insert(fila).select().single()
-
-  let { data, error } = await insertar(filaPlayer(p))
-  if (error && faltaColumnaEstado(error)) {
-    apagarEstado()
-    ;({ data, error } = await insertar(sinEstado(playerToDb(p) as Record<string, unknown>)))
+  // Un reintento por cada columna opcional que pueda faltar
+  for (;;) {
+    const { data, error } = await supabase.from('players').insert(filaPlayer(p)).select().single()
+    if (error && apagarColumnaPlayer(error)) continue
+    if (error) throw error
+    return dbToPlayer(data)
   }
-  if (error) throw error
-  return dbToPlayer(data)
 }
 
 /** Devuelve la fila guardada (con el updated_at nuevo). Lanza ConflictError si otro la cambió antes. */
 export async function updatePlayer(p: Player): Promise<Player> {
-  try {
-    return await actualizarConControl('players', p.id, filaPlayer(p), p.updatedAt, dbToPlayer)
-  } catch (e) {
-    if (!faltaColumnaEstado(e)) throw e
-    apagarEstado()
-    return actualizarConControl('players', p.id, sinEstado(playerToDb(p) as Record<string, unknown>), p.updatedAt, dbToPlayer)
+  for (;;) {
+    try {
+      return await actualizarConControl('players', p.id, filaPlayer(p), p.updatedAt, dbToPlayer)
+    } catch (e) {
+      if (!apagarColumnaPlayer(e)) throw e
+    }
   }
+}
+
+/** Marca (o desmarca) un jugador nuestro como visible para los partners externos. Solo toca esa columna. */
+export async function setPlayerShared(id: string, shared: boolean): Promise<void> {
+  const { error } = await supabase.from('players').update({ shared_with_partners: shared }).eq('id', id)
+  if (error) throw error
 }
 
 export async function deletePlayer(id: string): Promise<void> {
@@ -673,7 +700,7 @@ export async function fetchProfiles() {
     supabase.from('profiles').select('*').order('name').order('id').range(d, h)) as Promise<unknown[]>
 }
 
-export async function updateProfile(id: string, updates: { name?: string; avatar?: string; is_admin?: boolean; hidden_from_status?: boolean; captacion_only?: boolean; activo?: boolean }) {
+export async function updateProfile(id: string, updates: { name?: string; avatar?: string; is_admin?: boolean; hidden_from_status?: boolean; captacion_only?: boolean; activo?: boolean; partner_only?: boolean; partner_name?: string | null }) {
   const { error } = await supabase.from('profiles').update(updates).eq('id', id)
   if (error) throw error
 }

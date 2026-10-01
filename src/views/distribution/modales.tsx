@@ -16,7 +16,7 @@ import { CONDITIONS, NEG_STATUSES, STATUS_CONFIG, PRIORITY_CONFIG } from './cons
 
 // ── ADD PLAYER MODAL ──────────────────────────────────────────
 
-export function AddPlayerModal({ players, existingPlayerIds, season, onClose, onSave, onCreatePlayer, onToast }: {
+export function AddPlayerModal({ players, existingPlayerIds, season, onClose, onSave, onCreatePlayer, onToast, partner = false }: {
   players: Player[]
   existingPlayerIds: string[]
   season: string
@@ -25,8 +25,10 @@ export function AddPlayerModal({ players, existingPlayerIds, season, onClose, on
   onSave: (data: Omit<DistributionEntry, 'id' | 'createdAt'>) => Promise<void>
   onCreatePlayer?: (p: Player) => Promise<Player>
   onToast: (msg: string, variant?: 'success' | 'error' | 'info') => void
+  /** Cuenta de partner externo: `players` son solo los suyos y lo normal es dar de alta uno nuevo */
+  partner?: boolean
 }) {
-  const [mode, setMode] = useState<'existing' | 'intermediar'>('existing')
+  const [mode, setMode] = useState<'existing' | 'intermediar'>(partner ? 'intermediar' : 'existing')
 
   // Existing player state
   const [query, setQuery] = useState('')
@@ -174,13 +176,13 @@ export function AddPlayerModal({ players, existingPlayerIds, season, onClose, on
             onClick={() => setMode('existing')}
             className={`flex-1 py-1.5 rounded-md text-xs font-medium transition-colors ${mode === 'existing' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
-            Cartera AIS
+            {partner ? 'Ya creado' : 'Cartera AIS'}
           </button>
           <button
             onClick={() => setMode('intermediar')}
             className={`flex-1 py-1.5 rounded-md text-xs font-medium transition-colors ${mode === 'intermediar' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
-            Solo intermediar
+            {partner ? 'Jugador nuevo' : 'Solo intermediar'}
           </button>
         </div>
       )}
@@ -229,9 +231,11 @@ export function AddPlayerModal({ players, existingPlayerIds, season, onClose, on
       ) : (
         /* ── Nuevo jugador Solo Intermediar ── */
         <div className="space-y-3">
-          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-            Este jugador aparecerá solo en Distribución. No tendrá ficha de mantenimiento (tareas, contrato, etc.).
-          </p>
+          {!partner && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+              Este jugador aparecerá solo en Distribución. No tendrá ficha de mantenimiento (tareas, contrato, etc.).
+            </p>
+          )}
           <div>
             <input autoFocus value={newName} onChange={e => { setNewName(e.target.value); if (nameError) setNameError('') }}
               placeholder="Nombre completo *"

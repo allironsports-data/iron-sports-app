@@ -209,6 +209,28 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
     await onRefresh()
   }
 
+  /**
+   * Cuenta de partner externo: solo ve Distribución (sus jugadores, los de
+   * otros partners y los nuestros compartidos). Pide el nombre del partner:
+   * es lo que une a las cuentas de una misma agencia y marca sus jugadores.
+   */
+  const handleTogglePartner = async (p: Profile) => {
+    try {
+      if (p.partner_only) {
+        if (!window.confirm(`¿Quitar a ${p.name} la restricción de partner? Pasará a ver TODA la app.`)) return
+        await updateProfile(p.id, { partner_only: false, partner_name: null })
+      } else {
+        const nombre = window.prompt(`Nombre del partner (agencia) de ${p.name}.\nLas cuentas con el mismo nombre comparten jugadores.`, p.partner_name ?? '')?.trim()
+        if (!nombre) return
+        await updateProfile(p.id, { partner_only: true, partner_name: nombre, captacion_only: false, is_admin: false })
+      }
+      await onRefresh()
+    } catch (e) {
+      console.error(e)
+      window.alert('No se pudo cambiar. Comprueba que has ejecutado migration_partners.sql en Supabase.')
+    }
+  }
+
   const handleSaveEdit = async (id: string) => {
     await updateProfile(id, { name: editName, avatar: editAvatar })
     await onRefresh()
@@ -333,6 +355,11 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
                             <Shield className="w-2.5 h-2.5" /> Admin
                           </span>
                         )}
+                        {p.partner_only && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-teal-50 text-teal-700 border border-teal-200">
+                            Partner · {p.partner_name || 'sin nombre'}
+                          </span>
+                        )}
                         {p.activo === false && (
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-amber-100 text-amber-800 border border-amber-200">
                             Pendiente
@@ -381,6 +408,15 @@ function TeamTab({ profiles, players, onRefresh, onOpenTable }: { profiles: Prof
                         p.captacion_only ? 'border-violet-200 text-violet-600 bg-violet-50 hover:bg-violet-100' : 'border-slate-200 text-slate-500 hover:text-slate-700'
                       }`}>
                       {p.captacion_only && <Eye className="w-3 h-3" />} Solo Captación
+                    </button>
+                    <button onClick={() => handleTogglePartner(p)}
+                      title={p.partner_only
+                        ? 'Cuenta de partner externo: solo ve Distribución — clic para quitar la restricción'
+                        : 'Convertir en cuenta de partner externo: solo verá Distribución (sus jugadores y los compartidos)'}
+                      className={`inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border transition-colors ${
+                        p.partner_only ? 'border-teal-200 text-teal-700 bg-teal-50 hover:bg-teal-100' : 'border-slate-200 text-slate-500 hover:text-slate-700'
+                      }`}>
+                      Partner
                     </button>
                   </div>
                 </div>

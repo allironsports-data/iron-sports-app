@@ -224,8 +224,13 @@ export function JugadoresTab({
                       <div className="flex items-center gap-2 min-w-[160px]">
                         <Avatar name={player.name} photo={player.photo} size="xs" />
                         <span className="font-medium text-slate-800 truncate">{player.name}</span>
-                        {player.hiddenFromManagement && (
+                        {player.partnerOrigen ? (
+                          <span title={`Jugador del partner ${player.partnerOrigen}`} className="text-[11px] bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded-full font-medium flex-shrink-0 max-w-[90px] truncate">{player.partnerOrigen}</span>
+                        ) : player.hiddenFromManagement ? (
                           <span className="text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full font-medium flex-shrink-0">Interm.</span>
+                        ) : null}
+                        {player.sharedWithPartners && (
+                          <span title="Compartido con partners externos" className="text-[11px] bg-sky-100 text-sky-700 px-1.5 py-0.5 rounded-full font-medium flex-shrink-0">Compartido</span>
                         )}
                         <span className="ml-auto flex-shrink-0">{activityChip(lastNegActivity, entry.playerId)}</span>
                       </div>
@@ -332,8 +337,13 @@ export function JugadoresTab({
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="font-medium text-slate-800 text-sm truncate">{player.name}</span>
                         <span className="text-xs text-slate-400 flex-shrink-0">{player.positions[0]}</span>
-                        {player.hiddenFromManagement && (
+                        {player.partnerOrigen ? (
+                          <span className="text-xs bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded-full font-medium flex-shrink-0">{player.partnerOrigen}</span>
+                        ) : player.hiddenFromManagement ? (
                           <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full font-medium flex-shrink-0">Intermediar</span>
+                        ) : null}
+                        {player.sharedWithPartners && (
+                          <span className="text-xs bg-sky-100 text-sky-700 px-1.5 py-0.5 rounded-full font-medium flex-shrink-0">Compartido</span>
                         )}
                       </div>
                       <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
