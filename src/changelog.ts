@@ -21,10 +21,14 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-01',
     items: [
+      'Calendario: ya no va por persona sino por franja horaria — Sin hora (las tareas del día), Mañana, Tarde y Noche —, con las iniciales de a quién le toca al final de cada línea. Un partido con varios scouts sale una sola vez con todos. Si una celda tiene muchas cosas se ven las primeras y un «+N más». El aviso de solape (dos partidos el mismo día) sale en la cabecera del día. Sigue el modo «Por tipo»',
+      'Filtros: fuera las filas de botones. En Mi día (categoría), el calendario (tipo), la lista de todas las tareas (persona y origen) y Jugadores (estado y partner) ahora son desplegables',
+      'Inicio: el aviso de contratos de representación se puede descartar con la ✕ y no vuelve a salir hasta que entre otro contrato en sus últimos 6 meses. El aviso de «acciones de Firmar para hoy» desaparece: esas acciones ya salen en el calendario y en Mi día como llamadas y reuniones',
+      'Quitado el botón «Mi día» de arriba a la derecha (Mi día es ahora la primera pestaña de Mantenimiento) y el bloque «Mi día» de la página de Jugadores',
       'Eventos ⇄ Pipeline: un evento ligado a un jugador de Captación que está en el pipeline queda apuntado también en el historial de su tarjeta de Firmar (y se quita de ahí si borras el evento). Al revés ya pasaba: la próxima acción que pongas en la tarjeta sale en Mi día y en el calendario como llamada o reunión',
       'Nuevo evento: «Asisten» ocupa una sola fila de iniciales en vez de una etiqueta por persona',
       'Tablero de tareas: desaparece la vista de tarjetas en tres columnas. Ahora es siempre una lista compacta de una línea por tarea (también al agrupar por jugador o persona); siguen la tabla y la vista de semana',
-      'Inicio: en Jugadores, Equipo y Postpartidos sale arriba un bloque «Mi día» con hasta 5 cosas de hoy (y lo vencido) y un enlace «Ver todo»',
+      'Inicio: en Equipo y Postpartidos sale arriba un bloque «Mi día» con hasta 5 cosas de hoy (y lo vencido) y un enlace «Ver todo»',
       'Equipo: nuevo «Resumen de la semana» automático — tareas hechas, vencidas y creadas por persona, con la flecha de cambio respecto a la semana anterior. Se mueve con el mismo selector de semana',
       'Ficha de jugador → Tareas: la lista usa la misma fila de una línea que Mi día (estado, reprogramar y reasignar desde la propia fila), en vez de tarjetas en dos columnas',
       'Mi día: alta rápida en una línea encima de la lista. Escribe la tarea y pulsa Enter; «@» asigna a una persona (@nb, @nacho), «#» pone la categoría (#informe, #negociación), la fecha se entiende en texto (hoy, mañana, pasado mañana, viernes, 15/10) y «!» la marca como prioridad alta. Debajo se ve cómo se va a crear antes de pulsar Enter',

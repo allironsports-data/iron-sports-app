@@ -200,7 +200,6 @@ export function Dashboard({
   const activeTab = internalTab ?? view;   // 'tareas' | 'calendario' | 'jugadores' | 'equipo' | 'postpartidos'
   const [search, setSearch] = useState("");
   const [showAddPlayer, setShowAddPlayer] = useState(false);
-  const [showFirmasToday, setShowFirmasToday] = useState(false);
   const [showAddGeneralTask, setShowAddGeneralTask] = useState(false);
 
   // ── Estado del equipo (automático: tarea en curso + nota opcional) ──
@@ -728,9 +727,6 @@ export function Dashboard({
   const birthdaysToday = visiblePlayers.filter((p) => isBirthdayToday(p.birthDate));
   const birthdaysSoon = visiblePlayers.filter((p) => isBirthdaySoon(p.birthDate, 7));
 
-  // ── Firmar: iconos por tipo de acción (coherentes con el historial) ──
-  const FIRMAS_KIND_ICON: Record<string, string> = { llamada: "📞", whatsapp: "💬", reunion: "🤝", entorno: "👪", nota: "📝" };
-
   // ── Novedades de la app: visibles hasta descartarlas (por build) ──
   // Los cambios técnicos (adminItems) solo se le enseñan a los admin: al
   // resto del equipo no le dicen nada y ensucian la pantalla de inicio.
@@ -754,11 +750,13 @@ export function Dashboard({
       return diff > -30 * 86400000 && diff <= 180 * 86400000;
     })
     .sort((a, b) => a.end.localeCompare(b.end));
-
-  // ── Firmar: próximas acciones que tocan hoy (o están vencidas) ──
-  const firmasActionsToday = (firmasEntries ?? [])
-    .filter((e) => e.nextActionDate && e.nextActionDate <= todayStr && e.status !== 'firmado')
-    .sort((a, b) => (a.nextActionDate ?? '').localeCompare(b.nextActionDate ?? ''));
+  // Descartable: se guarda qué lista se descartó, y solo vuelve a salir si
+  // entra un contrato nuevo en la ventana (o cambia una fecha)
+  const repClave = repExpiring.map(x => `${x.p.id}:${x.end}`).join('|');
+  const [repDescartado, setRepDescartado] = useState<string>(() => {
+    try { return localStorage.getItem('ais_rep_descartado') ?? '' } catch { return '' }
+  });
+  const repVisto = repClave.split('|').every(k => repDescartado.split('|').includes(k));
 
   // ── Estado del equipo: datos derivados ──
   const statusProfiles = profiles.filter(p => !p.hidden_from_status);
@@ -1121,13 +1119,6 @@ export function Dashboard({
                 <Inbox className="w-3.5 h-3.5" />
                 Boulema
               </button>
-              <button
-                onClick={() => { setInternalTab(null); onViewChange('mi-dia'); }}
-                className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors ml-auto"
-              >
-                <Sun className="w-3.5 h-3.5" />
-                Mi día
-              </button>
             </div>
 
             {/* Level 2: Mantenimiento sub-tabs */}
@@ -1287,11 +1278,22 @@ export function Dashboard({
         )}
 
         {/* Contratos de representación que expiran */}
-        {repExpiring.length > 0 && (
-          <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg overflow-hidden">
+        {repExpiring.length > 0 && !repVisto && (
+          <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg overflow-hidden relative">
+            <button
+              onClick={() => {
+                try { localStorage.setItem('ais_rep_descartado', repClave) } catch { /* modo privado */ }
+                setRepDescartado(repClave);
+              }}
+              aria-label="Descartar aviso"
+              title="Descartar: vuelve a salir solo si entra otro contrato"
+              className="absolute right-2 top-2.5 p-1 text-amber-500 hover:text-amber-700 z-[1]"
+            >
+              <X className="w-4 h-4" />
+            </button>
             <button
               onClick={() => setShowRepContracts(v => !v)}
-              className="w-full flex items-center gap-2 p-3 text-left hover:bg-amber-100/50 transition-colors"
+              className="w-full flex items-center gap-2 p-3 pr-10 text-left hover:bg-amber-100/50 transition-colors"
             >
               <span className="text-sm flex-shrink-0">📃</span>
               <span className="text-sm font-semibold text-amber-800">
@@ -1346,8 +1348,8 @@ export function Dashboard({
           </div>
         )}
 
-        {/* Mi día en pequeño: lo de hoy (y lo vencido) en las pestañas que no son la lista */}
-        {(activeTab === 'jugadores' || activeTab === 'equipo' || activeTab === 'postpartidos') && (() => {
+        {/* Mi día en pequeño: lo de hoy (y lo vencido), solo en Equipo y Postpartidos */}
+        {(activeTab === 'equipo' || activeTab === 'postpartidos') && (() => {
           const mio = seccionesDelDia(agendaItems.filter(it => itemEsDe(it, currentProfile.id)), todayStr);
           const deHoy = [...mio.hoy, ...mio.vencidas];
           if (deHoy.length === 0) return null;
@@ -1374,52 +1376,6 @@ export function Dashboard({
             </div>
           );
         })()}
-
-        {/* Próximas acciones de Firmar para hoy (Captación → Firmar) */}
-        {firmasActionsToday.length > 0 && (
-          <div className="mb-4 bg-violet-50 border border-violet-200 rounded-lg overflow-hidden">
-            <button
-              onClick={() => setShowFirmasToday((v) => !v)}
-              className="w-full flex items-center gap-2 p-3 text-left hover:bg-violet-100/50 transition-colors"
-            >
-              <span className="text-sm flex-shrink-0">📌</span>
-              <span className="text-sm font-semibold text-violet-800">
-                {firmasActionsToday.length} acci{firmasActionsToday.length !== 1 ? "ones" : "ón"} de Firmar para hoy
-              </span>
-              <span className="hidden sm:inline text-xs text-violet-600/70 font-normal truncate">
-                {firmasActionsToday.slice(0, 3).map((e) => e.playerName).join(" · ")}{firmasActionsToday.length > 3 ? " · …" : ""}
-              </span>
-              <ChevronDown className={`w-4 h-4 text-violet-600 ml-auto flex-shrink-0 transition-transform ${showFirmasToday ? "rotate-180" : ""}`} />
-            </button>
-            {showFirmasToday && (
-              <div className="border-t border-violet-200 divide-y divide-violet-100">
-                {firmasActionsToday.map((e) => {
-                  const assignee = e.nextActionAssignee ? profiles.find((p) => p.id === e.nextActionAssignee) : undefined;
-                  const overdue = (e.nextActionDate ?? "") < todayStr;
-                  return (
-                    <button
-                      key={e.id}
-                      onClick={() => onOpenFirmar?.(e.id)}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs text-slate-700 hover:bg-violet-100/40 transition-colors"
-                    >
-                      <span className="font-semibold">{e.playerName}</span>
-                      <span className="text-slate-500 truncate">{FIRMAS_KIND_ICON[e.nextActionKind ?? ""] ?? "📌"} {e.nextAction ?? "Acción"}</span>
-                      {assignee && (
-                        <span className="flex-shrink-0 px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 font-mono font-bold text-[10px]">
-                          {assignee.avatar || assignee.name.split(" ")[0]}
-                        </span>
-                      )}
-                      {overdue && (
-                        <span className="flex-shrink-0 px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 text-[10px] font-semibold">vencida</span>
-                      )}
-                      <span className="ml-auto text-[11px] text-violet-500 flex-shrink-0">Abrir →</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
 
         {/* ── Tareas section ──────────────────────────────── */}
         {activeTab === 'tareas' && (<>
@@ -1613,60 +1569,6 @@ export function Dashboard({
           )}
 
           {vistaTareas === 'tablero' && (<>
-          {/* ── Filtro de persona del tablero ── */}
-          <div className="flex items-center gap-1.5 flex-wrap mb-3">
-            {/* Yo */}
-            <button
-              onClick={() => { setPersonFilter('me'); setQuickFilter(null); }}
-              className={`inline-flex items-center gap-1.5 pl-1.5 pr-3 py-1 rounded-full border text-xs font-semibold transition-colors ${
-                personFilter === 'me'
-                  ? 'bg-primary border-primary text-white'
-                  : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-              }`}
-            >
-              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold ${
-                personFilter === 'me' ? 'bg-white/20 text-white' : 'text-white'
-              }`} style={personFilter === 'me' ? {} : { background: PRIMARY }}>{currentProfile.avatar}</span>
-              Yo
-              <span className={personFilter === 'me' ? 'text-white/70 font-normal' : 'text-slate-400 font-normal'}>
-                {visibleTasks.filter(t => t.status !== 'completada' && involvesProfile(t, currentProfile.id)).length}
-              </span>
-            </button>
-            {/* Todos */}
-            <button
-              onClick={() => { setPersonFilter('all'); setQuickFilter(null); }}
-              className={`px-3 py-1 rounded-full border text-xs font-semibold transition-colors ${
-                personFilter === 'all'
-                  ? 'bg-primary border-primary text-white'
-                  : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-              }`}
-            >
-              Todos <span className={personFilter === 'all' ? 'text-white/70 font-normal' : 'text-slate-400 font-normal'}>{pendingTasks.filter(t => !(t.adminOnly && !currentProfile.is_admin)).length}</span>
-            </button>
-            {/* Resto del equipo (solo con tareas abiertas) */}
-            {profiles.filter(p => p.id !== currentProfile.id).map(p => {
-              const n = visibleTasks.filter(t => t.status !== 'completada' && involvesProfile(t, p.id)).length;
-              if (n === 0) return null;
-              const isSel = personFilter === p.id;
-              return (
-                <button
-                  key={p.id}
-                  onClick={() => { setPersonFilter(p.id); setQuickFilter(null); }}
-                  className={`inline-flex items-center gap-1.5 pl-1.5 pr-3 py-1 rounded-full border text-xs font-medium transition-colors ${
-                    isSel
-                      ? 'bg-primary border-primary text-white'
-                      : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-                  }`}
-                >
-                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold ${isSel ? 'bg-white/20 text-white' : 'text-white'}`}
-                    style={isSel ? {} : { background: PRIMARY }}>{p.avatar}</span>
-                  {p.name.split(' ')[0]}
-                  <span className={isSel ? 'text-white/70 font-normal' : 'text-slate-400 font-normal'}>{n}</span>
-                </button>
-              );
-            })}
-          </div>
-
           {/* ── Estadísticas + filtro rápido de tareas ── */}
           <div className="flex border border-slate-200 rounded-lg bg-white overflow-hidden divide-x divide-slate-200 mb-3">
             <div className="flex-1 px-3 py-2">
@@ -1687,30 +1589,22 @@ export function Dashboard({
             </div>
           </div>
           <div className="flex items-center gap-2 mb-4 flex-wrap">
+            {/* Persona */}
+            <select value={personFilter} onChange={e => { setPersonFilter(e.target.value); setQuickFilter(null); }} aria-label="Tareas de" className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+              <option value="me">Mis tareas ({visibleTasks.filter(t => t.status !== 'completada' && involvesProfile(t, currentProfile.id)).length})</option>
+              <option value="all">Todo el equipo ({pendingTasks.filter(t => !(t.adminOnly && !currentProfile.is_admin)).length})</option>
+              {profiles.filter(p => p.id !== currentProfile.id).map(p => {
+                const n = visibleTasks.filter(t => t.status !== 'completada' && involvesProfile(t, p.id)).length;
+                return n === 0 && personFilter !== p.id ? null : <option key={p.id} value={p.id}>{p.name.split(' ')[0]} ({n})</option>;
+              })}
+            </select>
             {/* Origen: de dónde nace la tarea. Las de Captación son las próximas
                 acciones del pipeline de Firmar; el resto, Mantenimiento. */}
-            <div className="flex items-center gap-0 bg-slate-100 rounded-lg p-0.5">
-              {([
-                { id: 'todas' as const, label: 'Todas', n: abiertasPersona.length },
-                { id: 'mantenimiento' as const, label: 'Mantenimiento', n: nMantenimiento },
-                { id: 'captacion' as const, label: 'Captación', n: nCaptacion },
-              ]).map(o => (
-                <button
-                  key={o.id}
-                  onClick={() => setOrigenFilter(o.id)}
-                  title={o.id === 'captacion'
-                    ? 'Próximas acciones del pipeline de Firmar'
-                    : o.id === 'mantenimiento' ? 'Todo lo que no viene del pipeline de Firmar' : undefined}
-                  className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-colors flex items-center gap-1 ${
-                    origenFilter === o.id ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  {o.label}
-                  <span className={origenFilter === o.id ? 'text-slate-400 font-normal' : 'text-slate-400 font-normal'}>{o.n}</span>
-                </button>
-              ))}
-            </div>
-            <span className="text-[11px] text-slate-400 font-medium">Filtro rápido</span>
+            <select value={origenFilter} onChange={e => setOrigenFilter(e.target.value as typeof origenFilter)} aria-label="Origen" className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+              <option value="todas">Mantenimiento y Captación ({abiertasPersona.length})</option>
+              <option value="mantenimiento">Solo Mantenimiento ({nMantenimiento})</option>
+              <option value="captacion">Solo Captación ({nCaptacion})</option>
+            </select>
             <select
               value={quickFilter ?? 'none'}
               onChange={e => setQuickFilter(e.target.value === 'none' ? null : e.target.value as typeof quickFilter)}
@@ -1944,81 +1838,30 @@ export function Dashboard({
         {/* ── Jugadores section ────────────────────────────── */}
         {activeTab === 'jugadores' && (<>
 
-        {/* ── Estado ───────────────────────────────────────────
-            Arranca en Activos: es la cartera con la que se trabaja. Los
-            recuentos son sobre todos los jugadores, no sobre lo filtrado,
-            para que se vea cuántos hay fuera de la vista. */}
+        {/* ── Estado y partner: desplegables ───────────────────
+            Estado arranca en Activos (la cartera con la que se trabaja) y
+            sus recuentos son sobre todos los jugadores. Partner cuenta
+            dentro del estado elegido y solo sale si hay más de uno, o si
+            hay un filtro puesto (uno que no se ve y esconde jugadores es
+            peor que un desplegable de más). */}
         <div className="flex items-center gap-2 flex-wrap mb-3">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Estado</span>
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {PLAYER_ESTADOS.map(e => {
-              const sel = estadoFilter === e;
-              const meta = ESTADO_META[e];
-              return (
-                <button
-                  key={e}
-                  onClick={() => setEstadoFilter(e)}
-                  title={meta.ayuda}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${
-                    sel
-                      ? 'bg-primary text-white border-primary'
-                      : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                  }`}
-                >
-                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${sel ? 'bg-white/80' : meta.punto}`} />
-                  {meta.label}
-                  <span className={`text-xs font-normal ${sel ? 'text-white/70' : 'text-slate-400'}`}>{nPorEstado[e]}</span>
-                </button>
-              );
-            })}
-            <button
-              onClick={() => setEstadoFilter(ESTADO_TODOS)}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${
-                estadoFilter === ESTADO_TODOS
-                  ? 'bg-primary text-white border-primary'
-                  : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-              }`}
-            >
-              Todos
-              <span className={`text-xs font-normal ${estadoFilter === ESTADO_TODOS ? 'text-white/70' : 'text-slate-400'}`}>{visiblePlayers.length}</span>
-            </button>
-          </div>
+          <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wide">
+            Estado
+            <select value={estadoFilter} onChange={e => setEstadoFilter(e.target.value as FiltroEstado)} className="text-xs font-medium normal-case tracking-normal border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+              {PLAYER_ESTADOS.map(e => <option key={e} value={e} title={ESTADO_META[e].ayuda}>{ESTADO_META[e].label} ({nPorEstado[e]})</option>)}
+              <option value={ESTADO_TODOS}>Todos ({visiblePlayers.length})</option>
+            </select>
+          </label>
+          {(partnerOptions.length > 1 || partnerActivo !== PARTNER_TODOS) && (
+            <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wide">
+              Partner
+              <select value={partnerActivo} onChange={e => setPartnerFilter(e.target.value)} className="text-xs font-medium normal-case tracking-normal border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+                <option value={PARTNER_TODOS}>Todos ({porEstado.length})</option>
+                {partnerOptions.map(o => <option key={o.key} value={o.key}>{o.label} ({o.count})</option>)}
+              </select>
+            </label>
+          )}
         </div>
-
-        {/* ── Partner ──────────────────────────────────────────
-            Va arriba del todo y en grande porque es el corte más gordo de
-            la cartera: primero decides de quién son los jugadores y luego
-            afinas con el resto de filtros. Las opciones salen de los datos,
-            así que si mañana hay un tercer partner aparece solo. */}
-        {/* La fila se oculta si dentro del estado elegido no hay más de un
-            partner… salvo que haya un filtro puesto: un filtro que no se ve
-            pero sigue escondiendo jugadores es peor que una fila de más */}
-        {(partnerOptions.length > 1 || partnerActivo !== PARTNER_TODOS) && (
-          <div className="flex items-center gap-2 flex-wrap mb-3">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Partner</span>
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {/* «Todos» cuenta dentro del estado elegido, no sobre la cartera
-                  entera: si no, en Activos ponía 110 y la lista daba 60 */}
-              {[{ key: PARTNER_TODOS, label: 'Todos', count: porEstado.length }, ...partnerOptions].map(o => {
-                const sel = partnerActivo === o.key;
-                return (
-                  <button
-                    key={o.key}
-                    onClick={() => setPartnerFilter(o.key)}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${
-                      sel
-                        ? 'bg-primary text-white border-primary'
-                        : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                    }`}
-                  >
-                    {o.label}
-                    <span className={`text-xs font-normal ${sel ? 'text-white/70' : 'text-slate-400'}`}>{o.count}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
 
         {/* Players list header */}
         <div className="flex flex-col gap-2 mb-3">

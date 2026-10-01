@@ -57,37 +57,31 @@ export function MiDiaLista({
   const [seleccionando, setSeleccionando] = useState(false)
   const [seleccion, setSeleccion] = useState<Set<string>>(new Set())
   const [q, setQ] = useState('')
-  const [categorias, setCategorias] = useState<Set<string>>(new Set())
+  const [categoria, setCategoria] = useState('')
   // Plegadas de entrada: lo ya hecho y lo que queda lejos
   const [plegadas, setPlegadas] = useState<Set<SeccionId>>(new Set(['hechasHoy', 'masAdelante']))
   const [confirmarMover, setConfirmarMover] = useState(false)
   const [moviendo, setMoviendo] = useState(false)
 
   const deLaPersona = useMemo(() => items.filter(it => itemEsDe(it, personaId)), [items, personaId])
-  // Los chips cuentan lo abierto: son para decidir qué mirar, no un histórico
+  // El desplegable cuenta lo abierto: son para decidir qué mirar, no un histórico
   const chips = useMemo(() => categoriasDe(deLaPersona.filter(it => it.estado !== 'completada')), [deLaPersona])
   const filtrados = useMemo(
     () => deLaPersona.filter(it =>
-      (categorias.size === 0 || (!!it.categoria && categorias.has(it.categoria))) && coincideTexto(it, q)),
-    [deLaPersona, categorias, q],
+      (!categoria || it.categoria === categoria) && coincideTexto(it, q)),
+    [deLaPersona, categoria, q],
   )
   const s = useMemo(() => seccionesDelDia(filtrados, hoy), [filtrados, hoy])
   const nProximos = s.proximos.reduce((n, g) => n + g.items.length, 0)
   const nAbiertos = s.vencidas.length + s.hoy.length + nProximos + s.masAdelante.length + s.sinFecha.length
   const vencidasMovibles = s.vencidas.filter(it => permisosItem(it).reprogramar)
-  const hayFiltro = categorias.size > 0 || q.trim() !== ''
+  const hayFiltro = !!categoria || q.trim() !== ''
 
   const alternar = (id: SeccionId) => setPlegadas(prev => {
     const n = new Set(prev)
     if (n.has(id)) n.delete(id); else n.add(id)
     return n
   })
-  const alternarCategoria = (c: string) => setCategorias(prev => {
-    const n = new Set(prev)
-    if (n.has(c)) n.delete(c); else n.add(c)
-    return n
-  })
-
   // De una en una: cada guardado parte del estado que dejó el anterior
   async function moverVarias(its: AgendaItem[], fecha: string) {
     setMoviendo(true)
@@ -191,7 +185,7 @@ export function MiDiaLista({
         </div>
       )}
 
-      {/* Buscador + chips de categoría */}
+      {/* Buscador + categoría */}
       <div className="flex items-center gap-1.5 flex-wrap mb-3">
         <div className="relative w-full sm:w-56">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
@@ -205,26 +199,13 @@ export function MiDiaLista({
             </button>
           )}
         </div>
-        {chips.length > 1 && (<>
-          <button
-            onClick={() => setCategorias(new Set())}
-            className={`px-2.5 py-1 rounded-full border text-[11px] font-semibold transition-colors ${
-              categorias.size === 0 ? 'bg-primary border-primary text-white' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'}`}
-          >
-            Todas
-          </button>
-          {chips.map(c => {
-            const sel = categorias.has(c.categoria)
-            return (
-              <button key={c.categoria} onClick={() => alternarCategoria(c.categoria)}
-                className={`px-2.5 py-1 rounded-full border text-[11px] font-semibold transition-colors ${
-                  sel ? 'bg-primary border-primary text-white' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'}`}
-              >
-                {c.categoria} <span className={`font-normal ${sel ? 'text-white/70' : 'text-slate-400'}`}>{c.n}</span>
-              </button>
-            )
-          })}
-        </>)}
+        {(chips.length > 1 || categoria) && (
+          <select value={categoria} onChange={e => setCategoria(e.target.value)} aria-label="Categoría"
+            className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+            <option value="">Todas las categorías</option>
+            {chips.map(c => <option key={c.categoria} value={c.categoria}>{c.categoria} ({c.n})</option>)}
+          </select>
+        )}
       </div>
 
       {nAbiertos === 0 && s.hechasHoy.length === 0 ? (

@@ -1,10 +1,10 @@
 // ── Calendario semanal de toda la empresa ────────────────────────────
 //
-// Una fila por persona (o por tipo) × 7 días, con un chip por cada cosa de
-// la lista unificada: tareas, llamadas y reuniones de Firmar, postpartidos,
-// partidos de Captación y eventos (citas, videollamadas, sesiones…).
-// Clic en un chip lo abre; clic en un hueco da de alta una tarea o un
-// evento con la persona y el día ya puestos.
+// Una fila por franja horaria (o por tipo) × 7 días, con una línea por cada
+// cosa de la lista unificada: tareas, llamadas y reuniones de Firmar,
+// postpartidos, partidos de Captación y eventos (citas, videollamadas,
+// sesiones…), cada una con las iniciales de a quién le toca. Clic en una
+// la abre; clic en un hueco da de alta una tarea o un evento ese día.
 //
 // En móvil no cabe una rejilla de 7 columnas: se ve un día por pantalla y
 // se pasa de uno a otro deslizando.
@@ -14,7 +14,7 @@ import { ChevronLeft, ChevronRight, ChevronDown, Plus, AlertTriangle } from 'luc
 import type { Profile } from '../contexts/AuthContext'
 import { parseDia, sumarDias, fechaLocal, lunesDe } from '../lib/fechas'
 import { itemEsDe, type AgendaItem } from '../lib/agendaItems'
-import { diasDeSemana, filasPorPersona, filasPorTipo, type FilaCalendario } from '../lib/calendario'
+import { diasDeSemana, filasPorFranja, filasPorTipo, solapesPorDia, FRANJAS, type FilaCalendario, type EntradaCalendario } from '../lib/calendario'
 import { AGENDA_TIPO_META, GRUPOS_TIPO } from '../components/agenda/tipoMeta'
 import { useIsDesktop } from '../hooks/useIsDesktop'
 
@@ -34,12 +34,15 @@ export interface CalendarioSemanalProps {
 const DOW = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 const corta = (iso: string) => parseDia(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
 const BTN = 'px-2 py-1 rounded-lg border border-slate-200 text-xs text-slate-600 bg-white hover:bg-slate-50 transition-colors'
+const SELECT = 'text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30'
 const SEG = (on: boolean) => `px-2.5 py-1 rounded text-[11px] font-semibold transition-colors ${on ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`
 
 export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, currentProfile, onAbrir, onNuevo }: CalendarioSemanalProps) {
   const esEscritorio = useIsDesktop(768)
-  const [modo, setModo] = useState<'persona' | 'tipo'>('persona')
-  const [gruposOff, setGruposOff] = useState<Set<string>>(new Set())
+  const [modo, setModo] = useState<'franja' | 'tipo'>('franja')
+  const [grupo, setGrupo] = useState<string>('all')
+  // Celdas desplegadas enteras (por defecto se ven las primeras y «+N más»)
+  const [enteras, setEnteras] = useState<Set<string>>(new Set())
   const [personaId, setPersonaId] = useState<string>('all')
   const [ocultarHechas, setOcultarHechas] = useState(false)
   // Celda con el menú de alta abierto: "fila|día"
@@ -53,38 +56,24 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
   const lunesHoy = fechaLocal(lunesDe(parseDia(hoy)))
   const esEstaSemana = lunes === lunesHoy
 
-  // Yo primero; el resto, en el orden del equipo
-  const personas = useMemo(() => {
-    const yo = profiles.find(p => p.id === currentProfile.id) ?? currentProfile
-    const todas = [yo, ...profiles.filter(p => p.id !== yo.id)]
-    return personaId === 'all' ? todas : todas.filter(p => p.id === personaId)
-  }, [profiles, currentProfile, personaId])
+  const avatarDe = useMemo(() => new Map(profiles.map(p => [p.id, p.avatar])), [profiles])
+  const grupos = useMemo(() => GRUPOS_TIPO.filter(g => grupo === 'all' || g.id === grupo), [grupo])
+  const visibles = useMemo(() => {
+    const tiposOn = new Set(grupos.flatMap(g => g.tipos))
+    return items.filter(it =>
+      !!it.fecha && it.fecha >= dias[0] && it.fecha <= dias[6] &&
+      tiposOn.has(it.tipo) &&
+      !(ocultarHechas && it.estado === 'completada') &&
+      (personaId === 'all' || itemEsDe(it, personaId)))
+  }, [items, dias, grupos, ocultarHechas, personaId])
 
-  const tiposOn = useMemo(
-    () => new Set(GRUPOS_TIPO.filter(g => !gruposOff.has(g.id)).flatMap(g => g.tipos)),
-    [gruposOff],
-  )
-  const visibles = useMemo(() => items.filter(it =>
-    !!it.fecha && it.fecha >= dias[0] && it.fecha <= dias[6] &&
-    tiposOn.has(it.tipo) &&
-    !(ocultarHechas && it.estado === 'completada') &&
-    (personaId === 'all' || itemEsDe(it, personaId)),
-  ), [items, dias, tiposOn, ocultarHechas, personaId])
-
-  const filas: (FilaCalendario & { label: string; avatar?: string; mia?: boolean })[] = useMemo(() => {
-    if (modo === 'persona') {
-      const fs = filasPorPersona(visibles, personas.map(p => p.id), lunes)
-      return fs.map((f, i) => ({ ...f, label: personas[i].name.split(' ')[0], avatar: personas[i].avatar, mia: personas[i].id === currentProfile.id }))
-    }
-    const grupos = GRUPOS_TIPO.filter(g => !gruposOff.has(g.id))
+  const filas: (FilaCalendario & { label: string; detalle?: string })[] = useMemo(() => {
+    if (modo === 'franja') return filasPorFranja(visibles, lunes).map((f, i) => ({ ...f, label: FRANJAS[i].label, detalle: FRANJAS[i].detalle }))
     return filasPorTipo(visibles, grupos, lunes).map((f, i) => ({ ...f, label: grupos[i].label }))
-  }, [modo, visibles, personas, lunes, gruposOff, currentProfile.id])
-
-  const alternarGrupo = (id: string) => setGruposOff(prev => {
-    const n = new Set(prev)
-    if (n.has(id)) n.delete(id); else n.add(id)
-    return n
-  })
+  }, [modo, visibles, lunes, grupos])
+  // Quién tiene dos partidos el mismo día
+  const solapes = useMemo(() => solapesPorDia(visibles, lunes), [visibles, lunes])
+  const textoSolape = (i: number) => solapes[i].map(x => `${avatarDe.get(x.personId) ?? '?'} ${x.n} partidos`).join(' · ')
 
   const irASemana = (l: string, idx?: number) => { setCelda(null); onLunes(l); if (idx !== undefined) setDiaIdx(idx) }
   const irAHoy = () => irASemana(lunesHoy, Math.max(0, diasDeSemana(lunesHoy).indexOf(hoy)))
@@ -96,36 +85,57 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
   }
 
   // A quién se le apunta lo que se crea desde una celda
-  const personaDeFila = (f: FilaCalendario) => modo === 'persona' ? f.id : (personaId === 'all' ? currentProfile.id : personaId)
+  const personaAlta = personaId === 'all' ? currentProfile.id : personaId
+  const MAX_CELDA = 6
 
-  const chip = (it: AgendaItem, ancho = false) => {
+  // Una línea por cosa: icono · hora · título · iniciales de a quién le toca
+  const chip = ({ item: it, personas, hecha }: EntradaCalendario, ancho = false) => {
     const m = AGENDA_TIPO_META[it.tipo]
-    const hecha = it.estado === 'completada'
     const vencida = !hecha && it.origen !== 'evento' && !!it.fecha && it.fecha < hoy
+    const quien = personas.map(p => avatarDe.get(p) ?? '?')
     return (
       <button
         key={it.id}
         onClick={e => { e.stopPropagation(); onAbrir(it) }}
-        title={`${m.label}: ${it.titulo}${it.playerNombre ? ` · ${it.playerNombre}` : ''}${it.hora ? ` · ${it.hora}` : ''}`}
-        className={`w-full flex items-center gap-1 rounded border px-1 py-0.5 text-left text-[11px] leading-tight hover:brightness-95 transition ${m.chip} ${hecha ? 'opacity-50' : ''} ${vencida ? '!border-red-300' : ''}`}
+        title={`${m.label}: ${it.titulo}${it.playerNombre ? ` · ${it.playerNombre}` : ''}${it.hora ? ` · ${it.hora}` : ''}${quien.length ? ` · ${quien.join(', ')}` : ''}`}
+        className={`w-full flex items-center gap-1 rounded px-1 py-px text-left text-[11px] leading-tight hover:bg-slate-200/70 transition-colors ${hecha ? 'opacity-50' : ''} ${vencida ? 'text-red-600' : 'text-slate-700'}`}
       >
         <m.Icon className={`w-3 h-3 flex-shrink-0 ${m.cls}`} />
         {it.hora && <span className="flex-shrink-0 font-semibold tabular-nums">{it.hora}</span>}
-        <span className={`min-w-0 truncate ${hecha ? 'line-through' : ''}`}>
+        <span className={`min-w-0 flex-1 truncate ${hecha ? 'line-through' : ''}`}>
           {it.prioridadAlta && !hecha && <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 mr-1 align-middle" />}
           {it.titulo}{ancho && it.playerNombre ? ` · ${it.playerNombre}` : ''}
         </span>
+        {quien.length > 0 && (
+          <span className="flex-shrink-0 text-[8px] font-bold text-primary tracking-tight">
+            {quien.slice(0, 3).join(' ')}{quien.length > 3 ? ` +${quien.length - 3}` : ''}
+          </span>
+        )}
       </button>
     )
   }
 
-  const menuAlta = (f: FilaCalendario, dia: string) => (
+  const celdaItems = (clave: string, es: EntradaCalendario[], ancho = false) => {
+    const entera = enteras.has(clave) || es.length <= MAX_CELDA
+    return (<>
+      {(entera ? es : es.slice(0, MAX_CELDA - 1)).map(e => chip(e, ancho))}
+      {es.length > MAX_CELDA && (
+        <button
+          onClick={e => { e.stopPropagation(); setEnteras(prev => { const n = new Set(prev); if (n.has(clave)) n.delete(clave); else n.add(clave); return n }) }}
+          className="w-full text-left px-1 text-[11px] font-semibold text-blue-600 hover:underline">
+          {entera ? 'ver menos' : `+${es.length - (MAX_CELDA - 1)} más`}
+        </button>
+      )}
+    </>)
+  }
+
+  const menuAlta = (dia: string) => (
     <>
       <div className="fixed inset-0 z-10" onClick={e => { e.stopPropagation(); setCelda(null) }} />
       <div className="absolute left-1 top-1 z-20 w-36 bg-white border border-slate-200 rounded-lg shadow-lg py-1 text-xs text-slate-700" onClick={e => e.stopPropagation()}>
         <p className="px-3 py-1 text-[11px] text-slate-400">{corta(dia)}</p>
         {(['tarea', 'evento'] as const).map(que => (
-          <button key={que} onClick={() => { setCelda(null); onNuevo(que, personaDeFila(f), dia) }}
+          <button key={que} onClick={() => { setCelda(null); onNuevo(que, personaAlta, dia) }}
             className="w-full flex items-center gap-1.5 px-3 py-1.5 hover:bg-slate-50 text-left">
             <Plus className="w-3 h-3" /> {que === 'tarea' ? 'Nueva tarea' : 'Nuevo evento'}
           </button>
@@ -145,35 +155,25 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
           {corta(dias[0])} – {parseDia(dias[6]).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
         </span>
         <div className="flex items-center gap-0 bg-slate-100 rounded-lg p-0.5">
-          <button onClick={() => setModo('persona')} className={SEG(modo === 'persona')}>Por persona</button>
+          <button onClick={() => setModo('franja')} className={SEG(modo === 'franja')}>Por franja</button>
           <button onClick={() => setModo('tipo')} className={SEG(modo === 'tipo')}>Por tipo</button>
         </div>
-        <select value={personaId} onChange={e => setPersonaId(e.target.value)} aria-label="Filtrar por persona"
-          className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+        <select value={grupo} onChange={e => setGrupo(e.target.value)} aria-label="Filtrar por tipo" className={SELECT}>
+          <option value="all">Todos los tipos</option>
+          {GRUPOS_TIPO.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}
+        </select>
+        <select value={personaId} onChange={e => setPersonaId(e.target.value)} aria-label="Filtrar por persona" className={SELECT}>
           <option value="all">Todo el equipo</option>
           {profiles.map(p => <option key={p.id} value={p.id}>{p.id === currentProfile.id ? 'Yo' : p.name}</option>)}
         </select>
-        <button onClick={() => onNuevo('evento', personaId === 'all' ? currentProfile.id : personaId, esEstaSemana ? hoy : dias[0])}
-          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-primary text-primary bg-white hover:bg-blue-50 transition-colors">
-          <Plus className="w-3 h-3" /> Evento
-        </button>
-      </div>
-      <div className="flex items-center gap-1.5 flex-wrap mb-3">
-        {GRUPOS_TIPO.map(g => {
-          const on = !gruposOff.has(g.id)
-          const m = AGENDA_TIPO_META[g.tipos[0]]
-          return (
-            <button key={g.id} onClick={() => alternarGrupo(g.id)} aria-pressed={on}
-              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[11px] font-semibold transition-colors ${
-                on ? 'bg-white border-slate-300 text-slate-700' : 'bg-slate-100 border-slate-200 text-slate-400 line-through'}`}>
-              <m.Icon className={`w-3 h-3 ${on ? m.cls : ''}`} /> {g.label}
-            </button>
-          )
-        })}
-        <label className="ml-auto inline-flex items-center gap-1.5 text-[11px] text-slate-600 cursor-pointer select-none">
+        <label className="inline-flex items-center gap-1.5 text-[11px] text-slate-600 cursor-pointer select-none">
           <input type="checkbox" checked={ocultarHechas} onChange={e => setOcultarHechas(e.target.checked)} className="w-3.5 h-3.5 rounded" />
           Ocultar completadas
         </label>
+        <button onClick={() => onNuevo('evento', personaAlta, esEstaSemana ? hoy : dias[0])}
+          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-primary text-primary bg-white hover:bg-blue-50 transition-colors">
+          <Plus className="w-3 h-3" /> Evento
+        </button>
       </div>
 
       {esEscritorio ? (
@@ -182,10 +182,15 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
           <table className="w-full table-fixed border-collapse">
             <thead>
               <tr className="text-[11px] text-slate-500">
-                <th className="w-28 px-2 py-1.5 text-left font-semibold border-b border-slate-200">{modo === 'persona' ? 'Persona' : 'Tipo'}</th>
+                <th className="w-24 px-2 py-1.5 text-left font-semibold border-b border-slate-200">{modo === 'franja' ? 'Franja' : 'Tipo'}</th>
                 {dias.map((d, i) => (
                   <th key={d} className={`px-1 py-1.5 text-left font-semibold border-b border-l border-slate-200 ${d === hoy ? 'bg-blue-50 text-blue-700' : ''}`}>
                     {DOW[i]} <span className="font-normal">{parseDia(d).getDate()}</span>
+                    {solapes[i].length > 0 && (
+                      <span className="ml-1 inline-flex items-center gap-0.5 font-semibold text-amber-600" title={`Solape: ${textoSolape(i)}`}>
+                        <AlertTriangle className="w-3 h-3" /> {solapes[i].map(x => avatarDe.get(x.personId) ?? '?').join(' ')}
+                      </span>
+                    )}
                   </th>
                 ))}
                 <th className="w-12 px-1 py-1.5 text-center font-semibold border-b border-l border-slate-200" title="Abiertas / total de la semana">Carga</th>
@@ -193,31 +198,20 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
             </thead>
             <tbody>
               {filas.map(f => (
-                <tr key={f.id} className={f.mia ? 'bg-blue-50/40' : ''}>
-                  <td className={`px-2 py-1.5 align-top border-b border-slate-100 ${f.mia ? 'border-l-2 border-l-primary' : ''}`}>
-                    <div className="flex items-center gap-1.5">
-                      {f.avatar && <span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white bg-primary flex-shrink-0">{f.avatar}</span>}
-                      <span className="text-xs font-semibold text-slate-700 truncate">{f.label}{f.mia && <span className="font-normal text-slate-400"> (yo)</span>}</span>
-                    </div>
-                    {f.solapes.length > 0 && (
-                      <p className="mt-0.5 flex items-center gap-1 text-[11px] font-semibold text-amber-600" title="Dos o más partidos el mismo día">
-                        <AlertTriangle className="w-3 h-3" /> Solape
-                      </p>
-                    )}
+                <tr key={f.id}>
+                  <td className="px-2 py-1.5 align-top border-b border-slate-100">
+                    <p className="text-xs font-semibold text-slate-700">{f.label}</p>
+                    {f.detalle && <p className="text-[11px] text-slate-400">{f.detalle}</p>}
                   </td>
                   {dias.map((d, i) => {
                     const clave = `${f.id}|${d}`
-                    const solape = modo === 'persona' && f.solapes.includes(i)
                     return (
                       <td key={d}
                         onClick={() => setCelda(c => c === clave ? null : clave)}
                         title={f.dias[i].length === 0 ? 'Añadir tarea o evento' : undefined}
-                        className={`relative p-1 align-top border-b border-l border-slate-100 cursor-pointer hover:bg-slate-100/70 ${d === hoy ? 'bg-blue-50/50' : ''} ${solape ? 'ring-1 ring-inset ring-amber-400' : ''}`}>
-                        <div className="space-y-0.5 min-h-[1.75rem]">
-                          {solape && <p className="text-[11px] font-semibold text-amber-600">⚠ {f.dias[i].filter(x => x.tipo === 'partido').length} partidos</p>}
-                          {f.dias[i].map(it => chip(it))}
-                        </div>
-                        {celda === clave && menuAlta(f, d)}
+                        className={`relative p-0.5 align-top border-b border-l border-slate-100 cursor-pointer hover:bg-slate-100/70 ${d === hoy ? 'bg-blue-50/50' : ''}`}>
+                        <div className="min-h-[1.5rem]">{celdaItems(clave, f.dias[i])}</div>
+                        {celda === clave && menuAlta(d)}
                       </td>
                     )
                   })}
@@ -259,29 +253,28 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
               </button>
             ))}
           </div>
+          {solapes[diaIdx].length > 0 && (
+            <p className="mb-2 flex items-center gap-1 text-[11px] font-semibold text-amber-600"><AlertTriangle className="w-3 h-3" /> Solape: {textoSolape(diaIdx)}</p>
+          )}
           <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100">
             {filas.map(f => {
-              const its = f.dias[diaIdx]
+              const es = f.dias[diaIdx]
               const abierta = !plegadas.has(f.id)
-              const solape = modo === 'persona' && f.solapes.includes(diaIdx)
               return (
-                <div key={f.id} className={f.mia ? 'bg-blue-50/40' : ''}>
+                <div key={f.id}>
                   <div className="flex items-center gap-1.5 px-2.5 py-1.5">
                     <button
                       onClick={() => setPlegadas(prev => { const n = new Set(prev); if (n.has(f.id)) n.delete(f.id); else n.add(f.id); return n })}
                       aria-expanded={abierta} className="flex items-center gap-1.5 flex-1 min-w-0 text-left">
                       <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${abierta ? '' : '-rotate-90'}`} />
-                      {f.avatar && <span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white bg-primary flex-shrink-0">{f.avatar}</span>}
                       <span className="text-xs font-semibold text-slate-700 truncate">{f.label}</span>
-                      <span className="text-[11px] text-slate-400">{its.length}</span>
-                      {solape && <span className="text-[11px] font-semibold text-amber-600">⚠ solape</span>}
+                      <span className="text-[11px] text-slate-400">{es.length}</span>
                     </button>
-                    <span className="text-[11px] text-slate-400 tabular-nums" title="Abiertas / total de la semana">{f.abiertos}/{f.total} sem.</span>
-                    <button onClick={() => onNuevo('evento', personaDeFila(f), dias[diaIdx])} aria-label="Nuevo evento" className="p-1 text-slate-500 hover:text-primary">
+                    <button onClick={() => onNuevo('evento', personaAlta, dias[diaIdx])} aria-label="Nuevo evento" className="p-1 text-slate-500 hover:text-primary">
                       <Plus className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                  {abierta && its.length > 0 && <div className="px-2.5 pb-2 space-y-1">{its.map(it => chip(it, true))}</div>}
+                  {abierta && es.length > 0 && <div className="px-1.5 pb-2">{celdaItems(`m|${f.id}|${dias[diaIdx]}`, es, true)}</div>}
                 </div>
               )
             })}
