@@ -243,6 +243,24 @@ describe('construirAgenda · sesiones de videoanálisis del jugador', () => {
   })
 })
 
+describe('construirAgenda · Boulema y vencimientos', () => {
+  it('un informe de Boulema pedido es una tarea pendiente de quien tiene que escribirlo', () => {
+    const items = construirAgenda(base({ peticionesBoulema: [
+      { id: 'b1', jugador: 'Diallo', equipo: 'ASEC', avatar: 'PP' }, { id: 'b1', jugador: 'Diallo', avatar: 'ZZ' },
+    ] }))
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({ id: 'boulema:b1:PP', tipo: 'tarea', origen: 'boulema', personId: OTRO, titulo: 'Informe Boulema — Diallo (ASEC)', abrir: { tipo: 'boulema' } })
+    expect(permisosItem(items[0]).estado).toBe(false)
+  })
+
+  it('los fines de contrato solo salen si se piden (admins) y caen en el rango', () => {
+    const p = { ...jugador('j1', 'Iker'), managedBy: [YO], representationContract: { start: '', end: '2026-10-05' }, clubContract: { endDate: '2027-06-30' } } as Player
+    expect(construirAgenda(base({ players: [p] }))).toEqual([])
+    const items = construirAgenda(base({ players: [p], vencimientos: true }))
+    expect(items.map(i => [i.titulo, i.fecha, i.categoria])).toEqual([['Fin del contrato de representación', '2026-10-05', 'Vencimiento']])
+  })
+})
+
 describe('archivo automático', () => {
   it('las completadas hace más de 30 días no salen; las recientes y las abiertas sí', () => {
     const items = construirAgenda(base({

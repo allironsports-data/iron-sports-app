@@ -19,7 +19,7 @@ import { fechaLocal, sumarDias } from './fechas'
 import { norm } from './texto'
 
 export type AgendaTipo = 'tarea' | 'llamada' | 'telefono' | 'reunion' | 'postpartido' | 'partido' | 'evento'
-export type AgendaOrigen = 'tarea' | 'firmar' | 'postpartido' | 'captacion' | 'evento'
+export type AgendaOrigen = 'tarea' | 'firmar' | 'postpartido' | 'captacion' | 'evento' | 'boulema'
 export type AgendaEstado = Task['status']
 
 /** A dónde lleva «abrir»: la pantalla natural de cada item. Lo resuelve la vista. */
@@ -30,6 +30,7 @@ export type AgendaDestino =
   | { tipo: 'partido'; matchId: string }
   | { tipo: 'jugador'; playerId: string }
   | { tipo: 'evento'; eventoId: string }
+  | { tipo: 'boulema' }
 
 export interface AgendaItem {
   /** Único en la lista: origen + id (y scout, en partidos con varios) */
@@ -87,6 +88,10 @@ export interface AgendaInput {
   eventos?: AgendaEvento[]
   /** «partido|iniciales» de cada informe de partido ya escrito */
   informesPartido?: Set<string>
+  /** Informes de Boulema pedidos y aún sin escribir: uno por petición y persona */
+  peticionesBoulema?: { id: string; jugador: string; equipo?: string; avatar: string }[]
+  /** true = incluir los fines de contrato (de representación y con el club). Solo para admins. */
+  vencimientos?: boolean
   /** Nombres de jugadores de Captación, para los eventos que apuntan a uno */
   nombreScouting?: (id: string) => string | undefined
   /**
@@ -311,6 +316,55 @@ export function construirAgenda(input: AgendaInput): AgendaItem[] {
     })
   }
 
+  // ── Informes de Boulema pendientes: una tarea para quien tiene que escribirlo ──
+  for (const pet of input.peticionesBoulema ?? []) {
+    const personId = perfilPorAvatar.get(pet.avatar)
+    if (!personId) continue
+    items.push({
+      id: `boulema:${pet.id}:${pet.avatar}`,
+      tipo: 'tarea',
+      titulo: `Informe Boulema — ${pet.jugador}${pet.equipo ? ` (${pet.equipo})` : ''}`,
+      personId,
+      otrosIds: [],
+      categoria: 'Boulema',
+      estado: 'pendiente',
+      prioridadAlta: false,
+      origen: 'boulema',
+      abrir: { tipo: 'boulema' },
+      ref: {},
+    })
+  }
+
+  // ── Fines de contrato (solo admins): de representación y con el club ──
+  if (input.vencimientos) {
+    for (const p of players) {
+      const fechas: [string | undefined, string][] = [
+        [p.representationContract?.end, 'Fin del contrato de representación'],
+        [p.clubContract?.endDate, 'Fin del contrato con el club'],
+      ]
+      for (const [fecha, titulo] of fechas) {
+        const dia = fecha?.slice(0, 10)
+        if (!dia || !/^\d{4}-\d{2}-\d{2}$/.test(dia) || dia < rango.desde || dia > rango.hasta) continue
+        items.push({
+          id: `vence:${p.id}:${titulo}`,
+          tipo: 'evento',
+          titulo,
+          personId: p.managedBy?.[0] ?? '',
+          otrosIds: p.managedBy?.slice(1) ?? [],
+          fecha: dia,
+          playerId: p.id,
+          playerNombre: p.name,
+          categoria: 'Vencimiento',
+          estado: 'pendiente',
+          prioridadAlta: true,
+          origen: 'evento',
+          abrir: { tipo: 'jugador', playerId: p.id },
+          ref: {},
+        })
+      }
+    }
+  }
+
   // ── Sesiones de videoanálisis de la ficha del jugador (Rendimiento → Vídeo) ──
   // Viven dentro del jugador; aquí salen como evento, a nombre de sus encargados.
   for (const p of players) {
@@ -375,7 +429,9 @@ export function itemEsDe(it: AgendaItem, profileId: string): boolean {
 /** Lo que se puede cambiar de cada item desde la lista */
 export function permisosItem(it: AgendaItem): { estado: boolean; enCurso: boolean; reprogramar: boolean; reasignar: boolean } {
   switch (it.origen) {
-    case 'evento':     return { estado: false, enCurso: false, reprogramar: false, reasignar: false }
+    case 'evento':
+    // Un informe de Boulema se «completa» escribiéndolo en Boulema, no desde aquí
+    case 'boulema':    return { estado: false, enCurso: false, reprogramar: false, reasignar: false }
     // La fecha y los scouts de un partido se cambian en Captación; aquí solo «visto»
     case 'captacion':  return { estado: true, enCurso: false, reprogramar: false, reasignar: false }
     // Sin tarea vinculada no hay dónde guardar el «en curso»

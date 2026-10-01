@@ -82,6 +82,8 @@ interface Props {
   matchScouts?: ScoutingMatchScout[];
   /** «partido|iniciales» de cada informe de partido ya escrito */
   informesPartido?: Set<string>;
+  /** Informes de Boulema pedidos y sin escribir (uno por petición y persona) */
+  peticionesBoulema?: { id: string; jugador: string; equipo?: string; avatar: string }[];
   /** Asigna un scout (iniciales) a un partido de Captación */
   onAddMatchScout?: (matchId: string, scout: string, viewMode?: 'campo' | 'video') => Promise<void>;
   /** Abre la ficha de un partido de Captación */
@@ -161,6 +163,7 @@ export function Dashboard({
   scoutingPlayers = [],
   onOpenSearch,
   informesPartido,
+  peticionesBoulema,
   onAddMatchScout,
   onOpenMatch,
   onSetMatchSeen,
@@ -722,10 +725,12 @@ export function Dashboard({
       hoy: todayStr,
       tasks: tasks.filter(t => !(t.adminOnly && !esAdmin)),
       firmasEntries: firmasEntries ?? [],
-      postpartidos, scoutingMatches, matchScouts, profiles, players, eventos, informesPartido,
+      postpartidos, scoutingMatches, matchScouts, profiles, players, eventos, informesPartido, peticionesBoulema,
+      // Los fines de contrato solo los ven los admins
+      vencimientos: esAdmin,
       nombreScouting: (id: string) => porId.get(id),
     };
-  }, [todayStr, tasks, esAdmin, firmasEntries, postpartidos, scoutingMatches, matchScouts, profiles, players, eventos, scoutingPlayers, informesPartido]);
+  }, [todayStr, tasks, esAdmin, firmasEntries, postpartidos, scoutingMatches, matchScouts, profiles, players, eventos, scoutingPlayers, informesPartido, peticionesBoulema]);
   const agendaItems = useMemo(
     () => construirAgenda({ ...agendaBase, activities: actsDia, rango: { desde: todayStr, hasta: diaHasta } }),
     [agendaBase, actsDia, todayStr, diaHasta],
@@ -937,6 +942,7 @@ export function Dashboard({
     if (d.tipo === 'firmar') return onOpenFirmar?.(d.entryId);
     if (d.tipo === 'partido') return onOpenMatch?.(d.matchId);
     if (d.tipo === 'jugador') return onSelectPlayer(d.playerId);
+    if (d.tipo === 'boulema') return onViewChange?.('boulema');
     if (d.tipo === 'evento') {
       const ev = eventos.find(x => x.id === d.eventoId);
       if (ev) setEventoModal({ inicial: ev, original: ev });

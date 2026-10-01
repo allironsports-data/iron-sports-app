@@ -232,6 +232,17 @@ export default function App() {
     [scoutingReports],
   )
 
+  // Informes de Boulema pedidos y sin escribir: uno por petición y persona a la
+  // que se le pidió. Salen en Tareas como pendiente de esa persona. (Hook: aquí arriba.)
+  const peticionesBoulemaPendientes = useMemo(() => {
+    const autorDe = new Map(scoutingReports.map(r => [r.id, r.persona]))
+    return boulemaPeticiones.flatMap(p => {
+      const yaEscribieron = new Set(p.reportIds.map(id => autorDe.get(id)).filter(Boolean))
+      return p.requestedFrom.filter(av => !yaEscribieron.has(av))
+        .map(av => ({ id: p.id, jugador: p.playerName, equipo: p.team, avatar: av }))
+    })
+  }, [boulemaPeticiones, scoutingReports])
+
   // DEBE declararse aquí arriba: es un hook y no puede ir después de los
   // returns tempranos (loading/login) — romperlo deja la app en blanco.
   const firmasSyncGuard = useRef(false)
@@ -2068,6 +2079,7 @@ export default function App() {
         scoutingPlayers={scoutingPlayers}
         onOpenSearch={() => setSearchOpen(true)}
         informesPartido={informesPartido}
+        peticionesBoulema={peticionesBoulemaPendientes}
         onAddMatchScout={handleAddMatchScout}
         onOpenMatch={(id) => setFlotante({ tipo: 'partido', id })}
         onSetMatchSeen={async (id, scout, visto) => {
