@@ -81,7 +81,7 @@ export function BottomNav({ current, onGo, onSearch }: {
   return (
     <>
       {mas && (
-        <div className="sm:hidden fixed inset-0 z-30" onClick={() => setMas(false)}>
+        <div className="sm:hidden fixed inset-0 z-[41]" onClick={() => setMas(false)}>
           <div
             className="absolute inset-x-0 bottom-[var(--nav-h)] bg-white border-t border-slate-200 shadow-[0_-8px_24px_rgba(0,0,0,0.12)] rounded-t-2xl overflow-hidden divide-y divide-slate-100"
             onClick={e => e.stopPropagation()}

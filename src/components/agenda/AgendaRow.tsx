@@ -137,7 +137,7 @@ export function AgendaRow({
             style={colorEstado ? { background: colorEstado, borderColor: colorEstado } : undefined}
           />
         </button>
-        <span className={`flex-1 min-w-0 truncate text-xs font-medium ${tachar ? 'line-through text-slate-400' : 'text-slate-800'}`} title={item.titulo}>
+        <span className={`flex-1 min-w-0 line-clamp-2 sm:line-clamp-1 break-words text-xs font-medium ${tachar ? 'line-through text-slate-400' : 'text-slate-800'}`} title={item.titulo}>
           {item.prioridadAlta && !hecha && <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 mr-1.5 align-middle" title="Prioridad alta" />}
           {item.titulo}
           {item.conInforme && <Check className="inline w-3 h-3 ml-1 text-emerald-500" aria-label="Informe hecho" />}
@@ -147,12 +147,12 @@ export function AgendaRow({
             <button
               onClick={e => { e.stopPropagation(); onOpenPlayer(item.playerId!) }}
               title={`Abrir la ficha de ${item.playerNombre}`}
-              className="flex-shrink-0 max-w-[7rem] sm:max-w-[11rem] truncate text-[11px] font-medium px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100 hover:bg-blue-100 transition-colors"
+              className="flex-shrink-0 max-w-[5.5rem] sm:max-w-[11rem] truncate text-[11px] font-medium px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100 hover:bg-blue-100 transition-colors"
             >
               {item.playerNombre}
             </button>
           ) : (
-            <span className="flex-shrink-0 max-w-[7rem] sm:max-w-[11rem] truncate text-[11px] font-medium px-1.5 py-0.5 rounded bg-slate-50 text-slate-600 border border-slate-200">
+            <span className="flex-shrink-0 max-w-[5.5rem] sm:max-w-[11rem] truncate text-[11px] font-medium px-1.5 py-0.5 rounded bg-slate-50 text-slate-600 border border-slate-200">
               {item.playerNombre}
             </span>
           )
