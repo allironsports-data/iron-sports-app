@@ -455,7 +455,7 @@ export function MatchDetailModal({
                     <button
                       onClick={() => onSetScoutMode(match, s.scout, s.viewMode === 'campo' ? 'video' : 'campo')}
                       title={s.viewMode === 'campo' ? 'Lo vio en el campo — clic para cambiar a vídeo' : 'Lo vio por vídeo — clic para cambiar a campo'}
-                      className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border transition-colors whitespace-nowrap ${
+                      className={`text-[10px] font-semibold px-2.5 py-1.5 sm:px-1.5 sm:py-0.5 rounded-full border transition-colors whitespace-nowrap ${
                         s.viewMode === 'campo'
                           ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                           : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
@@ -466,7 +466,7 @@ export function MatchDetailModal({
                     <button
                       onClick={() => onSetScoutStatus(match, s.scout, s.status === 'visto' ? 'pendiente' : 'visto')}
                       title={s.status === 'visto' ? 'Ya lo ha visto — marcar como pendiente' : 'Marcar como visto'}
-                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border transition-colors ${
+                      className={`text-[10px] font-bold px-2.5 py-1.5 sm:px-1.5 sm:py-0.5 rounded-full border transition-colors ${
                         s.status === 'visto'
                           ? 'bg-emerald-500 text-white border-emerald-500'
                           : 'bg-white/70 text-slate-500 border-slate-200 hover:bg-white'
@@ -476,9 +476,12 @@ export function MatchDetailModal({
                     </button>
                     {(isAdmin || isMe) && (
                       <button
-                        onClick={() => onRemoveScout(match, s.scout)}
+                        onClick={() => {
+                          // Está pegado a «visto» y en el móvil se pulsaba sin querer
+                          if (window.confirm(`¿Quitar a ${name || s.scout} de este partido?`)) onRemoveScout(match, s.scout)
+                        }}
                         aria-label={`Quitar a ${name || s.scout} del partido`}
-                        className="text-slate-400 hover:text-red-500 p-0.5"
+                        className="text-slate-400 hover:text-red-500 p-1.5 sm:p-0.5 ml-1 sm:ml-0"
                       >
                         <X className="w-3 h-3" />
                       </button>

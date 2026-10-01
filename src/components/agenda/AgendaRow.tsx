@@ -6,10 +6,11 @@
 // fila para que una tarea se vea y se maneje igual en todas partes.
 //
 // Escritorio: las acciones salen al pasar el ratón. Móvil: deslizar a la
-// derecha = hecha, a la izquierda = reprogramar; tocar = abrir.
+// derecha = hecha, a la izquierda = reprogramar; tocar = abrir; y «⋯» al
+// final de la fila saca las mismas acciones (incluida reasignar).
 
 import { useRef, useState } from 'react'
-import { Check, CalendarClock, UserRound, ExternalLink } from 'lucide-react'
+import { Check, CalendarClock, UserRound, ExternalLink, MoreHorizontal } from 'lucide-react'
 import type { Profile } from '../../contexts/AuthContext'
 import { parseDia, sumarDias } from '../../lib/fechas'
 import {
@@ -46,6 +47,8 @@ export function AgendaRow({
 }: AgendaRowProps) {
   const [menu, setMenu] = useState<null | 'fecha' | 'persona'>(null)
   const [dx, setDx] = useState(0)
+  // Móvil: barra de acciones abierta con «⋯» (en escritorio sale al pasar el ratón)
+  const [acciones, setAcciones] = useState(false)
   const toque = useRef<{ x: number; y: number } | null>(null)
 
   const p = permisosItem(item)
@@ -74,8 +77,11 @@ export function AgendaRow({
 
   // ── Swipe (móvil) ──
   const onTouchStart = (e: React.TouchEvent) => {
-    if (menu) return
-    toque.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+    if (menu || acciones) return
+    const x = e.touches[0].clientX
+    // Pegado al borde es el gesto «atrás» del navegador: no se compite con él
+    if (x < 24 || x > window.innerWidth - 24) return
+    toque.current = { x, y: e.touches[0].clientY }
   }
   const onTouchMove = (e: React.TouchEvent) => {
     if (!toque.current) return
@@ -94,10 +100,10 @@ export function AgendaRow({
     setDx(0)
   }
 
-  const btnAccion = 'p-1 rounded text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition-colors'
+  const btnAccion = 'p-2 sm:p-1 rounded text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition-colors'
 
   return (
-    <div className={`relative ${menu ? 'z-20' : ''}`}>
+    <div className={`relative ${menu || acciones ? 'z-20' : ''}`}>
       {/* Fondo del swipe: lo que va a pasar al soltar */}
       {dx !== 0 && (
         <div className={`absolute inset-0 flex items-center px-3 text-[11px] font-semibold text-white ${dx > 0 ? 'bg-emerald-500 justify-start' : 'bg-blue-500 justify-end'}`}>
@@ -107,7 +113,7 @@ export function AgendaRow({
       <div
         onClick={() => onAbrir(item)}
         onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd}
-        style={dx ? { transform: `translateX(${dx}px)` } : undefined}
+        style={{ touchAction: 'pan-y', ...(dx ? { transform: `translateX(${dx}px)` } : {}) }}
         className={`group relative flex items-center gap-2 px-2.5 py-1.5 cursor-pointer ${vencida ? 'bg-red-50 hover:bg-red-100/70' : 'bg-white hover:bg-slate-50'} ${dx ? '' : 'transition-transform'}`}
       >
         {onSeleccionar && (
@@ -124,7 +130,7 @@ export function AgendaRow({
           disabled={!puedeEstado}
           title={tituloEstado}
           aria-label="Cambiar estado"
-          className="flex-shrink-0 p-1 -m-1 rounded-full disabled:cursor-default enabled:hover:bg-slate-200 transition-colors"
+          className="relative flex-shrink-0 p-1 -m-1 rounded-full disabled:cursor-default enabled:hover:bg-slate-200 transition-colors before:absolute before:-inset-2 before:content-[''] sm:before:hidden"
         >
           <span
             className={`block w-3.5 h-3.5 rounded-full border-2 ${colorEstado ? '' : 'border-slate-300'} ${puedeEstado ? '' : 'opacity-40'}`}
@@ -166,13 +172,22 @@ export function AgendaRow({
           {persona?.avatar ?? '?'}
         </span>
 
-        {/* Acciones al pasar el ratón (escritorio) */}
+        {/* Móvil: «⋯» abre las acciones (con el ratón salen solas) */}
+        <button
+          onClick={e => { e.stopPropagation(); setAcciones(true) }}
+          aria-label="Acciones"
+          className="sm:hidden relative flex-shrink-0 p-1 -my-1 -mr-1 text-slate-400 before:absolute before:-inset-2 before:content-['']"
+        >
+          <MoreHorizontal className="w-4 h-4" />
+        </button>
+
+        {/* Acciones: al pasar el ratón (escritorio) o con «⋯» (móvil) */}
         <div
           onClick={e => e.stopPropagation()}
-          className={`absolute right-1.5 top-1/2 -translate-y-1/2 items-center gap-0.5 rounded-md bg-slate-100 border border-slate-200 px-0.5 py-0.5 shadow-sm ${menu ? 'flex' : 'hidden sm:group-hover:flex'}`}
+          className={`absolute right-1.5 top-1/2 -translate-y-1/2 items-center gap-0.5 rounded-md bg-slate-100 border border-slate-200 px-0.5 py-0.5 shadow-sm ${menu || acciones ? 'flex' : 'hidden sm:group-hover:flex sm:group-focus-within:flex'}`}
         >
           {puedeEstado && !hecha && (
-            <button onClick={() => onEstado!(item, 'completada')} title="Hecha" aria-label="Marcar como hecha" className={`${btnAccion} hover:!text-emerald-600`}>
+            <button onClick={() => { setAcciones(false); onEstado!(item, 'completada') }} title="Hecha" aria-label="Marcar como hecha" className={`${btnAccion} hover:!text-emerald-600`}>
               <Check className="w-3.5 h-3.5" />
             </button>
           )}
@@ -186,21 +201,22 @@ export function AgendaRow({
               <UserRound className="w-3.5 h-3.5" />
             </button>
           )}
-          <button onClick={() => onAbrir(item)} title="Abrir" aria-label="Abrir" className={btnAccion}>
+          <button onClick={() => { setAcciones(false); onAbrir(item) }} title="Abrir" aria-label="Abrir" className={btnAccion}>
             <ExternalLink className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
 
+      {acciones && !menu && <div className="fixed inset-0 z-10" onClick={() => setAcciones(false)} />}
       {menu && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setMenu(null)} />
+          <div className="fixed inset-0 z-10" onClick={() => { setMenu(null); setAcciones(false) }} />
           <div className="absolute right-1.5 top-full -mt-0.5 z-20 w-44 bg-white border border-slate-200 rounded-lg shadow-lg py-1 text-xs text-slate-700">
             {menu === 'fecha' && (<>
               {([
                 ['Hoy', hoy], ['Mañana', sumarDias(hoy, 1)], ['Próxima semana', lunesSiguiente(hoy)],
               ] as const).map(([txt, f]) => (
-                <button key={txt} onClick={() => { setMenu(null); onReprogramar?.(item, f) }}
+                <button key={txt} onClick={() => { setMenu(null); setAcciones(false); onReprogramar?.(item, f) }}
                   className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-slate-50 text-left">
                   {txt} <span className="text-[11px] text-slate-400">{fechaCorta(f)}</span>
                 </button>
@@ -223,7 +239,7 @@ export function AgendaRow({
             {menu === 'persona' && (
               <div className="max-h-56 overflow-y-auto">
                 {profiles.map(pr => (
-                  <button key={pr.id} onClick={() => { setMenu(null); if (pr.id !== item.personId) onReasignar?.(item, pr.id) }}
+                  <button key={pr.id} onClick={() => { setMenu(null); setAcciones(false); if (pr.id !== item.personId) onReasignar?.(item, pr.id) }}
                     className={`w-full flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50 text-left ${pr.id === item.personId ? 'font-semibold text-primary' : ''}`}>
                     <span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white bg-primary flex-shrink-0">{pr.avatar}</span>
                     <span className="truncate">{pr.name}</span>

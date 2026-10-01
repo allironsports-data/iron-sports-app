@@ -256,7 +256,7 @@ export function MiDiaLista({
 
       {/* Acciones en masa: por encima de la barra inferior del móvil (z-30) */}
       {seleccionando && seleccionadas.length > 0 && (
-        <div className="fixed inset-x-0 z-40 bg-white border-t border-slate-200 shadow-lg bottom-[calc(3.25rem+env(safe-area-inset-bottom))] sm:bottom-0">
+        <div className="fixed inset-x-0 z-40 bg-white border-t border-slate-200 shadow-lg bottom-[var(--nav-h)]">
           <div className="px-3 sm:px-6 py-2.5 flex items-center gap-2 flex-wrap">
             <span className="text-xs font-semibold text-slate-700 mr-auto">
               {seleccionadas.length} seleccionada{seleccionadas.length !== 1 ? 's' : ''} · mover a

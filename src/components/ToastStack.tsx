@@ -21,7 +21,7 @@ const VARIANT_ICON = {
 export function ToastStack({ toasts, onDismiss }: Props) {
   if (toasts.length === 0) return null;
   return (
-    <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-2 items-center pointer-events-none">
+    <div className="fixed bottom-[calc(var(--nav-h)+1.25rem)] left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-2 items-center pointer-events-none">
       {toasts.map(t => {
         const Icon = VARIANT_ICON[t.variant];
         return (

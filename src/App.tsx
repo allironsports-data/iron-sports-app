@@ -1495,7 +1495,7 @@ export default function App() {
       onClick={irAPlanificacion}
       title="Planificación del fin de semana"
       aria-label="Planificación"
-      className="fixed bottom-[5.5rem] sm:bottom-4 right-3 sm:right-4 z-40 inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-slate-900 text-white text-xs font-semibold shadow-lg hover:bg-slate-700 print:hidden"
+      className="fixed bottom-[calc(var(--nav-h)+1rem)] right-3 sm:right-4 z-40 inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-slate-900 text-white text-xs font-semibold shadow-lg hover:bg-slate-700 print:hidden"
     >
       <CalendarDays className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Planificación</span>
     </button>
@@ -1506,11 +1506,12 @@ export default function App() {
     <>
       {node}
       {flotanteNode}
-      {planificacionFab}
+      {/* Con una ficha flotante abierta el botón se quita: tapaba el pie del panel */}
+      {!flotante && planificacionFab}
       <SavingIndicator />
       {conflictNode}
       {mostrarSincronizando && (
-        <div className="fixed bottom-16 sm:bottom-3 left-1/2 -translate-x-1/2 z-[45] pointer-events-none">
+        <div className="fixed bottom-[calc(var(--nav-h)+0.75rem)] left-1/2 -translate-x-1/2 z-[45] pointer-events-none">
           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800/90 text-white text-[11px] font-medium shadow-lg">
             <span className="w-2.5 h-2.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
             Sincronizando datos…
@@ -1518,7 +1519,7 @@ export default function App() {
         </div>
       )}
       {!phase2Loading && cargasFallidas.length > 0 && (
-        <div className="fixed bottom-16 sm:bottom-3 left-1/2 -translate-x-1/2 z-[46] px-3 max-w-[92vw]">
+        <div className="fixed bottom-[calc(var(--nav-h)+0.75rem)] left-1/2 -translate-x-1/2 z-[46] px-3 max-w-[92vw]">
           <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-600 text-white text-[11px] font-semibold shadow-lg">
             <span className="truncate">No se ha podido cargar: {cargasFallidas.join(', ')}</span>
             <button onClick={() => window.location.reload()} className="underline underline-offset-2 flex-shrink-0">
@@ -1728,7 +1729,7 @@ export default function App() {
         {captacionNode}
         <button
           onClick={() => setMainSection('mi-dia')}
-          className="fixed bottom-4 right-4 z-40 inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-amber-500 text-white text-xs font-semibold shadow-lg hover:bg-amber-600"
+          className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] right-4 z-40 inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-amber-500 text-white text-xs font-semibold shadow-lg hover:bg-amber-600"
           aria-label="Mi día"
         >
           <Sun className="w-3.5 h-3.5" /> Mi día
@@ -1737,7 +1738,7 @@ export default function App() {
           onClick={() => { setCaptacionOpenTab('planificacion'); setSubTab('captacion', 'planificacion') }}
           title="Planificación del fin de semana"
           aria-label="Planificación"
-          className="fixed bottom-16 right-4 z-40 inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-slate-900 text-white text-xs font-semibold shadow-lg hover:bg-slate-700"
+          className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom))] right-4 z-40 inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-slate-900 text-white text-xs font-semibold shadow-lg hover:bg-slate-700"
         >
           <CalendarDays className="w-3.5 h-3.5" /> Planificación
         </button>

@@ -21,6 +21,12 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-01',
     items: [
+      'Móvil: la barra de abajo pasa de siete botones a cinco (Tareas · Captación · Pipeline · Distribución · Más). «Más» abre Buscar y Boulema. «Tareas» lleva a la lista nueva; la pantalla «Mi día» antigua deja de estar en la barra',
+      'Móvil: todo lo que flota abajo (avisos, «Sincronizando», la barra de mover vencidas, los botones «+» de Distribución, el botón de Planificación) se coloca por encima de la barra en vez de montarse sobre ella, también en iPhone. El botón de Planificación se quita mientras hay una ficha flotante abierta',
+      'Móvil, Tareas: cada fila tiene un «⋯» al final que saca hecha, reprogramar, reasignar y abrir (antes reasignar solo existía con ratón). El círculo de estado es más fácil de acertar con el dedo, y deslizar desde el mismo borde de la pantalla ya no compite con el «atrás» del navegador',
+      'Tareas: al marcar una tarea como hecha sale «Tarea hecha · Deshacer» durante unos segundos, por si fue sin querer',
+      'Captación en el móvil: las pestañas pasan a un desplegable (antes «Partidos» y «Planificación» quedaban fuera de la pantalla). Y en Partidos, los de hoy salen los primeros, ordenados por hora',
+      'Ficha de partido en el móvil: los botones campo/vídeo y «marcar visto» de cada scout son más grandes, y quitar a un scout pide confirmación (la ✕ estaba pegada y se pulsaba sin querer)',
       'Informe rápido desde la ficha de un partido (y desde su vista ampliada): si te quedas sin señal ya no se pierde. Se guarda en la cola y se envía solo cuando vuelve la conexión; y lo que vas escribiendo queda como borrador del jugador, así que si cierras la ficha lo recuperas al volver a abrir el informe',
       'Buscar (⌘K): en Mantenimiento se abrían dos buscadores a la vez. Ahora es uno solo, el mismo que en el resto de la app',
       'Abrir cosas ya no te saca de donde estás. Desde el calendario o desde Tareas, un partido abre su ficha flotante encima (la misma de Captación, con scouts, informes y alineación), y una llamada o reunión de Firmar abre la tarjeta del pipeline como panel lateral. Al cerrarlas sigues en el mismo día y con los mismos filtros',

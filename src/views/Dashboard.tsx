@@ -945,6 +945,14 @@ export function Dashboard({
       if (task) {
         // Si es la tarea de una acción de Firmar, App la marca hecha también allí
         if (guardarTarea) await Promise.resolve(guardarTarea({ ...task, status: estado }));
+        // Completar es un gesto fácil de hacer sin querer (deslizar, un toque): se puede deshacer.
+        // Solo en tareas normales: una acción de Firmar o una tarea que se repite ya han hecho más cosas.
+        if (estado === 'completada' && it.origen === 'tarea' && !task.recurrence && guardarTarea) {
+          showToast('Tarea hecha', 'success', {
+            label: 'Deshacer',
+            fn: () => { Promise.resolve(guardarTarea({ ...task, completedAt: undefined })).catch(fallo); },
+          });
+        }
         return;
       }
       // Acción de Firmar sin tarea vinculada: hecha = retirarla de la tarjeta, con su apunte
@@ -2647,7 +2655,7 @@ export function Dashboard({
 
       {/* Bulk action toolbar */}
       {selectMode && selected.size > 0 && (
-        <div className="fixed inset-x-0 z-40 bg-white border-t border-slate-200 shadow-lg bottom-[calc(3.25rem+env(safe-area-inset-bottom))] sm:bottom-0">
+        <div className="fixed inset-x-0 z-40 bg-white border-t border-slate-200 shadow-lg bottom-[var(--nav-h)]">
           <div className="max-w-6xl mx-auto px-3 sm:px-6 py-3 flex items-center justify-between gap-3">
             <span className="text-sm font-medium text-slate-700">{selected.size} seleccionado{selected.size > 1 ? "s" : ""}</span>
             <div className="flex items-center gap-2">

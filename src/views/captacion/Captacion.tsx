@@ -461,6 +461,7 @@ export function Captacion({
   // del mismo día, por hora — también de más reciente a más antigua. Antes
   // el segundo criterio no existía y dentro de un mismo día el orden salía
   // más o menos aleatorio (el de inserción en la base de datos).
+  const hoyPartidos = todayISO()
   const filteredMatches = useMemo(() => {
     const q = matchSearchDeb.toLowerCase().trim()
     return scoutingMatches
@@ -478,8 +479,15 @@ export function Captacion({
         }
         return true
       })
-      .sort((a, b) => b.date.localeCompare(a.date) || (b.time ?? '').localeCompare(a.time ?? ''))
-  }, [scoutingMatches, scoutsByMatch, matchPlayersByMatchId, playersById, matchSearchDeb, matchPersonaFilter, matchCompFilter, matchModeFilter, matchStatusFilter, hideFutureMatches])
+      // Los de HOY primero (por hora): en el campo es el que se busca, y antes
+      // quedaba enterrado bajo los partidos futuros. El resto, del más nuevo al más antiguo.
+      .sort((a, b) => {
+        const ha = a.date === hoyPartidos, hb = b.date === hoyPartidos
+        if (ha !== hb) return ha ? -1 : 1
+        if (ha) return (a.time ?? '99').localeCompare(b.time ?? '99')
+        return b.date.localeCompare(a.date) || (b.time ?? '').localeCompare(a.time ?? '')
+      })
+  }, [scoutingMatches, scoutsByMatch, matchPlayersByMatchId, playersById, matchSearchDeb, matchPersonaFilter, matchCompFilter, matchModeFilter, matchStatusFilter, hideFutureMatches, hoyPartidos])
 
   // Agenda semanal: antes, por cada uno de los 7 días se recorrían y ordenaban
   // los 1.900 partidos. Ahora se agrupan por fecha una sola vez.
@@ -1415,8 +1423,24 @@ export function Captacion({
         </div>
         )}
 
-        {/* Captación sub-tabs */}
-        <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center gap-1 py-1.5 border-t border-slate-100 bg-slate-50/60 overflow-x-auto scrollbar-none">
+        {/* Captación sub-tabs. En móvil son un desplegable: las siete no caben
+            y «Partidos» quedaba fuera de pantalla sin que nada lo indicara. */}
+        <div className="sm:hidden px-3 py-1.5 border-t border-slate-100 bg-slate-50/60">
+          <select
+            value={captTab}
+            onChange={e => setCaptTab(e.target.value as CaptacionTab)}
+            aria-label="Pestaña de Captación"
+            className="w-full border border-slate-200 rounded-lg px-2 py-1.5 bg-white font-semibold text-slate-700"
+          >
+            {([
+              ['partidos', 'Partidos'], ['jugadores', 'Jugadores'], ['informes', 'Informes recientes'], ['planificacion', 'Planificación'],
+              ['conclusiones', `Conclusiones${newCandidatesCount > 0 ? ` (${newCandidatesCount})` : ''}`], ['contratos', 'Fin de contrato'], ['equipos', 'Equipos'],
+            ] as [CaptacionTab, string][]).filter(([id]) => !restricted || RESTRICTED_TABS.includes(id)).map(([id, label]) => (
+              <option key={id} value={id}>{label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 hidden sm:flex items-center gap-1 py-1.5 border-t border-slate-100 bg-slate-50/60 overflow-x-auto scrollbar-none">
           {([
             { id: 'conclusiones' as CaptacionTab, label: 'Conclusiones', labelMobile: 'Concl.', icon: <Target className="w-3.5 h-3.5" /> },
             { id: 'contratos' as CaptacionTab, label: 'Fin de contrato', labelMobile: 'Contratos', icon: <Calendar className="w-3.5 h-3.5" /> },
@@ -1617,7 +1641,7 @@ export function Captacion({
 
       {/* ── Barra de fusión ── */}
       {mergeMode && (
-        <div className="fixed bottom-16 sm:bottom-6 left-1/2 -translate-x-1/2 z-40 bg-violet-600 text-white rounded-full shadow-xl px-4 py-2.5 flex items-center gap-3">
+        <div className="fixed bottom-[calc(var(--nav-h)+1rem)] left-1/2 -translate-x-1/2 z-40 bg-violet-600 text-white rounded-full shadow-xl px-4 py-2.5 flex items-center gap-3">
           <span className="text-xs font-semibold whitespace-nowrap">
             {mergeSelected.size === 0
               ? 'Toca los partidos que quieras fusionar'

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { Search, X, Home, TrendingUp, Eye, Inbox, Bell, Sun, PenLine} from 'lucide-react'
+import { Search, X, Home, TrendingUp, Eye, Inbox, Bell, PenLine, Menu } from 'lucide-react'
 import type { Player, ScoutingPlayer, FirmasEntry, Club, Task } from '../types'
 import { onSavingChange } from '../lib/supabase'
 import { norm } from '../lib/texto'
@@ -67,40 +67,58 @@ export function BottomNav({ current, onGo, onSearch }: {
   onGo: (s: MainSection) => void
   onSearch: () => void
 }) {
+  // Cinco botones: con siete, cada uno medía ~53px y se pulsaba el de al lado.
+  // Lo menos usado en el móvil (Boulema, buscar) va en «Más».
+  const [mas, setMas] = useState(false)
   const items: { id: MainSection; label: string; icon: React.ReactNode; match: MainSection[] }[] = [
-    { id: 'mi-dia', label: 'Mi día', icon: <Sun className="w-5 h-5" />, match: ['mi-dia'] },
-    { id: 'tareas', label: 'Manten.', icon: <Home className="w-5 h-5" />, match: ['tareas', 'jugadores'] },
-    { id: 'distribucion', label: 'Distrib.', icon: <TrendingUp className="w-5 h-5" />, match: ['distribucion'] },
+    { id: 'tareas', label: 'Tareas', icon: <Home className="w-5 h-5" />, match: ['tareas', 'jugadores', 'mi-dia'] },
     { id: 'captacion', label: 'Captación', icon: <Eye className="w-5 h-5" />, match: ['captacion'] },
     { id: 'pipeline', label: 'Pipeline', icon: <PenLine className="w-5 h-5" />, match: ['pipeline'] },
-    { id: 'boulema', label: 'Boulema', icon: <Inbox className="w-5 h-5" />, match: ['boulema'] },
+    { id: 'distribucion', label: 'Distribución', icon: <TrendingUp className="w-5 h-5" />, match: ['distribucion'] },
   ]
+  const BTN = 'flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 text-[10px] font-medium transition-colors'
+  const OPCION = 'w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-700 active:bg-slate-100'
   return (
-    <nav className="sm:hidden fixed bottom-0 inset-x-0 z-30 bg-white border-t border-slate-200 flex items-stretch pb-[env(safe-area-inset-bottom)]">
-      {items.map(it => {
-        const active = it.match.includes(current)
-        return (
-          <button
-            key={it.id}
-            onClick={() => onGo(it.id)}
-            className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 text-[10px] font-medium transition-colors ${
-              active ? 'text-primary' : 'text-slate-400'
-            }`}
+    <>
+      {mas && (
+        <div className="sm:hidden fixed inset-0 z-30" onClick={() => setMas(false)}>
+          <div
+            className="absolute inset-x-0 bottom-[var(--nav-h)] bg-white border-t border-slate-200 shadow-[0_-8px_24px_rgba(0,0,0,0.12)] rounded-t-2xl overflow-hidden divide-y divide-slate-100"
+            onClick={e => e.stopPropagation()}
           >
-            {it.icon}
-            {it.label}
-          </button>
-        )
-      })}
-      <button
-        onClick={onSearch}
-        className="flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 text-[10px] font-medium text-slate-400"
-        aria-label="Buscar"
-      >
-        <Search className="w-5 h-5" />
-        Buscar
-      </button>
-    </nav>
+            <button onClick={() => { setMas(false); onSearch() }} className={OPCION}>
+              <Search className="w-5 h-5 text-slate-400" /> Buscar
+            </button>
+            <button onClick={() => { setMas(false); onGo('boulema') }} className={`${OPCION} ${current === 'boulema' ? 'font-semibold text-primary' : ''}`}>
+              <Inbox className="w-5 h-5 text-slate-400" /> Boulema
+            </button>
+          </div>
+        </div>
+      )}
+      <nav className="sm:hidden fixed bottom-0 inset-x-0 z-30 bg-white border-t border-slate-200 flex items-stretch pb-[env(safe-area-inset-bottom)]">
+        {items.map(it => {
+          const active = !mas && it.match.includes(current)
+          return (
+            <button
+              key={it.id}
+              onClick={() => { setMas(false); onGo(it.id) }}
+              className={`${BTN} ${active ? 'text-primary' : 'text-slate-400'}`}
+            >
+              {it.icon}
+              {it.label}
+            </button>
+          )
+        })}
+        <button
+          onClick={() => setMas(v => !v)}
+          aria-expanded={mas}
+          className={`${BTN} ${mas || current === 'boulema' ? 'text-primary' : 'text-slate-400'}`}
+        >
+          <Menu className="w-5 h-5" />
+          Más
+        </button>
+      </nav>
+    </>
   )
 }
 
@@ -259,7 +277,7 @@ export function SystemNotifPrompt() {
   )
   if (!visible) return null
   return (
-    <div className="fixed bottom-16 sm:bottom-4 left-1/2 -translate-x-1/2 z-[55] flex items-center gap-2 bg-slate-800 text-white rounded-full pl-3.5 pr-1.5 py-1.5 shadow-lg text-xs">
+    <div className="fixed bottom-[calc(var(--nav-h)+1rem)] left-1/2 -translate-x-1/2 z-[55] flex items-center gap-2 bg-slate-800 text-white rounded-full pl-3.5 pr-1.5 py-1.5 shadow-lg text-xs">
       <Bell className="w-3.5 h-3.5 flex-shrink-0" />
       <span>¿Avisos aunque la app esté en segundo plano?</span>
       <button

@@ -70,8 +70,13 @@
   }
 }
 
-/* Barra de navegación inferior (móvil): deja hueco al final de la página */
+/* Barra de navegación inferior (móvil). --nav-h es su altura real (con la
+   zona segura del iPhone): todo lo que flota abajo se coloca con
+   bottom: calc(var(--nav-h) + …) para no quedar encima ni debajo de ella.
+   En escritorio vale 0. */
+:root { --nav-h: 0px; }
 @media (max-width: 639px) {
+  :root { --nav-h: calc(3.25rem + env(safe-area-inset-bottom)); }
   body {
     padding-bottom: calc(56px + env(safe-area-inset-bottom));
   }

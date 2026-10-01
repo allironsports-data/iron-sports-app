@@ -436,7 +436,7 @@ export function JugadoresTab({
     <button
       onClick={() => onAddPlayer()}
       aria-label="Añadir jugador"
-      className="sm:hidden fixed bottom-5 right-4 z-40 w-14 h-14 rounded-full bg-primary text-white shadow-lg flex items-center justify-center safe-area-bottom"
+      className="sm:hidden fixed bottom-[calc(var(--nav-h)+1.25rem)] right-4 z-40 w-14 h-14 rounded-full bg-primary text-white shadow-lg flex items-center justify-center safe-area-bottom"
     >
       <Plus className="w-6 h-6" />
     </button>
