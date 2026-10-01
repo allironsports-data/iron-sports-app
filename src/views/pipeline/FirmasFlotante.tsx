@@ -98,7 +98,8 @@ export function FirmasFlotante({
   }
 
   return (
-    <>
+    // Capa propia por encima de las cabeceras de la pantalla de debajo (algunas son z-50)
+    <div className="relative z-[60]">
       <FirmasDetailPanel
         key={entry.id}
         entry={entry}
@@ -136,6 +137,6 @@ export function FirmasFlotante({
         onCancel={() => setConfirmarBorrado(false)}
       />
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
-    </>
+    </div>
   )
 }

@@ -1323,7 +1323,11 @@ export function Captacion({
   }, [soloVacio])
   if (solo) {
     return (
-      <>
+      // Capa propia por encima de TODO lo de la pantalla de debajo. Las cabeceras
+      // de Pipeline y Boulema son z-50 y la ficha lateral z-40: sin esto la
+      // cabecera tapaba la parte de arriba de la ficha (nombre, cerrar) y no
+      // había forma de llegar a ella.
+      <div className="relative z-[60]">
         {renderFichaPartido('modal')}
         {panelNode}
         {showAddMatch && (
@@ -1344,7 +1348,7 @@ export function Captacion({
         )}
         <ToastStack toasts={toasts} onDismiss={dismissToast} />
         {estilosNode}
-      </>
+      </div>
     )
   }
 
