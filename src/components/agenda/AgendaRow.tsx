@@ -32,6 +32,12 @@ export interface AgendaRowProps {
   onReprogramar?: (item: AgendaItem, fecha: string | undefined) => void
   onReasignar?: (item: AgendaItem, profileId: string) => void
   onOpenPlayer?: (playerId: string) => void
+  /**
+   * De quién es la lista que se está mirando. Si llega y el responsable del
+   * item es otra persona, la fila se pinta como «adjunto»: la ves porque eres
+   * encargado del jugador o te han añadido, pero no te toca hacerla a ti.
+   */
+  vistaDe?: string
   /** Abre la ficha de Captación del jugador (tareas ligadas a un jugador de scouting) */
   onOpenScoutingPlayer?: (scoutingPlayerId: string) => void
   /** Selección múltiple: si llega, sale una casilla delante */
@@ -44,7 +50,7 @@ function fechaCorta(iso: string): string {
 }
 
 export function AgendaRow({
-  item, hoy, profiles, onAbrir, onEstado, onReprogramar, onReasignar, onOpenPlayer, onOpenScoutingPlayer,
+  item, hoy, profiles, onAbrir, onEstado, onReprogramar, onReasignar, onOpenPlayer, onOpenScoutingPlayer, vistaDe,
   seleccionada, onSeleccionar,
 }: AgendaRowProps) {
   const [menu, setMenu] = useState<null | 'fecha' | 'persona'>(null)
@@ -64,6 +70,8 @@ export function AgendaRow({
   const puedePersona = p.reasignar && !!onReasignar
   const { Icon, cls, label } = AGENDA_TIPO_META[item.tipo]
   const persona = profiles.find(x => x.id === item.personId)
+  // Adjunto: no soy el responsable, solo la sigo
+  const adjunto = !!vistaDe && item.personId !== vistaDe
 
   const textoFecha = !item.fecha
     ? ''
@@ -116,7 +124,7 @@ export function AgendaRow({
         onClick={() => onAbrir(item)}
         onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd}
         style={{ touchAction: 'pan-y', ...(dx ? { transform: `translateX(${dx}px)` } : {}) }}
-        className={`group relative flex items-center gap-2 px-2.5 py-1.5 cursor-pointer ${vencida ? 'bg-red-50 hover:bg-red-100/70' : 'bg-white hover:bg-slate-50'} ${dx ? '' : 'transition-transform'}`}
+        className={`group relative flex items-center gap-2 px-2.5 py-1.5 cursor-pointer ${vencida ? 'bg-red-50 hover:bg-red-100/70' : adjunto ? 'bg-slate-50 hover:bg-slate-100' : 'bg-white hover:bg-slate-50'} ${adjunto ? 'border-l-2 border-l-slate-300' : vistaDe ? 'border-l-2 border-l-primary' : ''} ${dx ? '' : 'transition-transform'}`}
       >
         {onSeleccionar && (
           <input
@@ -142,11 +150,14 @@ export function AgendaRow({
             />
           </button>
         ) : <span className="w-3.5 flex-shrink-0" />}
-        <span className={`flex-1 min-w-0 line-clamp-2 sm:line-clamp-1 break-words text-xs font-medium ${tachar ? 'line-through text-slate-400' : 'text-slate-800'}`} title={item.titulo}>
+        <span className={`flex-1 min-w-0 line-clamp-2 sm:line-clamp-1 break-words text-xs font-medium ${tachar ? 'line-through text-slate-400' : adjunto ? 'text-slate-500 font-normal' : 'text-slate-800'}`} title={item.titulo}>
           {item.prioridadAlta && !hecha && <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 mr-1.5 align-middle" title="Prioridad alta" />}
           {item.titulo}
           {item.conInforme && <Check className="inline w-3 h-3 ml-1 text-emerald-500" aria-label="Informe hecho" />}
         </span>
+        {adjunto && (
+          <span className="flex-shrink-0 text-[11px] italic text-slate-400" title={`La lleva ${persona?.name ?? 'otra persona'}; tú estás como adjunto`}>adjunto</span>
+        )}
         {item.playerNombre && (
           item.playerId && onOpenPlayer ? (
             <button

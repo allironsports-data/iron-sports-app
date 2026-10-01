@@ -122,7 +122,7 @@ export function MiDiaLista({
   const fila = (it: AgendaItem) => (
     <AgendaRow key={it.id} item={it} hoy={hoy} profiles={profiles}
       onAbrir={onAbrir} onEstado={onEstado} onReprogramar={onReprogramar} onReasignar={onReasignar}
-      onOpenPlayer={onOpenPlayer} onOpenScoutingPlayer={onOpenScoutingPlayer} />
+      onOpenPlayer={onOpenPlayer} onOpenScoutingPlayer={onOpenScoutingPlayer} vistaDe={personaId} />
   )
 
   function seccion(id: SeccionId, titulo: string, n: number, cuerpo: React.ReactNode, opts: { rojo?: boolean; extra?: React.ReactNode } = {}) {
@@ -208,6 +208,14 @@ export function MiDiaLista({
           </select>
         )}
       </div>
+
+      {/* Leyenda: lo mío frente a lo que solo sigo */}
+      {deLaPersona.some(it => it.personId !== personaId && it.estado !== 'completada') && (
+        <p className="mb-2 flex items-center gap-3 text-[11px] text-slate-500">
+          <span className="inline-flex items-center gap-1.5"><span className="w-0.5 h-3 bg-primary" /> {esYo ? 'Las llevas tú' : 'Las lleva'}</span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-0.5 h-3 bg-slate-300" /> Adjunto: las lleva otra persona y {esYo ? 'tú las sigues' : 'las sigue'} (por ser encargado del jugador o porque te añadieron)</span>
+        </p>
+      )}
 
       {nAbiertos === 0 && s.hechasHoy.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-lg">
