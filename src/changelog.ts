@@ -21,6 +21,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-01',
     items: [
+      'Editar jugador: nuevo campo «Segunda nacionalidad». Si el jugador ya tenía dos escritas con una barra («Spain/Nigeria»), salen cada una en su campo',
       'Pipeline: la columna «Decidir» pasa a llamarse «Frío / no relevante». Los jugadores que estaban ahí siguen ahí; solo cambia el nombre',
       'Corregido: en Pipeline, al abrir la ficha de Captación de un jugador desde su tarjeta, la cabecera de la página tapaba la parte de arriba de la ficha (nombre y botón de cerrar) y no se podía llegar a ella. Las fichas flotantes salen ahora por encima de todo',
       'De tarea a evento: al marcar como hecha una tarea de tipo Llamada, Reunión o Visita, la app pregunta «¿qué pasó?» (en las llamadas, además, contestó / no contestó). Al aceptar, la tarea se completa y queda un evento con la fecha de hoy en el calendario, en la ficha del jugador y, si está en el pipeline, en su tarjeta. Con «Solo completar» se cierra sin dejar nada',

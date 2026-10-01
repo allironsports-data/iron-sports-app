@@ -1784,7 +1784,11 @@ function EditPlayerModal({ player, profiles, onClose, onSave }: {
   const [birthDate, setBirthDate] = useState(player.birthDate ?? "");
   const [pos1, setPos1] = useState(player.positions[0] ?? "");
   const [pos2, setPos2] = useState(player.positions[1] ?? "");
-  const [nationality, setNationality] = useState(player.nationality);
+  // Las dos nacionalidades se guardan juntas en el mismo campo, «Primera/Segunda»
+  // (así ya se venía escribiendo a mano): no hace falta columna nueva.
+  const [nat1Inicial = '', nat2Inicial = ''] = (player.nationality ?? '').split('/').map(x => x.trim());
+  const [nationality, setNationality] = useState(nat1Inicial);
+  const [nationality2, setNationality2] = useState(nat2Inicial);
   const [partner, setPartner] = useState(player.partner ?? "");
   const [estado, setEstado] = useState<PlayerEstado>(estadoDe(player));
   const [managed1, setManaged1] = useState(player.managedBy[0] ?? "");
@@ -1833,7 +1837,7 @@ function EditPlayerModal({ player, profiles, onClose, onSave }: {
         name,
         birthDate,
         positions: [pos1, pos2].filter(Boolean),
-        nationality,
+        nationality: [nationality.trim(), nationality2.trim()].filter(Boolean).join('/'),
         clubs,
         partner: partner || undefined,
         estado,
@@ -1865,12 +1869,13 @@ function EditPlayerModal({ player, profiles, onClose, onSave }: {
             <EF label="Nombre completo" value={name} onChange={setName} />
             {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <EF label="Fecha de nacimiento" value={birthDate} onChange={setBirthDate} type="date" />
               {errors.birthDate && <p className="text-xs text-red-500 mt-1">{errors.birthDate}</p>}
             </div>
             <EF label="Nacionalidad" value={nationality} onChange={setNationality} />
+            <EF label="Segunda nacionalidad" value={nationality2} onChange={setNationality2} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
