@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { supabase } from '../lib/supabase'
+import { limpiarCopias } from '../lib/cacheLocal'
 import type { User } from '@supabase/supabase-js'
 import { AuthContext } from './authContext'
 
@@ -103,6 +104,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const signOut = async () => {
+    // Fuera la copia local de datos: en un ordenador compartido no debe quedar nada
+    await limpiarCopias()
     await supabase.auth.signOut()
     setUser(null)
     setProfile(null)

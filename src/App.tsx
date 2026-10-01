@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef, lazy, cloneElement, 
 import { CalendarDays, Sun } from 'lucide-react'
 import { useAuth } from './hooks/useAuth'
 import type { Player, Task, ScoutingPlayer, ScoutingReport, ScoutingInfo, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchOurPlayer, ScoutingMatchScout, BoulemaPeticion, MemberStatus, Postpartido, FirmasEntry, BoulemaPlayer } from './types'
+import { leerCopia, guardarCopia, limpiarCopias } from './lib/cacheLocal'
 import * as db from './lib/db'
 import { supabase } from './lib/supabase'
 import type { Profile } from './contexts/AuthContext'
@@ -444,17 +445,79 @@ export default function App() {
     // FASE 1 — datos críticos (bloquean la UI): jugadores, tareas y perfiles.
     // FASE 2 — el resto carga en segundo plano (importante en datos móviles:
     // la app es usable en cuanto llega la fase 1).
+    //
+    // COPIA LOCAL (lib/cacheLocal.ts): mientras llega cada tabla del servidor
+    // se pinta lo que había la última vez en este navegador. Lo del servidor
+    // manda siempre: en cuanto llega sustituye a la copia, y una tabla que ya
+    // ha llegado nunca se pisa con la copia.
+    const uid = user.id
+    const inicioCarga = performance.now()
+    const llegadas = new Set<string>()      // tablas que ya ha entregado el servidor
+    const deCopia = new Set<string>()       // tablas pintadas desde la copia local
+    void limpiarCopias(uid)
+    /** Pinta la copia local de `nombre` si el servidor aún no la ha entregado */
+    function hidratar<T>(nombre: string, aplicar: (v: T) => void): Promise<boolean> {
+      return leerCopia<T>(uid, nombre).then((v) => {
+        if (cancelled || v === undefined || llegadas.has(nombre)) return false
+        deCopia.add(nombre)
+        aplicar(v)
+        return true
+      })
+    }
+
+    // Tablas de la fase 2: nombre (para el aviso de fallos), lectura, valor
+    // vacío y cómo se aplica al estado.
+    type Carga<T> = { nombre: string; leer: () => Promise<T>; vacio: T; aplicar: (v: T) => void }
+    const carga = <T,>(nombre: string, leer: () => Promise<T>, vacio: T, aplicar: (v: T) => void): Carga<unknown> =>
+      ({ nombre, leer, vacio, aplicar } as unknown as Carga<unknown>)
+    const fase2: Carga<unknown>[] = [
+      carga('Clubes', db.fetchClubs, [] as Club[], v => setClubs(v as Club[])),
+      carga('Distribución', () => db.fetchDistributionEntries(), [] as DistributionEntry[], v => setDistEntries(v as DistributionEntry[])),
+      carga('Negociaciones', () => db.fetchNegotiations(), [] as ClubNegotiation[], v => setNegotiations(v as ClubNegotiation[])),
+      carga('Jugadores de captación', db.fetchScoutingPlayers, [] as ScoutingPlayer[], v => setScoutingPlayers(v as ScoutingPlayer[])),
+      carga('Informes', () => db.fetchScoutingReports(), [] as ScoutingReport[], v => setScoutingReports(v as ScoutingReport[])),
+      carga('Informes de entorno', db.fetchScoutingInfos, [] as ScoutingInfo[], v => setScoutingInfos(v)),
+      carga('Partidos', db.fetchScoutingMatches, [] as ScoutingMatch[], v => setScoutingMatches(v as ScoutingMatch[])),
+      carga('Alineaciones', db.fetchMatchPlayers, [] as ScoutingMatchPlayer[], v => setMatchPlayers(v as ScoutingMatchPlayer[])),
+      carga('Nuestros en partido', db.fetchMatchOurPlayers, [] as ScoutingMatchOurPlayer[], v => setMatchOurPlayers(v)),
+      carga('Scouts de partido', db.fetchMatchScouts, [] as ScoutingMatchScout[], v => setMatchScouts(v)),
+      carga('Peticiones Boulema', db.fetchBoulemaPeticiones, [] as BoulemaPeticion[], v => setBoulemaPeticiones(v)),
+      carga('Estado del equipo', db.fetchMemberStatuses, [] as MemberStatus[], v => setMemberStatuses(v)),
+      carga('Postpartidos', db.fetchPostpartidos, [] as Postpartido[], v => setPostpartidos(v)),
+      carga('Pipeline de firmas', db.fetchFirmasEntries, [] as FirmasEntry[], v => setFirmasEntries(v)),
+      carga('Jugadores Boulema', db.fetchBoulemaPlayers, [] as BoulemaPlayer[], v => setBoulemaPlayers(v)),
+      carga('Zonas', db.fetchClubZonas, [] as db.ClubZona[], v => setClubZonas(zonasAMapa(v))),
+      carga('Catálogo de equipos', db.fetchEquipos, [] as db.Equipo[], v => setEquipos(v)),
+    ]
+
+    // Copia local: primero la fase 1 (si está entera se quita el spinner ya)
+    // y, sin esperar, todas las tablas de la fase 2.
+    void Promise.all([
+      hidratar<Player[]>('Jugadores', setPlayers),
+      hidratar<Task[]>('Tareas', setTasks),
+      hidratar<Profile[]>('Perfiles', (pr) => { profilesRef.current = pr; setProfiles(pr) }),
+    ]).then((ok) => {
+      if (cancelled || !ok.every(Boolean)) return
+      setDataLoading(false)
+      console.info('[carga] copia local pintada en %d ms', Math.round(performance.now() - inicioCarga))
+    })
+    for (const c of fase2) void hidratar(c.nombre, c.aplicar)
+
     Promise.all([
       db.fetchPlayers(),
       db.fetchTasks(),
       db.fetchProfiles(),
     ]).then(([p, t, pr]) => {
       if (cancelled) return
+      llegadas.add('Jugadores'); llegadas.add('Tareas'); llegadas.add('Perfiles')
       setPlayers(p)
       setTasks(t)
       profilesRef.current = pr as Profile[]
       setProfiles(pr as Profile[])
       setDataLoading(false)
+      guardarCopia(uid, 'Jugadores', p)
+      guardarCopia(uid, 'Tareas', t)
+      guardarCopia(uid, 'Perfiles', pr)
 
       // Fase 2 en background
       setPhase2Loading(true)
@@ -470,7 +533,7 @@ export default function App() {
       // aviso «Sincronizando datos…» solo desaparece cuando termina la
       // última, y con un pequeño retraso para no parpadear en cargas rápidas.
       const fallos: string[] = []
-      let restantes = 17
+      let restantes = fase2.length
       // Tiempo de cada tabla (ms), para ver en consola cuál es la lenta.
       const tiempos: Record<string, number> = {}
       const inicioFase2 = performance.now()
@@ -483,36 +546,33 @@ export default function App() {
           if (!cancelled) { setCargasFallidas(fallos); setPhase2Loading(false) }
         }
       }
-      function opc<T>(nombre: string, p: Promise<T>, vacio: T, aplicar: (v: T) => void) {
+      for (const c of fase2) {
         const inicio = performance.now()
-        p.then(v => { if (!cancelled) aplicar(v) })
-          .catch((err: unknown) => {
-            console.error(`[carga] ${nombre}:`, err)
-            fallos.push(nombre)
-            if (!cancelled) aplicar(vacio)
+        c.leer()
+          .then(v => {
+            llegadas.add(c.nombre)
+            if (cancelled) return
+            c.aplicar(v)
+            guardarCopia(uid, c.nombre, v)
           })
-          .finally(() => terminaUna(nombre, inicio))
+          .catch((err: unknown) => {
+            console.error(`[carga] ${c.nombre}:`, err)
+            fallos.push(c.nombre)
+            // Si hay copia local en pantalla se deja (mejor datos de la última
+            // vez que una tabla vacía); el aviso de fallo sale igualmente.
+            llegadas.add(c.nombre)
+            if (!cancelled && !deCopia.has(c.nombre)) c.aplicar(c.vacio)
+          })
+          .finally(() => terminaUna(c.nombre, inicio))
       }
-      opc('Clubes', db.fetchClubs(), [], v => setClubs(v as Club[]))
-      opc('Distribución', db.fetchDistributionEntries(), [], v => setDistEntries(v as DistributionEntry[]))
-      opc('Negociaciones', db.fetchNegotiations(), [], v => setNegotiations(v as ClubNegotiation[]))
-      opc('Jugadores de captación', db.fetchScoutingPlayers(), [], v => setScoutingPlayers(v as ScoutingPlayer[]))
-      opc('Informes', db.fetchScoutingReports(), [], v => setScoutingReports(v as ScoutingReport[]))
-      opc('Informes de entorno', db.fetchScoutingInfos(), [] as ScoutingInfo[], v => setScoutingInfos(v))
-      opc('Partidos', db.fetchScoutingMatches(), [], v => setScoutingMatches(v as ScoutingMatch[]))
-      opc('Alineaciones', db.fetchMatchPlayers(), [], v => setMatchPlayers(v as ScoutingMatchPlayer[]))
-      opc('Nuestros en partido', db.fetchMatchOurPlayers(), [] as ScoutingMatchOurPlayer[], v => setMatchOurPlayers(v))
-      opc('Scouts de partido', db.fetchMatchScouts(), [] as ScoutingMatchScout[], v => setMatchScouts(v))
-      opc('Peticiones Boulema', db.fetchBoulemaPeticiones(), [] as BoulemaPeticion[], v => setBoulemaPeticiones(v))
-      opc('Estado del equipo', db.fetchMemberStatuses(), [] as MemberStatus[], v => setMemberStatuses(v))
-      opc('Postpartidos', db.fetchPostpartidos(), [] as Postpartido[], v => setPostpartidos(v))
-      opc('Pipeline de firmas', db.fetchFirmasEntries(), [] as FirmasEntry[], v => setFirmasEntries(v))
-      opc('Jugadores Boulema', db.fetchBoulemaPlayers(), [] as BoulemaPlayer[], v => setBoulemaPlayers(v))
-      opc('Zonas', db.fetchClubZonas(), [] as db.ClubZona[], v => setClubZonas(zonasAMapa(v)))
-      opc('Catálogo de equipos', db.fetchEquipos(), [] as db.Equipo[], v => setEquipos(v))
     }).catch((err: unknown) => {
       if (cancelled) return
       console.error('Error cargando datos iniciales:', err)
+      // Con la copia local en pantalla no se tapa la app con el error
+      if (deCopia.has('Jugadores') && deCopia.has('Tareas') && deCopia.has('Perfiles')) {
+        setCargasFallidas(['Jugadores', 'Tareas'])
+        return
+      }
       setDataError(err instanceof Error ? err.message : 'Error desconocido')
       setDataLoading(false)
     })

@@ -246,16 +246,45 @@ const PAGINAS_POR_RONDA = 4
 // siguientes en rondas de 4 hasta que alguna llega corta. Con `contar`
 // (un `select('*', { count: 'exact', head: true })`) se sabe el total y se
 // lanzan todas las páginas restantes de golpe.
+//
+// ATAJO (lo que más acelera la carga): el navegador recuerda cuántas filas
+// tenía cada tabla la última vez. Con ese dato se piden TODAS las páginas a
+// la vez desde el primer momento, sin esperar ni a la página 0 ni al
+// recuento (que en tablas grandes tarda casi un segundo él solo). Si la
+// tabla ha crecido, la última página llega llena y se sigue por rondas; si
+// ha menguado, las que sobran llegan vacías. El resultado es el mismo.
+// Solo se guarda un número por tabla, ningún dato.
+const CLAVE_FILAS = 'ais:filas:'
+function filasRecordadas(tabla: string): number | null {
+  try {
+    const n = Number(localStorage.getItem(CLAVE_FILAS + tabla))
+    return Number.isFinite(n) && n > 0 ? n : null
+  } catch { return null }
+}
+function recordarFilas(tabla: string, n: number) {
+  try { localStorage.setItem(CLAVE_FILAS + tabla, String(n)) } catch { /* sin almacenamiento: no pasa nada */ }
+}
+
 export async function leerTodo<T>(
   tabla: string,
   consulta: (desde: number, hasta: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
-  opciones?: { contar?: () => PromiseLike<{ count: number | null; error: unknown }> },
+  opciones?: {
+    contar?: () => PromiseLike<{ count: number | null; error: unknown }>
+    /** false si la consulta va filtrada (el nº de filas de la tabla entera no sirve de pista) */
+    recordar?: boolean
+  },
 ): Promise<T[]> {
   // paginas[i] = filas de la página i (se rellena según van llegando; el
   // índice conserva el orden aunque lleguen desordenadas)
   const paginas: T[][] = []
   const leidas = () => paginas.reduce((n, p) => n + (p?.length ?? 0), 0)
-  const terminar = () => dedupePorId(paginas.flat() as { id?: unknown }[]) as T[]
+  // Solo las lecturas de tabla entera (las que traen `contar`) usan el atajo
+  const recordar = !!opciones?.contar && opciones.recordar !== false
+  const terminar = () => {
+    const filas = dedupePorId(paginas.flat() as { id?: unknown }[]) as T[]
+    if (recordar) recordarFilas(tabla, filas.length)
+    return filas
+  }
 
   /** pide la página `i` y devuelve cuántas filas trajo */
   const pedir = async (i: number): Promise<number> => {
@@ -266,27 +295,38 @@ export async function leerTodo<T>(
     return pagina.length
   }
 
-  // Página 0 (y el recuento, si lo hay) a la vez.
-  const [n0, recuento] = await Promise.all([
-    pedir(0),
-    opciones?.contar ? opciones.contar() : Promise.resolve(null),
-  ])
-  if (n0 < PAGINA) return terminar()
-
   let siguiente = 1
   let corta = false
 
-  // Con el total conocido: todas las páginas que faltan de golpe.
-  const total = recuento && !recuento.error && typeof recuento.count === 'number' ? recuento.count : null
-  if (total !== null) {
-    const nPaginas = Math.min(Math.ceil(total / PAGINA), MAX_PAGINAS)
-    const indices: number[] = []
-    for (let i = 1; i < nPaginas; i++) indices.push(i)
-    const tamanos = await Promise.all(indices.map(pedir))
+  const previstas = recordar ? filasRecordadas(tabla) : null
+  if (previstas !== null) {
+    // Atajo: todas las páginas previstas de golpe, sin recuento (también en
+    // las tablas pequeñas: el recuento es una consulta más que el servidor
+    // tiene que atender, y al arrancar se lanzan decenas a la vez).
+    const nPaginas = Math.min(Math.max(1, Math.ceil(previstas / PAGINA)), MAX_PAGINAS)
+    const tamanos = await Promise.all(Array.from({ length: nPaginas }, (_, i) => pedir(i)))
     siguiente = nPaginas
-    // si la última llegó corta hemos acabado; si vino llena (han insertado
-    // entre el recuento y la lectura) seguimos por rondas
-    corta = tamanos.length === 0 || tamanos[tamanos.length - 1] < PAGINA
+    corta = tamanos.some(n => n < PAGINA)
+  } else {
+    // Página 0 (y el recuento, si lo hay) a la vez.
+    const [n0, recuento] = await Promise.all([
+      pedir(0),
+      opciones?.contar ? opciones.contar() : Promise.resolve(null),
+    ])
+    if (n0 < PAGINA) return terminar()
+
+    // Con el total conocido: todas las páginas que faltan de golpe.
+    const total = recuento && !recuento.error && typeof recuento.count === 'number' ? recuento.count : null
+    if (total !== null) {
+      const nPaginas = Math.min(Math.ceil(total / PAGINA), MAX_PAGINAS)
+      const indices: number[] = []
+      for (let i = 1; i < nPaginas; i++) indices.push(i)
+      const tamanos = await Promise.all(indices.map(pedir))
+      siguiente = nPaginas
+      // si la última llegó corta hemos acabado; si vino llena (han insertado
+      // entre el recuento y la lectura) seguimos por rondas
+      corta = tamanos.length === 0 || tamanos[tamanos.length - 1] < PAGINA
+    }
   }
 
   // Sin total (o si ha crecido): rondas de PAGINAS_POR_RONDA en paralelo.
@@ -544,6 +584,7 @@ export async function fetchTasks(playerId?: string): Promise<Task[]> {
     if (playerId) q = q.eq('player_id', playerId)
     return q
   }, {
+    recordar: !playerId,
     contar: () => {
       let q = supabase.from('tasks').select('*', { count: 'exact', head: true })
       if (playerId) q = q.eq('player_id', playerId)
@@ -893,6 +934,7 @@ export async function fetchDistributionEntries(season?: string): Promise<Distrib
     if (season) q = q.eq('season', season)
     return q
   }, {
+    recordar: !season,
     contar: () => {
       let q = supabase.from('distribution_entries').select('*', { count: 'exact', head: true }).eq('active', true)
       if (season) q = q.eq('season', season)
@@ -961,6 +1003,7 @@ export async function fetchNegotiations(playerId?: string, clubId?: string): Pro
     if (clubId) q = q.eq('club_id', clubId)
     return q
   }, {
+    recordar: !playerId && !clubId,
     contar: () => {
       let q = supabase.from('club_negotiations').select('*', { count: 'exact', head: true })
       if (playerId) q = q.eq('player_id', playerId)
@@ -1063,6 +1106,7 @@ export async function fetchScoutingReports(playerId?: string): Promise<ScoutingR
     if (playerId) q = q.eq('player_id', playerId)
     return q
   }, {
+    recordar: !playerId,
     contar: () => {
       let q = supabase.from('scouting_reports').select('*', { count: 'exact', head: true })
       if (playerId) q = q.eq('player_id', playerId)
