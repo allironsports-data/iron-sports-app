@@ -28,7 +28,8 @@ export function ConclusionesTab({ players, reports, threshold, onThresholdChange
 }) {
   const [mapAssessment, setMapAssessment] = useState<ScoutingAssessment>('Llamar')
   const [showHidden, setShowHidden] = useState(false)
-  const [mapView, setMapView] = useState<'matriz' | 'campo'>('matriz')
+  // Por defecto el campograma: es la vista que se usa para repasar las conclusiones
+  const [mapView, setMapView] = useState<'matriz' | 'campo'>('campo')
   const [mapDim, setMapDim] = useState<'pos' | 'cat'>('pos')
   const [selectedCell, setSelectedCell] = useState<{ row: string; col: string } | null>(null)
   const [genFilter, setGenFilter] = useState<string>('all')

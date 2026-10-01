@@ -21,6 +21,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-01',
     items: [
+      'Captación → Conclusiones: se abre directamente en el campograma en vez de en la matriz. La matriz sigue a un clic',
       'Editar jugador y Nuevo jugador: nuevo campo «Segunda nacionalidad», al lado de la primera. Si el jugador ya tenía dos escritas con una barra («Spain/Nigeria»), salen cada una en su campo',
       'Pipeline: la columna «Decidir» pasa a llamarse «Frío / no relevante». Los jugadores que estaban ahí siguen ahí; solo cambia el nombre',
       'Corregido: en Pipeline, al abrir la ficha de Captación de un jugador desde su tarjeta, la cabecera de la página tapaba la parte de arriba de la ficha (nombre y botón de cerrar) y no se podía llegar a ella. Las fichas flotantes salen ahora por encima de todo',
