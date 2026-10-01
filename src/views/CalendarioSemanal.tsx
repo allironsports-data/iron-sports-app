@@ -107,7 +107,7 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
         key={it.id}
         onClick={e => { e.stopPropagation(); onAbrir(it) }}
         title={`${m.label}: ${it.titulo}${it.playerNombre ? ` · ${it.playerNombre}` : ''}${it.hora ? ` · ${it.hora}` : ''}${quien.length ? ` · ${quien.join(', ')}` : ''}`}
-        className={`w-full flex items-start gap-1 rounded px-1 py-0.5 text-left text-[11px] leading-tight hover:bg-slate-200/70 transition-colors ${hecha ? 'opacity-50' : ''} ${vencida ? 'text-red-600' : 'text-slate-700'}`}
+        className={`w-full flex items-start gap-1.5 rounded px-1.5 py-1.5 text-left text-[11px] leading-snug hover:bg-slate-200/70 transition-colors ${hecha ? 'opacity-50' : ''} ${vencida ? 'text-red-600' : 'text-slate-700'}`}
       >
         <m.Icon className={`w-3 h-3 flex-shrink-0 mt-px ${m.cls}`} />
         {it.hora && <span className="flex-shrink-0 font-semibold tabular-nums">{it.hora}</span>}
@@ -358,12 +358,12 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
                 <div
                   onClick={() => setMenuDia(m => m === d ? null : d)}
                   title={es.length === 0 ? 'Añadir tarea o evento' : undefined}
-                  className="flex-1 p-0.5 min-h-[8rem] cursor-pointer hover:bg-slate-100/60"
+                  className="flex-1 p-1 min-h-[10rem] cursor-pointer hover:bg-slate-100/60 divide-y divide-slate-100"
                 >
                   {(resto > 0 ? es.slice(0, MAX_COLUMNA - 1) : es).map(linea)}
                   {resto > 0 && (
                     <button onClick={e => { e.stopPropagation(); setMenuDia(null); setAmpliado(i) }}
-                      className="w-full text-left px-1 text-[11px] font-semibold text-blue-600 hover:underline">
+                      className="w-full text-left px-1.5 py-1.5 text-[11px] font-semibold text-blue-600 hover:underline">
                       +{resto + 1} más
                     </button>
                   )}
