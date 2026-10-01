@@ -335,22 +335,11 @@ export function MatchExpandedView({
               className="pl-7 pr-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white w-44 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
             />
           </div>
-          <span className="text-[11px] text-slate-500 font-medium ml-1">Veredicto:</span>
-          {([
-            ['', 'Todos'], ['Llamar', 'Llamar'], ['Seguir', 'Seguir'], ['Descartar', 'Descartar'], ['Visto', 'Visto'], ['sin', 'Sin informe'],
-          ] as [FiltroVeredicto, string][]).map(([v, l]) => (
-            <button
-              key={v || 'todos'}
-              onClick={() => setFiltroVeredicto(v)}
-              className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
-                filtroVeredicto === v
-                  ? (v && v !== 'sin' ? (CONCLUSION_STYLE[v] ?? 'bg-slate-800 text-white border-slate-800') : 'bg-slate-800 text-white border-slate-800')
-                  : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
-              }`}
-            >
-              {l}
-            </button>
-          ))}
+          <select value={filtroVeredicto} onChange={e => setFiltroVeredicto(e.target.value as FiltroVeredicto)} aria-label="Veredicto" className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+            {([
+              ['', 'Todos los veredictos'], ['Llamar', 'Llamar'], ['Seguir', 'Seguir'], ['Descartar', 'Descartar'], ['Visto', 'Visto'], ['sin', 'Sin informe'],
+            ] as [FiltroVeredicto, string][]).map(([v, l]) => <option key={v || 'todos'} value={v}>{l}</option>)}
+          </select>
           {filtroScout && (
             <button onClick={() => setFiltroScout('')} className="text-[11px] text-blue-600 hover:underline">
               solo {filtroScout} ✕

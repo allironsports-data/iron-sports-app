@@ -21,6 +21,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-01',
     items: [
+      'Más filtros de botones convertidos en desplegables: zona y categoría en Equipos (con la cobertura de cada una), liga en Fin de contrato, veredicto en la vista ampliada de un partido, año y posición al afinar los sugeridos de un partido, prioridad en Oportunidades, y estatus en Firmar desde el móvil',
       'Firmar: si dos personas apuntan algo en la misma tarjeta casi a la vez, ya no se pierde ninguna de las dos notas. Al guardar solo se escribe lo que has cambiado tú, sobre la versión que hay en ese momento',
       'Tareas, jugadores de Captación y partidos: al guardar solo se escribe lo que has cambiado. Antes se guardaba la ficha entera y podía llevarse por delante un cambio que otra persona acababa de hacer en otro campo (por ejemplo, activar el campograma borraba la valoración recién puesta por otro scout)',
       'Más ligero con todo el equipo conectado: cuando alguien mete un informe, mueve una tarea o toca un partido, a los demás les llega solo ese cambio, en vez de volver a descargarse la tabla entera (unos 12.000 informes por cada informe nuevo)',

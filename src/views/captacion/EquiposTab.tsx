@@ -355,6 +355,7 @@ export function EquiposTab({
     }
   }
 
+  // Color de una celda del cuadro de cobertura (cubiertos / relevantes)
   const chipCls = (d: { rel: number; cub: number } | undefined, activo: boolean) => {
     if (activo) return 'bg-primary text-white border-primary'
     if (!d || d.rel === 0) return 'bg-white text-slate-400 border-slate-200 hover:border-slate-400'
@@ -448,43 +449,22 @@ export function EquiposTab({
         </div>
       )}
 
-      {/* ── Zonas y categorías: chips que resumen Y filtran ── */}
-      <div className="space-y-1.5">
-        <div className="flex flex-wrap items-center gap-1">
-          <span className="text-[10px] font-bold text-slate-400 uppercase w-14">Zona</span>
-          <button onClick={() => setZonaSel('all')} className={`text-[11px] font-semibold rounded-full border px-2 py-0.5 ${chipCls(undefined, zonaSel === 'all')}`}>Todas</button>
+      {/* ── Zona y categoría: desplegables con la cobertura (cubiertos/relevantes) de cada una ── */}
+      <div className="flex flex-wrap items-center gap-2">
+        <select value={zonaSel} onChange={e => setZonaSel(e.target.value)} aria-label="Zona" className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+          <option value="all">Todas las zonas</option>
           {zonas.map(z => {
             const d = resumen.porZona[z]
-            return (
-              <button
-                key={z}
-                onClick={() => setZonaSel(zonaSel === z ? 'all' : z)}
-                title={z}
-                className={`text-[11px] font-semibold rounded-full border px-2 py-0.5 ${chipCls(d, zonaSel === z)}`}
-              >
-                {z === SIN_ZONA ? 'Sin zona' : (ZONA_CORTA[z as Zona] ?? z)}
-                {d && <span className="ml-1 opacity-70">{d.cub}/{d.rel}</span>}
-              </button>
-            )
+            return <option key={z} value={z}>{z === SIN_ZONA ? 'Sin zona' : (ZONA_CORTA[z as Zona] ?? z)}{d ? ` · ${d.cub}/${d.rel}` : ''}</option>
           })}
-        </div>
-        <div className="flex flex-wrap items-center gap-1">
-          <span className="text-[10px] font-bold text-slate-400 uppercase w-14">Categ.</span>
-          <button onClick={() => setCatSel('all')} className={`text-[11px] font-semibold rounded-full border px-2 py-0.5 ${chipCls(undefined, catSel === 'all')}`}>Todas</button>
+        </select>
+        <select value={catSel} onChange={e => setCatSel(e.target.value)} aria-label="Categoría" className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+          <option value="all">Todas las categorías</option>
           {categorias.map(c => {
             const d = resumen.porCat[c]
-            return (
-              <button
-                key={c}
-                onClick={() => setCatSel(catSel === c ? 'all' : c)}
-                className={`text-[11px] font-semibold rounded-full border px-2 py-0.5 ${chipCls(d, catSel === c)}`}
-              >
-                {c === SIN_CATEGORIA ? 'Sin categoría' : c}
-                {d && <span className="ml-1 opacity-70">{d.cub}/{d.rel}</span>}
-              </button>
-            )
+            return <option key={c} value={c}>{c === SIN_CATEGORIA ? 'Sin categoría' : c}{d ? ` · ${d.cub}/${d.rel}` : ''}</option>
           })}
-        </div>
+        </select>
       </div>
 
       {/* ── Huecos: lo accionable de verdad ── */}

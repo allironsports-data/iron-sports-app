@@ -830,31 +830,19 @@ export function MatchDetailModal({
               </div>
               {/* Afinado: año y posición */}
               {playerSearch.length < 2 && suggestionPool.length > 0 && (suggYears.length > 1 || suggPosGroups.length > 1) && (
-                <div className="flex flex-wrap items-center gap-1">
-                  <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">Afinar:</span>
-                  {suggYears.slice(0, 8).map(y => (
-                    <button
-                      key={y}
-                      onClick={() => setSuggYearFilter(f => f === y ? null : y)}
-                      className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
-                        suggYearFilter === y ? 'bg-violet-100 border-violet-300 text-violet-700' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'
-                      }`}
-                    >
-                      {y}
-                    </button>
-                  ))}
-                  {suggPosGroups.length > 1 && <span className="text-slate-200">|</span>}
-                  {suggPosGroups.map(g => (
-                    <button
-                      key={g}
-                      onClick={() => setSuggPosFilter(f => f === g ? null : g)}
-                      className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
-                        suggPosFilter === g ? 'bg-violet-100 border-violet-300 text-violet-700' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'
-                      }`}
-                    >
-                      {g}
-                    </button>
-                  ))}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {suggYears.length > 1 && (
+                    <select value={suggYearFilter ?? ''} onChange={e => setSuggYearFilter(e.target.value || null)} aria-label="Año de nacimiento" className="text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+                      <option value="">Todos los años</option>
+                      {suggYears.slice(0, 8).map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                  )}
+                  {suggPosGroups.length > 1 && (
+                    <select value={suggPosFilter ?? ''} onChange={e => setSuggPosFilter((e.target.value || null) as typeof suggPosFilter)} aria-label="Posición" className="text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+                      <option value="">Todas las posiciones</option>
+                      {suggPosGroups.map(g => <option key={g} value={g}>{g}</option>)}
+                    </select>
+                  )}
                 </div>
               )}
             </div>

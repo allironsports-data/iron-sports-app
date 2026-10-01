@@ -186,11 +186,6 @@ export function ContratosTab({ players, firmasEntries, isAdmin, onOpenPlayer, on
 
   const fmtShort = (d: Date | null) => d ? d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '—'
 
-  const toggleLiga = (l: string) => setLigaFilter(prev => {
-    const n = new Set(prev)
-    if (n.has(l)) n.delete(l); else n.add(l)
-    return n.size ? n : prev            // nunca dejar los cuatro apagados
-  })
 
   async function saveContract(p: ScoutingPlayer) {
     setSaving(true)
@@ -317,25 +312,28 @@ export function ContratosTab({ players, firmasEntries, isAdmin, onOpenPlayer, on
       </div>
 
       {/* Ligas (solo al mirar toda la BBDD) */}
-      {source === 'todos' && (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Liga</span>
-          {[...LIGAS as string[], 'otros'].map(l => (
-            <button
-              key={l}
-              onClick={() => toggleLiga(l)}
-              className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border transition-colors ${
-                ligaFilter.has(l)
-                  ? 'bg-primary/10 text-primary border-primary/30'
-                  : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'
-              }`}
-            >
-              {l === 'otros' ? 'Resto' : l}
-              <span className="ml-1 text-[10px] opacity-70">{all.filter(e => (e.liga ?? 'otros') === l).length}</span>
-            </button>
-          ))}
-        </div>
-      )}
+      {source === 'todos' && (() => {
+        const principales = LIGAS as string[]
+        const todas = [...principales, 'otros']
+        const valor = ligaFilter.size === 1 ? [...ligaFilter][0]
+          : ligaFilter.size === todas.length ? '__todas__' : '__principales__'
+        const n = (l: string) => all.filter(e => (e.liga ?? 'otros') === l).length
+        return (
+          <select
+            value={valor}
+            onChange={e => {
+              const v = e.target.value
+              setLigaFilter(new Set(v === '__todas__' ? todas : v === '__principales__' ? principales : [v]))
+            }}
+            aria-label="Liga"
+            className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+          >
+            <option value="__principales__">Ligas principales ({principales.reduce((t, l) => t + n(l), 0)})</option>
+            <option value="__todas__">Todas las ligas ({all.length})</option>
+            {todas.map(l => <option key={l} value={l}>{l === 'otros' ? 'Resto' : l} ({n(l)})</option>)}
+          </select>
+        )
+      })()}
 
       {/* Años */}
       <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-0.5">

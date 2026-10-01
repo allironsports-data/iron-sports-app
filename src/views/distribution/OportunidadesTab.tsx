@@ -154,20 +154,10 @@ export function OportunidadesTab({
               className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
             />
           </div>
-          <div className="flex items-center gap-1">
-            {(['A', 'B', 'C', 'D'] as const).map(pr => (
-              <button
-                key={pr}
-                onClick={() => setOppPriority(oppPriority === pr ? '' : pr)}
-                className={`w-8 h-8 rounded-lg text-xs font-bold transition-colors ${
-                  oppPriority === pr ? `${PRIORITY_CONFIG[pr].bg} ${PRIORITY_CONFIG[pr].text} ring-2 ring-offset-1 ring-current` : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                }`}
-                title={`Prioridad ${pr}`}
-              >
-                {pr}
-              </button>
-            ))}
-          </div>
+          <select value={oppPriority} onChange={e => setOppPriority(e.target.value as typeof oppPriority)} aria-label="Prioridad" className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+            <option value="">Todas las prioridades</option>
+            {(['A', 'B', 'C', 'D'] as const).map(pr => <option key={pr} value={pr}>Prioridad {pr}</option>)}
+          </select>
           <span className="text-xs text-slate-400 ml-auto">
             {filteredOpportunities.length} oportunidad{filteredOpportunities.length !== 1 ? 'es' : ''}
           </span>

@@ -600,31 +600,13 @@ export function FirmasTab({
           {view === 'estatus' && (
             <>
               <div className="sm:hidden space-y-2">
-                <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-3 px-3 scrollbar-none">
-                  <button
-                    onClick={() => setMobStatus('all')}
-                    className={`flex-shrink-0 px-2.5 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
-                      mobStatus === 'all' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-500 border-slate-200'
-                    }`}
-                  >
-                    Todos {filtered.length}
-                  </button>
-                  {FIRMAS_STATUSES.map(s => {
-                    const n = filtered.filter(e => e.status === s).length
-                    return (
-                      <button
-                        key={s}
-                        onClick={() => setMobStatus(s)}
-                        className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
-                          mobStatus === s ? `${FIRMAS_CONFIG[s].bg} ${FIRMAS_CONFIG[s].text} ${FIRMAS_CONFIG[s].border} ring-1 ring-current` : 'bg-white text-slate-500 border-slate-200'
-                        }`}
-                      >
-                        <span className={`w-1.5 h-1.5 rounded-full ${FIRMAS_CONFIG[s].dot}`} />
-                        {FIRMAS_CONFIG[s].label} {n}
-                      </button>
-                    )
-                  })}
-                </div>
+                <select value={mobStatus} onChange={e => setMobStatus(e.target.value as FirmasStatus | 'all')} aria-label="Estatus"
+                  className="w-full border border-slate-200 rounded-lg px-2 py-1.5 bg-white font-semibold text-slate-700">
+                  <option value="all">Todos los estatus ({filtered.length})</option>
+                  {FIRMAS_STATUSES.map(s => (
+                    <option key={s} value={s}>{FIRMAS_CONFIG[s].label} ({filtered.filter(e => e.status === s).length})</option>
+                  ))}
+                </select>
                 {mobileList(
                   (mobStatus === 'all' ? [...filtered] : filtered.filter(e => e.status === mobStatus))
                     .sort((a, b) =>
