@@ -21,6 +21,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-01',
     items: [
+      'Tareas de un jugador: al crearla (o al ligarla a un jugador desde el panel), sus encargados entran por defecto como «Adjuntos», para que les aparezca también a ellos. Se pueden quitar a mano',
       'La pestaña «Mi día» pasa a llamarse «Tareas». El calendario es su propia pestaña, «Calendario», justo al lado',
       'Calendario más fácil de leer: nueva vista «Agenda» (la de por defecto) con los siete días uno debajo de otro y cada cosa a todo el ancho — hora, título entero, jugador, categoría y quién lo lleva —, sin tener que ampliar nada. La vista «Columnas» sigue ahí y ahora muestra el título completo en varias líneas y el jugador. Al pulsar en el nombre de un día se abre ese día con la tarjeta de cada persona del equipo',
       'Los cumpleaños vuelven a la página de inicio (el resto de avisos sigue en la campana)',

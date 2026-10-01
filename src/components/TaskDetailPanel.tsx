@@ -422,7 +422,12 @@ export function TaskDetailPanel({
                     {canEdit ? (
                       <select
                         value={playerId}
-                        onChange={e => setPlayerId(e.target.value)}
+                        onChange={e => {
+                          setPlayerId(e.target.value);
+                          // Al ligar la tarea a un jugador, sus encargados entran como adjuntos
+                          const encargados = players.find(p => p.id === e.target.value)?.managedBy ?? [];
+                          setWatchers(prev => [...prev, ...encargados.filter(id => id !== assigneeId && !prev.includes(id))]);
+                        }}
                         className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
                       >
                         <option value="">— Tarea general —</option>

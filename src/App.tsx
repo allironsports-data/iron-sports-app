@@ -924,9 +924,15 @@ export default function App() {
   }
 
   const handleAddTask = async (task: Task): Promise<Task> => {
-    const withCompleted: Task = task.status === 'completada' && !task.completedAt
-      ? { ...task, completedAt: new Date().toISOString() }
+    // Tarea de un jugador sin adjuntos: entran por defecto sus encargados
+    // (menos el responsable, que ya la tiene). Luego se pueden quitar.
+    const jugador = task.playerId && task.playerId !== 'general' ? playersRef.current.find(p => p.id === task.playerId) : undefined
+    const conAdjuntos: Task = jugador && !(task.watchers?.length)
+      ? { ...task, watchers: jugador.managedBy.filter(id => id !== task.assigneeId) }
       : task
+    const withCompleted: Task = conAdjuntos.status === 'completada' && !conAdjuntos.completedAt
+      ? { ...conAdjuntos, completedAt: new Date().toISOString() }
+      : conAdjuntos
     const saved = await db.createTask(withCompleted)
     setTasks((prev) => [...prev, saved])
     return saved
