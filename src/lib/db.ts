@@ -162,6 +162,46 @@ function logFetchError(tabla: string, error: unknown, leidas: number) {
   console.error(`[db] Fallo leyendo ${tabla} (se habían leído ${leidas} filas):`, error)
 }
 
+// ── Guardar solo lo que ha cambiado ──────────────────────────────────
+// Varias pantallas guardan «la ficha entera» a partir de la copia que
+// tienen en memoria. Si mientras tanto otra persona cambió otro campo, ese
+// guardado se lo llevaba por delante (activar el campograma de un jugador
+// borraba la valoración que otro scout acababa de poner).
+//
+// Aquí se recuerda la última fila que se ha visto del servidor (al leer la
+// tabla y con cada evento de realtime) y, al guardar, solo se mandan las
+// columnas cuyo valor es distinto del de esa fila. Lo que el usuario no ha
+// tocado no se escribe, así que no puede pisar nada.
+const filasVistas = new Map<string, Map<string, Record<string, unknown>>>()
+
+function recordarFila(tabla: string, row: Record<string, unknown>): void {
+  if (typeof row.id !== 'string') return
+  let m = filasVistas.get(tabla)
+  if (!m) { m = new Map(); filasVistas.set(tabla, m) }
+  m.set(row.id, row)
+}
+
+const mismoValor = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
+
+/** De `fila`, solo las columnas que difieren de la última versión vista. Sin versión vista: todas. */
+export function soloCambios(tabla: string, id: string, fila: Record<string, unknown>): Record<string, unknown> {
+  const vista = filasVistas.get(tabla)?.get(id)
+  if (!vista) return fila
+  const cambios: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(fila)) if (!(k in vista) || !mismoValor(v, vista[k])) cambios[k] = v
+  return cambios
+}
+
+/** UPDATE de solo lo cambiado; si no ha cambiado nada no se hace ninguna petición. */
+async function actualizarSoloCambios(tabla: string, id: string, fila: Record<string, unknown>): Promise<void> {
+  const cambios = soloCambios(tabla, id, fila)
+  if (Object.keys(cambios).length === 0) return
+  const { error } = await supabase.from(tabla).update(cambios).eq('id', id)
+  if (error) throw error
+  const vista = filasVistas.get(tabla)?.get(id)
+  if (vista) recordarFila(tabla, { ...vista, ...cambios })
+}
+
 /** 42P01 = «relation does not exist»: la tabla aún no está migrada. */
 function esTablaInexistente(error: unknown): boolean {
   return (error as { code?: string } | null)?.code === '42P01'
@@ -411,6 +451,7 @@ let tasksConRecurrence = false
 
 function dbToTask(row: Record<string, unknown>): Task {
   if ('recurrence' in row) tasksConRecurrence = true
+  recordarFila('tasks', row)
   return {
     id: row.id as string,
     playerId: (row.player_id as string) ?? 'general',
@@ -487,9 +528,12 @@ export async function createTask(t: Task): Promise<Task> {
 
 export async function updateTask(t: Task): Promise<void> {
   const fila = taskToDb(t)
-  let r = await supabase.from('tasks').update(fila).eq('id', t.id)
-  if (r.error && faltaColumnaRecurrence(r.error, fila)) r = await supabase.from('tasks').update(fila).eq('id', t.id)
-  if (r.error) throw r.error
+  try {
+    await actualizarSoloCambios('tasks', t.id, fila)
+  } catch (err) {
+    if (!faltaColumnaRecurrence(err, fila)) throw err
+    await actualizarSoloCambios('tasks', t.id, fila)
+  }
 }
 
 export async function deleteTask(id: string): Promise<void> {
@@ -926,6 +970,7 @@ export async function deleteNegotiation(id: string): Promise<void> {
 // ── SCOUTING / CAPTACIÓN ─────────────────────────────────────
 
 function dbToScoutingPlayer(row: Record<string, unknown>): ScoutingPlayer {
+  recordarFila('scouting_players', row)
   return {
     id: row.id as string,
     fullName: row.full_name as string,
@@ -1017,7 +1062,7 @@ export async function createScoutingPlayer(p: Omit<ScoutingPlayer, 'id' | 'creat
 }
 
 export async function updateScoutingPlayer(p: ScoutingPlayer): Promise<void> {
-  const { error } = await supabase.from('scouting_players').update({
+  await actualizarSoloCambios('scouting_players', p.id, {
     full_name: p.fullName,
     position_1: p.position1 ?? null,
     position_2: p.position2 ?? null,
@@ -1037,8 +1082,7 @@ export async function updateScoutingPlayer(p: ScoutingPlayer): Promise<void> {
     categoria: p.categoria ?? null,
     segunda_categoria: p.segundaCategoria ?? null,
     comentarios: p.comentarios ?? null,
-  }).eq('id', p.id)
-  if (error) throw error
+  })
 }
 
 export async function deleteScoutingPlayer(id: string): Promise<void> {
@@ -1385,6 +1429,7 @@ export async function mergeScoutingMatches(
 // ── Scouting Matches ────────────────────────────────────────
 
 function dbToScoutingMatch(row: Record<string, unknown>): ScoutingMatch {
+  recordarFila('scouting_matches', row)
   return {
     id: row.id as string,
     date: row.date as string,
@@ -1434,7 +1479,7 @@ export async function createScoutingMatch(m: Omit<ScoutingMatch, 'id' | 'created
 }
 
 export async function updateScoutingMatch(m: ScoutingMatch): Promise<void> {
-  const { error } = await supabase.from('scouting_matches').update({
+  await actualizarSoloCambios('scouting_matches', m.id, {
     date: m.date,
     time: m.time ?? null,
     home_team: m.homeTeam,
@@ -1444,8 +1489,7 @@ export async function updateScoutingMatch(m: ScoutingMatch): Promise<void> {
     view_mode: m.viewMode ?? null,
     status: m.status ?? 'pendiente',
     notes: m.notes ?? null,
-  }).eq('id', m.id)
-  if (error) throw error
+  })
 }
 
 export async function deleteScoutingMatch(id: string): Promise<void> {

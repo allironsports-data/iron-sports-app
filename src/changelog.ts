@@ -21,6 +21,9 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-01',
     items: [
+      'Firmar: si dos personas apuntan algo en la misma tarjeta casi a la vez, ya no se pierde ninguna de las dos notas. Al guardar solo se escribe lo que has cambiado tú, sobre la versión que hay en ese momento',
+      'Tareas, jugadores de Captación y partidos: al guardar solo se escribe lo que has cambiado. Antes se guardaba la ficha entera y podía llevarse por delante un cambio que otra persona acababa de hacer en otro campo (por ejemplo, activar el campograma borraba la valoración recién puesta por otro scout)',
+      'Más ligero con todo el equipo conectado: cuando alguien mete un informe, mueve una tarea o toca un partido, a los demás les llega solo ese cambio, en vez de volver a descargarse la tabla entera (unos 12.000 informes por cada informe nuevo)',
       'Móvil: la barra de abajo pasa de siete botones a cinco (Tareas · Captación · Pipeline · Distribución · Más). «Más» abre Buscar y Boulema. «Tareas» lleva a la lista nueva; la pantalla «Mi día» antigua deja de estar en la barra',
       'Móvil: todo lo que flota abajo (avisos, «Sincronizando», la barra de mover vencidas, los botones «+» de Distribución, el botón de Planificación) se coloca por encima de la barra en vez de montarse sobre ella, también en iPhone. El botón de Planificación se quita mientras hay una ficha flotante abierta',
       'Móvil, Tareas: cada fila tiene un «⋯» al final que saca hecha, reprogramar, reasignar y abrir (antes reasignar solo existía con ratón). El círculo de estado es más fácil de acertar con el dedo, y deslizar desde el mismo borde de la pantalla ya no compite con el «atrás» del navegador',
