@@ -390,7 +390,7 @@ export function PlayerDetail({
               <ContractTab player={player} onUpdate={onUpdatePlayer} isAdmin={currentProfile.is_admin} />
             )}
             {activeTab === "rendimiento" && (
-              <PerformanceTab player={player} profiles={profiles} onUpdate={onUpdatePlayer}
+              <PerformanceTab player={player} profiles={profiles} currentProfile={currentProfile} onUpdate={onUpdatePlayer}
                 postpartidos={postpartidos} scoutingMatches={scoutingMatches} allTasks={allTasks} />
             )}
             {activeTab === "info" && (
@@ -1000,8 +1000,8 @@ function ContractTab({ player, onUpdate, isAdmin }: { player: Player; onUpdate: 
 }
 
 /* ========== PERFORMANCE TAB ========== */
-function PerformanceTab({ player, profiles, onUpdate, postpartidos = [], scoutingMatches = [], allTasks = [] }: {
-  player: Player; profiles: Profile[]; onUpdate: (p: Player) => void | Promise<void>;
+function PerformanceTab({ player, profiles, currentProfile, onUpdate, postpartidos = [], scoutingMatches = [], allTasks = [] }: {
+  player: Player; profiles: Profile[]; currentProfile: Profile; onUpdate: (p: Player) => void | Promise<void>;
   postpartidos?: Postpartido[]; scoutingMatches?: ScoutingMatch[]; allTasks?: Task[];
 }) {
   const [section, setSection] = useState<"informes" | "video" | "postpartidos">("informes");
@@ -1153,13 +1153,18 @@ function PerformanceTab({ player, profiles, onUpdate, postpartidos = [], scoutin
                       <p className="text-sm font-medium text-slate-800 truncate">{v.description}</p>
                     </div>
                     <p className="text-xs text-slate-400">
-                      {new Date(v.date).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}
+                      {parseDia(v.date.slice(0, 10)).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}
+                      {v.time ? ` · ${v.time}` : ""}
                       {v.duration ? ` · ${v.duration} min` : ""}
+                      {v.lugar ? ` · 📍 ${v.lugar}` : ""}
+                      {v.responsableId ? ` · ${profiles.find(p => p.id === v.responsableId)?.name.split(" ")[0] ?? ""}` : ""}
                     </p>
-                    <a href={v.videoUrl} target="_blank" rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 mt-1.5 text-xs text-blue-600 hover:text-blue-800 hover:underline">
-                      <ExternalLink className="w-3 h-3" /> Ver vídeo
-                    </a>
+                    {v.videoUrl && (
+                      <a href={v.videoUrl} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 mt-1.5 text-xs text-blue-600 hover:text-blue-800 hover:underline">
+                        <ExternalLink className="w-3 h-3" /> Ver vídeo
+                      </a>
+                    )}
                   </div>
                   <button onClick={() => setVideoToDelete(v)}
                     aria-label="Eliminar sesión de vídeo"
@@ -1252,7 +1257,7 @@ function PerformanceTab({ player, profiles, onUpdate, postpartidos = [], scoutin
           }} />
       )}
       {showAddVideo && (
-        <AddVideoSessionModal onClose={() => setShowAddVideo(false)}
+        <AddVideoSessionModal profiles={profiles} currentProfileId={currentProfile.id} onClose={() => setShowAddVideo(false)}
           onSave={async (v) => {
             try { await onUpdate({ ...player, videoSessions: [v, ...(player.videoSessions ?? [])] }); setShowAddVideo(false); }
             catch { showToast("No se pudo guardar", "error"); }
@@ -1302,13 +1307,18 @@ function PerformanceTab({ player, profiles, onUpdate, postpartidos = [], scoutin
   );
 }
 
-function AddVideoSessionModal({ onClose, onSave }: {
+function AddVideoSessionModal({ profiles, currentProfileId, onClose, onSave }: {
+  profiles: Profile[]; currentProfileId: string;
   onClose: () => void; onSave: (v: VideoSession) => void;
 }) {
+  // Quien la lleva: por defecto quien la apunta (lo normal es el analista, no el gestor del jugador)
+  const [responsableId, setResponsableId] = useState(currentProfileId);
   const [date, setDate] = useState(hoyISO());
   const [videoUrl, setVideoUrl] = useState("");
   const [description, setDescription] = useState("");
   const [duration, setDuration] = useState("");
+  const [time, setTime] = useState("");
+  const [lugar, setLugar] = useState("");
   const [urlError, setUrlError] = useState(false);
 
   useEscapeKey(onClose);
@@ -1322,12 +1332,30 @@ function AddVideoSessionModal({ onClose, onSave }: {
         </div>
         <form onSubmit={(e) => {
           e.preventDefault();
-          if (!isValidUrl(videoUrl)) { setUrlError(true); return; }
-          onSave({ id: "vs" + Date.now(), date, videoUrl: normalizeUrl(videoUrl), description, duration: duration ? parseInt(duration) : undefined });
+          // El enlace es opcional: una sesión se puede dejar agendada antes de tener el vídeo
+          if (videoUrl.trim() && !isValidUrl(videoUrl)) { setUrlError(true); return; }
+          onSave({
+            id: "vs" + Date.now(), date, videoUrl: videoUrl.trim() ? normalizeUrl(videoUrl) : "", description,
+            duration: duration ? parseInt(duration) : undefined,
+            time: time || undefined, lugar: lugar.trim() || undefined,
+            responsableId: responsableId || undefined,
+          });
         }} className="p-4 space-y-3 pb-8">
-          <TF label="Fecha" value={date} onChange={setDate} type="date" required />
+          <div className="grid grid-cols-2 gap-3">
+            <TF label="Fecha" value={date} onChange={setDate} type="date" required />
+            <TF label="Hora (opcional)" value={time} onChange={setTime} type="time" />
+          </div>
+          <TF label="Lugar (opcional)" value={lugar} onChange={setLugar} placeholder="Ej. Oficina, videollamada, ciudad deportiva…" />
           <div>
-            <TF label="Enlace al vídeo (Streamable, YouTube, etc.)" value={videoUrl} onChange={(v) => { setVideoUrl(v); setUrlError(false); }} required />
+            <label className="block text-xs font-medium text-slate-600 mb-1">Encargado</label>
+            <select value={responsableId} onChange={(e) => setResponsableId(e.target.value)}
+              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
+              <option value="">— Los encargados del jugador —</option>
+              {profiles.map(p => <option key={p.id} value={p.id}>{p.avatar} {p.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <TF label="Enlace al vídeo (opcional: Streamable, YouTube…)" value={videoUrl} onChange={(v) => { setVideoUrl(v); setUrlError(false); }} />
             {urlError && <p className="text-xs text-red-500 mt-1">URL no válida</p>}
           </div>
           <TF label="Duración (minutos, opcional)" value={duration} onChange={setDuration} type="number" />
@@ -1337,7 +1365,7 @@ function AddVideoSessionModal({ onClose, onSave }: {
               placeholder="Ej: Revisión de movimientos defensivos, posicionamiento en bloque medio..."
               className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 resize-none" />
           </div>
-          <button type="submit" disabled={!videoUrl || !description}
+          <button type="submit" disabled={!description}
             className="w-full rounded-md text-white text-sm font-medium py-2.5 disabled:opacity-40 bg-primary hover:bg-primary/90 transition-colors">Guardar sesión</button>
         </form>
       </div>

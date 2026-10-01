@@ -21,6 +21,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-01',
     items: [
+      'Sesiones de videoanálisis (ficha del jugador → Rendimiento): ahora se les puede poner hora, lugar y encargado, y salen en el calendario a esa hora, con el lugar y a nombre del encargado (por defecto quien la apunta, que suele ser el analista, y no el gestor del jugador). El enlace al vídeo pasa a ser opcional, para poder dejar la sesión agendada antes de tener el vídeo',
       'Corregido: un evento que apuntabas para otras personas salía a tu nombre y en tu lista. Ahora un evento es de quienes asisten, no de quien lo crea; solo si no marcas a nadie queda a tu nombre',
       'Tareas que nacen del pipeline: al abrir la tarea de una próxima acción de Firmar, debajo de los comentarios se ve el historial de la tarjeta del jugador (los últimos apuntes) y un botón «Abrir tarjeta»',
       'Viajes en el calendario: botón «Viaje» para planear una salida de varios días (destino, ida, vuelta y quién va). El viaje sale en el calendario cada uno de sus días, arriba del todo, a la vista de todo el equipo y a nombre de quienes viajan',

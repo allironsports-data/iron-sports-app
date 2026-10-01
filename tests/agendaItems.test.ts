@@ -243,7 +243,13 @@ describe('construirAgenda · sesiones de videoanálisis del jugador', () => {
     expect(items[0]).toMatchObject({
       id: 'video:j1:v1', tipo: 'evento', origen: 'evento', categoria: 'Videoanálisis', titulo: 'Videoanálisis — Salida de balón',
       personId: OTRO, otrosIds: [YO], playerId: 'j1', abrir: { tipo: 'jugador', playerId: 'j1' }, estado: 'pendiente',
-    })
+    })  })
+
+  it('con encargado, hora y lugar: sale a nombre del encargado (el analista), no de los gestores', () => {
+    const p = { ...jugador('j1', 'Iker'), managedBy: [OTRO], videoSessions: [
+      { id: 'v1', date: HOY, videoUrl: '', description: 'Rupturas', time: '17:00', lugar: 'Oficina', responsableId: YO },
+    ] } as Player
+    expect(construirAgenda(base({ players: [p] }))[0]).toMatchObject({ personId: YO, otrosIds: [], hora: '17:00', lugar: 'Oficina' })
   })
 })
 

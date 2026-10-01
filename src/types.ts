@@ -147,6 +147,9 @@ export interface VideoSession {
   videoUrl: string;
   description: string;
   duration?: number;             // minutes
+  time?: string;                 // "HH:MM", opcional: sale en el calendario a esa hora
+  lugar?: string;                // dónde es la sesión, opcional
+  responsableId?: string;        // profiles.id de quien la lleva (el analista). Sin valor = encargados del jugador
 }
 
 // ---- Club interest / market info ----
