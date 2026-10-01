@@ -159,7 +159,13 @@ export interface VideoSession {
   duration?: number;             // minutes
   time?: string;                 // "HH:MM", opcional: sale en el calendario a esa hora
   lugar?: string;                // dónde es la sesión, opcional
-  responsableId?: string;        // profiles.id de quien la lleva (el analista). Sin valor = encargados del jugador
+  responsableId?: string;        // (antiguo) un solo encargado. Sustituido por `participantes`
+  /** Qué servicio es: sesion | video | recurso | entrenamiento | informe_datos. Sin valor = sesion (ver lib/serviciosAnalisis.ts) */
+  tipo?: string;
+  /** Título corto. `description` queda para el detalle. Los antiguos solo tienen description. */
+  titulo?: string;
+  /** profiles.id de las personas del equipo que han participado */
+  participantes?: string[];
 }
 
 // ---- Club interest / market info ----

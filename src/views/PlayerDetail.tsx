@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import logoImg from '../assets/logo.jpeg';
 import type {
   Player, Task,
-  PerformanceNote, PlayerLink, VideoSession,
+  PerformanceNote, PlayerLink, 
   DistributionEntry, ClubNegotiation, Club,
   PlayerActivity, Postpartido, ScoutingMatch,
 } from "../types";
@@ -23,6 +23,8 @@ import { isValidUrl, normalizeUrl, isValidName, isValidBirthDate } from "../lib/
 import { hoyISO, parseDia, esVencida } from "../lib/fechas";
 import { construirAgenda, type AgendaItem } from "../lib/agendaItems";
 import { AgendaRow } from "../components/agenda/AgendaRow";
+import { ServiciosAnalisis } from "./player/ServiciosAnalisis";
+import { SERVICIO_META, tipoDeServicio, tituloDeServicio } from "../lib/serviciosAnalisis";
 import {
   ArrowLeft, LogOut, ClipboardList, FileText,
   TrendingUp, User, Plus, X, AlertCircle,
@@ -1006,14 +1008,12 @@ function PerformanceTab({ player, profiles, currentProfile, onUpdate, postpartid
 }) {
   const [section, setSection] = useState<"informes" | "video" | "postpartidos">("informes");
   const [showAddNote, setShowAddNote] = useState(false);
-  const [showAddVideo, setShowAddVideo] = useState(false);
   const [editingNote, setEditingNote] = useState<PerformanceNote | null>(null);
   const [dbNotes, setDbNotes] = useState<PerformanceNote[]>(player.performance);
   // Id del jugador cuyas notas ya se han cargado: «cargando» se deriva, sin setState en el efecto
   const [notesLoadedFor, setNotesLoadedFor] = useState<string | null>(null);
   const notesLoading = notesLoadedFor !== player.id;
   const [noteToDelete, setNoteToDelete] = useState<PerformanceNote | null>(null);
-  const [videoToDelete, setVideoToDelete] = useState<VideoSession | null>(null);
   const { showToast } = useToastContext();
 
   useEffect(() => {
@@ -1022,7 +1022,6 @@ function PerformanceTab({ player, profiles, currentProfile, onUpdate, postpartid
       .catch(() => setNotesLoadedFor(player.id));
   }, [player.id]);
 
-  const videos = [...(player.videoSessions ?? [])].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   const tareasVideo = allTasks.filter(t => t.playerId === player.id && t.label === 'Videoanálisis')
     .sort((a, b) => Number(a.status === 'completada') - Number(b.status === 'completada') || (a.dueDate ?? '9').localeCompare(b.dueDate ?? '9'));
   const notes = [...dbNotes].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -1033,7 +1032,7 @@ function PerformanceTab({ player, profiles, currentProfile, onUpdate, postpartid
       <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
         {([
           { id: "informes", label: "Informes", icon: <BookOpen className="w-3.5 h-3.5" />, count: notesLoading ? undefined : notes.length },
-          { id: "video", label: "Vídeoanalisis", icon: <Video className="w-3.5 h-3.5" />, count: videos.length + tareasVideo.length },
+          { id: "video", label: "Análisis", icon: <Video className="w-3.5 h-3.5" />, count: (player.videoSessions?.length ?? 0) + tareasVideo.length },
           { id: "postpartidos", label: "Postpartidos", icon: <ClipboardList className="w-3.5 h-3.5" />, count: postpartidos.length },
         ] as const).map(s => (
           <button key={s.id} onClick={() => setSection(s.id)}
@@ -1111,71 +1110,7 @@ function PerformanceTab({ player, profiles, currentProfile, onUpdate, postpartid
 
       {/* VIDEO SESSIONS SECTION */}
       {section === "video" && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-slate-800">Sesiones de vídeoanalisis</h3>
-            <button onClick={() => setShowAddVideo(true)}
-              className="inline-flex items-center gap-1 rounded-md text-white text-xs font-medium px-2.5 py-1.5 bg-primary hover:bg-primary/90 transition-colors">
-              <Plus className="w-3.5 h-3.5" />Nueva sesión
-            </button>
-          </div>
-          {/* Tareas de tipo «Videoanálisis» de este jugador: lo pendiente y lo ya hecho */}
-          {tareasVideo.length > 0 && (
-            <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100">
-              <p className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">Tareas de videoanálisis</p>
-              {tareasVideo.map(t => (
-                <div key={t.id} className="flex items-center gap-2 px-3 py-1.5">
-                  <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${t.status === 'completada' ? 'bg-emerald-500' : t.status === 'en_progreso' ? 'bg-blue-500' : 'border-2 border-slate-300'}`} />
-                  <span className={`flex-1 min-w-0 truncate text-xs font-medium ${t.status === 'completada' ? 'line-through text-slate-400' : 'text-slate-800'}`} title={t.title}>{t.title}</span>
-                  <span className="text-[11px] text-slate-400 flex-shrink-0">
-                    {t.status === 'completada' ? 'hecha' : t.status === 'en_progreso' ? 'en curso' : 'pendiente'}
-                    {t.dueDate ? ` · ${parseDia(t.dueDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}` : ''}
-                  </span>
-                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white bg-primary flex-shrink-0">
-                    {profiles.find(p => p.id === t.assigneeId)?.avatar ?? '?'}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-          {videos.length === 0 && (
-            <div className="text-center py-10 text-sm text-slate-400 bg-white border border-slate-200 rounded-lg">
-              Sin sesiones registradas
-            </div>
-          )}
-          <div className="space-y-2">
-            {videos.map(v => (
-              <div key={v.id} className="bg-white border border-slate-200 rounded-lg p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Video className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
-                      <p className="text-sm font-medium text-slate-800 truncate">{v.description}</p>
-                    </div>
-                    <p className="text-xs text-slate-400">
-                      {parseDia(v.date.slice(0, 10)).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}
-                      {v.time ? ` · ${v.time}` : ""}
-                      {v.duration ? ` · ${v.duration} min` : ""}
-                      {v.lugar ? ` · 📍 ${v.lugar}` : ""}
-                      {v.responsableId ? ` · ${profiles.find(p => p.id === v.responsableId)?.name.split(" ")[0] ?? ""}` : ""}
-                    </p>
-                    {v.videoUrl && (
-                      <a href={v.videoUrl} target="_blank" rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 mt-1.5 text-xs text-blue-600 hover:text-blue-800 hover:underline">
-                        <ExternalLink className="w-3 h-3" /> Ver vídeo
-                      </a>
-                    )}
-                  </div>
-                  <button onClick={() => setVideoToDelete(v)}
-                    aria-label="Eliminar sesión de vídeo"
-                    className="p-2 sm:p-1 text-slate-500 hover:text-red-500 flex-shrink-0">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <ServiciosAnalisis player={player} profiles={profiles} currentProfile={currentProfile} tareas={tareasVideo} onUpdate={onUpdate} />
       )}
 
       {/* POSTPARTIDOS SECTION */}
@@ -1256,13 +1191,6 @@ function PerformanceTab({ player, profiles, currentProfile, onUpdate, postpartid
             setEditingNote(null);
           }} />
       )}
-      {showAddVideo && (
-        <AddVideoSessionModal profiles={profiles} currentProfileId={currentProfile.id} onClose={() => setShowAddVideo(false)}
-          onSave={async (v) => {
-            try { await onUpdate({ ...player, videoSessions: [v, ...(player.videoSessions ?? [])] }); setShowAddVideo(false); }
-            catch { showToast("No se pudo guardar", "error"); }
-          }} />
-      )}
 
       <ConfirmModal
         open={!!noteToDelete}
@@ -1284,91 +1212,6 @@ function PerformanceTab({ player, profiles, currentProfile, onUpdate, postpartid
         onCancel={() => setNoteToDelete(null)}
       />
 
-      <ConfirmModal
-        open={!!videoToDelete}
-        title="¿Eliminar sesión de vídeo?"
-        message={videoToDelete?.description ? `Se eliminará «${videoToDelete.description}».` : "Esta acción no se puede deshacer."}
-        confirmLabel="Eliminar"
-        variant="danger"
-        onConfirm={async () => {
-          if (!videoToDelete) return;
-          try {
-            await Promise.resolve(onUpdate({ ...player, videoSessions: player.videoSessions.filter(s => s.id !== videoToDelete.id) }));
-            setVideoToDelete(null);
-            showToast("Sesión eliminada", "info");
-          } catch {
-            showToast("No se pudo eliminar la sesión", "error");
-          }
-        }}
-        onCancel={() => setVideoToDelete(null)}
-      />
-
-    </div>
-  );
-}
-
-function AddVideoSessionModal({ profiles, currentProfileId, onClose, onSave }: {
-  profiles: Profile[]; currentProfileId: string;
-  onClose: () => void; onSave: (v: VideoSession) => void;
-}) {
-  // Quien la lleva: por defecto quien la apunta (lo normal es el analista, no el gestor del jugador)
-  const [responsableId, setResponsableId] = useState(currentProfileId);
-  const [date, setDate] = useState(hoyISO());
-  const [videoUrl, setVideoUrl] = useState("");
-  const [description, setDescription] = useState("");
-  const [duration, setDuration] = useState("");
-  const [time, setTime] = useState("");
-  const [lugar, setLugar] = useState("");
-  const [urlError, setUrlError] = useState(false);
-
-  useEscapeKey(onClose);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-0 sm:p-4">
-      <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-sm max-h-[90vh] overflow-y-auto safe-area-bottom">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-          <h2 className="text-sm font-semibold text-slate-800">Nueva sesión de vídeoanalisis</h2>
-          <button onClick={onClose} aria-label="Cerrar" className="p-2 -m-2 sm:p-1 sm:-m-1 text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
-        </div>
-        <form onSubmit={(e) => {
-          e.preventDefault();
-          // El enlace es opcional: una sesión se puede dejar agendada antes de tener el vídeo
-          if (videoUrl.trim() && !isValidUrl(videoUrl)) { setUrlError(true); return; }
-          onSave({
-            id: "vs" + Date.now(), date, videoUrl: videoUrl.trim() ? normalizeUrl(videoUrl) : "", description,
-            duration: duration ? parseInt(duration) : undefined,
-            time: time || undefined, lugar: lugar.trim() || undefined,
-            responsableId: responsableId || undefined,
-          });
-        }} className="p-4 space-y-3 pb-8">
-          <div className="grid grid-cols-2 gap-3">
-            <TF label="Fecha" value={date} onChange={setDate} type="date" required />
-            <TF label="Hora (opcional)" value={time} onChange={setTime} type="time" />
-          </div>
-          <TF label="Lugar (opcional)" value={lugar} onChange={setLugar} placeholder="Ej. Oficina, videollamada, ciudad deportiva…" />
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Encargado</label>
-            <select value={responsableId} onChange={(e) => setResponsableId(e.target.value)}
-              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
-              <option value="">— Los encargados del jugador —</option>
-              {profiles.map(p => <option key={p.id} value={p.id}>{p.avatar} {p.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <TF label="Enlace al vídeo (opcional: Streamable, YouTube…)" value={videoUrl} onChange={(v) => { setVideoUrl(v); setUrlError(false); }} />
-            {urlError && <p className="text-xs text-red-500 mt-1">URL no válida</p>}
-          </div>
-          <TF label="Duración (minutos, opcional)" value={duration} onChange={setDuration} type="number" />
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Descripción de la sesión</label>
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} required rows={3}
-              placeholder="Ej: Revisión de movimientos defensivos, posicionamiento en bloque medio..."
-              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 resize-none" />
-          </div>
-          <button type="submit" disabled={!description}
-            className="w-full rounded-md text-white text-sm font-medium py-2.5 disabled:opacity-40 bg-primary hover:bg-primary/90 transition-colors">Guardar sesión</button>
-        </form>
-      </div>
     </div>
   );
 }
@@ -2078,7 +1921,7 @@ function buildMergedEvents(
       id: 'vs-' + v.id,
       date: v.date,
       type: 'video',
-      title: v.description || 'Sesión de vídeoanalisis',
+      title: `${SERVICIO_META[tipoDeServicio(v)].label} — ${tituloDeServicio(v)}`,
       extra: v.duration ? `${v.duration} min` : undefined,
     });
   });

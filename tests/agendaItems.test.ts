@@ -241,7 +241,7 @@ describe('construirAgenda · sesiones de videoanálisis del jugador', () => {
     const items = construirAgenda(base({ players: [p] }))
     expect(items).toHaveLength(1)
     expect(items[0]).toMatchObject({
-      id: 'video:j1:v1', tipo: 'evento', origen: 'evento', categoria: 'Videoanálisis', titulo: 'Videoanálisis — Salida de balón',
+      id: 'video:j1:v1', tipo: 'evento', origen: 'evento', categoria: 'Sesión de videoanálisis', titulo: 'Sesión de videoanálisis — Salida de balón',
       personId: OTRO, otrosIds: [YO], playerId: 'j1', abrir: { tipo: 'jugador', playerId: 'j1' }, estado: 'pendiente',
     })  })
 
@@ -250,6 +250,15 @@ describe('construirAgenda · sesiones de videoanálisis del jugador', () => {
       { id: 'v1', date: HOY, videoUrl: '', description: 'Rupturas', time: '17:00', lugar: 'Oficina', responsableId: YO },
     ] } as Player
     expect(construirAgenda(base({ players: [p] }))[0]).toMatchObject({ personId: YO, otrosIds: [], hora: '17:00', lugar: 'Oficina' })
+  })
+
+  it('con tipo, título y varios participantes: es de todos ellos y el título dice qué servicio es', () => {
+    const p = { ...jugador('j1', 'Iker'), managedBy: ['gestor'], videoSessions: [
+      { id: 'v1', date: HOY, videoUrl: '', tipo: 'entrenamiento', titulo: 'Finalización', description: 'Detalle largo', participantes: [OTRO, YO] },
+    ] } as Player
+    expect(construirAgenda(base({ players: [p] }))[0]).toMatchObject({
+      titulo: 'Entrenamiento — Finalización', categoria: 'Entrenamiento', personId: OTRO, otrosIds: [YO],
+    })
   })
 })
 

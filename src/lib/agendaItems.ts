@@ -17,6 +17,7 @@ import type {
 } from '../types'
 import { fechaLocal, sumarDias } from './fechas'
 import { diasDeViaje } from './viajes'
+import { SERVICIO_META, tipoDeServicio, tituloDeServicio, participantesDeServicio } from './serviciosAnalisis'
 import { norm } from './texto'
 
 export type AgendaTipo = 'tarea' | 'llamada' | 'telefono' | 'reunion' | 'postpartido' | 'partido' | 'evento' | 'viaje'
@@ -376,19 +377,21 @@ export function construirAgenda(input: AgendaInput): AgendaItem[] {
     for (const v of p.videoSessions ?? []) {
       const dia = v.date?.slice(0, 10)
       if (!dia || dia < rango.desde || dia > rango.hasta) continue
+      // Es de quienes han participado (analistas…); los antiguos, sin nadie puesto, de los gestores del jugador
+      const quienes = participantesDeServicio(v)
+      const tipoServicio = SERVICIO_META[tipoDeServicio(v)].label
       items.push({
         id: `video:${p.id}:${v.id}`,
         tipo: 'evento',
-        titulo: v.description ? `Videoanálisis — ${v.description}` : 'Sesión de videoanálisis',
-        // Es de quien la lleva (el analista); las antiguas, sin encargado, de los gestores del jugador
-        personId: v.responsableId ?? p.managedBy?.[0] ?? '',
-        otrosIds: v.responsableId ? [] : (p.managedBy?.slice(1) ?? []),
+        titulo: `${tipoServicio} — ${tituloDeServicio(v)}`,
+        personId: quienes[0] ?? p.managedBy?.[0] ?? '',
+        otrosIds: quienes.length > 0 ? quienes.slice(1) : (p.managedBy?.slice(1) ?? []),
         fecha: dia,
         hora: v.time || undefined,
         lugar: v.lugar || undefined,
         playerId: p.id,
         playerNombre: p.name,
-        categoria: 'Videoanálisis',
+        categoria: tipoServicio,
         estado: 'pendiente',
         prioridadAlta: false,
         origen: 'evento',
