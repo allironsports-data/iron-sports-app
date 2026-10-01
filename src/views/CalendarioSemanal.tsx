@@ -40,7 +40,7 @@ const corta = (iso: string) => parseDia(iso).toLocaleDateString('es-ES', { day: 
 const BTN = 'px-2 py-1 rounded-lg border border-slate-200 text-xs text-slate-600 bg-white hover:bg-slate-50 transition-colors'
 const SELECT = 'text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30'
 /** Líneas que se ven en una columna de la semana antes del «+N más» */
-const MAX_COLUMNA = 14
+const MAX_COLUMNA = 12
 
 export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, currentProfile, onAbrir, onNuevo, notas = {}, onGuardarMiNota }: CalendarioSemanalProps) {
   // Nota propia en edición (null = no se está editando)
@@ -49,6 +49,10 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
   const [grupo, setGrupo] = useState<string>('all')
   const [personaId, setPersonaId] = useState<string>('all')
   const [ocultarHechas, setOcultarHechas] = useState(false)
+  // Semana como agenda (días apilados, todo el texto) o en 7 columnas
+  const [vista, setVista] = useState<'agenda' | 'columnas'>(
+    () => (sessionStorage.getItem('nav_cal_vista') as 'agenda' | 'columnas') ?? 'agenda')
+  const cambiarVista = (v: 'agenda' | 'columnas') => { sessionStorage.setItem('nav_cal_vista', v); setVista(v); setAmpliado(null) }
   // Día con el menú de alta abierto (vista de semana)
   const [menuDia, setMenuDia] = useState<string | null>(null)
   const dias = useMemo(() => diasDeSemana(lunes), [lunes])
@@ -100,13 +104,13 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
         key={it.id}
         onClick={e => { e.stopPropagation(); onAbrir(it) }}
         title={`${m.label}: ${it.titulo}${it.playerNombre ? ` · ${it.playerNombre}` : ''}${it.hora ? ` · ${it.hora}` : ''}${quien.length ? ` · ${quien.join(', ')}` : ''}`}
-        className={`w-full flex items-center gap-1 rounded px-1 py-px text-left text-[11px] leading-tight hover:bg-slate-200/70 transition-colors ${hecha ? 'opacity-50' : ''} ${vencida ? 'text-red-600' : 'text-slate-700'}`}
+        className={`w-full flex items-start gap-1 rounded px-1 py-0.5 text-left text-[11px] leading-tight hover:bg-slate-200/70 transition-colors ${hecha ? 'opacity-50' : ''} ${vencida ? 'text-red-600' : 'text-slate-700'}`}
       >
-        <m.Icon className={`w-3 h-3 flex-shrink-0 ${m.cls}`} />
+        <m.Icon className={`w-3 h-3 flex-shrink-0 mt-px ${m.cls}`} />
         {it.hora && <span className="flex-shrink-0 font-semibold tabular-nums">{it.hora}</span>}
-        <span className={`min-w-0 flex-1 truncate ${hecha ? 'line-through' : ''}`}>
+        <span className={`min-w-0 flex-1 break-words line-clamp-3 ${hecha ? 'line-through' : ''}`}>
           {it.prioridadAlta && !hecha && <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 mr-1 align-middle" />}
-          {it.titulo}
+          {it.titulo}{it.playerNombre && <span className="text-slate-400"> · {it.playerNombre}</span>}
         </span>
         {quien.length > 0 && (
           <span className="flex-shrink-0 text-[8px] font-bold text-primary tracking-tight">
@@ -162,7 +166,7 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
     }
     return (
       <div className="mb-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
-        {[yo, ...profiles.filter(p => p.id !== yo.id)].map(p => {
+        {[yo, ...profiles.filter(p => p.id !== yo.id && !p.hidden_from_status)].map(p => {
           const suyos = delDia.filter(it => itemEsDe(it, p.id))
           const abiertos = suyos.filter(it => it.estado !== 'completada')
             .sort((a, b) => Number(b.estado === 'en_progreso') - Number(a.estado === 'en_progreso') || (a.hora ?? '99').localeCompare(b.hora ?? '99'))
@@ -231,6 +235,16 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
         <span className="text-xs font-semibold text-slate-700 mr-auto">
           {corta(dias[0])} – {parseDia(dias[6]).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
         </span>
+        {esEscritorio && (
+          <div className="flex items-center gap-0 bg-slate-100 rounded-lg p-0.5">
+            {(['agenda', 'columnas'] as const).map(v => (
+              <button key={v} onClick={() => cambiarVista(v)}
+                className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-colors ${vista === v && diaIdx === null ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                {v === 'agenda' ? 'Agenda' : 'Columnas'}
+              </button>
+            ))}
+          </div>
+        )}
         <select value={grupo} onChange={e => setGrupo(e.target.value)} aria-label="Filtrar por tipo" className={SELECT}>
           <option value="all">Todos los tipos</option>
           {GRUPOS_TIPO.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}
@@ -249,8 +263,35 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
         </button>
       </div>
 
-      {diaIdx === null ? (
-        /* ── Semana: 7 días enteros ── */
+      {diaIdx === null && vista === 'agenda' ? (
+        /* ── Agenda: los 7 días apilados, cada cosa con todo su texto ── */
+        <div className="space-y-2">
+          {dias.map((d, i) => {
+            const es = porDia[i]
+            const pasado = d < hoy
+            return (
+              <section key={d} className={`bg-white border rounded-lg ${d === hoy ? 'border-blue-300' : 'border-slate-200'} ${pasado && es.length === 0 ? 'opacity-60' : ''}`}>
+                <div className={`flex items-center gap-2 px-2.5 py-1 ${es.length > 0 ? 'border-b border-slate-100' : ''} ${d === hoy ? 'bg-blue-50 rounded-t-lg' : ''}`}>
+                  <button onClick={() => setAmpliado(i)} title="Ver el día con el equipo"
+                    className={`text-xs font-bold first-letter:uppercase hover:underline ${d === hoy ? 'text-blue-700' : 'text-slate-700'}`}>
+                    {parseDia(d).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short' })}{d === hoy && ' · hoy'}
+                  </button>
+                  <span className="text-[11px]">{es.length > 0 ? carga(es) : <span className="text-slate-300">nada</span>}</span>
+                  {solapes[i].length > 0 && (
+                    <span className="flex items-center gap-1 text-[11px] font-semibold text-amber-600"><AlertTriangle className="w-3 h-3" /> Solape: {textoSolape(i)}</span>
+                  )}
+                  <div className="ml-auto flex items-center gap-1">
+                    <button onClick={() => onNuevo('tarea', personaAlta, d)} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] text-slate-500 hover:bg-slate-100 hover:text-slate-800"><Plus className="w-3 h-3" /> Tarea</button>
+                    <button onClick={() => onNuevo('evento', personaAlta, d)} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] text-slate-500 hover:bg-slate-100 hover:text-slate-800"><Plus className="w-3 h-3" /> Evento</button>
+                  </div>
+                </div>
+                {es.length > 0 && <div className="divide-y divide-slate-100">{es.map(filaDia)}</div>}
+              </section>
+            )
+          })}
+        </div>
+      ) : diaIdx === null ? (
+        /* ── Columnas: 7 días enteros, lado a lado ── */
         <div className="bg-white border border-slate-200 rounded-lg grid grid-cols-7 divide-x divide-slate-100">
           {dias.map((d, i) => {
             const es = porDia[i]

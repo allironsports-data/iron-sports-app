@@ -87,7 +87,7 @@ interface Props {
   onSetMatchSeen?: (matchId: string, scout: string | undefined, visto: boolean) => Promise<void>;
   /** true si hay una versión nueva de la app desplegada (detectado en App.tsx) */
   updateAvailable?: boolean;
-  /** Pestaña interna (calendario/equipo/postpartidos) si la lleva App: va en el hash. null = la del `view` */
+  /** Pestaña interna (equipo/postpartidos) si la lleva App: va en el hash. null = la del `view` */
   tab?: string;
   onTabChange?: (tab: TabInterna | null) => void;
   /** Jugadores de Captación — para ligar un evento a uno de ellos */
@@ -123,8 +123,8 @@ interface Props {
   onAddScoutingMatch?: (m: ScoutingMatch) => void;
 }
 
-type TabInterna = 'calendario' | 'equipo' | 'postpartidos';
-const esTabInterna = (t?: string): t is TabInterna => t === 'calendario' || t === 'equipo' || t === 'postpartidos';
+type TabInterna = 'equipo' | 'postpartidos';
+const esTabInterna = (t?: string): t is TabInterna => t === 'equipo' || t === 'postpartidos';
 
 // Birthday helpers
 function isBirthdayToday(birthDate: string): boolean {
@@ -197,7 +197,7 @@ export function Dashboard({
       ? (esTabInterna(tabProp) ? tabProp : null)
       : internalTabLocal;
   const setInternalTab = (t: TabInterna | null) => { setInternalTabLocal(t); onTabChange?.(t); };
-  const activeTab = internalTab ?? view;   // 'tareas' | 'calendario' | 'jugadores' | 'equipo' | 'postpartidos'
+  const activeTab = internalTab ?? view;   // 'tareas' | 'jugadores' | 'equipo' | 'postpartidos'
   const [search, setSearch] = useState("");
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [showAddGeneralTask, setShowAddGeneralTask] = useState(false);
@@ -486,9 +486,9 @@ export function Dashboard({
   const [groupBy, setGroupBy] = useState<'estado' | 'jugador' | 'persona'>(
     () => (sessionStorage.getItem('nav_group_by') as 'estado' | 'jugador' | 'persona') ?? 'estado'
   );
-  // «Mi día»: lista (por defecto) o el tablero de siempre; y de quién es el día
-  const [vistaTareas, setVistaTareas] = useState<'lista' | 'tablero'>(
-    () => (sessionStorage.getItem('nav_tareas_vista') as 'lista' | 'tablero') ?? 'lista'
+  // Tareas: mi lista (por defecto), el calendario de la semana o todas las tareas; y de quién es la lista
+  const [vistaTareas, setVistaTareas] = useState<'lista' | 'calendario' | 'tablero'>(
+    () => (sessionStorage.getItem('nav_tareas_vista') as 'lista' | 'calendario' | 'tablero') ?? 'lista'
   );
   const [diaPersonaId, setDiaPersonaId] = useState(currentProfile.id);
   // Calendario: lunes (AAAA-MM-DD) de la semana visible
@@ -668,8 +668,9 @@ export function Dashboard({
   const esAdmin = !!currentProfile.is_admin;
   const diaHasta = sumarDias(todayStr, 7);
   const calDomingo = sumarDias(calLunes, 6);
-  const actsDia = useActividadesRango(todayStr, diaHasta, activeTab !== 'calendario', actsVersion);
-  const actsCal = useActividadesRango(calLunes, calDomingo, activeTab === 'calendario', actsVersion);
+  const enCalendario = activeTab === 'tareas' && vistaTareas === 'calendario';
+  const actsDia = useActividadesRango(todayStr, diaHasta, !enCalendario, actsVersion);
+  const actsCal = useActividadesRango(calLunes, calDomingo, enCalendario, actsVersion);
   const agendaBase = useMemo(() => {
     const porId = new Map(scoutingPlayers.map(p => [p.id, p.fullName]));
     return {
@@ -686,10 +687,10 @@ export function Dashboard({
   );
   // Solo se calcula con el calendario abierto
   const agendaCal = useMemo(
-    () => activeTab === 'calendario'
+    () => enCalendario
       ? construirAgenda({ ...agendaBase, activities: actsCal, rango: { desde: calLunes, hasta: calDomingo } })
       : [],
-    [activeTab, agendaBase, actsCal, calLunes, calDomingo],
+    [enCalendario, agendaBase, actsCal, calLunes, calDomingo],
   );
   // Partidos de hoy de todo el equipo, de la misma lista que el calendario.
   // Un partido con varios scouts es un item por scout: aquí se juntan.
@@ -989,11 +990,10 @@ export function Dashboard({
   // Los avisos ya no ocupan la cabecera de la home: viven en la campana.
   const hayNovedades = showChangelog && !updateAvailable && changelogItems.length > 0;
   const hayContratos = repExpiring.length > 0 && !repVisto;
-  const hayCumples = birthdaysToday.length > 0 || birthdaysSoon.length > 0;
   // Cuántos bloques pinta el panel…
-  const nAvisosPanel = Number(hayNovedades) + Number(hayContratos) + Number(hayCumples) + Number(partidosHoy.length > 0);
+  const nAvisosPanel = Number(hayNovedades) + Number(hayContratos) + Number(partidosHoy.length > 0);
   // …y cuántos cuentan en el número rojo (lo de todos los días no: sería ruido)
-  const unreadNotifs = notifications.length + Number(hayNovedades) + Number(hayContratos) + Number(birthdaysToday.length > 0);
+  const unreadNotifs = notifications.length + Number(hayNovedades) + Number(hayContratos);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -1073,7 +1073,7 @@ export function Dashboard({
           </div>
         </div>
 
-        {/* Two-level nav: Mantenimiento | Distribución | Captación → Mi día | Jugadores | Equipo | Postpartidos */}
+        {/* Two-level nav: Mantenimiento | Distribución | Captación → Tareas | Jugadores | Equipo | Postpartidos */}
         {onViewChange && (
           <>
             {/* Level 1: main sections */}
@@ -1115,8 +1115,7 @@ export function Dashboard({
             {/* Level 2: Mantenimiento sub-tabs */}
             <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center bg-slate-50 border-t border-slate-100 overflow-x-auto scrollbar-none">
               {([
-                { id: 'tareas'       as const, label: 'Mi día' },
-                { id: 'calendario'   as const, label: 'Calendario' },
+                { id: 'tareas'       as const, label: 'Tareas' },
                 { id: 'jugadores'    as const, label: 'Jugadores' },
                 { id: 'equipo'       as const, label: 'Equipo' },
                 { id: 'postpartidos' as const, label: 'Postpartidos' },
@@ -1161,35 +1160,9 @@ export function Dashboard({
             <span className="text-xs font-semibold text-slate-700">Notificaciones</span>
             <button onClick={() => setShowNotifications(false)} aria-label="Cerrar notificaciones" className="text-slate-500 hover:text-slate-700"><X className="w-3.5 h-3.5" /></button>
           </div>
-          {/* Avisos: lo que antes ocupaba la cabecera de la home (cumpleaños, novedades, contratos, partidos de hoy) */}
+          {/* Avisos: lo que antes ocupaba la cabecera de la home (novedades, contratos, partidos de hoy) */}
           {nAvisosPanel > 0 && (
             <div className="p-2 space-y-2 border-b border-slate-100">
-        {/* Birthday alerts */}
-        {(birthdaysToday.length > 0 || birthdaysSoon.length > 0) && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-            {birthdaysToday.length > 0 && (
-              <div className="flex items-center gap-2 mb-1">
-                <Cake className="w-4 h-4 text-amber-600" />
-                <span className="text-sm font-semibold text-amber-800">
-                  ¡Hoy cumple años {birthdaysToday.map((p) => p.name).join(", ")}!
-                </span>
-              </div>
-            )}
-            {birthdaysSoon.length > 0 && (
-              <div className="flex items-start gap-2">
-                <Calendar className="w-4 h-4 text-amber-500 mt-0.5" />
-                <span className="text-xs text-amber-700">
-                  Próximos 7 días: {birthdaysSoon.map((p) => {
-                    const birth = new Date(p.birthDate);
-                    const dayMonth = `${birth.getDate()}/${birth.getMonth() + 1}`;
-                    return `${p.name} (${dayMonth})`;
-                  }).join(", ")}
-                </span>
-              </div>
-            )}
-          </div>
-        )}
-
         {/* Novedades tras actualizar (descartable) */}
         {showChangelog && !updateAvailable && changelogItems.length > 0 && (
           <div className="bg-violet-50 border border-violet-200 rounded-lg overflow-hidden">
@@ -1295,7 +1268,7 @@ export function Dashboard({
                 {item.titulo} <span className="font-mono font-bold text-emerald-700">{scouts.join(' ')}</span>
               </button>
             ))}
-            <button onClick={() => setInternalTab('calendario')} className="ml-auto text-[11px] text-emerald-700 hover:underline flex-shrink-0">Calendario →</button>
+            <button onClick={() => { setVistaTareas('calendario'); setInternalTab(null); onViewChange?.('tareas'); setShowNotifications(false); }} className="ml-auto text-[11px] text-emerald-700 hover:underline flex-shrink-0">Calendario →</button>
           </div>
         )}
 
@@ -1327,6 +1300,32 @@ export function Dashboard({
       )}
 
       <main className="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6 pb-20 sm:pb-6">
+        {/* Birthday alerts */}
+        {(birthdaysToday.length > 0 || birthdaysSoon.length > 0) && (
+          <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
+            {birthdaysToday.length > 0 && (
+              <div className="flex items-center gap-2 mb-1">
+                <Cake className="w-4 h-4 text-amber-600" />
+                <span className="text-sm font-semibold text-amber-800">
+                  ¡Hoy cumple años {birthdaysToday.map((p) => p.name).join(", ")}!
+                </span>
+              </div>
+            )}
+            {birthdaysSoon.length > 0 && (
+              <div className="flex items-start gap-2">
+                <Calendar className="w-4 h-4 text-amber-500 mt-0.5" />
+                <span className="text-xs text-amber-700">
+                  Próximos 7 días: {birthdaysSoon.map((p) => {
+                    const birth = new Date(p.birthDate);
+                    const dayMonth = `${birth.getDate()}/${birth.getMonth() + 1}`;
+                    return `${p.name} (${dayMonth})`;
+                  }).join(", ")}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Versión nueva desplegada: recargar para actualizar */}
         {updateAvailable && (
           <div className="mb-4 flex items-center gap-3 bg-gradient-to-r from-blue-600 to-violet-600 text-white rounded-lg px-4 py-3 shadow-sm">
@@ -1353,7 +1352,7 @@ export function Dashboard({
             <div className="mb-4 bg-white border border-slate-200 rounded-lg">
               <div className="flex items-center gap-2 px-2.5 py-1.5 border-b border-slate-100">
                 <Sun className="w-3.5 h-3.5 text-amber-500" />
-                <span className="text-xs font-semibold text-slate-700">Mi día</span>
+                <span className="text-xs font-semibold text-slate-700">Mis tareas de hoy</span>
                 <span className="text-[11px] text-slate-400">
                   {mio.hoy.length} para hoy{mio.vencidas.length > 0 && <span className="text-red-500 font-semibold"> · {mio.vencidas.length} vencida{mio.vencidas.length !== 1 ? 's' : ''}</span>}
                 </span>
@@ -1381,7 +1380,8 @@ export function Dashboard({
           <div className="min-w-0">
             <h2 className="text-sm font-bold text-slate-800 truncate">
               {vistaTareas === 'tablero' ? 'Todas las tareas'
-                : diaPersona.id === currentProfile.id ? 'Mi día' : `El día de ${diaPersona.name.split(' ')[0]}`}
+                : vistaTareas === 'calendario' ? 'Calendario del equipo'
+                : diaPersona.id === currentProfile.id ? 'Mis tareas' : `Tareas de ${diaPersona.name.split(' ')[0]}`}
               <span className="font-normal text-slate-400"> · {tituloDia(todayStr)}</span>
             </h2>
           </div>
@@ -1400,6 +1400,7 @@ export function Dashboard({
             <div className="flex items-center gap-0 bg-slate-100 rounded-lg p-0.5">
               {([
                 { id: 'lista' as const, label: 'Lista', Icono: LayoutList },
+                { id: 'calendario' as const, label: 'Calendario', Icono: Calendar },
                 { id: 'tablero' as const, label: 'Todas', Icono: Table },
               ]).map(v => (
                 <button
@@ -1445,6 +1446,27 @@ export function Dashboard({
               onCrear={onAddGeneralTask ? crearTareaRapida : undefined}
             />
           )}
+
+
+        {/* ── Calendario semanal de toda la empresa ─────────── */}
+        {vistaTareas === 'calendario' && (
+          <CalendarioSemanal
+            items={agendaCal}
+            lunes={calLunes}
+            onLunes={setCalLunes}
+            hoy={todayStr}
+            profiles={profiles}
+            currentProfile={currentProfile}
+            onAbrir={agendaAbrir}
+            notas={notasEquipo}
+            onGuardarMiNota={onUpdateMemberStatus ? guardarMiNota : undefined}
+            onNuevo={(que, personId, fecha) => {
+              if (que === 'evento') return openAddEvent({ fecha, participantIds: [personId] });
+              setTareaInicial({ assigneeId: personId, dueDate: fecha });
+              setShowAddGeneralTask(true);
+            }}
+          />
+        )}
 
           {vistaTareas === 'tablero' && (<>
           {/* ── Estadísticas + filtro rápido de tareas ── */}
@@ -1694,26 +1716,6 @@ export function Dashboard({
           </>)}
 
         </>)}
-
-        {/* ── Calendario semanal de toda la empresa ─────────── */}
-        {activeTab === 'calendario' && (
-          <CalendarioSemanal
-            items={agendaCal}
-            lunes={calLunes}
-            onLunes={setCalLunes}
-            hoy={todayStr}
-            profiles={statusProfiles}
-            currentProfile={currentProfile}
-            onAbrir={agendaAbrir}
-            notas={notasEquipo}
-            onGuardarMiNota={onUpdateMemberStatus ? guardarMiNota : undefined}
-            onNuevo={(que, personId, fecha) => {
-              if (que === 'evento') return openAddEvent({ fecha, participantIds: [personId] });
-              setTareaInicial({ assigneeId: personId, dueDate: fecha });
-              setShowAddGeneralTask(true);
-            }}
-          />
-        )}
 
         {/* ── Jugadores section ────────────────────────────── */}
         {activeTab === 'jugadores' && (<>
