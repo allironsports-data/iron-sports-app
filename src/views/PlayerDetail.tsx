@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, memo } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import logoImg from '../assets/logo.jpeg';
 import type {
   Player, Task,
@@ -21,10 +21,12 @@ import { ConfirmModal } from "../components/ConfirmModal";
 import { useEscapeKey } from "../hooks/useEscapeKey";
 import { isValidUrl, normalizeUrl, isValidName, isValidBirthDate } from "../lib/validate";
 import { hoyISO, parseDia, esVencida } from "../lib/fechas";
+import { construirAgenda, type AgendaItem } from "../lib/agendaItems";
+import { AgendaRow } from "../components/agenda/AgendaRow";
 import {
   ArrowLeft, LogOut, ClipboardList, FileText,
-  TrendingUp, User, Plus, X, Calendar, AlertCircle,
-  Clock, CheckCircle2, Trash2, Edit3, ChevronRight, Users,
+  TrendingUp, User, Plus, X, AlertCircle,
+  Clock, Trash2, Edit3, ChevronRight, Users,
   Paperclip, Download, ExternalLink, Link2,
   Video, BarChart2, BookOpen, Pencil, ChevronDown,
   Activity, History,
@@ -496,109 +498,8 @@ function ClubsDisplay({ clubs }: { clubs: Player["clubs"] }) {
   );
 }
 
-/* ========== TASK CARD (nivel de módulo: no se recrea en cada render de TasksTab) ========== */
-function taskStatusIcon(s: Task["status"]) {
-  if (s === "completada") return <CheckCircle2 className="w-4 h-4 text-emerald-500" />;
-  if (s === "en_progreso") return <Clock className="w-4 h-4 text-blue-500" />;
-  return <AlertCircle className="w-4 h-4 text-slate-300" />;
-}
-
-const TaskCard = memo(function TaskCard({
-  task, profiles, allTasks, currentProfile, hoy, selectedId, onSelect, onCycleStatus, onRequestDelete,
-}: {
-  task: Task; profiles: Profile[]; allTasks: Task[]; currentProfile: Profile;
-  /** AAAA-MM-DD de hoy, para decidir «vencida» */
-  hoy: string;
-  selectedId: string | null;
-  onSelect: (t: Task) => void;
-  onCycleStatus: (t: Task) => void;
-  onRequestDelete: (t: Task) => void;
-}) {
-  const assignee  = profiles.find((m) => m.id === task.assigneeId);
-  const dependency = task.dependsOnId ? allTasks.find((t) => t.id === task.dependsOnId) : null;
-  const isOverdue = task.status !== "completada" && esVencida(task.dueDate, hoy);
-  const isSelected = selectedId === task.id;
-  const canEdit   = currentProfile.is_admin || task.assigneeId === currentProfile.id;
-  const prioBorderColor =
-    task.priority === "alta"  ? "#E24B4A" :
-    task.priority === "media" ? "#EF9F27" : "#94a3b8";
-
-  return (
-    <div
-      onClick={() => onSelect(task)}
-      className={`bg-white border rounded-xl overflow-hidden cursor-pointer transition-all hover:shadow-sm ${
-        isSelected
-          ? "border-blue-400 ring-1 ring-blue-200"
-          : task.status === "completada"
-          ? "border-slate-100 opacity-60"
-          : isOverdue
-          ? "border-red-200"
-          : "border-slate-200 hover:border-slate-300"
-      }`}
-      style={{ borderLeftWidth: "3px", borderLeftColor: task.status === "completada" ? "#e2e8f0" : prioBorderColor }}
-    >
-      <div className="p-3">
-        <div className="flex items-start gap-3">
-          <button
-            onClick={(e) => { e.stopPropagation(); onCycleStatus(task); }}
-            className="mt-0.5 flex-shrink-0"
-          >
-            {taskStatusIcon(task.status)}
-          </button>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className={`text-sm font-medium ${task.status === "completada" ? "text-slate-400 line-through" : "text-slate-800"}`}>
-                {task.title}
-              </span>
-              {task.adminOnly && (
-                <span className="text-[9px] font-bold uppercase tracking-wide text-rose-500 border border-rose-200 bg-rose-50 rounded px-1 py-px">admin</span>
-              )}
-            </div>
-            {task.description && <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{task.description}</p>}
-            <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-              {assignee && (
-                <span className="inline-flex items-center gap-1 text-xs text-slate-500">
-                  <span className="w-4 h-4 rounded-full bg-slate-100 text-[9px] font-semibold flex items-center justify-center">{assignee.avatar}</span>
-                  {assignee.name.split(" ")[0]}
-                </span>
-              )}
-              {(task.watchers ?? []).map((wId) => {
-                const w = profiles.find((m) => m.id === wId);
-                return w ? (
-                  <span key={wId} className="inline-flex items-center gap-1 text-xs text-slate-400">
-                    <span className="w-4 h-4 rounded-full bg-blue-50 text-[9px] font-semibold flex items-center justify-center text-blue-600">{w.avatar}</span>
-                    {w.name.split(" ")[0]}
-                  </span>
-                ) : null;
-              })}
-              {task.dueDate && (
-                <span className={`inline-flex items-center gap-1 text-xs ${isOverdue ? "text-red-500 font-medium" : "text-slate-400"}`}>
-                  <Calendar className="w-3 h-3" />
-                  {parseDia(task.dueDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
-                  {isOverdue && " ⚠"}
-                </span>
-              )}
-              {dependency && <span className="text-xs text-slate-400 truncate">Dep: {dependency.title}</span>}
-            </div>
-          </div>
-          {canEdit && (
-            <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-              <button onClick={() => onSelect(task)} aria-label="Ver detalles de la tarea" className="p-2 -m-1 sm:p-1 sm:m-0 text-slate-500 hover:text-blue-500 transition-colors" title="Ver detalles">
-                <Edit3 className="w-3.5 h-3.5" />
-              </button>
-              <button onClick={() => onRequestDelete(task)} aria-label="Eliminar tarea" title="Eliminar tarea" className="p-2 -m-1 sm:p-1 sm:m-0 text-slate-500 hover:text-red-400 transition-colors">
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-});
-
 /* ========== TASKS TAB ========== */
-function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask, onUpdateTask, onDeleteTask }: {
+function TasksTab({ tasks, profiles, player, currentProfile, onAddTask, onUpdateTask, onDeleteTask }: {
   tasks: Task[]; allTasks: Task[]; profiles: Profile[]; player: Player;
   currentProfile: Profile; onAddTask: (task: Task) => void;
   onUpdateTask: (task: Task) => void | Promise<void>; onDeleteTask: (taskId: string) => void | Promise<void>;
@@ -617,37 +518,43 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
   const inProgressCount = tasks.filter((t) => t.status === "en_progreso").length;
   const completedCount = tasks.filter((t) => t.status === "completada").length;
 
-  const activeTasks = tasks.filter((t) => t.status !== "completada");
-  const completedTasks = tasks.filter((t) => t.status === "completada");
 
-  const sortByPrio = (list: Task[]) =>
-    [...list].sort((a, b) => {
-      const prio = { alta: 0, media: 1, baja: 2 };
-      // overdue first within active
-      const aOver = esVencida(a.dueDate, hoy) ? 0 : 1;
-      const bOver = esVencida(b.dueDate, hoy) ? 0 : 1;
-      if (aOver !== bOver) return aOver - bOver;
-      return prio[a.priority] - prio[b.priority];
-    });
+  // Misma fila que «Mi día» y la home. El jugador no se repite en cada fila:
+  // ya estamos en su ficha. Las completadas hace más de 30 días no salen.
+  const items = useMemo(
+    () => construirAgenda({
+      hoy, tasks, firmasEntries: [], postpartidos: [], scoutingMatches: [], matchScouts: [],
+      profiles, players: [], rango: { desde: hoy, hasta: hoy },
+    }),
+    [hoy, tasks, profiles],
+  );
+  const porItem = new Map(tasks.map(t => [`tarea:${t.id}`, t]));
+  const orden = (a: AgendaItem, b: AgendaItem) =>
+    Number(b.estado === "en_progreso") - Number(a.estado === "en_progreso") ||
+    Number(b.prioridadAlta) - Number(a.prioridadAlta) ||
+    (a.fecha ?? "9999").localeCompare(b.fecha ?? "9999") || a.titulo.localeCompare(b.titulo);
+  const activas = items.filter(it => it.estado !== "completada").sort(orden);
+  const completadas = items.filter(it => it.estado === "completada")
+    .sort((a, b) => (b.hechaEl ?? "").localeCompare(a.hechaEl ?? ""));
+  const archivadas = completedCount - completadas.length;
 
-  const inProgressFiltered = sortByPrio(activeTasks.filter((t) => t.status === "en_progreso"));
-  const pendingFiltered    = sortByPrio(activeTasks.filter((t) => t.status === "pendiente"));
-
-  const cycleStatus = async (t: Task) => {
+  const guardar = async (it: AgendaItem, cambios: Partial<Task>) => {
+    const t = porItem.get(it.id);
+    if (!t) return;
     try {
-      await onUpdateTask({ ...t, status: t.status === "completada" ? "pendiente" : t.status === "pendiente" ? "en_progreso" : "completada" });
+      await onUpdateTask({ ...t, ...cambios });
     } catch {
       showToast("No se pudo guardar", "error");
     }
   };
-
-  const cardProps = {
-    profiles, allTasks, currentProfile, hoy,
-    selectedId: detailTask?.id ?? null,
-    onSelect: setDetailTask,
-    onCycleStatus: cycleStatus,
-    onRequestDelete: setTaskToDelete,
-  };
+  const fila = (it: AgendaItem) => (
+    <AgendaRow key={it.id} item={it} hoy={hoy} profiles={profiles}
+      onAbrir={(x) => { const t = porItem.get(x.id); if (t) setDetailTask(t); }}
+      onEstado={(x, estado) => guardar(x, { status: estado })}
+      onReprogramar={(x, fecha) => guardar(x, { dueDate: fecha })}
+      onReasignar={(x, profileId) => guardar(x, { assigneeId: profileId })}
+    />
+  );
 
   return (
     <div className="space-y-3">
@@ -669,75 +576,34 @@ function TasksTab({ tasks, allTasks, profiles, player, currentProfile, onAddTask
         </button>
       </div>
 
-      {/* ── Kanban: 2 columnas principales ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
-
-        {/* Columna: Pendiente */}
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2 px-2.5 py-1.5 bg-slate-100 rounded-lg">
-            <AlertCircle className="w-3.5 h-3.5 text-slate-400" />
-            <span className="text-xs font-semibold text-slate-600 flex-1">Pendiente</span>
-            <span className="text-[11px] font-mono text-slate-400">{pendingFiltered.length}</span>
-          </div>
-          <div className="space-y-2">
-            {pendingFiltered.map(t => <TaskCard key={t.id} task={t} {...cardProps} />)}
-            {pendingFiltered.length === 0 && (
-              <div className="h-12 border-2 border-dashed border-slate-100 rounded-xl flex items-center justify-center">
-                <span className="text-xs text-slate-300">Sin tareas pendientes</span>
-              </div>
-            )}
-          </div>
-          {/* Quick-add */}
-          <button
-            onClick={() => setShowAdd(true)}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg border border-dashed border-slate-200 transition-colors w-full"
-          >
-            <Plus className="w-3 h-3" /> Añadir tarea
-          </button>
+      {/* ── Activas: una línea por tarea ── */}
+      {activas.length > 0 ? (
+        <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100">{activas.map(fila)}</div>
+      ) : (
+        <div className="h-12 border-2 border-dashed border-slate-100 rounded-xl flex items-center justify-center">
+          <span className="text-xs text-slate-300">Sin tareas activas</span>
         </div>
+      )}
 
-        {/* Columna: En progreso */}
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2 px-2.5 py-1.5 bg-blue-50 rounded-lg">
-            <Clock className="w-3.5 h-3.5 text-blue-400" />
-            <span className="text-xs font-semibold text-blue-700 flex-1">En progreso</span>
-            <span className="text-[11px] font-mono text-blue-400">{inProgressFiltered.length}</span>
-          </div>
-          <div className="space-y-2">
-            {inProgressFiltered.map(t => <TaskCard key={t.id} task={t} {...cardProps} />)}
-            {inProgressFiltered.length === 0 && (
-              <div className="h-12 border-2 border-dashed border-blue-50 rounded-xl flex items-center justify-center">
-                <span className="text-xs text-slate-300">Sin tareas en curso</span>
-              </div>
-            )}
-          </div>
-          {/* Quick-add */}
+      {/* ── Completadas (colapsable) ── */}
+      {completadas.length > 0 && (
+        <div>
           <button
-            onClick={() => setShowAdd(true)}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg border border-dashed border-slate-200 transition-colors w-full"
+            onClick={() => setShowCompleted(v => !v)}
+            className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 hover:text-slate-800 mb-1"
           >
-            <Plus className="w-3 h-3" /> Añadir tarea
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showCompleted ? '' : '-rotate-90'}`} />
+            Completadas
+            <span className="font-semibold rounded-full px-1.5 py-px bg-slate-200 text-slate-600">{completadas.length}</span>
           </button>
+          {showCompleted && (
+            <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100">{completadas.map(fila)}</div>
+          )}
         </div>
-      </div>
-
-      {/* ── Completadas (fila completa, colapsable) ── */}
-      <div className="border border-slate-100 rounded-xl overflow-hidden">
-        <button
-          onClick={() => setShowCompleted(v => !v)}
-          className="w-full flex items-center gap-2 px-3 py-2.5 bg-emerald-50 hover:bg-emerald-100 transition-colors"
-        >
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-          <span className="text-xs font-semibold text-emerald-700 flex-1">Completadas</span>
-          <span className="text-[11px] font-mono text-emerald-500 mr-1">{completedCount}</span>
-          <ChevronDown className={`w-3.5 h-3.5 text-emerald-400 transition-transform ${showCompleted ? 'rotate-180' : ''}`} />
-        </button>
-        {showCompleted && (
-          <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {completedTasks.map(t => <TaskCard key={t.id} task={t} {...cardProps} />)}
-          </div>
-        )}
-      </div>
+      )}
+      {archivadas > 0 && (
+        <p className="text-[11px] text-slate-400">{archivadas} completada{archivadas !== 1 ? 's' : ''} hace más de 30 días, archivada{archivadas !== 1 ? 's' : ''}</p>
+      )}
 
       {showAdd && (
         <AddTaskModal profiles={profiles} tasks={tasks} playerId={player.id} player={player}

@@ -21,6 +21,12 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-01',
     items: [
+      'Eventos ⇄ Pipeline: un evento ligado a un jugador de Captación que está en el pipeline queda apuntado también en el historial de su tarjeta de Firmar (y se quita de ahí si borras el evento). Al revés ya pasaba: la próxima acción que pongas en la tarjeta sale en Mi día y en el calendario como llamada o reunión',
+      'Nuevo evento: «Asisten» ocupa una sola fila de iniciales en vez de una etiqueta por persona',
+      'Tablero de tareas: desaparece la vista de tarjetas en tres columnas. Ahora es siempre una lista compacta de una línea por tarea (también al agrupar por jugador o persona); siguen la tabla y la vista de semana',
+      'Inicio: en Jugadores, Equipo y Postpartidos sale arriba un bloque «Mi día» con hasta 5 cosas de hoy (y lo vencido) y un enlace «Ver todo»',
+      'Equipo: nuevo «Resumen de la semana» automático — tareas hechas, vencidas y creadas por persona, con la flecha de cambio respecto a la semana anterior. Se mueve con el mismo selector de semana',
+      'Ficha de jugador → Tareas: la lista usa la misma fila de una línea que Mi día (estado, reprogramar y reasignar desde la propia fila), en vez de tarjetas en dos columnas',
       'Mi día: alta rápida en una línea encima de la lista. Escribe la tarea y pulsa Enter; «@» asigna a una persona (@nb, @nacho), «#» pone la categoría (#informe, #negociación), la fecha se entiende en texto (hoy, mañana, pasado mañana, viernes, 15/10) y «!» la marca como prioridad alta. Debajo se ve cómo se va a crear antes de pulsar Enter',
       'Mi día: en «Vencidas», botón «Seleccionar» para marcar varias y moverlas de golpe a hoy, a mañana o a la próxima semana',
       'Tareas que se repiten: en la tarea (y al crearla, en «Más opciones») se puede elegir «Repetir: cada semana / cada mes». Al completarla se crea sola la siguiente, con la fecha que toque',

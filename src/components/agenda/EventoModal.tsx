@@ -29,6 +29,8 @@ interface Props {
   onSave: (e: EventoBorrador) => Promise<void>
   /** Solo al editar: borra el evento */
   onDelete?: () => Promise<void>
+  /** Estatus en el pipeline Firmar del jugador de Captación elegido, si está en él */
+  estatusPipeline?: (scoutingPlayerId: string) => string | undefined
 }
 
 const AMBITOS: { id: EventoAmbito; label: string }[] = [
@@ -39,7 +41,7 @@ const AMBITOS: { id: EventoAmbito; label: string }[] = [
 
 const CAMPO = 'w-full text-xs border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-blue-200'
 
-export function EventoModal({ players, scoutingPlayers, profiles, currentProfile, inicial, editando, onClose, onSave, onDelete }: Props) {
+export function EventoModal({ players, scoutingPlayers, profiles, currentProfile, inicial, editando, onClose, onSave, onDelete, estatusPipeline }: Props) {
   const tipoInicial = inicial?.tipo ?? EVENTO_TIPOS[0]
   const esTipoDeLista = (EVENTO_TIPOS as readonly string[]).includes(tipoInicial)
   const [tipo, setTipo] = useState<string>(esTipoDeLista ? tipoInicial : 'custom')
@@ -187,31 +189,39 @@ export function EventoModal({ players, scoutingPlayers, profiles, currentProfile
                   )}
                 </div>
               )}
+              {ambito === 'captacion' && scoutingPlayerId && estatusPipeline?.(scoutingPlayerId) && (
+                <p className="text-[11px] text-violet-600">Está en el pipeline ({estatusPipeline(scoutingPlayerId)}): queda apuntado también en el historial de su tarjeta de Firmar.</p>
+              )}
               {ambito === 'mantenimiento' && (
                 <p className="text-[11px] text-slate-400">Queda apuntado también en la actividad de la ficha de cada jugador.</p>
               )}
             </div>
           )}
 
-          {/* Quién asiste: el evento sale en el calendario de cada uno */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-slate-600 flex items-center gap-1.5">
+          {/* Quién asiste: una fila de iniciales; el evento sale en el calendario de cada uno */}
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-medium text-slate-600 flex items-center gap-1.5 flex-shrink-0">
               <Users className="w-3.5 h-3.5 text-slate-400" /> Asisten
             </label>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap gap-1">
               {profiles.map(p => {
                 const sel = participantIds.includes(p.id)
                 return (
                   <button key={p.id} type="button" onClick={() => alternarParticipante(p.id)}
-                    className={`inline-flex items-center gap-1 pl-1 pr-2 py-0.5 rounded-full border text-[11px] font-medium transition-colors ${
-                      sel ? 'bg-primary border-primary text-white' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'}`}>
-                    <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold ${sel ? 'bg-white/20 text-white' : 'bg-primary text-white'}`}>{p.avatar}</span>
-                    {p.id === currentProfile.id ? 'Yo' : p.name.split(' ')[0]}
+                    title={p.id === currentProfile.id ? `${p.name} (yo)` : p.name} aria-label={p.name} aria-pressed={sel}
+                    className={`w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-bold transition-colors ${
+                      sel ? 'bg-primary text-white ring-2 ring-blue-200' : 'bg-white text-slate-400 border border-slate-200 hover:border-slate-400 hover:text-slate-600'}`}>
+                    {p.avatar}
                   </button>
                 )
               })}
             </div>
           </div>
+          {participantIds.length > 0 && (
+            <p className="text-[11px] text-slate-400 -mt-1.5">
+              {participantIds.map(id => profiles.find(p => p.id === id)?.name.split(' ')[0]).filter(Boolean).join(', ')}
+            </p>
+          )}
 
           <div className="space-y-1">
             <label className="text-xs font-medium text-slate-600">Notas <span className="text-slate-400 font-normal">(opcional)</span></label>
