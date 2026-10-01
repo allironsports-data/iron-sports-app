@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { X, Trash2, ChevronRight, Send } from "lucide-react";
-import { TASK_LABELS, type Task, type Player, type TaskLabel } from "../types";
+import { TASK_LABELS, type Task, type Player, type TaskLabel, type FirmasEntry } from "../types";
 import { parseDia, esVencida } from "../lib/fechas";
 import { RECURRENCIAS, RECURRENCIA_LABEL, type Recurrencia } from "../lib/recurrencia";
 import type { Profile } from "../contexts/AuthContext";
@@ -23,11 +23,13 @@ interface Props {
   onGoToPlayer?: (playerId: string) => void;
   /** Se llama tras guardar un comentario (p. ej. para apuntarlo también en la tarjeta de Firmar de la que nace la tarea) */
   onComment?: (task: Task, texto: string) => void;
+  /** Si la tarea nace de una próxima acción del pipeline: su tarjeta (se enseña el historial) y cómo abrirla */
+  firmar?: { entry: FirmasEntry; onAbrir: () => void };
 }
 
 export function TaskDetailPanel({
   task, player, players, profiles, currentProfile,
-  onClose, onUpdate, onSaveAndClose, onDelete, onGoToPlayer, onComment,
+  onClose, onUpdate, onSaveAndClose, onDelete, onGoToPlayer, onComment, firmar,
 }: Props) {
   const canEdit = currentProfile.is_admin || task.assigneeId === currentProfile.id
     || (task.watchers ?? []).includes(currentProfile.id);
@@ -555,6 +557,39 @@ export function TaskDetailPanel({
                       </div>
                     );
                   })
+                )}
+
+                {/* Historial de la tarjeta de Firmar de la que nace la tarea (solo lectura) */}
+                {firmar && (
+                  <div className="border-t border-slate-100 pt-3">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 flex-1 truncate">
+                        Pipeline · {firmar.entry.playerName}
+                      </p>
+                      <button onClick={firmar.onAbrir} className="text-[11px] font-semibold text-blue-600 hover:underline flex-shrink-0">
+                        Abrir tarjeta →
+                      </button>
+                    </div>
+                    {firmar.entry.comments.length === 0 ? (
+                      <p className="text-[11px] text-slate-400">La tarjeta aún no tiene apuntes.</p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {[...firmar.entry.comments].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8).map(c => (
+                          <div key={c.id} className="text-[11px] leading-snug">
+                            <span className="text-slate-400">
+                              {new Date(c.date).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
+                              {c.author ? ` · ${c.author.split(" ")[0]}` : ""}
+                              {c.kind && c.kind !== "nota" ? ` · ${c.kind}` : ""}
+                            </span>
+                            <p className="text-slate-600 break-words">{c.text}</p>
+                          </div>
+                        ))}
+                        {firmar.entry.comments.length > 8 && (
+                          <p className="text-[11px] text-slate-400">+{firmar.entry.comments.length - 8} apuntes más en la tarjeta</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
 

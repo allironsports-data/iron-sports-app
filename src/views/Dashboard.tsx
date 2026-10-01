@@ -2841,6 +2841,11 @@ export function Dashboard({
           currentProfile={currentProfile}
           onGoToPlayer={onSelectPlayer}
           onComment={comentarioAFirmar}
+          firmar={(() => {
+            const entry = (firmasEntries ?? []).find(f => f.nextActionTaskId === detailTask.id);
+            // La tarjeta se abre flotante; el panel de la tarea se cierra para que no la tape
+            return entry ? { entry, onAbrir: () => { setDetailTask(null); onOpenFirmar?.(entry.id); } } : undefined;
+          })()}
           onClose={() => setDetailTask(null)}
           onUpdate={async (updated) => {
             try {
