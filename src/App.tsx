@@ -1937,6 +1937,19 @@ export default function App() {
       onAddScoutingMatch={handleAddScoutingMatch}
       firmasEntries={firmasEntries}
       onOpenFirmar={irAFirmas}
+      onPatchFirmasEntry={handlePatchFirmasEntry}
+      matchScouts={matchScouts}
+      onOpenMatch={(id) => { setCaptacionOpenMatchId(id); irA('captacion', 'partidos') }}
+      onSetMatchSeen={async (id, scout, visto) => {
+        const status = visto ? 'visto' as const : 'pendiente' as const
+        if (scout) return handleSetMatchScoutStatus(id, scout, status)
+        // sin filas de scouts: el estado vive en el propio partido
+        const m = scoutingMatches.find(x => x.id === id)
+        if (!m) return
+        const actualizado = { ...m, status }
+        await db.updateScoutingMatch(actualizado)
+        handleUpdateScoutingMatch(actualizado)
+      }}
       openTaskId={openTaskId}
       onOpenTaskConsumed={() => setOpenTaskId(null)}
       updateAvailable={updateAvailable}

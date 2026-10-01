@@ -19,6 +19,21 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-10-01',
+    items: [
+      'Mantenimiento: la pestaña «Tareas» pasa a ser «Mi día». En vez del tablero de tarjetas, una lista de una línea por cosa pendiente que junta todo lo tuyo: tareas, llamadas y reuniones del pipeline Firmar, postpartidos, partidos de Captación que tienes asignados (hoy y los próximos 7 días) y eventos',
+      'Mi día: secciones plegables con contador — Vencidas (con botón «Mover todo a hoy»), Hoy (primero lo que tiene hora), Próximos 7 días agrupado por día, Sin fecha, Más adelante y Hechas hoy',
+      'Mi día: cada fila lleva el icono del tipo, un círculo de estado que al pulsarlo pasa de pendiente a en curso y a hecha, el jugador (clic → su ficha), la categoría, la fecha y el responsable. Al pasar el ratón salen las acciones: hecha, reprogramar (hoy / mañana / próxima semana / elegir fecha), reasignar y abrir. En el móvil: deslizar a la derecha = hecha, a la izquierda = reprogramar',
+      'Mi día: chips de categoría y un buscador de texto encima de la lista. El jugador ya no es una forma de agrupar por defecto: va como chip en cada fila',
+      'Mi día: reprogramar o reasignar una acción de Firmar desde la lista la cambia también en su tarjeta del pipeline; completar un postpartido sigue pidiendo el link del vídeo; un partido se marca como visto',
+      'El tablero de siempre (kanban, compacto, tabla, semana, agrupar por jugador o persona) sigue ahí: botón «Tablero» arriba a la derecha. Jugadores, Equipo y Postpartidos no cambian',
+    ],
+    adminItems: [
+      'Mi día: los admin tienen arriba a la derecha un selector de persona para ver «El día de X» en la misma pantalla',
+      'lib/agendaItems.ts: lista unificada (tareas + Firmar + postpartidos + partidos + eventos) con tests; components/agenda/AgendaRow.tsx: la fila, pensada para reutilizarse en calendario, home y ficha de jugador',
+    ],
+  },
+  {
     date: '2026-09-08',
     items: [
       'Ficha de partido: nuevo botón «Vista ampliada» (icono ⤢ junto al lápiz) que abre el partido a pantalla completa con los dos equipos en columnas, el texto completo de cada informe, resumen por scout y filtros por veredicto o scout',

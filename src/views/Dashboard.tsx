@@ -9,9 +9,12 @@ import { useAtras } from "../hooks/useAtras";
 import { useDebounce } from "../hooks/useDebounce";
 import { isValidName, isValidBirthDate } from "../lib/validate";
 import logoImg from '../assets/logo.jpeg';
-import type { Player, Task, TaskLabel, PlayerActivity, ScoutingMatch, MemberStatus, Postpartido, FirmasEntry } from "../types";
+import type { Player, Task, TaskLabel, PlayerActivity, ScoutingMatch, ScoutingMatchScout, MemberStatus, Postpartido, FirmasEntry } from "../types";
 import { calcAge, clubsLabel, TASK_LABELS, PLAYER_ESTADOS } from "../types";
-import { fechaLocal, hoyISO, lunesDe, esVencida, parseDia } from "../lib/fechas";
+import { fechaLocal, hoyISO, lunesDe, esVencida, parseDia, sumarDias } from "../lib/fechas";
+import { construirAgenda, type AgendaItem, type AgendaEstado } from "../lib/agendaItems";
+import { tituloDia } from "../lib/miDia";
+import { MiDiaLista } from "./MiDiaLista";
 import { createPlayerActivity, fetchActivitiesByAuthor, createScoutingMatch } from "../lib/db";
 import type { Profile } from "../contexts/AuthContext";
 import type { AppNotification } from "../App";
@@ -62,6 +65,14 @@ interface Props {
   /** Pipeline de firmas — para el aviso de próximas acciones de hoy */
   firmasEntries?: FirmasEntry[];
   onOpenFirmar?: (entryId: string) => void;
+  /** Cambia la próxima acción de una tarjeta de Firmar (y, con ella, su tarea vinculada) */
+  onPatchFirmasEntry?: (id: string, changes: Partial<FirmasEntry> | ((e: FirmasEntry) => FirmasEntry)) => Promise<void>;
+  /** Scouts asignados a cada partido — para los partidos de «Mi día» */
+  matchScouts?: ScoutingMatchScout[];
+  /** Abre la ficha de un partido de Captación */
+  onOpenMatch?: (matchId: string) => void;
+  /** Marca un partido como visto/pendiente. `scout` = iniciales si el partido tiene scouts propios */
+  onSetMatchSeen?: (matchId: string, scout: string | undefined, visto: boolean) => Promise<void>;
   /** true si hay una versión nueva de la app desplegada (detectado en App.tsx) */
   updateAvailable?: boolean;
   /** Pestaña interna (equipo/postpartidos) si la lleva App: va en el hash. null = la del `view` */
@@ -128,6 +139,10 @@ export function Dashboard({
   onOpenTaskConsumed,
   firmasEntries,
   onOpenFirmar,
+  onPatchFirmasEntry,
+  matchScouts = [],
+  onOpenMatch,
+  onSetMatchSeen,
   updateAvailable,
   tab: tabProp,
   onTabChange,
@@ -356,6 +371,7 @@ export function Dashboard({
         await createPlayerActivity(evtPlayer, input);
       }
       setShowAddEvent(false);
+      setAgendaActs({}); // el evento nuevo tiene que salir en «Mi día»
       const playerName = players.find(p => p.id === evtPlayer)?.name ?? 'jugador';
       showToast(`Evento registrado para ${playerName}`, "success");
     } catch {
@@ -391,6 +407,13 @@ export function Dashboard({
   const [groupBy, setGroupBy] = useState<'estado' | 'jugador' | 'persona'>(
     () => (sessionStorage.getItem('nav_group_by') as 'estado' | 'jugador' | 'persona') ?? 'estado'
   );
+  // «Mi día»: lista (por defecto) o el tablero de siempre; y de quién es el día
+  const [vistaTareas, setVistaTareas] = useState<'lista' | 'tablero'>(
+    () => (sessionStorage.getItem('nav_tareas_vista') as 'lista' | 'tablero') ?? 'lista'
+  );
+  const [diaPersonaId, setDiaPersonaId] = useState(currentProfile.id);
+  // Eventos por persona para «Mi día» (se piden al mirar su día y se guardan)
+  const [agendaActs, setAgendaActs] = useState<Record<string, PlayerActivity[]>>({});
   const [weekOffset, setWeekOffset] = useState(0);
   // Activities per profile for the Equipo workload view (cached — week nav does NOT refetch)
   const [teamActivities, setTeamActivities] = useState<Record<string, PlayerActivity[]>>({});
@@ -464,6 +487,17 @@ export function Dashboard({
   useEffect(() => { sessionStorage.setItem('nav_estado_filter', estadoFilter) }, [estadoFilter]);
   useEffect(() => { sessionStorage.setItem('nav_player_view', playerView) }, [playerView]);
   useEffect(() => { sessionStorage.setItem('nav_group_by', groupBy) }, [groupBy]);
+  useEffect(() => { sessionStorage.setItem('nav_tareas_vista', vistaTareas) }, [vistaTareas]);
+
+  // Eventos de la persona cuyo día se está mirando (paginado en db.ts)
+  useEffect(() => {
+    if (activeTab !== 'tareas' || vistaTareas !== 'lista' || agendaActs[diaPersonaId]) return;
+    let vivo = true;
+    fetchActivitiesByAuthor(diaPersonaId)
+      .then(acts => { if (vivo) setAgendaActs(prev => ({ ...prev, [diaPersonaId]: acts })); })
+      .catch(() => {}); // sin eventos la lista sigue siendo útil
+    return () => { vivo = false; };
+  }, [activeTab, vistaTareas, diaPersonaId, agendaActs]);
 
   // Fetch activities for all profiles when the Equipo tab is active.
   // Loaded once and cached: navigating between weeks reuses the same data.
@@ -557,6 +591,20 @@ export function Dashboard({
   // For the "esta semana" stat in the board we always use offset=0
   const thisMonday = lunesDe(new Date());
   const thisSunday = finDeSemana(thisMonday);
+
+  // ── Lista unificada (tareas + Firmar + postpartidos + partidos + eventos) ──
+  // Partidos y eventos: de hoy a 7 días. Un partido pasado sin marcar no es
+  // una tarea vencida, y hay miles en el histórico.
+  const esAdmin = !!currentProfile.is_admin;
+  const agendaItems = useMemo(() => construirAgenda({
+    hoy: todayStr,
+    tasks: tasks.filter(t => !(t.adminOnly && !esAdmin)),
+    firmasEntries: firmasEntries ?? [],
+    postpartidos, scoutingMatches, matchScouts, profiles, players,
+    activities: agendaActs[diaPersonaId] ?? [],
+    rango: { desde: todayStr, hasta: sumarDias(todayStr, 7) },
+  }), [todayStr, tasks, esAdmin, firmasEntries, postpartidos, scoutingMatches, matchScouts, profiles, players, agendaActs, diaPersonaId]);
+  const diaPersona = profiles.find(p => p.id === diaPersonaId) ?? currentProfile;
 
   const boardOverdue = boardTasks.filter(t => t.dueDate && t.dueDate < todayStr);
   const boardDueToday = boardTasks.filter(t => t.dueDate === todayStr);
@@ -740,6 +788,86 @@ export function Dashboard({
     }
   };
 
+  // ── Acciones sobre un item de la lista unificada ──
+  // Cada origen se guarda en su sitio: la tarea en tasks, la acción de Firmar
+  // en su tarjeta (que arrastra a su tarea), el partido en Captación.
+  const guardarTarea = onUpdateTask ?? onUpdateGeneralTask;
+  const tareaDeItem = (it: AgendaItem) => it.ref.taskId ? tasks.find(t => t.id === it.ref.taskId) : undefined;
+  const fallo = () => showToast("No se pudo guardar. Inténtalo de nuevo.", "error");
+
+  function agendaAbrir(it: AgendaItem) {
+    const d = it.abrir;
+    if (d.tipo === 'firmar') return onOpenFirmar?.(d.entryId);
+    if (d.tipo === 'partido') return onOpenMatch?.(d.matchId);
+    if (d.tipo === 'jugador') return onSelectPlayer(d.playerId);
+    const t = d.taskId ? tasks.find(x => x.id === d.taskId) : undefined;
+    if (t) setDetailTask(t);
+    else if (d.tipo === 'postpartido') setInternalTab('postpartidos');
+  }
+
+  async function agendaEstado(it: AgendaItem, estado: AgendaEstado) {
+    try {
+      if (it.origen === 'captacion') {
+        if (it.ref.matchId) await onSetMatchSeen?.(it.ref.matchId, it.ref.scout, estado === 'completada');
+        return;
+      }
+      const task = tareaDeItem(it);
+      // Completar un postpartido sigue pidiendo el link del vídeo
+      if (it.origen === 'postpartido' && estado === 'completada') {
+        const pp = postpartidos.find(p => p.id === it.ref.postpartidoId);
+        if (pp && task) { setPpVideoUrl(pp.videoUrl ?? ''); setPpCompleteTarget({ pp, task }); }
+        return;
+      }
+      if (task) {
+        // Si es la tarea de una acción de Firmar, App la marca hecha también allí
+        if (guardarTarea) await Promise.resolve(guardarTarea({ ...task, status: estado }));
+        return;
+      }
+      // Acción de Firmar sin tarea vinculada: hecha = retirarla de la tarjeta, con su apunte
+      if (it.origen === 'firmar' && it.ref.firmasEntryId && estado === 'completada') {
+        await onPatchFirmasEntry?.(it.ref.firmasEntryId, e => ({
+          ...e,
+          nextAction: undefined, nextActionDate: undefined, nextActionAssignee: undefined, nextActionKind: undefined,
+          comments: [...e.comments, {
+            id: crypto.randomUUID(),
+            text: `✓ Hecho: ${e.nextAction ?? 'próxima acción'}`,
+            date: new Date().toISOString(),
+            author: currentProfile.name,
+            authorId: currentProfile.id,
+            kind: (e.nextActionKind ?? 'nota') as NonNullable<FirmasEntry['comments'][number]['kind']>,
+          }],
+        }));
+      }
+    } catch { fallo(); }
+  }
+
+  async function agendaReprogramar(it: AgendaItem, fecha: string | undefined) {
+    try {
+      // En Firmar manda la tarjeta: al cambiarla, su tarea se mueve sola
+      if (it.origen === 'firmar' && it.ref.firmasEntryId) {
+        await onPatchFirmasEntry?.(it.ref.firmasEntryId, { nextActionDate: fecha });
+        return;
+      }
+      const task = tareaDeItem(it);
+      if (task && guardarTarea) await Promise.resolve(guardarTarea({ ...task, dueDate: fecha }));
+    } catch { fallo(); }
+  }
+
+  async function agendaReasignar(it: AgendaItem, profileId: string) {
+    try {
+      if (it.origen === 'firmar' && it.ref.firmasEntryId) {
+        await onPatchFirmasEntry?.(it.ref.firmasEntryId, { nextActionAssignee: profileId });
+        return;
+      }
+      const task = tareaDeItem(it);
+      if (task && guardarTarea) await Promise.resolve(guardarTarea({ ...task, assigneeId: profileId }));
+      if (it.origen === 'postpartido') {
+        const pp = postpartidos.find(p => p.id === it.ref.postpartidoId);
+        if (pp && onUpdatePostpartido) await onUpdatePostpartido({ ...pp, assigneeId: profileId });
+      }
+    } catch { fallo(); }
+  }
+
   const canBulkAction = (onBulkDelete || onBulkAssignManager) && currentProfile.is_admin;
   const unreadNotifs = notifications.length;
 
@@ -821,7 +949,7 @@ export function Dashboard({
           </div>
         </div>
 
-        {/* Two-level nav: Mantenimiento | Distribución | Captación → Tareas | Jugadores | Equipo */}
+        {/* Two-level nav: Mantenimiento | Distribución | Captación → Mi día | Jugadores | Equipo | Postpartidos */}
         {onViewChange && (
           <>
             {/* Level 1: main sections */}
@@ -870,7 +998,7 @@ export function Dashboard({
             {/* Level 2: Mantenimiento sub-tabs */}
             <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center bg-slate-50 border-t border-slate-100 overflow-x-auto scrollbar-none">
               {([
-                { id: 'tareas'       as const, label: 'Tareas' },
+                { id: 'tareas'       as const, label: 'Mi día' },
                 { id: 'jugadores'    as const, label: 'Jugadores' },
                 { id: 'equipo'       as const, label: 'Equipo' },
                 { id: 'postpartidos' as const, label: 'Postpartidos' },
@@ -1110,61 +1238,43 @@ export function Dashboard({
         {/* ── Tareas section ──────────────────────────────── */}
         {activeTab === 'tareas' && (<>
 
-        {/* ── Header: person filter chips + actions ── */}
-        <div className="flex items-center justify-between gap-2 sm:gap-3 mb-4 flex-wrap">
+        {/* ── Cabecera: de quién es el día · vista · acciones ── */}
+        <div className="flex items-center justify-between gap-2 sm:gap-3 mb-3 flex-wrap">
+          <div className="min-w-0">
+            <h2 className="text-sm font-bold text-slate-800 truncate">
+              {vistaTareas === 'tablero' ? 'Tablero'
+                : diaPersona.id === currentProfile.id ? 'Mi día' : `El día de ${diaPersona.name.split(' ')[0]}`}
+              <span className="font-normal text-slate-400"> · {tituloDia(todayStr)}</span>
+            </h2>
+          </div>
           <div className="flex items-center gap-1.5 flex-wrap">
-            {/* Yo */}
-            <button
-              onClick={() => { setPersonFilter('me'); setQuickFilter(null); }}
-              className={`inline-flex items-center gap-1.5 pl-1.5 pr-3 py-1 rounded-full border text-xs font-semibold transition-colors ${
-                personFilter === 'me'
-                  ? 'bg-primary border-primary text-white'
-                  : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-              }`}
-            >
-              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold ${
-                personFilter === 'me' ? 'bg-white/20 text-white' : 'text-white'
-              }`} style={personFilter === 'me' ? {} : { background: PRIMARY }}>{currentProfile.avatar}</span>
-              Yo
-              <span className={personFilter === 'me' ? 'text-white/70 font-normal' : 'text-slate-400 font-normal'}>
-                {visibleTasks.filter(t => t.status !== 'completada' && involvesProfile(t, currentProfile.id)).length}
-              </span>
-            </button>
-            {/* Todos */}
-            <button
-              onClick={() => { setPersonFilter('all'); setQuickFilter(null); }}
-              className={`px-3 py-1 rounded-full border text-xs font-semibold transition-colors ${
-                personFilter === 'all'
-                  ? 'bg-primary border-primary text-white'
-                  : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-              }`}
-            >
-              Todos <span className={personFilter === 'all' ? 'text-white/70 font-normal' : 'text-slate-400 font-normal'}>{pendingTasks.filter(t => !(t.adminOnly && !currentProfile.is_admin)).length}</span>
-            </button>
-            {/* Resto del equipo (solo con tareas abiertas) */}
-            {profiles.filter(p => p.id !== currentProfile.id).map(p => {
-              const n = visibleTasks.filter(t => t.status !== 'completada' && involvesProfile(t, p.id)).length;
-              if (n === 0) return null;
-              const isSel = personFilter === p.id;
-              return (
+            {/* Persona (solo admins): la misma pantalla con el día de otro */}
+            {vistaTareas === 'lista' && esAdmin && profiles.length > 1 && (
+              <select
+                value={diaPersona.id}
+                onChange={e => setDiaPersonaId(e.target.value)}
+                aria-label="Ver el día de"
+                className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              >
+                {profiles.map(p => <option key={p.id} value={p.id}>{p.id === currentProfile.id ? 'Yo' : p.name}</option>)}
+              </select>
+            )}
+            <div className="flex items-center gap-0 bg-slate-100 rounded-lg p-0.5">
+              {([
+                { id: 'lista' as const, label: 'Lista', Icono: LayoutList },
+                { id: 'tablero' as const, label: 'Tablero', Icono: LayoutGrid },
+              ]).map(v => (
                 <button
-                  key={p.id}
-                  onClick={() => { setPersonFilter(p.id); setQuickFilter(null); }}
-                  className={`inline-flex items-center gap-1.5 pl-1.5 pr-3 py-1 rounded-full border text-xs font-medium transition-colors ${
-                    isSel
-                      ? 'bg-primary border-primary text-white'
-                      : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                  key={v.id}
+                  onClick={() => setVistaTareas(v.id)}
+                  className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-colors flex items-center gap-1 ${
+                    vistaTareas === v.id ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                   }`}
                 >
-                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold ${isSel ? 'bg-white/20 text-white' : 'text-white'}`}
-                    style={isSel ? {} : { background: PRIMARY }}>{p.avatar}</span>
-                  {p.name.split(' ')[0]}
-                  <span className={isSel ? 'text-white/70 font-normal' : 'text-slate-400 font-normal'}>{n}</span>
+                  <v.Icono className="w-3 h-3" /> {v.label}
                 </button>
-              );
-            })}
-          </div>
-          <div className="flex items-center gap-1.5">
+              ))}
+            </div>
             <button
               onClick={openAddEvent}
               className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
@@ -1298,6 +1408,76 @@ export function Dashboard({
                 )}
               </div>
             )}
+          </div>
+
+          {vistaTareas === 'lista' && (
+            <MiDiaLista
+              items={agendaItems}
+              hoy={todayStr}
+              personaId={diaPersona.id}
+              esYo={diaPersona.id === currentProfile.id}
+              profiles={profiles}
+              onAbrir={agendaAbrir}
+              onEstado={agendaEstado}
+              onReprogramar={agendaReprogramar}
+              onReasignar={agendaReasignar}
+              onOpenPlayer={onSelectPlayer}
+            />
+          )}
+
+          {vistaTareas === 'tablero' && (<>
+          {/* ── Filtro de persona del tablero ── */}
+          <div className="flex items-center gap-1.5 flex-wrap mb-3">
+            {/* Yo */}
+            <button
+              onClick={() => { setPersonFilter('me'); setQuickFilter(null); }}
+              className={`inline-flex items-center gap-1.5 pl-1.5 pr-3 py-1 rounded-full border text-xs font-semibold transition-colors ${
+                personFilter === 'me'
+                  ? 'bg-primary border-primary text-white'
+                  : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+              }`}
+            >
+              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold ${
+                personFilter === 'me' ? 'bg-white/20 text-white' : 'text-white'
+              }`} style={personFilter === 'me' ? {} : { background: PRIMARY }}>{currentProfile.avatar}</span>
+              Yo
+              <span className={personFilter === 'me' ? 'text-white/70 font-normal' : 'text-slate-400 font-normal'}>
+                {visibleTasks.filter(t => t.status !== 'completada' && involvesProfile(t, currentProfile.id)).length}
+              </span>
+            </button>
+            {/* Todos */}
+            <button
+              onClick={() => { setPersonFilter('all'); setQuickFilter(null); }}
+              className={`px-3 py-1 rounded-full border text-xs font-semibold transition-colors ${
+                personFilter === 'all'
+                  ? 'bg-primary border-primary text-white'
+                  : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+              }`}
+            >
+              Todos <span className={personFilter === 'all' ? 'text-white/70 font-normal' : 'text-slate-400 font-normal'}>{pendingTasks.filter(t => !(t.adminOnly && !currentProfile.is_admin)).length}</span>
+            </button>
+            {/* Resto del equipo (solo con tareas abiertas) */}
+            {profiles.filter(p => p.id !== currentProfile.id).map(p => {
+              const n = visibleTasks.filter(t => t.status !== 'completada' && involvesProfile(t, p.id)).length;
+              if (n === 0) return null;
+              const isSel = personFilter === p.id;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => { setPersonFilter(p.id); setQuickFilter(null); }}
+                  className={`inline-flex items-center gap-1.5 pl-1.5 pr-3 py-1 rounded-full border text-xs font-medium transition-colors ${
+                    isSel
+                      ? 'bg-primary border-primary text-white'
+                      : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                  }`}
+                >
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold ${isSel ? 'bg-white/20 text-white' : 'text-white'}`}
+                    style={isSel ? {} : { background: PRIMARY }}>{p.avatar}</span>
+                  {p.name.split(' ')[0]}
+                  <span className={isSel ? 'text-white/70 font-normal' : 'text-slate-400 font-normal'}>{n}</span>
+                </button>
+              );
+            })}
           </div>
 
           {/* ── Estadísticas + filtro rápido de tareas ── */}
@@ -1590,6 +1770,7 @@ export function Dashboard({
               );
             })()}
           </div>
+          </>)}
 
         </>)}
 
