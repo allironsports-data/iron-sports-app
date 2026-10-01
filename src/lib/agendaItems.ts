@@ -48,6 +48,8 @@ export interface AgendaItem {
   playerId?: string
   playerNombre?: string
   categoria?: string
+  /** Partidos: esa persona ya ha metido su informe del partido */
+  conInforme?: boolean
   /** Dónde es (eventos con lugar) */
   lugar?: string
   estado: AgendaEstado
@@ -83,6 +85,8 @@ export interface AgendaInput {
   activities?: PlayerActivity[]
   /** Eventos de agenda (tabla agenda_eventos) */
   eventos?: AgendaEvento[]
+  /** «partido|iniciales» de cada informe de partido ya escrito */
+  informesPartido?: Set<string>
   /** Nombres de jugadores de Captación, para los eventos que apuntan a uno */
   nombreScouting?: (id: string) => string | undefined
   /**
@@ -256,6 +260,7 @@ export function construirAgenda(input: AgendaInput): AgendaItem[] {
           ...base, id: `partido:${m.id}:${s.scout}`, personId,
           estado: s.status === 'visto' ? 'completada' : 'pendiente',
           hechaEl: s.status === 'visto' ? m.date : undefined,
+          conInforme: input.informesPartido?.has(`${m.id}|${s.scout}`),
           ref: { matchId: m.id, scout: s.scout },
         })
       }
@@ -266,6 +271,7 @@ export function construirAgenda(input: AgendaInput): AgendaItem[] {
         ...base, id: `partido:${m.id}`, personId,
         estado: m.status === 'visto' ? 'completada' : 'pendiente',
         hechaEl: m.status === 'visto' ? m.date : undefined,
+        conInforme: input.informesPartido?.has(`${m.id}|${m.assignedTo}`),
         ref: { matchId: m.id },
       })
     }
@@ -404,8 +410,8 @@ export function seccionesDelDia(items: AgendaItem[], hoy: string): SeccionesDia 
     }
     if (!it.fecha) { s.sinFecha.push(it); continue }
     if (it.fecha < hoy) {
-      // Un evento pasado no es una tarea vencida: simplemente ya ocurrió
-      if (it.origen !== 'evento') s.vencidas.push(it)
+      // Un evento o un partido pasado no es una tarea vencida: simplemente ya ocurrió
+      if (it.origen !== 'evento' && it.origen !== 'captacion') s.vencidas.push(it)
     }
     else if (it.fecha === hoy) s.hoy.push(it)
     else if (it.fecha <= limite) {

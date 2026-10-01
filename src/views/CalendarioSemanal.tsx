@@ -10,7 +10,7 @@
 // semana: se ve siempre un día y se pasa de uno a otro deslizando.
 
 import { useMemo, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Maximize2, CalendarDays } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Maximize2, CalendarDays, Check } from 'lucide-react'
 import type { Profile } from '../contexts/AuthContext'
 import { parseDia, sumarDias, fechaLocal, lunesDe } from '../lib/fechas'
 import { itemEsDe, type AgendaItem } from '../lib/agendaItems'
@@ -41,6 +41,8 @@ const BTN = 'px-2 py-1 rounded-lg border border-slate-200 text-xs text-slate-600
 const SELECT = 'text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30'
 /** Líneas que se ven en una columna de la semana antes del «+N más» */
 const MAX_COLUMNA = 12
+/** Lo que se completa y puede vencer. Eventos y partidos no: ocurren. */
+const esTarea = (it: AgendaItem) => it.origen !== 'evento' && it.origen !== 'captacion'
 
 export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, currentProfile, onAbrir, onNuevo, notas = {}, onGuardarMiNota }: CalendarioSemanalProps) {
   // Nota propia en edición (null = no se está editando)
@@ -73,7 +75,7 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
     return items.filter(it =>
       !!it.fecha && it.fecha >= dias[0] && it.fecha <= dias[6] &&
       tiposOn.has(it.tipo) &&
-      !(ocultarHechas && it.estado === 'completada') &&
+      !(ocultarHechas && it.estado === 'completada' && esTarea(it)) &&
       (personaId === 'all' || itemEsDe(it, personaId)))
   }, [items, dias, grupo, ocultarHechas, personaId])
   const porDia = useMemo(() => entradasPorDia(visibles, lunes), [visibles, lunes])
@@ -95,10 +97,11 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
   const personaAlta = personaId === 'all' ? currentProfile.id : personaId
 
   // Semana: una línea por cosa — icono · hora · título · iniciales
-  const linea = ({ item: it, personas, hecha }: EntradaCalendario) => {
+  const linea = ({ item: it, personas, hecha, conInforme }: EntradaCalendario) => {
     const m = AGENDA_TIPO_META[it.tipo]
-    const vencida = !hecha && it.origen !== 'evento' && !!it.fecha && it.fecha < hoy
-    const quien = personas.map(p => avatarDe.get(p) ?? '?')
+    const vencida = !hecha && esTarea(it) && !!it.fecha && it.fecha < hoy
+    // Partidos: ✓ junto a las iniciales de quien ya ha metido su informe
+    const quien = personas.map(p => `${avatarDe.get(p) ?? '?'}${conInforme.includes(p) ? '✓' : ''}`)
     return (
       <button
         key={it.id}
@@ -122,9 +125,9 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
   }
 
   // Día ampliado: la misma cosa con todo a la vista
-  const filaDia = ({ item: it, personas, hecha }: EntradaCalendario) => {
+  const filaDia = ({ item: it, personas, hecha, conInforme }: EntradaCalendario) => {
     const m = AGENDA_TIPO_META[it.tipo]
-    const vencida = !hecha && it.origen !== 'evento' && !!it.fecha && it.fecha < hoy
+    const vencida = !hecha && esTarea(it) && !!it.fecha && it.fecha < hoy
     return (
       <button
         key={it.id}
@@ -145,8 +148,11 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
         </span>
         <span className="flex-shrink-0 flex items-center gap-0.5 flex-wrap justify-end max-w-[8rem]">
           {personas.map(p => (
-            <span key={p} title={nombreDe.get(p)} className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white bg-primary">
+            <span key={p} title={`${nombreDe.get(p) ?? ''}${conInforme.includes(p) ? ' · informe hecho' : ''}`} className="relative w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white bg-primary">
               {avatarDe.get(p) ?? '?'}
+              {conInforme.includes(p) && (
+                <span className="absolute -bottom-1 -right-1 w-3 h-3 rounded-full bg-emerald-500 border border-white flex items-center justify-center"><Check className="w-2 h-2 text-white" /></span>
+              )}
             </span>
           ))}
         </span>
@@ -168,10 +174,10 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
       <div className="mb-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
         {[yo, ...profiles.filter(p => p.id !== yo.id && !p.hidden_from_status)].map(p => {
           const suyos = delDia.filter(it => itemEsDe(it, p.id))
-          const abiertos = suyos.filter(it => it.estado !== 'completada')
+          const abiertos = suyos.filter(it => it.estado !== 'completada' || !esTarea(it))
             .sort((a, b) => Number(b.estado === 'en_progreso') - Number(a.estado === 'en_progreso') || (a.hora ?? '99').localeCompare(b.hora ?? '99'))
           const hechos = suyos.length - abiertos.length
-          const nPend = abiertos.filter(it => it.origen !== 'evento').length
+          const nPend = abiertos.filter(esTarea).length
           const esYo = p.id === yo.id
           const nota = notas[p.id]
           return (
@@ -180,7 +186,7 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
                 <span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white bg-primary flex-shrink-0">{p.avatar}</span>
                 <span className="text-xs font-semibold text-slate-800 truncate">{p.name.split(' ')[0]}{esYo && <span className="font-normal text-slate-400"> (yo)</span>}</span>
                 <span className="ml-auto text-[11px] text-slate-400 tabular-nums flex-shrink-0">
-                  {nPend > 0 ? `${nPend} pendiente${nPend !== 1 ? 's' : ''}` : abiertos.length > 0 ? `${abiertos.length} evento${abiertos.length !== 1 ? 's' : ''}` : suyos.length > 0 ? 'todo hecho' : 'nada'}
+                  {nPend > 0 ? `${nPend} pendiente${nPend !== 1 ? 's' : ''}` : abiertos.length > 0 ? `${abiertos.length} en agenda` : suyos.length > 0 ? 'todo hecho' : 'nada'}
                   {hechos > 0 && abiertos.length > 0 && ` · ${hechos} ✓`}
                 </span>
               </button>
@@ -222,13 +228,13 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
   }
 
   const carga = (es: EntradaCalendario[]) => {
-    // Los eventos no se «hacen»: la carga cuenta solo lo que es tarea, llamada, postpartido o partido
-    const tareas = es.filter(e => e.item.origen !== 'evento')
+    // Eventos y partidos no se «hacen»: la carga cuenta solo tareas, llamadas y postpartidos
+    const tareas = es.filter(e => esTarea(e.item))
     const abiertas = tareas.filter(e => !e.hecha).length
     const eventos = es.length - tareas.length
     return (
       <span className="font-normal text-slate-400 tabular-nums" title="Abiertas / total del día (los eventos van aparte)">
-        {tareas.length > 0 && `${abiertas}/${tareas.length}`}{eventos > 0 && `${tareas.length > 0 ? ' · ' : ''}${eventos} ev.`}
+        {tareas.length > 0 && `${abiertas}/${tareas.length}`}{eventos > 0 && `${tareas.length > 0 ? ' · ' : ''}${eventos} ev./part.`}
       </span>
     )
   }

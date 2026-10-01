@@ -11,8 +11,10 @@ import type { AgendaItem } from './agendaItems'
 export interface EntradaCalendario {
   item: AgendaItem
   personas: string[]
-  /** true si para todas esas personas está hecho. Los eventos nunca: no son tareas. */
+  /** true si para todas esas personas está hecho. Eventos y partidos nunca: no son tareas. */
   hecha: boolean
+  /** Partidos: quiénes (profiles.id) han metido ya su informe */
+  conInforme: string[]
 }
 
 /** Los 7 días (AAAA-MM-DD) de la semana que empieza en `lunes` */
@@ -30,15 +32,17 @@ export function entradasDe(items: AgendaItem[]): EntradaCalendario[] {
   for (const it of items) {
     const clave = it.origen === 'captacion' && it.ref.matchId ? `partido:${it.ref.matchId}` : it.id
     const previa = porClave.get(clave)
-    const hecha = it.estado === 'completada'
+    const hecha = it.estado === 'completada' && it.origen !== 'captacion'
+    const informe = it.conInforme && it.personId ? [it.personId] : []
     if (!previa) {
       const personas = [it.personId, ...it.otrosIds].filter((p, i, a) => !!p && a.indexOf(p) === i)
-      porClave.set(clave, { item: it, personas, hecha })
+      porClave.set(clave, { item: it, personas, hecha, conInforme: informe })
       continue
     }
     if (it.personId && !previa.personas.includes(it.personId)) previa.personas.push(it.personId)
+    previa.conInforme.push(...informe)
     // La entrada se abre con el item de quien aún lo tiene pendiente
-    if (previa.hecha && !hecha) previa.item = it
+    if (previa.item.estado === 'completada' && it.estado !== 'completada') previa.item = it
     previa.hecha = previa.hecha && hecha
   }
   return [...porClave.values()]

@@ -21,6 +21,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-01',
     items: [
+      'Partidos en el calendario y en Tareas: ya no salen tachados ni en rojo cuando pasan, porque no son tareas. Lo único que llevan es un tick verde junto a las iniciales del scout que ya ha metido su informe de ese partido',
       'Corregido: los eventos pasados (visitas, reuniones, comidas…) salían tachados y como «hecha», como si fueran tareas. Un evento no se completa ni vence: ahora se ve siempre normal, y en el recuento del día va aparte de las tareas',
       'Nuevo evento → tipo «Partido»: ya no crea un evento suelto, da de alta un partido de verdad en Captación → Partidos. Pide local, visitante, competición y si se ve en el campo o por vídeo, y quienes marques quedan como scouts del partido',
       'Eventos (reuniones, visitas, comidas…): nuevo campo opcional «Lugar», que se ve en el calendario',

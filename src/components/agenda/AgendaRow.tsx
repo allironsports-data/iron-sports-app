@@ -50,7 +50,10 @@ export function AgendaRow({
 
   const p = permisosItem(item)
   const hecha = item.estado === 'completada'
-  const vencida = !hecha && !!item.fecha && item.fecha < hoy
+  // Eventos y partidos no son tareas: ni se tachan ni vencen
+  const esTarea = item.origen !== 'evento' && item.origen !== 'captacion'
+  const tachar = hecha && esTarea
+  const vencida = !hecha && esTarea && !!item.fecha && item.fecha < hoy
   const puedeEstado = p.estado && !!onEstado
   const puedeFecha = p.reprogramar && !!onReprogramar
   const puedePersona = p.reasignar && !!onReasignar
@@ -65,6 +68,7 @@ export function AgendaRow({
 
   const colorEstado = hecha ? '#10b981' : item.estado === 'en_progreso' ? '#3b82f6' : undefined
   const tituloEstado = !puedeEstado ? undefined
+    : item.origen === 'captacion' ? (hecha ? 'Marcar como no visto' : 'Marcar como visto')
     : hecha ? 'Reabrir'
     : siguienteEstado(item) === 'en_progreso' ? 'Pasar a en curso' : 'Marcar como hecha'
 
@@ -127,9 +131,10 @@ export function AgendaRow({
             style={colorEstado ? { background: colorEstado, borderColor: colorEstado } : undefined}
           />
         </button>
-        <span className={`flex-1 min-w-0 truncate text-xs font-medium ${hecha ? 'line-through text-slate-400' : 'text-slate-800'}`} title={item.titulo}>
+        <span className={`flex-1 min-w-0 truncate text-xs font-medium ${tachar ? 'line-through text-slate-400' : 'text-slate-800'}`} title={item.titulo}>
           {item.prioridadAlta && !hecha && <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 mr-1.5 align-middle" title="Prioridad alta" />}
           {item.titulo}
+          {item.conInforme && <Check className="inline w-3 h-3 ml-1 text-emerald-500" aria-label="Informe hecho" />}
         </span>
         {item.playerNombre && (
           item.playerId && onOpenPlayer ? (

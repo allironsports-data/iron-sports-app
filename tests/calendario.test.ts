@@ -30,11 +30,14 @@ describe('calendario', () => {
     expect(dias.flat()).toHaveLength(5)
   })
 
-  it('un partido con varios scouts es una entrada con todos; hecha solo si lo han visto todos', () => {
-    const [e] = entradasDe([partido('m1', 'NB', 'nb', { estado: 'completada' }), partido('m1', 'PP', 'pp')])
+  it('un partido con varios scouts es una entrada con todos; nunca «hecha», y se sabe quién tiene informe', () => {
+    const [e] = entradasDe([partido('m1', 'NB', 'nb', { estado: 'completada', conInforme: true }), partido('m1', 'PP', 'pp')])
     expect(e.personas).toEqual(['nb', 'pp'])
     expect(e.hecha).toBe(false)
-    expect(e.item.personId).toBe('pp') // se abre con el de quien lo tiene pendiente
+    expect(e.conInforme).toEqual(['nb'])
+    expect(e.item.personId).toBe('pp') // se abre con el de quien aún no lo ha visto
+    const [visto] = entradasDe([partido('m2', 'NB', 'nb', { estado: 'completada' })])
+    expect(visto.hecha).toBe(false)
   })
 
   it('las personas de una entrada: responsable y luego watchers/participantes, sin repetir', () => {

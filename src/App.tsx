@@ -219,6 +219,13 @@ export default function App() {
   )
 
   // Guard anti-bucle de la sincronización Firmar ⇄ Tareas.
+  // Quién ha metido informe de qué partido («partido|iniciales»): el calendario
+  // pone un tick junto al scout. Hook: tiene que ir aquí arriba, antes de los returns.
+  const informesPartido = useMemo(
+    () => new Set(scoutingReports.filter(r => r.matchId && r.persona).map(r => `${r.matchId}|${r.persona}`)),
+    [scoutingReports],
+  )
+
   // DEBE declararse aquí arriba: es un hook y no puede ir después de los
   // returns tempranos (loading/login) — romperlo deja la app en blanco.
   const firmasSyncGuard = useRef(false)
@@ -1962,6 +1969,7 @@ export default function App() {
       onPatchFirmasEntry={handlePatchFirmasEntry}
       matchScouts={matchScouts}
       scoutingPlayers={scoutingPlayers}
+      informesPartido={informesPartido}
       onAddMatchScout={handleAddMatchScout}
       onOpenMatch={(id) => { setCaptacionOpenMatchId(id); irA('captacion', 'partidos') }}
       onSetMatchSeen={async (id, scout, visto) => {

@@ -81,6 +81,8 @@ interface Props {
   onPatchFirmasEntry?: (id: string, changes: Partial<FirmasEntry> | ((e: FirmasEntry) => FirmasEntry)) => Promise<void>;
   /** Scouts asignados a cada partido — para los partidos de «Mi día» */
   matchScouts?: ScoutingMatchScout[];
+  /** «partido|iniciales» de cada informe de partido ya escrito */
+  informesPartido?: Set<string>;
   /** Asigna un scout (iniciales) a un partido de Captación */
   onAddMatchScout?: (matchId: string, scout: string, viewMode?: 'campo' | 'video') => Promise<void>;
   /** Abre la ficha de un partido de Captación */
@@ -156,6 +158,7 @@ export function Dashboard({
   onPatchFirmasEntry,
   matchScouts = [],
   scoutingPlayers = [],
+  informesPartido,
   onAddMatchScout,
   onOpenMatch,
   onSetMatchSeen,
@@ -697,10 +700,10 @@ export function Dashboard({
       hoy: todayStr,
       tasks: tasks.filter(t => !(t.adminOnly && !esAdmin)),
       firmasEntries: firmasEntries ?? [],
-      postpartidos, scoutingMatches, matchScouts, profiles, players, eventos,
+      postpartidos, scoutingMatches, matchScouts, profiles, players, eventos, informesPartido,
       nombreScouting: (id: string) => porId.get(id),
     };
-  }, [todayStr, tasks, esAdmin, firmasEntries, postpartidos, scoutingMatches, matchScouts, profiles, players, eventos, scoutingPlayers]);
+  }, [todayStr, tasks, esAdmin, firmasEntries, postpartidos, scoutingMatches, matchScouts, profiles, players, eventos, scoutingPlayers, informesPartido]);
   const agendaItems = useMemo(
     () => construirAgenda({ ...agendaBase, activities: actsDia, rango: { desde: todayStr, hasta: diaHasta } }),
     [agendaBase, actsDia, todayStr, diaHasta],
@@ -715,12 +718,12 @@ export function Dashboard({
   // Partidos de hoy de todo el equipo, de la misma lista que el calendario.
   // Un partido con varios scouts es un item por scout: aquí se juntan.
   const partidosHoy = useMemo(() => {
-    const porPartido = new Map<string, { item: AgendaItem; scouts: string[]; vistos: number }>();
+    const porPartido = new Map<string, { item: AgendaItem; scouts: string[] }>();
     for (const it of agendaItems) {
       if (it.origen !== 'captacion' || it.fecha !== todayStr || !it.ref.matchId) continue;
-      const g = porPartido.get(it.ref.matchId) ?? { item: it, scouts: [], vistos: 0 };
-      g.scouts.push(profiles.find(p => p.id === it.personId)?.avatar ?? '?');
-      if (it.estado === 'completada') g.vistos++;
+      const g = porPartido.get(it.ref.matchId) ?? { item: it, scouts: [] };
+      // ✓ = ese scout ya ha metido su informe
+      g.scouts.push(`${profiles.find(p => p.id === it.personId)?.avatar ?? '?'}${it.conInforme ? '✓' : ''}`);
       porPartido.set(it.ref.matchId, g);
     }
     return [...porPartido.values()].sort((a, b) => (a.item.hora ?? '99').localeCompare(b.item.hora ?? '99'));
@@ -1278,12 +1281,12 @@ export function Dashboard({
             <span className="text-xs font-semibold text-emerald-800 flex items-center gap-1.5">
               <Trophy className="w-3.5 h-3.5" /> {partidosHoy.length} partido{partidosHoy.length !== 1 ? 's' : ''} hoy
             </span>
-            {partidosHoy.map(({ item, scouts, vistos }) => (
+            {partidosHoy.map(({ item, scouts }) => (
               <button
                 key={item.ref.matchId}
                 onClick={() => agendaAbrir(item)}
                 title="Abrir el partido"
-                className={`text-[11px] text-emerald-900 hover:underline ${vistos === scouts.length ? 'opacity-50 line-through' : ''}`}
+                className="text-[11px] text-emerald-900 hover:underline"
               >
                 {item.hora && <span className="font-semibold tabular-nums">{item.hora} </span>}
                 {item.titulo} <span className="font-mono font-bold text-emerald-700">{scouts.join(' ')}</span>
