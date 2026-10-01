@@ -170,14 +170,24 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
       if (notaBorrador !== null && notaBorrador.trim() !== (notas[yo.id] ?? '')) void onGuardarMiNota?.(notaBorrador)
       setNotaBorrador(null)
     }
-    return (
+    return (<>
+      <p className="mb-1 text-[11px] text-slate-500">
+        <b className="font-bold uppercase tracking-wider text-slate-500">El equipo {dia === hoy ? 'hoy' : 'ese día'}</b>
+        {dia === hoy
+          ? ' · «En curso» = en lo que está cada uno ahora (sus tareas marcadas en curso, tengan la fecha que tengan) · «Para hoy» = lo que tiene con fecha de hoy'
+          : ' · lo que tiene cada uno con fecha de ese día'}
+      </p>
       <div className="mb-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
         {[yo, ...profiles.filter(p => p.id !== yo.id && !p.hidden_from_status)].map(p => {
           const suyos = delDia.filter(it => itemEsDe(it, p.id))
           const abiertos = suyos.filter(it => it.estado !== 'completada' || !esTarea(it))
-            .sort((a, b) => Number(b.estado === 'en_progreso') - Number(a.estado === 'en_progreso') || (a.hora ?? '99').localeCompare(b.hora ?? '99'))
+          // Dos cosas distintas, y se enseñan por separado:
+          //  · EN CURSO: en lo que está ahora mismo (tareas marcadas «en curso», tengan la fecha que tengan). Solo hoy.
+          //  · ESE DÍA: lo que tiene con fecha de ese día (tareas, llamadas, partidos, eventos).
+          const enCurso = abiertos.filter(it => it.estado === 'en_progreso')
+          const delDiaSuyo = abiertos.filter(it => it.estado !== 'en_progreso' && it.fecha === dia)
+            .sort((a, b) => (a.hora ?? '99').localeCompare(b.hora ?? '99'))
           const hechos = suyos.length - abiertos.length
-          const nPend = abiertos.filter(esTarea).length
           const esYo = p.id === yo.id
           const nota = notas[p.id]
           return (
@@ -186,22 +196,33 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
                 <span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white bg-primary flex-shrink-0">{p.avatar}</span>
                 <span className="text-xs font-semibold text-slate-800 truncate">{p.name.split(' ')[0]}{esYo && <span className="font-normal text-slate-400"> (yo)</span>}</span>
                 <span className="ml-auto text-[11px] text-slate-400 tabular-nums flex-shrink-0">
-                  {nPend > 0 ? `${nPend} pendiente${nPend !== 1 ? 's' : ''}` : abiertos.length > 0 ? `${abiertos.length} en agenda` : suyos.length > 0 ? 'todo hecho' : 'nada'}
+                  {abiertos.length === 0 ? (suyos.length > 0 ? 'todo hecho' : 'nada')
+                    : [enCurso.length > 0 ? `${enCurso.length} en curso` : '', delDiaSuyo.length > 0 ? `${delDiaSuyo.length} ${dia === hoy ? 'hoy' : 'ese día'}` : ''].filter(Boolean).join(' · ')}
                   {hechos > 0 && abiertos.length > 0 && ` · ${hechos} ✓`}
                 </span>
               </button>
-              {abiertos.slice(0, 3).map(it => {
-                const m = AGENDA_TIPO_META[it.tipo]
-                return (
-                  <button key={it.id} onClick={() => onAbrir(it)} title={it.titulo}
-                    className={`w-full flex items-center gap-1 text-left text-[11px] leading-snug hover:underline ${it.estado === 'en_progreso' ? 'text-blue-600 font-semibold' : 'text-slate-600'}`}>
-                    <m.Icon className={`w-3 h-3 flex-shrink-0 ${m.cls}`} />
-                    {it.hora && <span className="tabular-nums font-semibold">{it.hora}</span>}
-                    <span className="truncate">{it.titulo}{it.playerNombre ? ` · ${it.playerNombre.split(' ')[0]}` : ''}</span>
-                  </button>
-                )
-              })}
-              {abiertos.length > 3 && <p className="text-[11px] text-slate-400">+{abiertos.length - 3} más</p>}
+              {([
+                ['En curso', enCurso, 'text-blue-600 font-semibold'],
+                [dia === hoy ? 'Para hoy' : 'Ese día', delDiaSuyo, 'text-slate-600'],
+              ] as const).map(([titulo, lista, cls]) => lista.length > 0 && (
+                <div key={titulo} className="mt-1">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{titulo}</p>
+                  {lista.slice(0, 3).map(it => {
+                    const m = AGENDA_TIPO_META[it.tipo]
+                    return (
+                      <button key={it.id} onClick={() => onAbrir(it)} title={it.titulo}
+                        className={`w-full flex items-center gap-1 text-left text-[11px] leading-snug hover:underline ${cls}`}>
+                        <m.Icon className={`w-3 h-3 flex-shrink-0 ${m.cls}`} />
+                        {it.hora && <span className="tabular-nums font-semibold">{it.hora}</span>}
+                        <span className="truncate">{it.titulo}{it.playerNombre ? ` · ${it.playerNombre.split(' ')[0]}` : ''}</span>
+                      </button>
+                    )
+                  })}
+                  {lista.length > 3 && (
+                    <button onClick={() => setPersonaId(p.id)} className="text-[11px] text-slate-400 hover:text-slate-700 hover:underline">+{lista.length - 3} más</button>
+                  )}
+                </div>
+              ))}
               {/* Nota libre: solo tiene sentido hoy */}
               {dia === hoy && (esYo && onGuardarMiNota ? (
                 notaBorrador !== null ? (
@@ -224,7 +245,7 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
           )
         })}
       </div>
-    )
+    </>)
   }
 
   const carga = (es: EntradaCalendario[]) => {

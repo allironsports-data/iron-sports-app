@@ -21,6 +21,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-01',
     items: [
+      'Calendario → día ampliado: las tarjetas del equipo separan ahora dos cosas que antes iban mezcladas — «En curso» (en lo que está cada uno ahora: sus tareas marcadas en curso, tengan la fecha que tengan) y «Para hoy» (lo que tiene con fecha de ese día) —, con un texto que lo explica',
       'Sesiones de videoanálisis (ficha del jugador → Rendimiento): ahora se les puede poner hora, lugar y encargado, y salen en el calendario a esa hora, con el lugar y a nombre del encargado (por defecto quien la apunta, que suele ser el analista, y no el gestor del jugador). El enlace al vídeo pasa a ser opcional, para poder dejar la sesión agendada antes de tener el vídeo',
       'Corregido: un evento que apuntabas para otras personas salía a tu nombre y en tu lista. Ahora un evento es de quienes asisten, no de quien lo crea; solo si no marcas a nadie queda a tu nombre',
       'Tareas que nacen del pipeline: al abrir la tarea de una próxima acción de Firmar, debajo de los comentarios se ve el historial de la tarjeta del jugador (los últimos apuntes) y un botón «Abrir tarjeta»',
