@@ -19,7 +19,7 @@ const ESTATUS: Record<string, { label: string; cls: string }> = {
   caliente: { label: 'Caliente', cls: 'bg-red-100 text-red-600' },
   templado: { label: 'Templado', cls: 'bg-yellow-100 text-yellow-700' },
   frio:     { label: 'Frío',     cls: 'bg-sky-100 text-sky-700' },
-  decidir:  { label: 'Decidir',  cls: 'bg-violet-100 text-violet-700' },
+  decidir:  { label: 'Frío / no relevante', cls: 'bg-violet-100 text-violet-700' },
 }
 
 const diaCorto = (iso: string) => parseDia(iso).toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })
