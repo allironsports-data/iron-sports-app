@@ -1,95 +1,72 @@
 -- ══════════════════════════════════════════════════════════════════════
---  PARTNERS EXTERNOS · acceso solo a Distribución
+--  ARREGLO · lentitud tras migration_partners.sql + perfiles que no se
+--  pueden editar ("infinite recursion detected in policy for profiles")
 --
---  Cuentas de partners de fuera que ayudan a distribuir jugadores. Qué
---  puede hacer una cuenta «partner» (profiles.partner_only = true):
+--  1) LENTITUD: las políticas llamaban a es_partner() / es_cuenta_activa()
+--     / es_captacion_only() UNA VEZ POR FILA. Con miles de filas, cada
+--     lectura hacía miles de consultas a profiles. Envueltas en
+--     (select …) Postgres las calcula una sola vez por consulta.
+--     Mismas reglas, mismo resultado: solo cambia la velocidad.
+--  2) PERFILES: la política de admin se consultaba a sí misma.
 --
---   · VER   sus jugadores y los de otros partners (ficha completa),
---           los jugadores NUESTROS marcados «compartir con partners»
---           (solo una ficha reducida, por la vista players_compartidos),
---           todos los clubes, y las entradas de distribución y
---           negociaciones de los jugadores que puede ver.
---   · CREAR/EDITAR  sus propios jugadores, clubes, y negociaciones de los
---           jugadores que puede ver.
---   · NADA MÁS: ni tareas, ni Captación, ni pipeline, ni Boulema, ni
---           contactos, ni actividad, ni documentos (pasaportes, contratos).
---
---  Las funciones van siempre como (select public.es_partner()): así Postgres
---  las calcula UNA vez por consulta y no una por fila (si no, todo va lento).
---
---  Todas las políticas son RESTRICTIVAS: se suman con Y a las que ya hay.
---  Para las cuentas normales no cambia nada.
---
---  Requiere es_cuenta_activa() (seguridad_2_cierre.sql) y
---  es_captacion_only() (rls_captacion_only.sql). Reejecutable: vuelve a ejecutarlo cada vez
---  que se cree una tabla nueva, para que quede cerrada a los partners.
---  Ejecutar en Supabase → SQL Editor.
---
---  ⚠ ANTES DE DAR ACCESO A NADIE: crea una cuenta de prueba, márcala como
---  partner desde Admin y comprueba con ella las consultas del final.
+--  Reejecutable. Ejecutar entero en Supabase → SQL Editor.
 -- ══════════════════════════════════════════════════════════════════════
 
 
--- ── 1 · Columnas ─────────────────────────────────────────────────────
-alter table public.profiles add column if not exists partner_only boolean not null default false;
-alter table public.profiles add column if not exists partner_name text;        -- a qué partner pertenece la cuenta
-
--- partner_origen: nombre del partner externo que ha traído al jugador (null = es nuestro).
--- Ojo: NO es la columna `partner` que ya existía (partner interno responsable).
-alter table public.players add column if not exists partner_origen text;
-alter table public.players add column if not exists shared_with_partners boolean not null default false;
-
-create index if not exists players_partner_origen_idx on public.players (partner_origen) where partner_origen is not null;
+-- ── A · Perfiles: fuera la recursión ─────────────────────────────────
+drop policy if exists "Admin actualiza cualquier perfil" on public.profiles;
+create policy "Admin actualiza cualquier perfil"
+  on public.profiles for update
+  using      ((select public.es_admin()))
+  with check ((select public.es_admin()));
 
 
--- ── 2 · Funciones (saltan RLS: si no, para mirar tu propio perfil haría falta poder leerlo) ──
-create or replace function public.es_partner()
-returns boolean language sql stable security definer set search_path = public as $$
-  select coalesce((select p.partner_only from public.profiles p where p.id = auth.uid()), false)
-$$;
-
-create or replace function public.mi_partner()
-returns text language sql stable security definer set search_path = public as $$
-  select nullif(trim(p.partner_name), '') from public.profiles p where p.id = auth.uid()
-$$;
-
--- ¿Puede un partner ver a este jugador? Los de partners (suyos o de otros) y los nuestros compartidos.
-create or replace function public.jugador_visible_partner(pid uuid)
-returns boolean language sql stable security definer set search_path = public as $$
-  select exists (
-    select 1 from public.players p
-    where p.id = pid and (p.partner_origen is not null or p.shared_with_partners)
-  )
-$$;
-
-
--- ── 3 · Nadie se hace partner (ni deja de serlo) a sí mismo ──────────
-create or replace function public.guard_profile_flags()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $guard$
+-- ── B · Candado de cuenta activa: una evaluación por consulta ────────
+do $a$
+declare t text;
 begin
-  if auth.uid() is null then return new; end if;   -- editor SQL: paso libre
-
-  if (new.is_admin       is distinct from old.is_admin)
-  or (new.captacion_only is distinct from old.captacion_only)
-  or (new.activo         is distinct from old.activo)
-  or (new.partner_only   is distinct from old.partner_only)
-  or (new.partner_name   is distinct from old.partner_name) then
-    if not exists (
-      select 1 from public.profiles p
-      where p.id = auth.uid() and coalesce(p.is_admin, false)
-    ) then
-      raise exception 'Solo un administrador puede cambiar los permisos de una cuenta';
+  for t in select tablename from pg_policies where schemaname = 'public' and policyname = 'cuenta_activa'
+  loop
+    execute format('drop policy if exists cuenta_activa on public.%I', t);
+    if t = 'profiles' then
+      execute format($p$
+        create policy cuenta_activa on public.%I
+          as restrictive for all to public
+          using      ((select public.es_cuenta_activa()) or id = (select auth.uid()))
+          with check ((select public.es_cuenta_activa()) or id = (select auth.uid()))
+      $p$, t);
+    else
+      execute format($p$
+        create policy cuenta_activa on public.%I
+          as restrictive for all to public
+          using      ((select public.es_cuenta_activa()))
+          with check ((select public.es_cuenta_activa()))
+      $p$, t);
     end if;
-  end if;
-  return new;
+  end loop;
 end
-$guard$;
+$a$;
 
 
+-- ── C · Candado «solo Captación»: ídem, en las mismas tablas que ya lo tenían ──
+do $c$
+declare r record;
+begin
+  for r in select tablename, roles from pg_policies where schemaname = 'public' and policyname = 'captacion_only_fuera'
+  loop
+    execute format('drop policy if exists captacion_only_fuera on public.%I', r.tablename);
+    execute format($p$
+      create policy captacion_only_fuera on public.%I
+        as restrictive for all to %s
+        using      (not (select public.es_captacion_only()))
+        with check (not (select public.es_captacion_only()))
+    $p$, r.tablename, array_to_string(r.roles, ', '));
+  end loop;
+end
+$c$;
+
+
+-- ── D · Políticas de partners, rehechas con (select …) ───────────────
 -- ── 4 · Jugadores ────────────────────────────────────────────────────
 -- Leer la tabla: solo los de partners (ficha completa). Los nuestros
 -- compartidos NO se leen de aquí —la fila entera lleva contrato, teléfono,
@@ -231,21 +208,8 @@ create policy partner_fuera on storage.objects
   with check (not (select public.es_partner()));
 
 
--- ══════════════════════════════════════════════════════════════════════
---  COMPROBACIÓN (entrando en la app con la cuenta de partner de prueba,
---  o aquí con «Run as» esa cuenta):
---
---    select count(*) from tasks;                 → 0
---    select count(*) from scouting_players;      → 0
---    select count(*) from captacion_firmas;      → 0
---    select count(*) from contactos;             → 0
---    select count(*) from players;               → solo los de partners
---    select count(*) from players_compartidos;   → solo los marcados para compartir
---    select count(*) from clubs;                 → todos
---
---  Tablas con RLS desactivado (un partner las leería enteras). Tiene que
---  salir vacío; si sale alguna, hay que activarle RLS antes de dar acceso:
---
---    select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
---    where n.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity;
--- ══════════════════════════════════════════════════════════════════════
+-- ── E · Comprobación: políticas de profiles (ninguna debe llevar "FROM profiles") ──
+select policyname, cmd, permissive, qual, with_check
+from pg_policies
+where schemaname = 'public' and tablename = 'profiles'
+order by policyname;
