@@ -2052,6 +2052,7 @@ export default function App() {
         onSelectPlayer={(id) => navigateToPlayer(id, false)}
         onLogout={signOut}
         onAddPlayer={handleAddPlayer}
+        onUpdatePlayer={handleUpdatePlayer}
         onAdmin={profile.is_admin ? abrirAdmin : undefined}
         onBulkDelete={profile.is_admin ? handleBulkDelete : undefined}
         onBulkAssignManager={profile.is_admin ? handleBulkAssignManager : undefined}

@@ -21,6 +21,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-01',
     items: [
+      'Informe de datos automático: al marcar como hecha una tarea de tipo «Informe» de un jugador nuestro, la app pregunta si se le ha enviado un informe de datos. Si dices que sí (con el enlace, opcional), queda registrado en su ficha, en Rendimiento → Análisis. Con «Solo completar» la tarea se cierra sin más',
       'Ficha del jugador → Rendimiento: la pestaña «Vídeoanálisis» pasa a ser «Análisis» y distingue cinco servicios, cada uno con su color — Sesión de videoanálisis (nos sentamos con el jugador), Vídeo (preparado expresamente para él), Recurso (un concepto táctico con material hecho para otro), Entrenamiento (sesión en campo) e Informe de datos (se le ha enviado uno). Arriba se ve cuántos lleva de cada tipo y se puede filtrar',
       'Servicios de análisis: ahora se pueden editar (lápiz), tienen título y descripción en cajas separadas, y en vez de un único encargado se marcan todas las personas del equipo que han participado. En el calendario salen a nombre de todas ellas, con el tipo de servicio delante',
       'Captación → Conclusiones: se abre directamente en el campograma en vez de en la matriz. La matriz sigue a un clic',

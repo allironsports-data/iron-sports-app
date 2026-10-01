@@ -23,6 +23,7 @@ import { EventoModal, type EventoBorrador } from "../components/agenda/EventoMod
 import { ViajeModal } from "../components/agenda/ViajeModal";
 import { TareaModal } from "../components/agenda/TareaModal";
 import { RegistroContactoModal, type RegistroContacto } from "../components/agenda/RegistroContactoModal";
+import { InformeDatosModal } from "../components/agenda/InformeDatosModal";
 import { TipoNuevo } from "../components/agenda/TipoNuevo";
 import { useActividadesRango } from "../hooks/useActividadesRango";
 import {
@@ -111,6 +112,8 @@ interface Props {
   onSelectPlayer: (id: string) => void;
   onLogout: () => void;
   onAddPlayer: (player: Player) => void;
+  /** Guarda la ficha de un jugador (p. ej. para registrarle un informe de datos enviado) */
+  onUpdatePlayer?: (player: Player) => void | Promise<void>;
   onAdmin?: () => void;
   onBulkDelete?: (ids: string[]) => Promise<void>;
   onBulkAssignManager?: (playerIds: string[], managerId: string) => Promise<void>;
@@ -183,6 +186,7 @@ export function Dashboard({
   onSelectPlayer,
   onLogout,
   onAddPlayer,
+  onUpdatePlayer,
   onAdmin,
   onBulkDelete,
   onBulkAssignManager,
@@ -353,6 +357,8 @@ export function Dashboard({
   const [eventoModal, setEventoModal] = useState<{ inicial: Partial<EventoBorrador>; original?: AgendaEvento } | null>(null);
   // Tarea de contacto que se está completando: antes de cerrarla se pregunta qué pasó
   const [registro, setRegistro] = useState<Task | null>(null);
+  // Tarea de tipo «Informe» de un jugador que se está completando: se pregunta si registrar el informe de datos
+  const [informeDatos, setInformeDatos] = useState<Task | null>(null);
   // Viaje abierto (id): enseña a qué jugadores del pipeline se puede visitar
   const [viajeId, setViajeId] = useState<string | null>(null);
   useAtras(!!viajeId, () => setViajeId(null), 'viaje');
@@ -477,9 +483,37 @@ export function Dashboard({
     !!antes.label && !!EVENTO_DE_TAREA[antes.label] &&
     !(firmasEntries ?? []).some(f => f.nextActionTaskId === antes.id);
 
+  // Tarea «Informe» de un jugador nuestro → al completarla se ofrece registrarla como
+  // «Informe de datos» enviado, en su ficha (Rendimiento → Análisis).
+  const jugadorDe = (t: Task) => t.playerId && t.playerId !== 'general' ? players.find(p => p.id === t.playerId) : undefined;
+  const pideInformeDatos = (antes: Task, despues: Task) =>
+    despues.status === 'completada' && antes.status !== 'completada' &&
+    antes.label === 'Informe' && !!jugadorDe(antes) && !!onUpdatePlayer;
+
+  async function completarInforme(task: Task, r: { enlace: string; nota: string } | null) {
+    try {
+      if (guardarTarea) await Promise.resolve(guardarTarea(task));
+      setInformeDatos(null);
+      if (detailTask?.id === task.id) setDetailTask(null);
+      const jugador = jugadorDe(task);
+      if (!r || !jugador || !onUpdatePlayer) { showToast('Tarea hecha', 'success'); return; }
+      await Promise.resolve(onUpdatePlayer({
+        ...jugador,
+        videoSessions: [{
+          id: 'vs' + Date.now(), tipo: 'informe_datos', titulo: task.title, description: r.nota,
+          date: hoyISO(), videoUrl: r.enlace, participantes: [task.assigneeId || currentProfile.id],
+        }, ...(jugador.videoSessions ?? [])],
+      }));
+      showToast(`Tarea hecha e informe registrado en la ficha de ${jugador.name.split(' ')[0]}`, 'success');
+    } catch {
+      showToast('No se pudo guardar. Inténtalo de nuevo.', 'error');
+    }
+  }
+
   /** Guarda la tarea; si es de contacto y se está completando, antes pregunta qué pasó. true = guardada ya. */
   async function guardarTareaOPreguntar(antes: Task, despues: Task): Promise<boolean> {
     if (pideRegistro(antes, despues)) { setRegistro(despues); return false; }
+    if (pideInformeDatos(antes, despues)) { setInformeDatos(despues); return false; }
     if (guardarTarea) await Promise.resolve(guardarTarea(despues));
     return true;
   }
@@ -2883,6 +2917,17 @@ export function Dashboard({
           onRegistrar={(r) => completarRegistrando(registro, r)}
           onSoloCompletar={() => completarRegistrando(registro, null)}
           onClose={() => setRegistro(null)}
+        />
+      )}
+
+      {/* ── Tarea «Informe» de un jugador completada: ¿informe de datos enviado? ── */}
+      {informeDatos && (
+        <InformeDatosModal
+          task={informeDatos}
+          jugador={jugadorDe(informeDatos)?.name ?? 'el jugador'}
+          onRegistrar={(r) => completarInforme(informeDatos, r)}
+          onSoloCompletar={() => completarInforme(informeDatos, null)}
+          onClose={() => setInformeDatos(null)}
         />
       )}
 
