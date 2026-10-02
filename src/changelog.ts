@@ -19,6 +19,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-10-02',
+    items: [
+      'Distribución: cada temporada enseña solo lo suyo. Antes, en 2026-27 la columna de clubes, el estado, la actividad, el pipeline y las propuestas pendientes de un jugador arrastraban las negociaciones de 2025-26. Ahora solo cuentan las negociaciones con clubes de la temporada elegida; las de la anterior siguen ahí, cambiando de temporada en el desplegable de arriba',
+      'Distribución → Jugadores: se abre en la vista de lista en vez de en tarjetas. Las tarjetas siguen a un clic',
+    ],
+  },
+  {
     date: '2026-10-01',
     items: [
       'La app abre mucho más rápido: al recargar se pinta al instante lo que había la última vez en este navegador y, por detrás, se actualiza con lo del servidor (el aviso «Sincronizando datos…» sigue saliendo mientras tanto). La primera vez en cada navegador carga como antes. Al cerrar sesión se borra esa copia',

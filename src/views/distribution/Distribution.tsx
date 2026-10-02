@@ -102,7 +102,6 @@ export function Distribution({
   // de pipeline, clubes, solicitudes y contadores. Los datos no se borran
   // (siguen en la BBDD y en la ficha del jugador); la negociación «cerrado»
   // sí se conserva como historial.
-  const negotiations = useMemo(() => hideDeadNegotiations(negotiationsAll), [negotiationsAll])
 
   // ── Temporada ─────────────────────────────────────────────
   // 2025-26 se archiva (se sigue pudiendo consultar, pero ya no es la
@@ -111,6 +110,14 @@ export function Distribution({
   // ambos, no solo la lista de jugadores.
   const [season, setSeason] = useState<string>(SEASONS[0])
   const clubs = useMemo(() => clubsAll.filter(c => c.season === season), [clubsAll, season])
+  // Las negociaciones no llevan temporada propia: son de la temporada de su
+  // club. Se filtran ANTES de ocultar las «muertas»: si no, los clubes, el
+  // estado y los contadores de un jugador arrastraban lo de la temporada
+  // anterior, y un traspaso cerrado el año pasado tapaba lo de este.
+  const negotiations = useMemo(() => {
+    const deLaTemporada = new Set(clubs.map(c => c.id))
+    return hideDeadNegotiations(negotiationsAll.filter(n => deLaTemporada.has(n.clubId)))
+  }, [negotiationsAll, clubs])
   // Si te traen aquí a un club concreto (p. ej. desde la ficha de un
   // jugador) que resulta ser de otra temporada, cambia sola de temporada en
   // vez de enseñar «no encontrado».
@@ -229,7 +236,7 @@ export function Distribution({
   const [showClosedDeals, setShowClosedDeals] = useState(false)
   const [pipelineMyOnly, setPipelineMyOnly] = useState(false)
   const [pipelineListView, setPipelineListView] = useState(false)
-  const [jugadoresTableView, setJugadoresTableView] = useState<boolean>(() => sessionStorage.getItem('dist_jugadores_table_view') === '1')
+  const [jugadoresTableView, setJugadoresTableView] = useState<boolean>(() => sessionStorage.getItem('dist_jugadores_table_view') !== '0')  // lista por defecto
   useEffect(() => { sessionStorage.setItem('dist_jugadores_table_view', jugadoresTableView ? '1' : '0') }, [jugadoresTableView])
 
   // filters
