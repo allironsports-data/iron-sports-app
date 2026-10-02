@@ -21,8 +21,13 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-02',
     items: [
+      'Pipeline → Firmar: las tarjetas se pueden ordenar a mano dentro de su columna. Arrastra una tarjeta y suéltala sobre otra: si la bajas queda debajo, si la subes queda encima. El orden lo ve todo el equipo y es el mismo en la vista general y en la de zona. Soltarla sobre una tarjeta de otra columna la cambia de estatus y la deja en ese sitio. Reordenar no cuenta como «tocar» al jugador: no reinicia los días sin tocar',
+      'Tareas: las filas de tu lista se pueden ordenar a mano arrastrándolas, dentro de cada bloque (Vencidas, Hoy, cada día de la semana, Sin fecha, Más adelante). El orden es personal: el tuyo no cambia el de los demás. Las tareas nuevas aparecen al final del bloque hasta que las muevas. De momento solo con ratón (ordenador)',
       'Distribución: cada temporada enseña solo lo suyo. Antes, en 2026-27 la columna de clubes, el estado, la actividad, el pipeline y las propuestas pendientes de un jugador arrastraban las negociaciones de 2025-26. Ahora solo cuentan las negociaciones con clubes de la temporada elegida; las de la anterior siguen ahí, cambiando de temporada en el desplegable de arriba',
       'Distribución → Jugadores: se abre en la vista de lista en vez de en tarjetas. Las tarjetas siguen a un clic',
+    ],
+    adminItems: [
+      'Orden manual de Tareas: se guarda por usuario en la tabla agenda_orden (migration_agenda_orden.sql). Sin la migración funciona igual, pero el orden se queda solo en el navegador donde se hizo. El de Firmar usa la columna sort_pos que ya existía y solo escribe esa columna',
     ],
   },
   {

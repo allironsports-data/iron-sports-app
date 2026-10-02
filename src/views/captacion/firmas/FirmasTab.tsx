@@ -20,8 +20,10 @@ export function FirmasTab({
   entries, profiles, currentProfile, isAdmin, scoutingPlayers, scoutingReports,
   players, onCreatePlayer, onSyncActionTasks,
   onCreate, onPatch, onDelete, onOpenScoutingPlayer, showToast, headerHeight,
-  openEntryId, onOpenEntryConsumed, vistaFija,
+  openEntryId, onOpenEntryConsumed, vistaFija, onReorder,
 }: {
+  /** Orden manual dentro de una columna (arrastrar una tarjeta sobre otra) */
+  onReorder?: (pares: { id: string; sortPos: number }[]) => Promise<void>
   entries: FirmasEntry[]
   profiles: Profile[]
   currentProfile: Profile
@@ -242,8 +244,36 @@ export function FirmasTab({
     )
   }
 
+  // ── orden manual: soltar una tarjeta sobre otra ──
+  // El orden es uno por estatus (el mismo en la vista general y en la de
+  // zona). Se recoloca sobre la columna ENTERA, no sobre lo filtrado, y se
+  // renumera 1..n: así no dependen de huecos ni de empates en sort_pos.
+  const [dragOverCard, setDragOverCard] = useState<string | null>(null)
+  const porOrden = (a: FirmasEntry, b: FirmasEntry) => a.sortPos - b.sortPos || a.playerName.localeCompare(b.playerName)
+  const soltarSobre = async (dragId: string, destino: FirmasEntry) => {
+    const movida = entries.find(x => x.id === dragId)
+    if (!movida || !onReorder || movida.id === destino.id) return
+    const s = destino.status
+    const columna = entries.filter(x => x.status === s).sort(porOrden)
+    const desde = columna.findIndex(x => x.id === movida.id)
+    const hasta = columna.findIndex(x => x.id === destino.id)
+    const resto = columna.filter(x => x.id !== movida.id)
+    // Bajando dentro de la misma columna se queda DEBAJO de la tarjeta sobre
+    // la que se suelta; subiendo (o viniendo de otra columna), encima.
+    const en = resto.findIndex(x => x.id === destino.id) + (desde !== -1 && desde < hasta ? 1 : 0)
+    resto.splice(en, 0, movida)
+    const pares = resto.map((x, i) => ({ id: x.id, sortPos: i + 1 })).filter((p, i) => resto[i].sortPos !== p.sortPos)
+    try {
+      await onReorder(pares)
+      if (movida.status !== s) await changeStatus(movida, s)
+    } catch {
+      showToast('No se pudo guardar el orden. Inténtalo de nuevo.', 'error')
+    }
+  }
+
   // ── tarjeta ──
-  const card = (e: FirmasEntry, showStatusDot = false) => {
+  // `reordenable`: en el tablero por estatus se puede soltar otra encima para ordenar
+  const card = (e: FirmasEntry, showStatusDot = false, reordenable = false) => {
     const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
     const aging = firmasAging(e)
     const actionOverdue = !!e.nextActionDate && e.nextActionDate < todayISO() && e.status !== 'firmado'
@@ -256,7 +286,19 @@ export function FirmasTab({
         onMouseLeave={endHover}
         draggable={canHover}
         onDragStart={ev => { endHover(); ev.dataTransfer.setData('text/plain', e.id); ev.dataTransfer.effectAllowed = 'move' }}
-        className="w-full text-left bg-white border border-slate-200 rounded-lg px-2.5 py-2 hover:border-slate-300 hover:shadow-sm transition-all"
+        onDragEnd={() => { setDragOverCard(null); setDragOverCol(null) }}
+        {...(reordenable && onReorder ? {
+          onDragOver: (ev: React.DragEvent) => { ev.preventDefault(); ev.stopPropagation(); if (dragOverCard !== e.id) setDragOverCard(e.id); if (dragOverCol) setDragOverCol(null) },
+          onDragLeave: () => setDragOverCard(cur => cur === e.id ? null : cur),
+          onDrop: (ev: React.DragEvent) => {
+            ev.preventDefault(); ev.stopPropagation()
+            setDragOverCard(null); setDragOverCol(null)
+            void soltarSobre(ev.dataTransfer.getData('text/plain'), e)
+          },
+        } : {})}
+        className={`w-full text-left bg-white border rounded-lg px-2.5 py-2 hover:border-slate-300 hover:shadow-sm transition-all ${
+          dragOverCard === e.id ? 'border-primary ring-2 ring-primary/30' : 'border-slate-200'
+        }`}
       >
         <div className="flex items-start justify-between gap-1.5">
           <span className="text-xs font-semibold text-slate-800 leading-snug flex items-center gap-1.5 min-w-0">
@@ -382,7 +424,7 @@ export function FirmasTab({
   const statusBoard = (list: FirmasEntry[]) => {
     const groups: Record<FirmasStatus, FirmasEntry[]> = { llamar: [], caliente: [], templado: [], frio: [], decidir: [], firmado: [] }
     list.forEach(e => groups[e.status].push(e))
-    FIRMAS_STATUSES.forEach(s => groups[s].sort((a, b) => a.sortPos - b.sortPos || a.playerName.localeCompare(b.playerName)))
+    FIRMAS_STATUSES.forEach(s => groups[s].sort(porOrden))
     return (
       <div className="hidden sm:flex gap-3 overflow-x-auto pb-2 sm:mx-0 sm:px-0 xl:grid xl:grid-cols-6 xl:overflow-visible">
         {FIRMAS_STATUSES.map(s => (
@@ -414,7 +456,7 @@ export function FirmasTab({
             <div className="px-2 pb-2 space-y-1.5 max-h-[65vh] overflow-y-auto">
               {groups[s].length === 0 ? (
                 <div className="text-[11px] text-slate-400 text-center py-4">—</div>
-              ) : groups[s].map(e => card(e))}
+              ) : groups[s].map(e => card(e, false, true))}
             </div>
           </div>
         ))}

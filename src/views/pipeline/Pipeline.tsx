@@ -38,6 +38,8 @@ export interface PipelineProps {
   onSyncFirmasActionTasks?: () => Promise<number>
   onCreateFirmasEntry: (e: Omit<FirmasEntry, 'id' | 'createdAt' | 'updatedAt'>) => Promise<FirmasEntry>
   onPatchFirmasEntry: PatchFirmasEntry
+  /** Orden manual de las tarjetas dentro de su columna */
+  onReorderFirmas?: (pares: { id: string; sortPos: number }[]) => Promise<void>
   onDeleteFirmasEntry: (id: string) => Promise<void>
   /** Abrir la ficha de un jugador de Captación desde una tarjeta */
   onOpenScoutingPlayer: (id: string) => void
@@ -178,6 +180,7 @@ export function Pipeline(props: PipelineProps) {
           onOpenEntryConsumed={() => { onOpenEntryConsumed?.(); setSaltoId(null) }}
           onCreate={props.onCreateFirmasEntry}
           onPatch={props.onPatchFirmasEntry}
+          onReorder={props.onReorderFirmas}
           onDelete={props.onDeleteFirmasEntry}
           onOpenScoutingPlayer={props.onOpenScoutingPlayer}
           showToast={showToast}

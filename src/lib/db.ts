@@ -1650,6 +1650,21 @@ export async function createFirmasEntry(e: Omit<FirmasEntry, 'id' | 'createdAt' 
   return dbToFirmasEntry(data)
 }
 
+/**
+ * Orden manual de las tarjetas dentro de su columna. Solo toca sort_pos (ni
+ * updated_at): reordenar no es «tocar» al jugador, así que no reinicia los
+ * días sin tocar ni pisa lo que otro esté escribiendo en la tarjeta.
+ */
+export async function setFirmasSortPos(pares: { id: string; sortPos: number }[]): Promise<void> {
+  const LOTE = 8
+  for (let i = 0; i < pares.length; i += LOTE) {
+    const res = await Promise.all(pares.slice(i, i + LOTE).map(p =>
+      supabase.from('captacion_firmas').update({ sort_pos: p.sortPos }).eq('id', p.id)))
+    const fallo = res.find(r => r.error)
+    if (fallo?.error) throw fallo.error
+  }
+}
+
 export async function updateFirmasEntry(e: FirmasEntry): Promise<void> {
   const { error } = await supabase.from('captacion_firmas').update({
     player_name: e.playerName,

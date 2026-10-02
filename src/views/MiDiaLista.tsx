@@ -20,6 +20,7 @@ import {
 import { AgendaRow } from '../components/agenda/AgendaRow'
 import { EmptyState } from '../components/EmptyState'
 import { ConfirmModal } from '../components/ConfirmModal'
+import { useOrdenManual, aplicarOrden, recolocar } from '../lib/ordenManual'
 
 export interface MiDiaListaProps {
   /** Lista unificada de TODO el equipo; aquí se filtra por persona */
@@ -72,7 +73,31 @@ export function MiDiaLista({
       (!categoria || it.categoria === categoria) && coincideTexto(it, q)),
     [deLaPersona, categoria, q],
   )
-  const s = useMemo(() => seccionesDelDia(filtrados, hoy), [filtrados, hoy])
+  // Orden manual: solo en la lista propia (el orden es personal). Cada bloque
+  // (Vencidas, Hoy, cada día, Sin fecha, Más adelante) se ordena por separado.
+  const { orden, guardar: guardarOrden } = useOrdenManual(esYo ? personaId : undefined)
+  const s = useMemo(() => {
+    const base = seccionesDelDia(filtrados, hoy)
+    if (!esYo) return base
+    return {
+      ...base,
+      vencidas: aplicarOrden(base.vencidas, orden),
+      hoy: aplicarOrden(base.hoy, orden),
+      proximos: base.proximos.map(g => ({ ...g, items: aplicarOrden(g.items, orden) })),
+      masAdelante: aplicarOrden(base.masAdelante, orden),
+      sinFecha: aplicarOrden(base.sinFecha, orden),
+    }
+  }, [filtrados, hoy, esYo, orden])
+  // Arrastrar: id que se mueve, bloque del que sale y fila sobre la que está
+  const [arrastre, setArrastre] = useState<{ id: string; bloque: string } | null>(null)
+  const [sobre, setSobre] = useState<string | null>(null)
+  function soltar(bloque: AgendaItem[], destinoId: string) {
+    const a = arrastre
+    setArrastre(null); setSobre(null)
+    if (!a) return
+    const ids = recolocar(bloque.map(it => it.id), a.id, destinoId)
+    if (ids) guardarOrden(ids, new Set(deLaPersona.map(it => it.id)))
+  }
   const nProximos = s.proximos.reduce((n, g) => n + g.items.length, 0)
   const nAbiertos = s.vencidas.length + s.hoy.length + nProximos + s.masAdelante.length + s.sinFecha.length
   const vencidasMovibles = s.vencidas.filter(it => permisosItem(it).reprogramar)
@@ -124,6 +149,24 @@ export function MiDiaLista({
       onAbrir={onAbrir} onEstado={onEstado} onReprogramar={onReprogramar} onReasignar={onReasignar}
       onOpenPlayer={onOpenPlayer} onOpenScoutingPlayer={onOpenScoutingPlayer} vistaDe={personaId} />
   )
+  /** Filas de un bloque que se pueden arrastrar para ordenarlas (solo en la lista propia) */
+  const filasOrdenables = (bloque: AgendaItem[], idBloque: string) => !esYo || bloque.length < 2
+    ? bloque.map(fila)
+    : bloque.map(it => (
+      <div key={it.id} draggable
+        title="Arrastra para ordenar"
+        onDragStart={ev => { ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', it.id); setArrastre({ id: it.id, bloque: idBloque }) }}
+        onDragEnd={() => { setArrastre(null); setSobre(null) }}
+        onDragOver={ev => {
+          if (arrastre?.bloque !== idBloque || arrastre.id === it.id) return
+          ev.preventDefault()
+          if (sobre !== it.id) setSobre(it.id)
+        }}
+        onDrop={ev => { if (arrastre?.bloque === idBloque) { ev.preventDefault(); soltar(bloque, it.id) } }}
+        className={`${arrastre?.id === it.id ? 'opacity-40' : ''} ${sobre === it.id && arrastre?.bloque === idBloque ? 'outline outline-2 -outline-offset-2 outline-primary' : ''}`}>
+        {fila(it)}
+      </div>
+    ))
 
   function seccion(id: SeccionId, titulo: string, n: number, cuerpo: React.ReactNode, opts: { rojo?: boolean; extra?: React.ReactNode } = {}) {
     if (n === 0) return null
@@ -144,8 +187,8 @@ export function MiDiaLista({
     )
   }
 
-  const lista = (its: AgendaItem[]) => (
-    <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100">{its.map(fila)}</div>
+  const lista = (its: AgendaItem[], idBloque?: string) => (
+    <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100">{idBloque ? filasOrdenables(its, idBloque) : its.map(fila)}</div>
   )
   // Vencidas en modo selección: casilla delante de las que se pueden mover
   const filaVencida = (it: AgendaItem) => seleccionando && permisosItem(it).reprogramar
@@ -227,7 +270,7 @@ export function MiDiaLista({
         </div>
       ) : (<>
         {seccion('vencidas', 'Vencidas', s.vencidas.length, (
-          <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100">{s.vencidas.map(filaVencida)}</div>
+          <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100">{seleccionando ? s.vencidas.map(filaVencida) : filasOrdenables(s.vencidas, 'vencidas')}</div>
         ), {
           rojo: true,
           extra: vencidasMovibles.length > 0 && (
@@ -245,7 +288,7 @@ export function MiDiaLista({
             </div>
           ),
         })}
-        {seccion('hoy', 'Hoy', s.hoy.length, lista(s.hoy))}
+        {seccion('hoy', 'Hoy', s.hoy.length, lista(s.hoy, 'hoy'))}
         {seccion('proximos', 'Próximos 7 días', nProximos, (
           <div className="bg-white border border-slate-200 rounded-lg overflow-visible">
             {s.proximos.map(g => (
@@ -253,13 +296,13 @@ export function MiDiaLista({
                 <p className="px-2.5 pt-1.5 pb-0.5 text-[11px] font-semibold text-slate-400 first-letter:uppercase">
                   {tituloDiaCorto(g.dia)} <span className="font-normal">· {g.items.length}</span>
                 </p>
-                <div className="divide-y divide-slate-100">{g.items.map(fila)}</div>
+                <div className="divide-y divide-slate-100">{filasOrdenables(g.items, g.dia)}</div>
               </div>
             ))}
           </div>
         ))}
-        {seccion('sinFecha', 'Sin fecha', s.sinFecha.length, lista(s.sinFecha))}
-        {seccion('masAdelante', 'Más adelante', s.masAdelante.length, lista(s.masAdelante))}
+        {seccion('sinFecha', 'Sin fecha', s.sinFecha.length, lista(s.sinFecha, 'sinFecha'))}
+        {seccion('masAdelante', 'Más adelante', s.masAdelante.length, lista(s.masAdelante, 'masAdelante'))}
         {seccion('hechasHoy', 'Hechas hoy', s.hechasHoy.length, lista(s.hechasHoy))}
       </>)}
 

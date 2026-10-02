@@ -1532,6 +1532,19 @@ export default function App() {
       if (patchQueue.current.get(id) === mio) patchQueue.current.delete(id)
     }
   }
+  /** Orden manual de tarjetas en una columna del pipeline (arrastrar y soltar) */
+  const handleReorderFirmas = async (pares: { id: string; sortPos: number }[]) => {
+    if (pares.length === 0) return
+    const nuevas = new Map(pares.map(p => [p.id, p.sortPos]))
+    const antes = new Map(firmasEntriesRef.current.map(e => [e.id, e.sortPos]))
+    setFirmasEntries(prev => prev.map(e => nuevas.has(e.id) ? { ...e, sortPos: nuevas.get(e.id)! } : e))
+    try {
+      await db.setFirmasSortPos(pares)
+    } catch (err) {
+      setFirmasEntries(prev => prev.map(e => nuevas.has(e.id) && antes.has(e.id) ? { ...e, sortPos: antes.get(e.id)! } : e))
+      throw err
+    }
+  }
   const handleDeleteFirmasEntry = async (id: string) => {
     await db.deleteFirmasEntry(id)
     setFirmasEntries(prev => prev.filter(x => x.id !== id))
@@ -1786,6 +1799,7 @@ export default function App() {
       onSyncFirmasActionTasks={handleSyncFirmasActionTasks}
       onCreateFirmasEntry={handleCreateFirmasEntry}
       onPatchFirmasEntry={handlePatchFirmasEntry}
+      onReorderFirmas={handleReorderFirmas}
       onDeleteFirmasEntry={handleDeleteFirmasEntry}
       onOpenScoutingPlayer={(id) => setFlotante({ tipo: 'scouting', id })}
       openEntryId={captacionOpenFirmasId}
