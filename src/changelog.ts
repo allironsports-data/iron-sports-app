@@ -22,7 +22,10 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: '2026-10-03',
     items: [
       'Partidos: «marcar visto» y el botón campo/vídeo de un scout volvían a quedarse como estaban (decía «guardado» pero no cambiaba nada) en los partidos que tenían al scout solo como responsable del formulario, sin fila propia. Ahora esa fila se crea sola al pulsar, y al crear o editar un partido desde el formulario el responsable queda también como scout',
-      'Captación → Partidos: orden claro. Primero los de hoy por hora; después los próximos en orden (mañana, pasado…); y al final los ya jugados, del más reciente al más antiguo. Antes los futuros salían al revés y mezclados con los pasados',
+      'Captación → Partidos: un solo orden, del más lejano al más antiguo (los futuros arriba, luego hoy, luego lo ya jugado) y, dentro del mismo día, por hora. Ya no hay un bloque especial de «hoy» mezclado con el resto. Con «Hasta hoy» desaparecen los futuros y hoy queda el primero',
+      'Partidos: editar un partido ya no abre el formulario arriba de la página. En la tabla, la fila se convierte en formulario en su sitio (Enter guarda, Esc cancela); en el móvil, la tarjeta. Solo si el partido no está a la vista (otra página o filtrado) sale el panel de siempre',
+      'Partidos → vista Semana: rediseñada. Un bloque por día a lo ancho, con los partidos en filas de una línea (hora, equipos, competición, modo, jugadores con informe, scouts) en letra legible; se puede marcar visto, editar o abrir el partido desde ahí. Antes eran 7 columnas estrechas con letra minúscula',
+      'Partidos: el «visto» del partido y el de cada scout van a la par. Marcar el partido marca a todos sus scouts; el partido queda visto cuando lo han visto todos',
     ],
   },
   {

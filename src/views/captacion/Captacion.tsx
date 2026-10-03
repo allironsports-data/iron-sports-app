@@ -457,8 +457,6 @@ export function Captacion({
   }, [matchPlayers])
 
   // ── filtered matches ──
-  // Orden: ver el sort de abajo (hoy → próximos → pasados).
-  const hoyPartidos = todayISO()
   const filteredMatches = useMemo(() => {
     const q = matchSearchDeb.toLowerCase().trim()
     return scoutingMatches
@@ -476,18 +474,12 @@ export function Captacion({
         }
         return true
       })
-      // Tres bloques: HOY (por hora), luego los PRÓXIMOS en orden cronológico
-      // (mañana, pasado…), y al final los PASADOS del más reciente al más
-      // antiguo. Antes hoy iba primero pero el resto se ordenaba todo del más
-      // nuevo al más antiguo, y los futuros salían al revés (6, 5, 4 oct).
-      .sort((a, b) => {
-        const bloque = (m: ScoutingMatch) => m.date === hoyPartidos ? 0 : m.date > hoyPartidos ? 1 : 2
-        const ba = bloque(a), bb = bloque(b)
-        if (ba !== bb) return ba - bb
-        if (ba === 2) return b.date.localeCompare(a.date) || (b.time ?? '').localeCompare(a.time ?? '')
-        return a.date.localeCompare(b.date) || (a.time ?? '99').localeCompare(b.time ?? '99')
-      })
-  }, [scoutingMatches, scoutsByMatch, matchPlayersByMatchId, playersById, matchSearchDeb, matchPersonaFilter, matchCompFilter, matchModeFilter, matchStatusFilter, hideFutureMatches, hoyPartidos])
+      // Un solo criterio, sin bloques especiales: por fecha del más lejano al
+      // más antiguo (los futuros arriba, luego hoy, luego lo ya jugado) y,
+      // dentro del mismo día, por hora de partido. Con «Hasta hoy» se quitan
+      // los futuros y hoy queda el primero.
+      .sort((a, b) => b.date.localeCompare(a.date) || (a.time ?? '99').localeCompare(b.time ?? '99'))
+  }, [scoutingMatches, scoutsByMatch, matchPlayersByMatchId, playersById, matchSearchDeb, matchPersonaFilter, matchCompFilter, matchModeFilter, matchStatusFilter, hideFutureMatches])
 
   // Agenda semanal: antes, por cada uno de los 7 días se recorrían y ordenaban
   // los 1.900 partidos. Ahora se agrupan por fecha una sola vez.
@@ -1098,15 +1090,23 @@ export function Captacion({
     }
   }, [onDeleteMatch, showToast])
 
+  // El «visto» del partido y el de cada scout van a la par: marcar el partido
+  // marca a todos sus scouts, y el partido queda visto cuando lo están todos.
+  // Antes eran dos datos sueltos y un partido podía salir «pendiente» en la
+  // lista con su único scout en «visto».
   const handleToggleMatchStatus = useCallback(async (m: ScoutingMatch) => {
     try {
-      const updated: ScoutingMatch = { ...m, status: m.status === 'visto' ? 'pendiente' : 'visto' }
+      const status = m.status === 'visto' ? 'pendiente' : 'visto'
+      const updated: ScoutingMatch = { ...m, status }
       await db.updateScoutingMatch(updated)
       onUpdateMatch(updated)
+      for (const s of scoutsByMatch[m.id] ?? []) {
+        if (s.status !== status) await onSetMatchScoutStatus(m.id, s.scout, status)
+      }
     } catch {
       showToast('Error al actualizar el estado del partido', 'error')
     }
-  }, [onUpdateMatch, showToast])
+  }, [onUpdateMatch, showToast, scoutsByMatch, onSetMatchScoutStatus])
 
   /** Guardar un partido ya existente (hora, notas, modo… desde la hoja de Planificación) */
   const guardarPartido = useCallback(async (m: ScoutingMatch) => {
@@ -1148,6 +1148,15 @@ export function Captacion({
   async function handleScoutStatus(m: ScoutingMatch, scout: string, status: 'pendiente' | 'visto') {
     try {
       await onSetMatchScoutStatus(m.id, scout, status)
+      // Estado del partido = ¿lo han visto todos sus scouts?
+      const otros = (scoutsByMatch[m.id] ?? []).filter(s => s.scout !== scout)
+      const todos = status === 'visto' && otros.every(s => s.status === 'visto')
+      const del = todos ? 'visto' : 'pendiente'
+      if (m.status !== del) {
+        const updated: ScoutingMatch = { ...m, status: del }
+        await db.updateScoutingMatch(updated)
+        onUpdateMatch(updated)
+      }
     } catch {
       showToast('No se pudo cambiar el estado del scout', 'error')
     }

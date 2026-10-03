@@ -9,6 +9,7 @@ import { type FilterChip, ActiveFilterChips } from './comun'
 import { type ShowToast, type MatchScoutInfo, SELECT_CLS, MONTHS_ES, personaToName, todayISO, isFutureMatch, SIN_CONTEO, SIN_SCOUTS, SIN_PARTIDOS } from './helpers'
 import { MatchRow } from './partidos/MatchRow'
 import { MatchFormPanel, type MatchFormState } from './partidos/MatchFormPanel'
+import { MatchEditRow } from './partidos/MatchEditRow'
 
 // ── Pestaña PARTIDOS · aviso de pendientes, agenda semanal, filtros, lista
 // (tarjetas en móvil / tabla en escritorio) y ficha del partido al lado ──
@@ -159,43 +160,82 @@ export function PartidosTab({
               )}
               <button onClick={() => setMatchWeekOffset(o => o + 1)} aria-label="Semana siguiente" className="px-2 py-1 rounded-lg border border-slate-200 text-xs text-slate-500 hover:bg-slate-50"><ChevronRight className="w-3.5 h-3.5" /></button>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-7 gap-1.5">
+            {/* Un bloque por día, a lo ancho: el día a la izquierda y sus
+                partidos en filas de una línea, con sitio para leerlos. Antes
+                eran 7 columnas estrechas con letra de 9 px. */}
+            <div className="divide-y divide-slate-100 border border-slate-200 rounded-lg overflow-hidden">
               {days.map((d, i) => {
                 const dayMatches = matchesPorFecha[d] ?? SIN_PARTIDOS
                 const isToday = d === todayISO()
                 return (
-                  <div key={d} className={`rounded-lg border p-1.5 min-h-[64px] ${isToday ? 'border-blue-300 bg-blue-50/40' : 'border-slate-200 bg-slate-50/50'}`}>
-                    <div className={`text-[10px] font-bold uppercase mb-1 ${isToday ? 'text-blue-700' : 'text-slate-400'}`}>
-                      {DOW[i]} {parseInt(d.slice(8), 10)}
+                  <div key={d} className={`flex items-stretch ${isToday ? 'bg-blue-50/50' : dayMatches.length === 0 ? 'bg-slate-50/60' : 'bg-white'}`}>
+                    <div className={`w-[72px] sm:w-[88px] flex-shrink-0 px-2.5 py-2 border-r border-slate-100 ${isToday ? 'text-blue-700' : 'text-slate-500'}`}>
+                      <div className="text-[11px] font-bold uppercase">{DOW[i]}</div>
+                      <div className="text-sm font-semibold leading-tight">{parseInt(d.slice(8), 10)} <span className="text-[11px] font-normal">{parseDia(d).toLocaleDateString('es-ES', { month: 'short' })}</span></div>
+                      {isToday && <div className="text-[11px] font-semibold">hoy</div>}
                     </div>
-                    <div className="space-y-1">
-                      {dayMatches.map(m => (
-                        <div
-                          key={m.id}
-                          className={`rounded-md border px-1.5 py-1 bg-white ${m.status === 'visto' ? 'border-slate-200 opacity-70' : 'border-blue-200'}`}
-                          title={`${m.homeTeam} vs ${m.awayTeam}${m.competition ? ` · ${m.competition}` : ''}${m.assignedTo ? ` · lo ve ${m.assignedTo}` : ''}`}
-                        >
-                          <div className="text-[10.5px] font-medium text-slate-700 leading-tight">{m.homeTeam} – {m.awayTeam}</div>
-                          <div className="mt-0.5 flex items-center gap-1 text-[9.5px] text-slate-400">
-                            {m.time && <span>{m.time}</span>}
-                            {m.assignedTo && <span className="font-mono font-bold text-slate-500">{m.assignedTo}</span>}
-                            <span>{m.viewMode === 'campo' ? '🏟️' : '📹'}</span>
-                            {m.status === 'visto' && <span className="text-emerald-600">✓</span>}
+                    <div className="flex-1 min-w-0 divide-y divide-slate-100">
+                      {dayMatches.length === 0 && <div className="px-3 py-2 text-xs text-slate-300">—</div>}
+                      {dayMatches.map(m => {
+                        const scs = scoutsByMatch[m.id] ?? SIN_SCOUTS
+                        const c = conteoPorPartido[m.id] ?? SIN_CONTEO
+                        return (
+                          <div
+                            key={m.id}
+                            onClick={() => setDetailMatchId(m.id)}
+                            className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-slate-50 ${m.status === 'visto' ? 'text-slate-400' : 'text-slate-700'}`}
+                          >
+                            <span className={`w-11 flex-shrink-0 text-xs tabular-nums ${m.status === 'visto' ? '' : 'font-semibold'}`}>{m.time ?? '—'}</span>
+                            <span className="min-w-0 flex-1 truncate text-xs">
+                              <span className={`font-medium ${m.status === 'visto' ? '' : 'text-slate-800'}`}>{m.homeTeam}</span>
+                              <span className="text-slate-400 mx-1">vs</span>
+                              <span className={`font-medium ${m.status === 'visto' ? '' : 'text-slate-800'}`}>{m.awayTeam}</span>
+                              {m.competition && <span className="ml-2 text-[11px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{m.competition}</span>}
+                            </span>
+                            <span className="flex-shrink-0 text-[11px]" title={m.viewMode === 'campo' ? 'En el campo' : 'Por vídeo'}>{m.viewMode === 'campo' ? '🏟️' : '📹'}</span>
+                            {c.total > 0 && (
+                              <span className="flex-shrink-0 text-[11px] text-violet-700 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded" title={`${c.conInforme} de ${c.total} jugadores con informe`}>
+                                👤 {c.conInforme}/{c.total}
+                              </span>
+                            )}
+                            <span className="flex-shrink-0 flex items-center gap-1">
+                              {scs.length === 0 && <span className="text-[11px] text-slate-300">sin scout</span>}
+                              {scs.map(s2 => (
+                                <span key={s2.scout} title={`${personaToName(s2.scout, profiles) || s2.scout}${s2.status === 'visto' ? ' · visto' : ' · pendiente'}`}
+                                  className={`text-[11px] font-mono font-semibold px-1.5 py-0.5 rounded ${s2.status === 'visto' ? 'text-emerald-700 bg-emerald-50' : 'text-slate-600 bg-slate-100'}`}>
+                                  {s2.scout}{s2.status === 'visto' ? ' ✓' : ''}
+                                </span>
+                              ))}
+                            </span>
+                            <button
+                              onClick={e => { e.stopPropagation(); handleToggleMatchStatus(m) }}
+                              title={m.status === 'visto' ? 'Marcar como pendiente' : 'Marcar como visto'}
+                              aria-label={m.status === 'visto' ? 'Marcar como pendiente' : 'Marcar como visto'}
+                              className={`flex-shrink-0 inline-flex items-center justify-center w-5 h-5 rounded-full border ${m.status === 'visto' ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 text-slate-300 hover:border-emerald-400 hover:text-emerald-500'}`}
+                            >
+                              <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="2.5,8 6,11.5 13.5,4" /></svg>
+                            </button>
+                            <button onClick={e => { e.stopPropagation(); openEditMatch(m) }} title="Editar" aria-label="Editar partido"
+                              className="flex-shrink-0 p-1 text-slate-300 hover:text-blue-500">
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
                           </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   </div>
                 )
               })}
             </div>
-            <p className="mt-2 text-[10.5px] text-slate-400">La agenda respeta los filtros. Para editar o marcar visto un partido, usa la vista Lista.</p>
+            <p className="mt-2 text-[11px] text-slate-400">La agenda respeta los filtros de abajo. Clic en un partido para abrirlo.</p>
           </div>
         )
       })()}
 
-      {/* Add/edit match form */}
-      {showAddMatch && (
+      {/* Alta de partido. La edición va en la propia fila o tarjeta; el panel
+          solo se usa para editar si el partido no está a la vista en la lista
+          (otra página, filtrado, o desde la vista de semana). */}
+      {showAddMatch && (!editingMatch || matchesView === 'semana' || !matchesPagina.some(m => m.id === editingMatch.id)) && (
         <MatchFormPanel
           key={editingMatch?.id ?? 'new'}
           initial={editingMatch ?? undefined}
@@ -349,6 +389,18 @@ export function PartidosTab({
             {matchesPagina.length === 0 ? (
               <div className="text-center py-10 text-slate-400 text-sm">No hay partidos que coincidan con los filtros</div>
             ) : matchesPagina.map(m => {
+              if (editingMatch?.id === m.id) {
+                return (
+                  <MatchFormPanel
+                    key={`edit-${m.id}`}
+                    initial={m}
+                    profiles={profiles}
+                    onSave={handleSaveMatch}
+                    onCancel={() => { setShowAddMatch(false); setEditingMatch(null) }}
+                    showToast={showToast}
+                  />
+                )
+              }
               const linkedPlayerIds = matchPlayersByMatchId[m.id] ?? []
               const linkedPlayers = linkedPlayerIds.map(id => playersById.get(id)).filter(Boolean) as ScoutingPlayer[]
               const isVisto = m.status === 'visto'
@@ -461,6 +513,17 @@ export function PartidosTab({
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {matchesPagina.map(m => {
+                    if (editingMatch?.id === m.id) {
+                      return (
+                        <MatchEditRow
+                          key={`edit-${m.id}`}
+                          match={m}
+                          profiles={profiles}
+                          onSave={async (f) => { await handleSaveMatch(f); showToast('Partido actualizado') }}
+                          onCancel={() => { setShowAddMatch(false); setEditingMatch(null) }}
+                        />
+                      )
+                    }
                     const scoutName = personaToName(m.assignedTo, profiles)
                     return (
                       <MatchRow
