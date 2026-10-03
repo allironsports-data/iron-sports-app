@@ -476,11 +476,11 @@ export function Captacion({
         }
         return true
       })
-      // Un solo criterio, sin bloques especiales: por fecha del más lejano al
-      // más antiguo (los futuros arriba, luego hoy, luego lo ya jugado) y,
-      // dentro del mismo día, por hora de partido. Con «Hasta hoy» se quitan
-      // los futuros y hoy queda el primero.
-      .sort((a, b) => b.date.localeCompare(a.date) || (a.time ?? '99').localeCompare(b.time ?? '99'))
+      // Un solo criterio, sin bloques especiales: del más lejano al más
+      // antiguo, también dentro del mismo día (18:30 antes que 11:00). Los
+      // futuros arriba, luego hoy, luego lo ya jugado. Con «Hasta hoy» se
+      // quitan los futuros y hoy queda el primero.
+      .sort((a, b) => b.date.localeCompare(a.date) || (b.time ?? '').localeCompare(a.time ?? ''))
   }, [scoutingMatches, scoutsByMatch, matchPlayersByMatchId, playersById, matchSearchDeb, matchPersonaFilter, matchCompFilter, matchModeFilter, matchStatusFilter, hideFutureMatches])
 
   // Agenda semanal: antes, por cada uno de los 7 días se recorrían y ordenaban
