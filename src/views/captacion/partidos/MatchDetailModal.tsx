@@ -5,11 +5,10 @@ import type { Profile } from '../../../contexts/AuthContext'
 import * as db from '../../../lib/db'
 import { guardarBorrador, leerBorrador, borrarBorrador, encolar, esErrorDeRed } from '../../../lib/colaInformes'
 import { useEscapeKey } from '../../../hooks/useEscapeKey'
-import { teamMatchKind, teamsAlike, avisoEquipoPartido } from '../../../lib/equipos'
+import { teamMatchKind, teamsAlike, mismoEquipo, equipoMatchKind, avisoEquipoPartido } from '../../../lib/equipos'
 import { POS_GROUPS, grupoDe as posGroupOf, type PosGroup } from '../../../lib/campo'
 import { AssessmentChip, Spinner, FichaCarcasa } from '../comun'
 import { type ShowToast, type MatchScoutInfo, type ConclusionOption, type SuggestWhy, CONCLUSION_OPTIONS, normConclusion, CONCLUSION_STYLE, MONTHS_ES, birthYearFromBirthdate, personaToName, fmtDate, SUGGEST_ORDER, SUGGEST_LABEL, SEARCH_LIMIT, scoutColor } from '../helpers'
-import { PegarAlineacion } from './PegarAlineacion'
 import { MatchExpandedView } from './MatchExpandedView'
 import { useAtras } from '../../../hooks/useAtras'
 
@@ -69,7 +68,7 @@ export function MatchDetailModal({
   scoutingPlayers, linkedPlayerIds, scoutingReports, allMatches, matchPlayersByMatchId,
   onClose, onEdit, onToggleStatus,
   onAddScout, onRemoveScout, onSetScoutStatus, onSetScoutMode,
-  onAddMatchPlayer, onRemoveMatchPlayer, onAddReport, onUpdateReport, onDeleteReport, onLinkReportToMatch, onCreateAndLinkPlayer, onOpenEquipo,
+  onAddMatchPlayer, onRemoveMatchPlayer, onAddReport, onUpdateReport, onDeleteReport, onLinkReportToMatch, onOpenEquipo,
   onFixPlayerTeam, onOpenPlayer, onOpenMatch, showToast,
   variant = 'modal', nuestros,
 }: {
@@ -225,12 +224,17 @@ export function MatchDetailModal({
   )
 
   // Otros partidos de estos mismos equipos, para saltar de uno a otro
-  const partidosRelacionados = useMemo(() => allMatches
-    .filter(m => m.id !== match.id &&
-      (teamMatchKind(m.homeTeam, match.homeTeam) || teamMatchKind(m.awayTeam, match.homeTeam) ||
-       teamMatchKind(m.homeTeam, match.awayTeam) || teamMatchKind(m.awayTeam, match.awayTeam)))
-    .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, 4), [allMatches, match.id, match.homeTeam, match.awayTeam])
+  // Mismo EQUIPO (club y categoría): un Betis Juv A no tiene nada que ver con
+  // el Betis B ni con el Betis C. Solo si no hay ninguno del equipo exacto se
+  // enseñan los del club, marcados como tales.
+  const partidosRelacionados = useMemo(() => {
+    const otros = allMatches.filter(m => m.id !== match.id)
+    const de = (m: ScoutingMatch, pred: (a?: string, b?: string) => boolean) =>
+      pred(m.homeTeam, match.homeTeam) || pred(m.awayTeam, match.homeTeam) || pred(m.homeTeam, match.awayTeam) || pred(m.awayTeam, match.awayTeam)
+    const exactos = otros.filter(m => de(m, mismoEquipo))
+    const lista = exactos.length > 0 ? exactos : otros.filter(m => de(m, teamsAlike))
+    return { lista: lista.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 4), delClub: exactos.length === 0 }
+  }, [allMatches, match.id, match.homeTeam, match.awayTeam])
 
   async function handleAddPlayer(playerId: string) {
     try {
@@ -310,21 +314,25 @@ export function MatchDetailModal({
     const byTeam = new Map<string, SuggestWhy>()
     for (const p of scoutingPlayers) {
       if (linkedPlayerIds.includes(p.id)) continue
-      const kind = teamMatchKind(p.team, match.homeTeam) ?? teamMatchKind(p.team, match.awayTeam)
-      if (kind === 'exacto') byTeam.set(p.id, 'equipo')
-      else if (kind === 'parcial') byTeam.set(p.id, 'posible')
+      // Primero los del equipo EXACTO (club y categoría); los de otros equipos
+      // del club (B, C, Juv B…) van aparte y detrás; los ambiguos, al final.
+      const kinds = [equipoMatchKind(p.team, match.homeTeam), equipoMatchKind(p.team, match.awayTeam)]
+      if (kinds.includes('equipo')) byTeam.set(p.id, 'equipo')
+      else if (kinds.includes('club')) byTeam.set(p.id, 'club')
+      else if (kinds.includes('parcial')) byTeam.set(p.id, 'posible')
     }
     for (const m2 of allMatches) {
       if (m2.id === match.id) continue
+      // Historial: solo partidos del MISMO equipo (club y categoría)
       const sameFixture =
-        (teamsAlike(m2.homeTeam, match.homeTeam) && teamsAlike(m2.awayTeam, match.awayTeam)) ||
-        (teamsAlike(m2.homeTeam, match.awayTeam) && teamsAlike(m2.awayTeam, match.homeTeam))
+        (mismoEquipo(m2.homeTeam, match.homeTeam) && mismoEquipo(m2.awayTeam, match.awayTeam)) ||
+        (mismoEquipo(m2.homeTeam, match.awayTeam) && mismoEquipo(m2.awayTeam, match.homeTeam))
       const sameTeams = sameFixture ||
-        teamsAlike(m2.homeTeam, match.homeTeam) || teamsAlike(m2.homeTeam, match.awayTeam) ||
-        teamsAlike(m2.awayTeam, match.homeTeam) || teamsAlike(m2.awayTeam, match.awayTeam)
+        mismoEquipo(m2.homeTeam, match.homeTeam) || mismoEquipo(m2.homeTeam, match.awayTeam) ||
+        mismoEquipo(m2.awayTeam, match.homeTeam) || mismoEquipo(m2.awayTeam, match.awayTeam)
       if (!sameTeams) continue
       for (const pid of (matchPlayersByMatchId[m2.id] ?? [])) {
-        if (linkedPlayerIds.includes(pid) || byTeam.has(pid)) continue
+        if (linkedPlayerIds.includes(pid) || byTeam.get(pid) === 'equipo') continue
         const sp = scoutingPlayers.find(x => x.id === pid)
         if (!sp) continue
         if (sp.team?.trim() && !sameFixture) continue
@@ -783,22 +791,14 @@ export function MatchDetailModal({
             </div>
           </div>
 
-          {/* ── Pegar alineación de una web ── */}
-          <PegarAlineacion
-            match={match}
-            scoutingPlayers={scoutingPlayers}
-            linkedPlayerIds={linkedPlayerIds}
-            onLink={async (playerId) => { await handleAddPlayer(playerId) }}
-            onCreateAndLink={async (nombre, equipo) => { await onCreateAndLinkPlayer(nombre, equipo, match.id) }}
-            onFixTeam={onFixPlayerTeam}
-          />
-
           {/* ── Otros partidos de estos equipos ── */}
-          {partidosRelacionados.length > 0 && (
+          {partidosRelacionados.lista.length > 0 && (
             <div className="border-t border-slate-100 pt-3">
-              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Otros partidos de estos equipos</span>
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
+                {partidosRelacionados.delClub ? 'Ningún otro partido de estos equipos · otros equipos de estos clubes' : 'Otros partidos de estos equipos'}
+              </span>
               <div className="mt-1.5 flex flex-wrap gap-1.5">
-                {partidosRelacionados.map(m => (
+                {partidosRelacionados.lista.map(m => (
                   <button
                     key={m.id}
                     onClick={() => onOpenMatch?.(m.id)}

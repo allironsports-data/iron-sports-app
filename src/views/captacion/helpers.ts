@@ -142,12 +142,16 @@ export function relativeDate(iso?: string): string {
 export type MatchScoutInfo = { scout: string; status: 'pendiente' | 'visto'; viewMode: 'campo' | 'video' }
 
 // Motivo por el que un jugador aparece sugerido en un partido
-export type SuggestWhy = 'equipo' | 'posible' | 'historial' | 'busqueda'
-export const SUGGEST_ORDER: Record<SuggestWhy, number> = { equipo: 0, posible: 1, historial: 2, busqueda: 3 }
+export type SuggestWhy = 'equipo' | 'historial' | 'club' | 'posible' | 'busqueda'
+// equipo = mismo equipo exacto (club y categoría) · historial = vinculado a otro
+// partido de este mismo equipo · club = mismo club pero otra categoría (B, C,
+// Juv B…) · posible = nombre ambiguo. Los del equipo exacto siempre primero.
+export const SUGGEST_ORDER: Record<SuggestWhy, number> = { equipo: 0, historial: 1, club: 2, posible: 3, busqueda: 4 }
 export const SUGGEST_LABEL: Record<SuggestWhy, string> = {
   equipo: '',
-  posible: ' · nombre de equipo ambiguo',
   historial: ' · visto antes con este equipo',
+  club: ' · otro equipo del club',
+  posible: ' · nombre de equipo ambiguo',
   busqueda: '',
 }
 /** Tope de resultados del buscador libre (las sugerencias por equipo no tienen tope) */
