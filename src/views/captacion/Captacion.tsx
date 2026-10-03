@@ -299,6 +299,8 @@ export function Captacion({
   // Se calcula UNA vez aquí (antes también lo hacía EquiposTab por su cuenta) y se pasa por prop
   const desdeTemporada = inicioTemporada()
   const filasEquipos = useFilasEquipos(equipos, scoutingPlayers, scoutingReports, scoutingMatches, clubZonas, desdeTemporada)
+  // Nombres de equipos conocidos, para los formularios de partido
+  const nombresEquipos = useMemo(() => filasEquipos.map(f => f.nombre), [filasEquipos])
   const filaEquipoAbierta = useMemo(
     () => panelEquipo ? filasEquipos.find(f => f.clave === normEquipo(panelEquipo)) ?? null : null,
     [filasEquipos, panelEquipo],
@@ -1266,6 +1268,7 @@ export function Captacion({
           filaEquipoAbierta={filaEquipoAbierta}
           renombrando={renombrando} setRenombrando={setRenombrando} guardarRenombre={guardarRenombre}
           onSaveEquipo={onSaveEquipo}
+          onSetClubZona={onSetClubZona}
           setZonasAbierto={setZonasAbierto}
           setDetailMatchId={setDetailMatchId}
           categoriasConocidas={categoriasConocidas}
@@ -1566,6 +1569,8 @@ export function Captacion({
         <EquiposTab
           filas={filasEquipos}
           desde={desdeTemporada}
+          clubZonas={clubZonas}
+          onSetClubZona={onSetClubZona}
           onSaveEquipo={onSaveEquipo}
           onAbrirEquipo={n => { abrirJugador(null); setPanelEquipo(n) }}
           equipoAbierto={panelEquipo}
@@ -1593,6 +1598,7 @@ export function Captacion({
       {/* ── PARTIDOS TAB ──────────────────────────────────── */}
       {captTab === 'partidos' && (
         <PartidosTab
+          nombresEquipos={nombresEquipos}
           detailMatchId={detailMatchId} setDetailMatchId={setDetailMatchId}
           isDesktop={isDesktop} isTablaAncha={isTablaAncha}
           misPendientes={misPendientes}
@@ -1714,6 +1720,8 @@ export function Captacion({
       {zonasAbierto && (
         <ZonasPanel
           players={scoutingPlayers}
+          equipos={equipos}
+          partidos={scoutingMatches}
           clubZonas={clubZonas}
           onSetClubZona={onSetClubZona}
           onClose={() => setZonasAbierto(false)}

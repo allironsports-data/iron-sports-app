@@ -32,8 +32,10 @@ export function PartidosTab({
   hideFutureMatches, setHideFutureMatches, mergeMode, setMergeMode, mergeSelected, setMergeSelected, toggleMergeSelected,
   filteredMatches, matchesPagina, matchPlayersByMatchId, playersById, scoutsByMatch, conteoPorPartido,
   handleToggleMatchStatus, openEditMatch, handleDeleteMatch, onRemoveMatchPlayer, currentProfile, isAdmin,
-  matchPage, setMatchPage, matchTotalPages, renderFichaPartido,
+  matchPage, setMatchPage, matchTotalPages, renderFichaPartido, nombresEquipos,
 }: {
+  /** Equipos conocidos, para sugerir al escribir y avisar de nombres nuevos */
+  nombresEquipos: string[]
   detailMatchId: string | null
   setDetailMatchId: React.Dispatch<React.SetStateAction<string | null>>
   isDesktop: boolean
@@ -243,6 +245,7 @@ export function PartidosTab({
           onSave={handleSaveMatch}
           onCancel={() => { setShowAddMatch(false); setEditingMatch(null) }}
           showToast={showToast}
+          equipos={nombresEquipos}
           partidos={scoutingMatches}
           onOpenExisting={id => { setShowAddMatch(false); setEditingMatch(null); setDetailMatchId(id) }}
         />
@@ -398,6 +401,7 @@ export function PartidosTab({
                     onSave={handleSaveMatch}
                     onCancel={() => { setShowAddMatch(false); setEditingMatch(null) }}
                     showToast={showToast}
+                    equipos={nombresEquipos}
                   />
                 )
               }
@@ -405,12 +409,15 @@ export function PartidosTab({
               const linkedPlayers = linkedPlayerIds.map(id => playersById.get(id)).filter(Boolean) as ScoutingPlayer[]
               const isVisto = m.status === 'visto'
               const isFuture = isFutureMatch(m.date)
+              // Mismo criterio que la tabla: ámbar = lo tengo pendiente YO; azul = futuro
+              const mio = (scoutsByMatch[m.id] ?? []).find(s2 => s2.scout === currentProfile.avatar)
+              const pendienteMio = !!mio && mio.status !== 'visto' && !isVisto
               const day = m.date.slice(8); const mon = MONTHS_ES[parseInt(m.date.slice(5, 7)) - 1]; const yr = m.date.slice(2, 4)
               return (
                 <div key={m.id} className={`bg-white border rounded-xl p-3 space-y-2 ${
-                  isVisto ? 'border-slate-200' :
+                  pendienteMio ? 'border-amber-200 bg-amber-50/30' :
                   isFuture ? 'border-blue-200 bg-blue-50/30' :
-                  'border-amber-200 bg-amber-50/30'
+                  'border-slate-200'
                 }`}>
                   {/* Header row */}
                   <div className="flex items-start justify-between gap-2">
@@ -519,6 +526,7 @@ export function PartidosTab({
                           key={`edit-${m.id}`}
                           match={m}
                           profiles={profiles}
+                          equipos={nombresEquipos}
                           onSave={async (f) => { await handleSaveMatch(f); showToast('Partido actualizado') }}
                           onCancel={() => { setShowAddMatch(false); setEditingMatch(null) }}
                         />

@@ -5,7 +5,7 @@ import type { ScoutingPlayer, ScoutingReport, ScoutingInfo, ScoutingInfoTipo, Sc
 import type { Profile } from '../../contexts/AuthContext'
 import type { Equipo as EquipoCatalogo } from '../../lib/db'
 import { isValidName } from '../../lib/validate'
-import { ZONA_CORTA, SIN_ZONA, normEquipo, type Zona } from '../../lib/zonas'
+import { ZONAS, ZONA_CORTA, SIN_ZONA, normEquipo, type Zona } from '../../lib/zonas'
 import type { buscarJugadoresParecidos } from '../../lib/duplicados'
 import { AssessmentChip, FormRow, InfoItem, Spinner, ReportCard } from './comun'
 import { type ShowToast, type CaptacionTab, type ConclusionOption, ASSESSMENT_CONFIG, ALL_ASSESSMENTS, POSITIONS_SCOUTING, CONCLUSION_OPTIONS, MONTHS_ES, REPORT_TEMPLATE, birthYearFromBirthdate, fmtDate, normConclusion } from './helpers'
@@ -88,7 +88,7 @@ export function PlayerPanel({
   panelPlayerId, panelPlayer, setPanelPlayerId, panelEquipo, setPanelEquipo, volverAEquipo, setVolverAEquipo,
   showAddPlayer, setShowAddPlayer, showEditPlayer, setShowEditPlayer, editTarget,
   // ficha del equipo
-  filaEquipoAbierta, renombrando, setRenombrando, guardarRenombre, onSaveEquipo, setZonasAbierto, setDetailMatchId,
+  filaEquipoAbierta, renombrando, setRenombrando, guardarRenombre, onSaveEquipo, onSetClubZona, setZonasAbierto, setDetailMatchId,
   categoriasConocidas, equiposOrdenados, equipos, scoutingMatches,
   // formulario de jugador
   form, setForm, emptyForm, playerNameError, setPlayerNameError, jugadoresParecidos, setOcultarParecidos,
@@ -135,6 +135,8 @@ export function PlayerPanel({
   guardarRenombre: () => Promise<void>
   onSaveEquipo: (e: Partial<EquipoCatalogo> & { nombre: string; club: string }) => Promise<void>
   setZonasAbierto: React.Dispatch<React.SetStateAction<boolean>>
+  /** Zona del club del equipo (vale para todos los equipos de ese club) */
+  onSetClubZona: (club: string, nombre: string, zona: Zona | null) => Promise<void>
   setDetailMatchId: React.Dispatch<React.SetStateAction<string | null>>
   categoriasConocidas: string[]
   equiposOrdenados: EquipoCatalogo[]
@@ -523,6 +525,13 @@ export function PlayerPanel({
                     </div>
                   )}
 
+                  {f.soloPartidos && (
+                    <div className="text-[11px] text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+                      Este equipo solo existe porque aparece en {f.partidosHist} partido{f.partidosHist !== 1 ? 's' : ''}: no está en el catálogo ni tiene jugadores.
+                      Si es un nombre mal escrito, renómbralo (lápiz de arriba) al nombre correcto y se fusionará con el equipo bueno, partidos incluidos.
+                    </div>
+                  )}
+
                   {/* Los números */}
                   <div className="grid grid-cols-4 gap-2">
                     {[
@@ -553,9 +562,22 @@ export function PlayerPanel({
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Zona (del club {f.club})</label>
-                      <button onClick={() => setZonasAbierto(true)} className="field text-left hover:border-primary">
-                        {f.zona === SIN_ZONA ? <span className="text-amber-600">sin zona — asignar</span> : f.zona}
-                      </button>
+                      {/* Antes abría el panel de zonas de TODOS los clubes, y si el
+                          equipo no tenía jugadores apuntados ni salía en él. */}
+                      <select
+                        value={f.zona === SIN_ZONA ? '' : f.zona}
+                        onChange={e => {
+                          const v = e.target.value
+                          void onSetClubZona(f.club, f.nombre, v ? v as Zona : null)
+                            .then(() => showToast(v ? `${f.club}: ${v} (todos sus equipos)` : `${f.club}: sin zona`))
+                            .catch(() => showToast('No se ha podido guardar la zona', 'error'))
+                        }}
+                        className="field"
+                      >
+                        <option value="">— sin zona —</option>
+                        {ZONAS.map(z => <option key={z} value={z}>{z}</option>)}
+                      </select>
+                      <button onClick={() => setZonasAbierto(true)} className="mt-1 text-[11px] text-slate-400 hover:text-primary">Ver todas las zonas</button>
                     </div>
                   </div>
 

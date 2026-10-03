@@ -3,6 +3,7 @@ import type { ScoutingMatch } from '../../../types'
 import type { Profile } from '../../../contexts/AuthContext'
 import { buscarPartidosParecidos } from '../../../lib/duplicados'
 import { useDebounce } from '../../../hooks/useDebounce'
+import { normEquipo } from '../../../lib/zonas'
 import { FormRow, Spinner } from '../comun'
 import { type ShowToast, COMPETITION_OPTIONS, fmtDate } from '../helpers'
 // ── MatchFormPanel — isolated so keystrokes don't re-render the whole list ──
@@ -10,7 +11,9 @@ export type MatchFormState = { date: string; time: string; homeTeam: string; awa
 function emptyMatchForm(fecha = ''): MatchFormState {
   return { date: fecha, time: '', homeTeam: '', awayTeam: '', competition: '', assignedTo: '', viewMode: 'video', notes: '' }
 }
-export function MatchFormPanel({ initial, fechaInicial, profiles, onSave, onCancel, showToast, partidos = [], onOpenExisting }: {
+export function MatchFormPanel({ initial, fechaInicial, profiles, onSave, onCancel, showToast, partidos = [], onOpenExisting, equipos = [] }: {
+  /** Nombres de equipos conocidos (catálogo + jugadores + partidos): sugerencias y aviso de equipo nuevo */
+  equipos?: string[]
   initial?: ScoutingMatch
   /** Fecha preseleccionada al crear (p. ej. el viernes de la planificación) */
   fechaInicial?: string
@@ -27,6 +30,8 @@ export function MatchFormPanel({ initial, fechaInicial, profiles, onSave, onCanc
     : emptyMatchForm(fechaInicial)
   )
   const [saving, setSaving] = useState(false)
+  const conocidos = useMemo(() => new Set(equipos.map(normEquipo)), [equipos])
+  const esNuevo = (t: string) => t.trim().length >= 3 && equipos.length > 0 && !conocidos.has(normEquipo(t))
   const set = (k: keyof MatchFormState, v: string) => setForm(f => ({ ...f, [k]: v }))
   // Aviso de duplicado: solo al crear (al editar saldría el propio partido)
   const [ocultarParecidos, setOcultarParecidos] = useState(false)
@@ -66,9 +71,16 @@ export function MatchFormPanel({ initial, fechaInicial, profiles, onSave, onCanc
           </select>
         </FormRow>
       </div>
+      <datalist id="equipos-conocidos">{equipos.map(n => <option key={n} value={n} />)}</datalist>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        <FormRow label="Local"><input value={form.homeTeam} onChange={e => set('homeTeam', e.target.value)} className="field" placeholder="Equipo local" /></FormRow>
-        <FormRow label="Visitante"><input value={form.awayTeam} onChange={e => set('awayTeam', e.target.value)} className="field" placeholder="Equipo visitante" /></FormRow>
+        <FormRow label="Local">
+          <input value={form.homeTeam} onChange={e => set('homeTeam', e.target.value)} list="equipos-conocidos" className="field" placeholder="Equipo local" />
+          {esNuevo(form.homeTeam) && <p className="text-[11px] text-amber-600 mt-0.5">Equipo nuevo: no está en Equipos. Comprueba que no sea otra grafía de uno existente.</p>}
+        </FormRow>
+        <FormRow label="Visitante">
+          <input value={form.awayTeam} onChange={e => set('awayTeam', e.target.value)} list="equipos-conocidos" className="field" placeholder="Equipo visitante" />
+          {esNuevo(form.awayTeam) && <p className="text-[11px] text-amber-600 mt-0.5">Equipo nuevo: no está en Equipos. Comprueba que no sea otra grafía de uno existente.</p>}
+        </FormRow>
       </div>
       {parecidos.length > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 text-xs text-amber-800 space-y-1">

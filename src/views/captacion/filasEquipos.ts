@@ -42,6 +42,8 @@ export interface FilaEquipo {
   relevante: boolean
   cubierto: boolean
   enCatalogo: boolean
+  /** Solo se conoce por los partidos: ni está en el catálogo ni tiene jugadores (típico de un nombre mal escrito al crear un partido) */
+  soloPartidos: boolean
   jugadores: number
   plantilla: ScoutingPlayer[]
   informes: number
@@ -91,11 +93,13 @@ export function calcularFilasEquipos(
     if (normConclusion(r.conclusion) === 'Llamar') conInformeLlamar.add(r.playerId)
   }
 
-  const partidos = new Map<string, { temporada: number; total: number; ultimo?: string }>()
+  const partidos = new Map<string, { temporada: number; total: number; ultimo?: string; nombres: Map<string, number> }>()
   const anota = (equipo: string | undefined, fecha: string) => {
     const k = normEquipo(equipo)
     if (!k) return
-    const e = partidos.get(k) ?? { temporada: 0, total: 0 }
+    const e = partidos.get(k) ?? { temporada: 0, total: 0, nombres: new Map<string, number>() }
+    const raw = (equipo ?? '').trim()
+    e.nombres.set(raw, (e.nombres.get(raw) ?? 0) + 1)
     e.total++
     if (fecha >= desde) e.temporada++
     if (!e.ultimo || fecha > e.ultimo) e.ultimo = fecha
@@ -108,17 +112,20 @@ export function calcularFilasEquipos(
   const delCatalogo = new Map<string, EquipoCatalogo>()
   for (const e of equipos) delCatalogo.set(normEquipo(e.nombre), e)
 
-  const claves = new Set<string>([...delCatalogo.keys(), ...porEquipo.keys()])
+  // Un equipo que solo sale en partidos también cuenta: si no, al crear un
+  // partido con un nombre nuevo (o mal escrito) el equipo «existía» en
+  // Partidos pero no había forma de verlo ni de corregirlo aquí.
+  const claves = new Set<string>([...delCatalogo.keys(), ...porEquipo.keys(), ...partidos.keys()])
   const out: FilaEquipo[] = []
   for (const k of claves) {
     const cat = delCatalogo.get(k)
     const grupo = porEquipo.get(k)
     const jug = grupo?.jugadores ?? []
-    const masUsado = grupo
-      ? [...grupo.nombres.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0]
+    const masUsado = (nombres?: Map<string, number>) => nombres
+      ? [...nombres.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0]
       : undefined
-    const nombre = cat?.nombre ?? masUsado ?? k
     const pt = partidos.get(k)
+    const nombre = cat?.nombre ?? masUsado(grupo?.nombres) ?? masUsado(pt?.nombres) ?? k
     const enLlamarIds = jug
       .filter(p => p.assessment === 'Llamar' || conInformeLlamar.has(p.id))
       .map(p => p.id)
@@ -131,6 +138,7 @@ export function calcularFilasEquipos(
       relevante: cat?.relevante ?? false,
       cubierto: cat?.cubierto ?? false,
       enCatalogo: !!cat,
+      soloPartidos: !cat && jug.length === 0,
       jugadores: jug.length,
       // Los valorados primero, y entre ellos por orden de interés
       // (Llamar, Seguir, Decidir…). Sin valorar, al final: si no se hace

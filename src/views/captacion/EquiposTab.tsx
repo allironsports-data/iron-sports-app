@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from 'react'
 import { Search, X, Plus, ChevronRight, MapPin, ClipboardList, Wand2, History, CalendarDays } from 'lucide-react'
-import type { ScoutingPlayer } from '../../types'
+import type { ScoutingPlayer, ScoutingMatch } from '../../types'
 import type { Equipo as EquipoCatalogo } from '../../lib/db'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { ZONAS, ZONA_CORTA, SIN_ZONA, zonaDe, clubBase, normEquipo, type Zona } from '../../lib/zonas'
@@ -13,8 +13,11 @@ import { type FilaEquipo, etiquetaTemporada, SIN_CATEGORIA, semaforoEquipo, regl
 // cambian de golpe el primer equipo, el B y todos los juveniles, y los
 // fichajes futuros ya nacen con su zona. Se guarda en la base de datos
 // (tabla scouting_club_zonas), así que lo que cambia uno lo ven todos.
-export function ZonasPanel({ players, clubZonas, onSetClubZona, onClose, showToast }: {
+export function ZonasPanel({ players, equipos = [], partidos = [], clubZonas, onSetClubZona, onClose, showToast }: {
   players: ScoutingPlayer[]
+  /** Catálogo y partidos: para que salgan también los clubes sin jugadores apuntados */
+  equipos?: EquipoCatalogo[]
+  partidos?: ScoutingMatch[]
   clubZonas: Record<string, Zona>
   onSetClubZona: (club: string, nombre: string, zona: Zona | null) => Promise<void>
   onClose: () => void
@@ -28,18 +31,23 @@ export function ZonasPanel({ players, clubZonas, onSetClubZona, onClose, showToa
   const [aplicando, setAplicando] = useState(false)
   useEscapeKey(onClose)
 
-  // Un club por cada equipo distinto de la BBDD, con cuántos jugadores tiene
+  // Un club por cada equipo distinto: de los jugadores, del catálogo y de los
+  // partidos. Antes solo de los jugadores, y un equipo dado de alta a mano o
+  // que solo salía en un partido no aparecía aquí: no había forma de darle zona.
   const clubes = useMemo(() => {
     const m = new Map<string, { club: string; nombre: string; n: number }>()
-    for (const p of players) {
-      const club = clubBase(p.team)
-      if (!club) continue
+    const mete = (team: string | undefined, cuenta: boolean) => {
+      const club = clubBase(team)
+      if (!club) return
       const e = m.get(club)
-      if (e) e.n++
-      else m.set(club, { club, nombre: (p.team ?? '').trim(), n: 1 })
+      if (e) { if (cuenta) e.n++ }
+      else m.set(club, { club, nombre: (team ?? '').trim(), n: cuenta ? 1 : 0 })
     }
+    for (const p of players) mete(p.team, true)
+    for (const e of equipos) mete(e.nombre, false)
+    for (const pt of partidos) { mete(pt.homeTeam, false); mete(pt.awayTeam, false) }
     return [...m.values()].sort((a, b) => b.n - a.n || a.club.localeCompare(b.club))
-  }, [players])
+  }, [players, equipos, partidos])
 
   const nq = normSearch(q)
   const visibles = useMemo(() => clubes.filter(c => {
@@ -177,7 +185,7 @@ export function ZonasPanel({ players, clubZonas, onSetClubZona, onClose, showToa
                     {c.nombre}
                     {aMano && <span className="ml-1.5 text-[9px] font-bold text-blue-600 uppercase">a mano</span>}
                   </div>
-                  <div className="text-[10px] text-slate-400">{c.n} jugador{c.n !== 1 ? 'es' : ''}</div>
+                  <div className="text-[10px] text-slate-400">{c.n === 0 ? 'sin jugadores apuntados' : `${c.n} jugador${c.n !== 1 ? 'es' : ''}`}</div>
                 </div>
                 <select
                   value={zona ?? ''}
@@ -205,9 +213,12 @@ export function ZonasPanel({ players, clubZonas, onSetClubZona, onClose, showToa
 }
 
 export function EquiposTab({
-  filas, desde,
+  filas, desde, clubZonas, onSetClubZona,
   onSaveEquipo, onAbrirEquipo, equipoAbierto, onAbrirZonas, onAbrirPlantilla, showToast,
 }: {
+  clubZonas: Record<string, Zona>
+  /** Zona del club (vale para todos sus equipos) */
+  onSetClubZona: (club: string, nombre: string, zona: Zona | null) => Promise<void>
   /** Filas calculadas UNA vez en Captacion.tsx con useFilasEquipos (se comparten con el panel lateral) */
   filas: FilaEquipo[]
   /** Inicio de la temporada actual (inicioTemporada()) */
@@ -228,6 +239,10 @@ export function EquiposTab({
   const [altaAbierta, setAltaAbierta] = useState(false)
   const [nuevoNombre, setNuevoNombre] = useState('')
   const [nuevaCat, setNuevaCat] = useState('')
+  const [nuevaZona, setNuevaZona] = useState<string>('')
+  const [nuevoRelevante, setNuevoRelevante] = useState(false)
+  // Zona que ya tendría por su club (tabla por defecto + correcciones), para no pedirla dos veces
+  const zonaDeducida = useMemo(() => zonaDe(nuevoNombre, clubZonas), [nuevoNombre, clubZonas])
 
   const categorias = useMemo(
     () => [...new Set(filas.map(f => f.categoria))].sort((a, b) =>
@@ -347,9 +362,13 @@ export function EquiposTab({
       return
     }
     try {
-      await onSaveEquipo({ nombre, club: clubBase(nombre), categoria: nuevaCat || undefined, relevante: true, manual: true })
-      showToast(`${nombre} añadido como relevante`)
-      setNuevoNombre(''); setNuevaCat(''); setAltaAbierta(false)
+      const club = clubBase(nombre)
+      await onSaveEquipo({ nombre, club, categoria: nuevaCat || undefined, relevante: nuevoRelevante, manual: true })
+      // La zona es del club: si se elige una distinta de la deducida, se guarda para el club
+      const zona = (nuevaZona || zonaDeducida || '') as Zona | ''
+      if (zona && zona !== zonaDeducida) await onSetClubZona(club, nombre, zona)
+      showToast(`${nombre} añadido${nuevoRelevante ? ' como relevante' : ''}${zona ? ` · ${ZONA_CORTA[zona] ?? zona}` : ' · sin zona'}`)
+      setNuevoNombre(''); setNuevaCat(''); setNuevaZona(''); setNuevoRelevante(false); setAltaAbierta(false)
     } catch {
       showToast('No se ha podido crear el equipo', 'error')
     }
@@ -440,11 +459,22 @@ export function EquiposTab({
               {categorias.filter(c => c !== SIN_CATEGORIA).map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
-          <button onClick={() => void crearEquipo()} className="px-3 py-1.5 text-xs font-bold bg-primary text-white rounded-lg hover:bg-primary/90">
-            Añadir como ★
+          <div className="min-w-[180px]">
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Zona {zonaDeducida && !nuevaZona ? <span className="font-normal normal-case text-slate-400">(deducida del club)</span> : ''}</label>
+            <select value={nuevaZona || zonaDeducida || ''} onChange={e => setNuevaZona(e.target.value)} className={SELECT_CLS + ' w-full'}>
+              <option value="">— sin zona —</option>
+              {ZONAS.map(z => <option key={z} value={z}>{z}</option>)}
+            </select>
+          </div>
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 cursor-pointer pb-1.5">
+            <input type="checkbox" checked={nuevoRelevante} onChange={e => setNuevoRelevante(e.target.checked)} className="accent-amber-500" />
+            ★ Relevante
+          </label>
+          <button onClick={() => void crearEquipo()} disabled={!nuevoNombre.trim()} className="px-3 py-1.5 text-xs font-bold bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-40">
+            Añadir equipo
           </button>
-          <p className="w-full text-[10.5px] text-slate-500">
-            Para equipos que te importan y de los que <strong>todavía no tienes a nadie apuntado</strong>.
+          <p className="w-full text-[11px] text-slate-500">
+            La zona es del club: se aplica a todos sus equipos (filial, juveniles…). Marca ★ solo si el equipo os importa para el control de cobertura.
           </p>
         </div>
       )}
@@ -611,7 +641,9 @@ export function EquiposTab({
                     </td>
                     <td className="px-3 py-2 font-medium text-slate-800">
                       {f.nombre}
-                      {!f.enCatalogo && <span className="ml-1.5 text-[9px] font-bold text-blue-500 uppercase" title="Todavía no está en el catálogo">nuevo</span>}
+                      {f.soloPartidos
+                        ? <span className="ml-1.5 text-[10px] font-bold text-amber-600 uppercase" title="Solo aparece en partidos: ni está en el catálogo ni tiene jugadores. Si es un nombre mal escrito, ábrelo y renómbralo al correcto para fusionarlo.">solo partidos</span>
+                        : !f.enCatalogo && <span className="ml-1.5 text-[10px] font-bold text-blue-500 uppercase" title="Todavía no está en el catálogo">nuevo</span>}
                     </td>
                     <td className="px-2 py-2 text-[11px] text-slate-500 whitespace-nowrap">
                       {f.zona === SIN_ZONA ? <span className="text-amber-600">sin zona</span> : (ZONA_CORTA[f.zona as Zona] ?? f.zona)}
