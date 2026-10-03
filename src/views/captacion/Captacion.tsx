@@ -457,10 +457,7 @@ export function Captacion({
   }, [matchPlayers])
 
   // ── filtered matches ──
-  // Orden: por día (más reciente primero, ya viene así de la BBDD) y, dentro
-  // del mismo día, por hora — también de más reciente a más antigua. Antes
-  // el segundo criterio no existía y dentro de un mismo día el orden salía
-  // más o menos aleatorio (el de inserción en la base de datos).
+  // Orden: ver el sort de abajo (hoy → próximos → pasados).
   const hoyPartidos = todayISO()
   const filteredMatches = useMemo(() => {
     const q = matchSearchDeb.toLowerCase().trim()
@@ -479,13 +476,16 @@ export function Captacion({
         }
         return true
       })
-      // Los de HOY primero (por hora): en el campo es el que se busca, y antes
-      // quedaba enterrado bajo los partidos futuros. El resto, del más nuevo al más antiguo.
+      // Tres bloques: HOY (por hora), luego los PRÓXIMOS en orden cronológico
+      // (mañana, pasado…), y al final los PASADOS del más reciente al más
+      // antiguo. Antes hoy iba primero pero el resto se ordenaba todo del más
+      // nuevo al más antiguo, y los futuros salían al revés (6, 5, 4 oct).
       .sort((a, b) => {
-        const ha = a.date === hoyPartidos, hb = b.date === hoyPartidos
-        if (ha !== hb) return ha ? -1 : 1
-        if (ha) return (a.time ?? '99').localeCompare(b.time ?? '99')
-        return b.date.localeCompare(a.date) || (b.time ?? '').localeCompare(a.time ?? '')
+        const bloque = (m: ScoutingMatch) => m.date === hoyPartidos ? 0 : m.date > hoyPartidos ? 1 : 2
+        const ba = bloque(a), bb = bloque(b)
+        if (ba !== bb) return ba - bb
+        if (ba === 2) return b.date.localeCompare(a.date) || (b.time ?? '').localeCompare(a.time ?? '')
+        return a.date.localeCompare(b.date) || (a.time ?? '99').localeCompare(b.time ?? '99')
       })
   }, [scoutingMatches, scoutsByMatch, matchPlayersByMatchId, playersById, matchSearchDeb, matchPersonaFilter, matchCompFilter, matchModeFilter, matchStatusFilter, hideFutureMatches, hoyPartidos])
 

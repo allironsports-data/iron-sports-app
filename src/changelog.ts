@@ -19,6 +19,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-10-03',
+    items: [
+      'Captación → Partidos: orden claro. Primero los de hoy por hora; después los próximos en orden (mañana, pasado…); y al final los ya jugados, del más reciente al más antiguo. Antes los futuros salían al revés y mezclados con los pasados',
+    ],
+  },
+  {
     date: '2026-10-02',
     items: [
       'Pipeline → Firmar: las tarjetas se pueden ordenar a mano dentro de su columna. Arrastra una tarjeta y suéltala sobre otra: si la bajas queda debajo, si la subes queda encima. El orden lo ve todo el equipo y es el mismo en la vista general y en la de zona. Soltarla sobre una tarjeta de otra columna la cambia de estatus y la deja en ese sitio. Reordenar no cuenta como «tocar» al jugador: no reinicia los días sin tocar',
