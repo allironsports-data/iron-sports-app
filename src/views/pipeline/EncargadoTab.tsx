@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { AlertTriangle, Flame, PhoneOff, CalendarClock, ChevronRight, Inbox } from 'lucide-react'
+import { AlertTriangle, Flame, PhoneOff, CalendarClock, ChevronRight, Inbox, Users } from 'lucide-react'
 import type { FirmasEntry, FirmasStatus } from '../../types'
 import type { Profile } from '../../contexts/AuthContext'
 import { EmptyState } from '../../components/EmptyState'
@@ -178,6 +178,36 @@ export function EncargadoTab({
   const persona = conPipeline.find(p => p.id === quien)
   const esYo = quien === currentProfile.id
 
+  // ── Comparativa del equipo: una fila por encargado ──
+  // Lo que no se ve en «mi pipeline»: quién acumula tarjetas paradas, quién
+  // no registra actividad, quién cierra. Y las tarjetas que no lleva nadie.
+  const equipo = useMemo(() => {
+    const vivasTodas = entries.filter(e => e.status !== 'firmado')
+    const filas = conPipeline.map(p => {
+      const suyas = vivasTodas.filter(e => e.managers.includes(p.id))
+      const firmadas90 = entries.filter(e => e.status === 'firmado' && e.managers.includes(p.id) && (dias(e.signedAt) ?? 999) <= 90).length
+      const paradas = suyas.map(e => firmasAging(e)?.days ?? dias(e.updatedAt) ?? 0)
+      // Última acción registrada por esta persona en cualquiera de sus tarjetas
+      let ultima: string | undefined
+      for (const e of suyas) for (const c of e.comments) if (c.authorId === p.id && (!ultima || c.date > ultima)) ultima = c.date
+      return {
+        p,
+        vivas: suyas.length,
+        porEstatus: ESTATUS_VIVOS.map(s => suyas.filter(e => e.status === s).length),
+        calientes: suyas.filter(e => e.status === 'caliente').length,
+        top: suyas.filter(e => e.potencialTop).length,
+        desatendidas: suyas.filter(e => firmasAging(e)?.overdue).length,
+        vencidas: suyas.filter(e => e.nextAction && cuandoAccion(e.nextActionDate).vencida).length,
+        sinAccion: suyas.filter(e => e.status === 'caliente' && !e.nextAction).length,
+        firmadas90,
+        mediaParada: paradas.length ? Math.round(paradas.reduce((a, b) => a + b, 0) / paradas.length) : null,
+        ultima,
+      }
+    }).sort((a, b) => b.vivas - a.vivas)
+    const sinEncargado = vivasTodas.filter(e => e.managers.length === 0)
+    return { filas, sinEncargado }
+  }, [entries, conPipeline])
+
   return (
     <div className="flex-1 w-full px-3 sm:px-6 py-4">
       <div className="max-w-6xl mx-auto space-y-4">
@@ -202,6 +232,84 @@ export function EncargadoTab({
               <option key={p.id} value={p.id}>{p.id === currentProfile.id ? `${p.name} (yo)` : p.name}</option>
             ))}
           </select>
+        </div>
+
+        {/* ── El equipo entero, de un vistazo ── */}
+        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-slate-100 flex items-center gap-2">
+            <Users className="w-4 h-4 text-slate-400" />
+            <h3 className="text-sm font-bold text-slate-800 flex-1">El equipo</h3>
+            <span className="text-[11px] text-slate-400">clic en una fila para ver su pipeline</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-[11px] text-slate-500 uppercase tracking-wide">
+                  <th className="text-left px-3 py-2 font-semibold">Encargado</th>
+                  <th className="text-center px-2 py-2 font-semibold" title="Tarjetas en marcha (sin contar firmadas)">Vivas</th>
+                  <th className="text-left px-2 py-2 font-semibold">Por estatus</th>
+                  <th className="text-center px-2 py-2 font-semibold" title="Potencial top">⭐</th>
+                  <th className="text-center px-2 py-2 font-semibold" title="Pasadas de cadencia (caliente 10 d, templado 50, frío 90)">Desatend.</th>
+                  <th className="text-center px-2 py-2 font-semibold" title="Próximas acciones con fecha de hoy o pasada">Acc. vencidas</th>
+                  <th className="text-center px-2 py-2 font-semibold" title="Calientes sin próxima acción apuntada">Cal. sin acción</th>
+                  <th className="text-center px-2 py-2 font-semibold" title="Media de días sin tocar de sus tarjetas">Media parada</th>
+                  <th className="text-center px-2 py-2 font-semibold" title="Firmados en los últimos 90 días">Firmados 90 d</th>
+                  <th className="text-left px-2 py-2 font-semibold" title="Último apunte que ha escrito en alguna de sus tarjetas">Última acción</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {equipo.sinEncargado.length > 0 && (
+                  <tr className="bg-red-50/60">
+                    <td className="px-3 py-2 font-semibold text-red-700">⚠ Sin encargado</td>
+                    <td className="px-2 py-2 text-center font-bold text-red-700">{equipo.sinEncargado.length}</td>
+                    <td className="px-2 py-2" colSpan={8}>
+                      <span className="flex flex-wrap gap-1">
+                        {equipo.sinEncargado.slice(0, 12).map(e => (
+                          <button key={e.id} onClick={() => onAbrirEntry(e.id)} className="text-[11px] bg-white border border-red-200 text-red-700 rounded-full px-2 py-0.5 hover:border-red-400">
+                            {e.playerName}
+                          </button>
+                        ))}
+                        {equipo.sinEncargado.length > 12 && <span className="text-[11px] text-red-600">y {equipo.sinEncargado.length - 12} más</span>}
+                      </span>
+                    </td>
+                  </tr>
+                )}
+                {equipo.filas.map(f => {
+                  const sel = f.p.id === quien
+                  const ult = f.ultima ? dias(f.ultima) : null
+                  return (
+                    <tr key={f.p.id} onClick={() => setQuien(f.p.id)} className={`cursor-pointer transition-colors ${sel ? 'bg-blue-50/60' : 'hover:bg-slate-50'}`}>
+                      <td className="px-3 py-2 font-medium text-slate-800 whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="w-5 h-5 rounded-full bg-primary text-white text-[9px] font-bold inline-flex items-center justify-center">{f.p.avatar}</span>
+                          {f.p.name}{f.p.id === currentProfile.id && <span className="text-slate-400 font-normal"> (yo)</span>}
+                        </span>
+                      </td>
+                      <td className="px-2 py-2 text-center font-bold text-slate-700 tabular-nums">{f.vivas || '—'}</td>
+                      <td className="px-2 py-2">
+                        <span className="flex items-center gap-2 text-[11px] text-slate-600">
+                          {ESTATUS_VIVOS.map((s, i) => f.porEstatus[i] ? (
+                            <span key={s} className="inline-flex items-center gap-0.5" title={FIRMAS_CONFIG[s].label}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${FIRMAS_CONFIG[s].dot}`} />{f.porEstatus[i]}
+                            </span>
+                          ) : null)}
+                        </span>
+                      </td>
+                      <td className="px-2 py-2 text-center text-xs text-amber-700 tabular-nums">{f.top || '—'}</td>
+                      <td className={`px-2 py-2 text-center text-xs tabular-nums ${f.desatendidas ? 'text-red-600 font-bold' : 'text-slate-400'}`}>{f.desatendidas || '—'}</td>
+                      <td className={`px-2 py-2 text-center text-xs tabular-nums ${f.vencidas ? 'text-red-600 font-bold' : 'text-slate-400'}`}>{f.vencidas || '—'}</td>
+                      <td className={`px-2 py-2 text-center text-xs tabular-nums ${f.sinAccion ? 'text-amber-600 font-semibold' : 'text-slate-400'}`}>{f.sinAccion || '—'}</td>
+                      <td className={`px-2 py-2 text-center text-xs tabular-nums ${f.mediaParada == null ? 'text-slate-400' : f.mediaParada > 30 ? 'text-red-600 font-semibold' : f.mediaParada > 14 ? 'text-amber-600' : 'text-slate-600'}`}>{f.mediaParada == null ? '—' : `${f.mediaParada} d`}</td>
+                      <td className={`px-2 py-2 text-center text-xs tabular-nums ${f.firmadas90 ? 'text-emerald-700 font-semibold' : 'text-slate-400'}`}>{f.firmadas90 || '—'}</td>
+                      <td className={`px-2 py-2 text-[11px] whitespace-nowrap ${ult == null ? 'text-slate-300' : ult > 14 ? 'text-red-600 font-semibold' : ult > 7 ? 'text-amber-600' : 'text-slate-500'}`}>
+                        {ult == null ? 'sin apuntes' : ult === 0 ? 'hoy' : `hace ${ult} d`}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         {mias.length === 0 ? (
@@ -324,6 +432,7 @@ export function EncargadoTab({
                       <th className="text-left px-2 py-2 font-semibold">Zona</th>
                       <th className="text-center px-2 py-2 font-semibold" title="Días desde el último movimiento">Parada</th>
                       <th className="text-left px-2 py-2 font-semibold">Próxima acción</th>
+                      <th className="text-left px-2 py-2 font-semibold" title="Último apunte registrado en la tarjeta (de quien sea)">Última acción</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
@@ -333,6 +442,8 @@ export function EncargadoTab({
                       const d = aging?.days ?? dias(e.updatedAt)
                       const c = cuandoAccion(e.nextActionDate)
                       const meta = e.nextActionKind ? FIRMAS_ACTION_KIND_META[e.nextActionKind] : undefined
+                      const ultimo = e.comments.length ? e.comments[e.comments.length - 1] : undefined
+                      const dUlt = ultimo ? dias(ultimo.date) : null
                       return (
                         <tr
                           key={e.id}
@@ -358,6 +469,15 @@ export function EncargadoTab({
                                 {meta?.icon} {e.nextAction} <span className="text-slate-400">· {c.txt}</span>
                               </span>
                             ) : <span className="text-slate-300">sin acción</span>}
+                          </td>
+                          <td className="px-2 py-2 text-[11px] max-w-[260px]">
+                            {ultimo ? (
+                              <span className="flex items-center gap-1 text-slate-600">
+                                <span>{FIRMAS_ACTION_KIND_META[ultimo.kind ?? 'nota']?.icon ?? '📝'}</span>
+                                <span className="truncate" title={ultimo.text}>{ultimo.text}</span>
+                                <span className="text-slate-400 flex-shrink-0">· {dUlt === 0 ? 'hoy' : `hace ${dUlt} d`}{ultimo.author ? ` · ${ultimo.author.split(' ')[0]}` : ''}</span>
+                              </span>
+                            ) : <span className="text-slate-300">sin apuntes</span>}
                           </td>
                         </tr>
                       )

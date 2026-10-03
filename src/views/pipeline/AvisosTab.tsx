@@ -1,7 +1,11 @@
-import { useState } from 'react'
-import { BellOff, Check, CheckCircle2, Clock } from 'lucide-react'
+import { useCallback, useMemo, useState } from 'react'
+import { BellOff, Check, CheckCircle2, Clock, ExternalLink } from 'lucide-react'
 import { EmptyState } from '../../components/EmptyState'
 import type { Aviso, GrupoAviso } from '../captacion/firmas/avisos'
+import type { FirmasEntry } from '../../types'
+import type { Profile } from '../../contexts/AuthContext'
+import { FIRMAS_CONFIG } from '../captacion/firmas/helpers'
+import { FirmasManagers } from '../captacion/firmas/comun'
 
 // ── Avisos del pipeline ──────────────────────────────────────────────
 // Antes era un desplegable encima del tablero: para leerlo había que
@@ -21,7 +25,13 @@ const tonoDe = (t: string) => TONO[t as keyof typeof TONO] ?? TONO.blue
 export function AvisosTab({
   grupos, urgentes, total, avisosMudos, onSilenciar, onRestaurar, onAbrirEntry,
   onPosponer, onVisto, ocultos, onRestaurarPospuestos,
+  entries, profiles, currentProfile, onOpenScoutingPlayer,
 }: {
+  /** Para pintar cada aviso con su contexto (estatus, zona, encargados) y filtrar «solo los míos» */
+  entries: FirmasEntry[]
+  profiles: Profile[]
+  currentProfile: Profile
+  onOpenScoutingPlayer?: (id: string) => void
   grupos: GrupoAviso[]
   urgentes: number
   total: number
@@ -35,7 +45,19 @@ export function AvisosTab({
   onRestaurarPospuestos: () => void
 }) {
   const [soloUrgentes, setSoloUrgentes] = useState(false)
-  const visibles = soloUrgentes ? grupos.filter(g => g.tone === 'red') : grupos
+  const porId = useMemo(() => new Map(entries.map(e => [e.id, e])), [entries])
+  // «Solo los míos»: los avisos de las tarjetas que llevo yo. Por defecto
+  // activo si llevo alguna: cada encargado ve lo suyo, no la lista entera.
+  const llevoAlguna = useMemo(() => entries.some(e => e.managers.includes(currentProfile.id)), [entries, currentProfile.id])
+  const [soloMios, setSoloMios] = useState<boolean | null>(null)
+  const soloMiosActivo = soloMios ?? llevoAlguna
+  const esMio = useCallback((a: Aviso) => !!porId.get(a.entryId)?.managers.includes(currentProfile.id), [porId, currentProfile.id])
+  const visibles = useMemo(() => {
+    let gs = soloUrgentes ? grupos.filter(g => g.tone === 'red') : grupos
+    if (soloMiosActivo) gs = gs.map(g => ({ ...g, items: g.items.filter(esMio) })).filter(g => g.items.length > 0)
+    return gs
+  }, [grupos, soloUrgentes, soloMiosActivo, esMio])
+  const nMios = useMemo(() => grupos.reduce((n, g) => n + g.items.filter(esMio).length, 0), [grupos, esMio])
 
   return (
     <div className="flex-1 w-full px-3 sm:px-6 py-4">
@@ -48,6 +70,17 @@ export function AvisosTab({
               Cosas que pasan fuera de Firmar y deberían mover una tarjeta: partidos, informes, cambios de club, contratos…
             </p>
           </div>
+          {llevoAlguna && (
+            <button
+              onClick={() => setSoloMios(!soloMiosActivo)}
+              className={`text-xs font-semibold rounded-lg px-2.5 py-1.5 border transition-colors ${
+                soloMiosActivo ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              }`}
+              title="Avisos de las tarjetas que llevas tú"
+            >
+              Solo los míos · {nMios}
+            </button>
+          )}
           {urgentes > 0 && (
             <button
               onClick={() => setSoloUrgentes(v => !v)}
@@ -62,7 +95,13 @@ export function AvisosTab({
           )}
         </div>
 
-        {total === 0 ? (
+        {total > 0 && visibles.length === 0 ? (
+          <EmptyState
+            icon={<CheckCircle2 className="w-10 h-10" />}
+            title={soloMiosActivo ? 'Nada pendiente en tus tarjetas' : 'Nada urgente'}
+            subtitle={soloMiosActivo ? `Hay ${total} aviso${total !== 1 ? 's' : ''} en tarjetas de otros encargados — quita «Solo los míos» para verlos` : 'Quita el filtro para ver el resto'}
+          />
+        ) : total === 0 ? (
           <EmptyState
             icon={<CheckCircle2 className="w-10 h-10" />}
             title="Nada que revisar"
@@ -90,15 +129,39 @@ export function AvisosTab({
                     </button>
                   </div>
                   <div className="divide-y divide-slate-50 max-h-[320px] overflow-y-auto">
-                    {g.items.map(a => (
+                    {g.items.map(a => {
+                      const e = porId.get(a.entryId)
+                      const cfg = e ? FIRMAS_CONFIG[e.status] : undefined
+                      // El texto del aviso suele empezar por el nombre: se quita para no repetirlo
+                      const detalle = e && a.text.startsWith(e.playerName) ? a.text.slice(e.playerName.length).replace(/^[\s:·—-]+/, '') : a.text
+                      return (
                       <div key={`${a.kind}|${a.entryId}`} className="flex items-center hover:bg-slate-50 transition-colors">
                         <button
                           onClick={() => onAbrirEntry(a.entryId)}
-                          className="flex-1 min-w-0 text-left text-[11.5px] text-slate-700 pl-3 pr-2 py-1.5"
+                          className="flex-1 min-w-0 text-left pl-3 pr-2 py-1.5"
                         >
-                          {a.text}
+                          {e ? (
+                            <span className="flex items-center gap-1.5 flex-wrap">
+                              {cfg && <span className={`w-2 h-2 rounded-full flex-shrink-0 ${cfg.dot}`} title={cfg.label} />}
+                              {e.potencialTop && <span className="text-[11px]" title="Potencial top">⭐</span>}
+                              <span className="text-xs font-semibold text-slate-800">{e.playerName}</span>
+                              <span className="text-[11px] text-slate-400">{e.zone}</span>
+                              <FirmasManagers managerIds={e.managers} profiles={profiles} max={2} />
+                            </span>
+                          ) : null}
+                          <span className="block text-[11.5px] text-slate-700">{detalle}</span>
                         </button>
                         <span className="flex items-center gap-0.5 pr-2 flex-shrink-0">
+                          {e?.scoutingPlayerId && onOpenScoutingPlayer && (
+                            <button
+                              onClick={() => onOpenScoutingPlayer(e.scoutingPlayerId!)}
+                              title="Abrir su ficha de Captación (informes, partidos)"
+                              aria-label="Abrir ficha de Captación"
+                              className="p-1 rounded text-slate-300 hover:text-primary hover:bg-blue-50"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                           <button
                             onClick={() => onPosponer(a, 7)}
                             title="Posponer 7 días"
@@ -117,7 +180,8 @@ export function AvisosTab({
                           </button>
                         </span>
                       </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
               )

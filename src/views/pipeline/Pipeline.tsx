@@ -234,7 +234,11 @@ export function Pipeline(props: PipelineProps) {
           onVisto={avisos.marcarVisto}
           ocultos={avisos.ocultos}
           onRestaurarPospuestos={avisos.restaurarPospuestos}
-          onAbrirEntry={id => { setSaltoId(id); setTab('firmar') }}
+          onAbrirEntry={id => { if (props.onOpenFirmar) props.onOpenFirmar(id); else { setSaltoId(id); setTab('firmar') } }}
+          entries={firmasEntries}
+          profiles={profiles}
+          currentProfile={currentProfile}
+          onOpenScoutingPlayer={props.onOpenScoutingPlayer}
         />
       )}
 
