@@ -1066,13 +1066,23 @@ export function Captacion({
       status: (editingMatch?.status ?? 'pendiente') as 'pendiente' | 'visto',
       notes: form.notes.trim() || undefined,
     }
+    // El «responsable» del formulario es también un scout del partido: sin su
+    // fila en scouting_match_scouts, «marcar visto» y campo/vídeo no tenían
+    // dónde guardarse.
+    const conFilaDeScout = async (matchId: string) => {
+      if (!payload.assignedTo) return
+      if ((scoutsByMatch[matchId] ?? []).some(s => s.scout === payload.assignedTo) && editingMatch?.assignedTo === payload.assignedTo) return
+      try { await onAddMatchScout(matchId, payload.assignedTo, payload.viewMode) } catch (e) { console.error(e) }
+    }
     if (editingMatch) {
       const updated: ScoutingMatch = { ...editingMatch, ...payload }
       await db.updateScoutingMatch(updated)
       onUpdateMatch(updated)
+      await conFilaDeScout(updated.id)
     } else {
       const saved = await db.createScoutingMatch(payload)
       onAddMatch(saved)
+      await conFilaDeScout(saved.id)
     }
     setShowAddMatch(false)
     setEditingMatch(null)

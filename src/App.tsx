@@ -1366,13 +1366,17 @@ export default function App() {
     await db.removeMatchScout(matchId, scout)
     setMatchScouts(prev => prev.filter(x => !(x.matchId === matchId && x.scout === scout)))
   }
+  // La fila puede no existir todavía (scout solo en assigned_to): db la crea
+  // y aquí se añade al estado si no estaba.
+  const ponerFilaScout = (fila: ScoutingMatchScout) => setMatchScouts(prev =>
+    prev.some(x => x.matchId === fila.matchId && x.scout === fila.scout)
+      ? prev.map(x => x.matchId === fila.matchId && x.scout === fila.scout ? { ...x, ...fila } : x)
+      : [...prev, fila])
   const handleSetMatchScoutStatus = async (matchId: string, scout: string, status: 'pendiente' | 'visto') => {
-    await db.setMatchScoutStatus(matchId, scout, status)
-    setMatchScouts(prev => prev.map(x => x.matchId === matchId && x.scout === scout ? { ...x, status } : x))
+    ponerFilaScout(await db.setMatchScoutStatus(matchId, scout, status))
   }
   const handleSetMatchScoutMode = async (matchId: string, scout: string, viewMode: 'campo' | 'video') => {
-    await db.setMatchScoutMode(matchId, scout, viewMode)
-    setMatchScouts(prev => prev.map(x => x.matchId === matchId && x.scout === scout ? { ...x, viewMode } : x))
+    ponerFilaScout(await db.setMatchScoutMode(matchId, scout, viewMode))
   }
 
   // ── Firmar ⇄ Tareas: cada próxima acción genera una tarea real ──

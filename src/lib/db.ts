@@ -1419,11 +1419,17 @@ export async function addMatchScout(matchId: string, scout: string, viewMode?: '
   return dbToMatchScout(data)
 }
 
+// Modo y estado de ESE scout en el partido. Van por upsert y devuelven la
+// fila: un partido antiguo (o creado desde el formulario con solo el
+// «responsable») tiene al scout en scouting_matches.assigned_to pero sin
+// fila aquí, y un update a secas no tocaba nada y «guardaba» sin cambiar.
 /** Cómo vio ESE scout el partido: en el campo o por vídeo */
-export async function setMatchScoutMode(matchId: string, scout: string, viewMode: 'campo' | 'video'): Promise<void> {
-  const { error } = await supabase.from('scouting_match_scouts')
-    .update({ view_mode: viewMode }).eq('match_id', matchId).eq('scout', scout)
+export async function setMatchScoutMode(matchId: string, scout: string, viewMode: 'campo' | 'video'): Promise<ScoutingMatchScout> {
+  const { data, error } = await supabase.from('scouting_match_scouts')
+    .upsert({ match_id: matchId, scout, view_mode: viewMode }, { onConflict: 'match_id,scout' })
+    .select().single()
   if (error) throw error
+  return dbToMatchScout(data)
 }
 
 export async function removeMatchScout(matchId: string, scout: string): Promise<void> {
@@ -1432,10 +1438,12 @@ export async function removeMatchScout(matchId: string, scout: string): Promise<
   if (error) throw error
 }
 
-export async function setMatchScoutStatus(matchId: string, scout: string, status: 'pendiente' | 'visto'): Promise<void> {
-  const { error } = await supabase.from('scouting_match_scouts')
-    .update({ status }).eq('match_id', matchId).eq('scout', scout)
+export async function setMatchScoutStatus(matchId: string, scout: string, status: 'pendiente' | 'visto'): Promise<ScoutingMatchScout> {
+  const { data, error } = await supabase.from('scouting_match_scouts')
+    .upsert({ match_id: matchId, scout, status }, { onConflict: 'match_id,scout' })
+    .select().single()
   if (error) throw error
+  return dbToMatchScout(data)
 }
 
 // ── Fusión manual de partidos ─────────────────────────────────

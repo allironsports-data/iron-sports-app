@@ -21,6 +21,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-03',
     items: [
+      'Partidos: «marcar visto» y el botón campo/vídeo de un scout volvían a quedarse como estaban (decía «guardado» pero no cambiaba nada) en los partidos que tenían al scout solo como responsable del formulario, sin fila propia. Ahora esa fila se crea sola al pulsar, y al crear o editar un partido desde el formulario el responsable queda también como scout',
       'Captación → Partidos: orden claro. Primero los de hoy por hora; después los próximos en orden (mañana, pasado…); y al final los ya jugados, del más reciente al más antiguo. Antes los futuros salían al revés y mezclados con los pasados',
     ],
   },
