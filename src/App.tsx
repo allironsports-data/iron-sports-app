@@ -1806,6 +1806,9 @@ export default function App() {
       onReorderFirmas={handleReorderFirmas}
       onDeleteFirmasEntry={handleDeleteFirmasEntry}
       onOpenScoutingPlayer={(id) => setFlotante({ tipo: 'scouting', id })}
+      onOpenMatch={(id) => setFlotante({ tipo: 'partido', id })}
+      onOpenFirmar={(id) => setFlotante({ tipo: 'firmar', id })}
+      clubZonas={clubZonas}
       openEntryId={captacionOpenFirmasId}
       onOpenEntryConsumed={() => setCaptacionOpenFirmasId(null)}
       onGoToSection={(s) => irA(s)}

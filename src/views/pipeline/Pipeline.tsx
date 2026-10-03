@@ -6,6 +6,8 @@ import type { Profile } from '../../contexts/AuthContext'
 import type { PatchFirmasEntry } from '../captacion/helpers'
 import { ToastStack } from '../../components/ToastStack'
 import { useToast } from '../../hooks/useToast'
+import { ZonaTab } from './ZonaTab'
+import type { Zona } from '../../lib/zonas'
 import { FirmasTab } from '../captacion/firmas/FirmasTab'
 import { TimelineTab } from './TimelineTab'
 import { EncargadoTab } from './EncargadoTab'
@@ -43,6 +45,11 @@ export interface PipelineProps {
   onDeleteFirmasEntry: (id: string) => Promise<void>
   /** Abrir la ficha de un jugador de Captación desde una tarjeta */
   onOpenScoutingPlayer: (id: string) => void
+  /** Abrir un partido / una tarjeta en flotante (vista Por zona) */
+  onOpenMatch?: (id: string) => void
+  onOpenFirmar?: (id: string) => void
+  /** Correcciones de zona por club (scouting_club_zonas) */
+  clubZonas?: Record<string, Zona>
   /** Abrir una tarjeta concreta al entrar (desde el Dashboard, el buscador…) */
   openEntryId?: string | null
   onOpenEntryConsumed?: () => void
@@ -164,9 +171,8 @@ export function Pipeline(props: PipelineProps) {
         </div>
       </header>
 
-      {(tab === 'firmar' || tab === 'zona') && (
+      {tab === 'firmar' && (
         <FirmasTab
-          vistaFija={tab === 'zona' ? 'zona' : undefined}
           entries={firmasEntries}
           profiles={profiles}
           currentProfile={currentProfile}
@@ -185,6 +191,25 @@ export function Pipeline(props: PipelineProps) {
           onOpenScoutingPlayer={props.onOpenScoutingPlayer}
           showToast={showToast}
           headerHeight={headerHeight}
+        />
+      )}
+
+      {tab === 'zona' && (
+        <ZonaTab
+          entries={firmasEntries}
+          profiles={profiles}
+          scoutingPlayers={props.scoutingPlayers}
+          scoutingReports={props.scoutingReports}
+          scoutingMatches={props.scoutingMatches}
+          matchPlayers={props.matchPlayers}
+          clubZonas={props.clubZonas}
+          onAbrirEntry={id => { if (props.onOpenFirmar) props.onOpenFirmar(id); else { setSaltoId(id); setTab('firmar') } }}
+          onOpenScoutingPlayer={props.onOpenScoutingPlayer}
+          onOpenMatch={props.onOpenMatch}
+          onRenameZone={async (de, a) => {
+            for (const e of firmasEntries.filter(x => x.zone === de)) await props.onPatchFirmasEntry(e.id, { zone: a })
+            showToast(`Zona renombrada: ${a}`)
+          }}
         />
       )}
 
