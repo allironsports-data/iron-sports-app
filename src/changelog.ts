@@ -21,6 +21,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-03',
     items: [
+      'Pipeline → Firmar: marca «potencial top» por jugador. Se activa con la estrella ⭐ junto al nombre en la ficha de la tarjeta; la tarjeta y la fila del móvil la enseñan, y el botón «⭐ Potencial top» de los filtros deja solo esos, para ver cómo van los top de cada zona (combina con el filtro de zona y el resto). Requiere migration_firmas_potencial_top.sql; sin ella la marca no se guarda',
       'Partidos: «marcar visto» y el botón campo/vídeo de un scout volvían a quedarse como estaban (decía «guardado» pero no cambiaba nada) en los partidos que tenían al scout solo como responsable del formulario, sin fila propia. Ahora esa fila se crea sola al pulsar, y al crear o editar un partido desde el formulario el responsable queda también como scout',
       'Captación → Partidos: un solo orden, del más lejano al más antiguo (los futuros arriba, luego hoy, luego lo ya jugado) y, dentro del mismo día, por hora. Ya no hay un bloque especial de «hoy» mezclado con el resto. Con «Hasta hoy» desaparecen los futuros y hoy queda el primero',
       'Partidos: editar un partido ya no abre el formulario arriba de la página. En la tabla, la fila se convierte en formulario en su sitio (Enter guarda, Esc cancela); en el móvil, la tarjeta. Solo si el partido no está a la vista (otra página o filtrado) sale el panel de siempre',

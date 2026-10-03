@@ -61,6 +61,8 @@ export function FirmasTab({
   const [statusFilter, setStatusFilter] = useState<FirmasStatus | 'all'>('all')
   const [managerFilter, setManagerFilter] = useState<string>('all')
   const [overdueOnly, setOverdueOnly] = useState(false)
+  // Solo los marcados «potencial top» (los de techo alto de cada zona)
+  const [topOnly, setTopOnly] = useState(false)
 
   // Vista por zonas: zona seleccionada (persistida)
   const [selZone, setSelZone] = useState<string>(() => sessionStorage.getItem('capt_firmas_zone') ?? '')
@@ -150,6 +152,7 @@ export function FirmasTab({
     if (statusFilter !== 'all' && e.status !== statusFilter) return false
     if (managerFilter !== 'all' && !e.managers.includes(managerFilter)) return false
     if (overdueOnly && !firmasAging(e)?.overdue) return false
+    if (topOnly && !e.potencialTop) return false
     const n = normSearch(debSearch)
     if (n) {
       const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
@@ -157,13 +160,14 @@ export function FirmasTab({
       if (!hay.includes(n)) return false
     }
     return true
-  }, [zoneFilter, statusFilter, managerFilter, overdueOnly, debSearch, spById])
+  }, [zoneFilter, statusFilter, managerFilter, overdueOnly, topOnly, debSearch, spById])
 
   const filtered = useMemo(() => entries.filter(e => matchesFilters(e)), [entries, matchesFilters])
   // Igual pero sin filtro de zona — alimenta el selector de zonas
   const filteredNoZone = useMemo(() => entries.filter(e => matchesFilters(e, true)), [entries, matchesFilters])
 
   const overdueCount = useMemo(() => entries.filter(e => firmasAging(e)?.overdue).length, [entries])
+  const topCount = useMemo(() => entries.filter(e => e.potencialTop && e.status !== 'firmado').length, [entries])
 
 
   // ── agenda: todas las próximas acciones pendientes, por fecha ──
@@ -211,7 +215,7 @@ export function FirmasTab({
     }
   }
 
-  const clearFilters = () => { setSearch(''); setZoneFilter('all'); setStatusFilter('all'); setManagerFilter('all'); setOverdueOnly(false) }
+  const clearFilters = () => { setSearch(''); setZoneFilter('all'); setStatusFilter('all'); setManagerFilter('all'); setOverdueOnly(false); setTopOnly(false) }
 
   const startHover = (e: FirmasEntry, ev: React.MouseEvent) => {
     if (!canHover) return
@@ -303,6 +307,7 @@ export function FirmasTab({
         <div className="flex items-start justify-between gap-1.5">
           <span className="text-xs font-semibold text-slate-800 leading-snug flex items-center gap-1.5 min-w-0">
             {showStatusDot && <span className={`w-2 h-2 rounded-full flex-shrink-0 ${FIRMAS_CONFIG[e.status].dot}`} title={FIRMAS_CONFIG[e.status].label} />}
+            {e.potencialTop && <span className="flex-shrink-0 text-[11px]" title="Potencial top">⭐</span>}
             <span className="truncate">{e.playerName}</span>
           </span>
           <span className="flex items-center gap-1 flex-shrink-0">
@@ -388,7 +393,7 @@ export function FirmasTab({
           <span className={`w-2 h-2 rounded-full flex-shrink-0 ${FIRMAS_CONFIG[e.status].dot}`} title={FIRMAS_CONFIG[e.status].label} />
         )}
         <span className="min-w-0 flex-1">
-          <span className="block text-sm font-semibold text-slate-800 truncate leading-tight">{e.playerName}</span>
+          <span className="block text-sm font-semibold text-slate-800 truncate leading-tight">{e.potencialTop && <span title="Potencial top">⭐ </span>}{e.playerName}</span>
           <span className="block text-[11px] text-slate-400 truncate">
             {sp
               ? [sp.team, sp.birthdate ? sp.birthdate.slice(0, 4) : null].filter(Boolean).join(' · ') || e.zone
@@ -610,7 +615,16 @@ export function FirmasTab({
             >
               ⚠ <span className="hidden sm:inline">Desatendidos</span> {overdueCount}
             </button>
-            {(search || zoneFilter !== 'all' || statusFilter !== 'all' || managerFilter !== 'all' || overdueOnly) && (
+            <button
+              onClick={() => setTopOnly(v => !v)}
+              className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
+                topOnly ? 'bg-amber-50 border-amber-300 text-amber-700 font-semibold' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+              }`}
+              title="Solo los jugadores marcados como potencial top (se marca en la ficha de cada tarjeta)"
+            >
+              ⭐ <span className="hidden sm:inline">Potencial top</span> {topCount}
+            </button>
+            {(search || zoneFilter !== 'all' || statusFilter !== 'all' || managerFilter !== 'all' || overdueOnly || topOnly) && (
               <button
                 onClick={clearFilters}
                 className="text-xs text-slate-500 border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white hover:bg-slate-50 transition-colors"

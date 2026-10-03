@@ -1606,6 +1606,7 @@ function dbToFirmasEntry(row: Record<string, unknown>): FirmasEntry {
     nextActionDate: (row.next_action_date as string) ?? undefined,
     nextActionAssignee: (row.next_action_assignee as string) ?? undefined,
     signedAt: (row.signed_at as string) ?? undefined,
+    potencialTop: (row.potencial_top as boolean) ?? false,
     createdAt: row.created_at as string,
     updatedAt: (row.updated_at as string) ?? (row.created_at as string),
   }
@@ -1634,8 +1635,21 @@ export async function fetchFirmasEntries(): Promise<FirmasEntry[]> {
   }
 }
 
+// captacion_firmas.potencial_top: opcional hasta ejecutar
+// migration_firmas_potencial_top.sql. Si la columna no existe, se guarda sin ella.
+let firmasSinPotencialTop = false
+function sinPotencialTop(fila: Record<string, unknown>, error: unknown): Record<string, unknown> | null {
+  if (firmasSinPotencialTop || !esColumnaInexistente(error)) return null
+  if (!/potencial_top/.test((error as { message?: string } | null)?.message ?? '')) return null
+  firmasSinPotencialTop = true
+  console.warn('[db] captacion_firmas no tiene columna potencial_top: se guarda sin ella (ejecuta migration_firmas_potencial_top.sql)')
+  const copia = { ...fila }
+  delete copia.potencial_top
+  return copia
+}
+
 export async function createFirmasEntry(e: Omit<FirmasEntry, 'id' | 'createdAt' | 'updatedAt'>): Promise<FirmasEntry> {
-  const { data, error } = await supabase.from('captacion_firmas').insert({
+  const fila: Record<string, unknown> = {
     player_name: e.playerName,
     zone: e.zone,
     status: e.status,
@@ -1653,7 +1667,11 @@ export async function createFirmasEntry(e: Omit<FirmasEntry, 'id' | 'createdAt' 
     next_action_date: e.nextActionDate ?? null,
     next_action_assignee: e.nextActionAssignee ?? null,
     signed_at: e.signedAt ?? null,
-  }).select().single()
+    ...(firmasSinPotencialTop ? {} : { potencial_top: e.potencialTop ?? false }),
+  }
+  let { data, error } = await supabase.from('captacion_firmas').insert(fila).select().single()
+  const reintento = error ? sinPotencialTop(fila, error) : null
+  if (reintento) ({ data, error } = await supabase.from('captacion_firmas').insert(reintento).select().single())
   if (error) throw error
   return dbToFirmasEntry(data)
 }
@@ -1674,7 +1692,7 @@ export async function setFirmasSortPos(pares: { id: string; sortPos: number }[])
 }
 
 export async function updateFirmasEntry(e: FirmasEntry): Promise<void> {
-  const { error } = await supabase.from('captacion_firmas').update({
+  const fila: Record<string, unknown> = {
     player_name: e.playerName,
     zone: e.zone,
     status: e.status,
@@ -1693,7 +1711,11 @@ export async function updateFirmasEntry(e: FirmasEntry): Promise<void> {
     next_action_assignee: e.nextActionAssignee ?? null,
     signed_at: e.signedAt ?? null,
     updated_at: new Date().toISOString(),
-  }).eq('id', e.id)
+    ...(firmasSinPotencialTop ? {} : { potencial_top: e.potencialTop ?? false }),
+  }
+  let { error } = await supabase.from('captacion_firmas').update(fila).eq('id', e.id)
+  const reintento = error ? sinPotencialTop(fila, error) : null
+  if (reintento) ({ error } = await supabase.from('captacion_firmas').update(reintento).eq('id', e.id))
   if (error) throw error
 }
 

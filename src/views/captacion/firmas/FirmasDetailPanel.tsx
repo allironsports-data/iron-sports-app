@@ -248,6 +248,17 @@ export function FirmasDetailPanel({
               <Pencil className="w-3 h-3 text-slate-300 group-hover:text-slate-500 flex-shrink-0" />
             </button>
           )}
+          <button
+            onClick={() => void onPatch(entry.id, { potencialTop: !entry.potencialTop })}
+            title={entry.potencialTop ? 'Potencial top — clic para quitar la marca' : 'Marcar como potencial top (jugador de techo alto: filtro en el pipeline)'}
+            aria-label={entry.potencialTop ? 'Quitar potencial top' : 'Marcar potencial top'}
+            aria-pressed={!!entry.potencialTop}
+            className={`flex-shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold px-1.5 py-0.5 rounded-full border transition-colors ${
+              entry.potencialTop ? 'bg-amber-50 border-amber-300 text-amber-700' : 'bg-white border-slate-200 text-slate-400 hover:text-amber-600 hover:border-amber-300'
+            }`}
+          >
+            ⭐<span className="hidden sm:inline">{entry.potencialTop ? 'Top' : 'Top?'}</span>
+          </button>
           <FirmasStatusChip status={entry.status} onChange={s => onChangeStatus(entry, s)} size="md" />
           {entry.status === 'firmado' ? (
             <span className="text-[11px] text-green-600 font-medium hidden sm:inline">🎉 {entry.signedAt ? fmtDate(entry.signedAt) : ''}</span>

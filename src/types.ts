@@ -486,6 +486,8 @@ export interface FirmasEntry {
   nextActionDate?: string      // "YYYY-MM-DD"
   nextActionAssignee?: string  // profiles.id
   signedAt?: string            // ISO — cuándo pasó a «firmado»
+  /** Marcado a mano como jugador de techo alto: filtro en el pipeline para seguir a los top de cada zona */
+  potencialTop?: boolean
   createdAt: string
   updatedAt: string
 }
