@@ -218,7 +218,7 @@ export function PlayerDetail({
           {avatarText}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-slate-900 truncate flex items-center gap-1.5"><PrioridadBadge prioridad={player.prioridad} /><span className="truncate">{player.name}</span></p>
+          <p className="text-sm font-semibold text-slate-900 truncate flex items-center gap-1.5">{currentProfile.is_admin && <PrioridadBadge prioridad={player.prioridad} />}<span className="truncate">{player.name}</span></p>
           <p className="text-xs text-slate-500 truncate">{player.positions.join(" / ")} · {calcAge(player.birthDate)} años</p>
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -285,7 +285,7 @@ export function PlayerDetail({
                 <div className="w-14 h-14 rounded-xl bg-slate-100 flex items-center justify-center text-lg font-bold text-slate-400 mx-auto mb-2">
                   {avatarText}
                 </div>
-                <p className="text-sm font-semibold text-slate-900 leading-tight flex items-center justify-center gap-1.5"><PrioridadBadge prioridad={player.prioridad} /><span>{player.name}</span></p>
+                <p className="text-sm font-semibold text-slate-900 leading-tight flex items-center justify-center gap-1.5">{currentProfile.is_admin && <PrioridadBadge prioridad={player.prioridad} />}<span>{player.name}</span></p>
                 <p className="text-xs text-slate-500 mt-0.5">
                   {player.positions.join(" / ")} · {calcAge(player.birthDate)} años
                 </p>
@@ -438,6 +438,7 @@ export function PlayerDetail({
         <EditPlayerModal
           player={player}
           profiles={profiles}
+          isAdmin={!!currentProfile.is_admin}
           onClose={() => setShowEditPlayer(false)}
           onSave={async (updated) => {
             // Esperamos al guardado: si falla no cerramos el modal ni perdemos lo editado
@@ -1621,8 +1622,10 @@ function ESel({ label, value, onChange, options }: { label: string; value: strin
   );
 }
 
-function EditPlayerModal({ player, profiles, onClose, onSave }: {
+function EditPlayerModal({ player, profiles, isAdmin, onClose, onSave }: {
   player: Player; profiles: Profile[];
+  /** La prioridad A/B/C solo la ven y la cambian los admins */
+  isAdmin: boolean;
   onClose: () => void; onSave: (p: Player) => void | Promise<void>;
 }) {
   const [name, setName] = useState(player.name);
@@ -1687,7 +1690,8 @@ function EditPlayerModal({ player, profiles, onClose, onSave }: {
         clubs,
         partner: partner || undefined,
         estado,
-        prioridad: prioridad || undefined,
+        // Quien no es admin no la ve: se conserva la que hubiera
+        prioridad: isAdmin ? (prioridad || undefined) : player.prioridad,
         managedBy: [managed1, managed2].filter(Boolean),
         info: { ...player.info, phone },
         representationContract: { ...player.representationContract, start: reprStart, end: reprEnd },
@@ -1796,7 +1800,7 @@ function EditPlayerModal({ player, profiles, onClose, onSave }: {
               </select>
               <p className="text-[11px] text-slate-400 mt-1">{ESTADO_META[estado].ayuda}</p>
             </div>
-            <div className="mt-3">
+            {isAdmin && <div className="mt-3">
               <label className="block text-xs font-medium text-slate-600 mb-1">Prioridad</label>
               <div className="flex items-center gap-1.5">
                 {PLAYER_PRIORIDADES.map(p => (
@@ -1808,7 +1812,7 @@ function EditPlayerModal({ player, profiles, onClose, onSave }: {
                 {prioridad && <button type="button" onClick={() => setPrioridad('')} className="text-[11px] text-slate-400 hover:text-slate-600 ml-1">Quitar</button>}
               </div>
               <p className="text-[11px] text-slate-400 mt-1">{prioridad ? PRIORIDAD_META[prioridad].ayuda : 'Sin prioridad asignada'}</p>
-            </div>
+            </div>}
           </div>
 
           <div className="pt-2 flex gap-2">
