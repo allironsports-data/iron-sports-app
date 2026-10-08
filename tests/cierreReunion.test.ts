@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { esReunionCerrable, reunionPasada, reunionSinCerrar, idApunteEvento } from '../src/lib/reuniones'
-import { apunteDeEvento, aplicarCierreEnTarjeta, textoApunteEvento } from '../src/views/captacion/firmas/cierreReunion'
+import { apunteDeEvento, aplicarCierreEnTarjeta, textoApunteEvento, aplicarCierreLlamada, conSiguientePaso, esAccionDeLlamada } from '../src/views/captacion/firmas/cierreReunion'
 import type { AgendaEvento, FirmasEntry } from '../src/types'
 
 const HOY = '2026-10-08'
@@ -97,5 +97,43 @@ describe('aplicarCierreEnTarjeta', () => {
   it('el mismo estatus no genera log', () => {
     const out = aplicarCierreEnTarjeta(tarjeta(), evento(), { recap: 'ok', estatus: 'caliente' }, AUTOR, HOY)
     expect(out.comments.some(c => c.kind === 'estatus')).toBe(false)
+  })
+})
+
+describe('aplicarCierreLlamada', () => {
+  const conLlamada = () => tarjeta({ nextAction: 'Llamar al padre', nextActionKind: 'whatsapp', nextActionDate: '2026-10-08', nextActionAssignee: 'p-pp', nextActionTaskId: 't1' })
+
+  it('solo llamadas y whatsapps', () => {
+    expect(esAccionDeLlamada('llamada')).toBe(true)
+    expect(esAccionDeLlamada('whatsapp')).toBe(true)
+    expect(esAccionDeLlamada('reunion')).toBe(false)
+    expect(esAccionDeLlamada(undefined)).toBe(false)
+  })
+
+  it('no contestó: apunte con resultado, se retira la acción y nada más', () => {
+    const out = aplicarCierreLlamada(conLlamada(), { contesto: false, estatus: 'frio' }, AUTOR, '2026-10-08T10:00:00Z')
+    expect(out.comments).toHaveLength(1)
+    expect(out.comments[0]).toMatchObject({ kind: 'whatsapp', outcome: 'no_contesto', text: '✓ Hecho: Llamar al padre' })
+    expect(out.nextAction).toBeUndefined()
+    expect(out.nextActionKind).toBeUndefined()
+    // la tarea vinculada se conserva: App la completa al ver que la acción ya no está
+    expect(out.nextActionTaskId).toBe('t1')
+    // sin contestar no se cambia el estatus aunque venga
+    expect(out.status).toBe('caliente')
+  })
+
+  it('contestó: recap debajo del apunte y cambio de estatus con su log', () => {
+    const out = aplicarCierreLlamada(conLlamada(), { contesto: true, recap: ' Quiere vernos en noviembre ', estatus: 'templado' }, AUTOR, '2026-10-08T10:00:00Z')
+    expect(out.comments[0]).toMatchObject({ outcome: 'contesto', text: '✓ Hecho: Llamar al padre\nQuiere vernos en noviembre' })
+    expect(out.comments[1]).toMatchObject({ kind: 'estatus', text: 'Caliente → Templado' })
+    expect(out.status).toBe('templado')
+    expect(out.nextAction).toBeUndefined()
+  })
+
+  it('conSiguientePaso pone la próxima acción; vacío no toca nada', () => {
+    const base = aplicarCierreLlamada(conLlamada(), { contesto: true, recap: 'ok' }, AUTOR)
+    const con = conSiguientePaso(base, { kind: 'reunion', label: 'Reunión en casa', date: '2026-11-03', assigneeId: 'p-nb' })
+    expect(con).toMatchObject({ nextAction: 'Reunión en casa', nextActionKind: 'reunion', nextActionDate: '2026-11-03', nextActionAssignee: 'p-nb' })
+    expect(conSiguientePaso(base, { kind: 'llamada', label: '  ' })).toBe(base)
   })
 })

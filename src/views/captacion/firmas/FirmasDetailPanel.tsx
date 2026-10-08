@@ -3,7 +3,8 @@ import { X, Trash2, Pencil, Send, ExternalLink, ChevronDown, Handshake } from 'l
 import type { Player, ScoutingPlayer, ScoutingReport, FirmasEntry, FirmasStatus, FirmasComment, AgendaEvento } from '../../../types'
 import * as db from '../../../lib/db'
 import { CerrarReunionModal, type ReunionNueva } from '../../../components/agenda/CerrarReunionModal'
-import { aplicarCierreEnTarjeta, type DatosCierre } from './cierreReunion'
+import { CerrarLlamadaModal } from '../../../components/agenda/CerrarLlamadaModal'
+import { aplicarCierreEnTarjeta, aplicarCierreLlamada, conSiguientePaso, esAccionDeLlamada, type DatosCierre, type DatosLlamada } from './cierreReunion'
 import type { Profile } from '../../../contexts/AuthContext'
 import { ZONAS_PIPELINE as FIRMAS_ZONE_ORDER } from '../../../lib/zonas'
 import { equipoMatchKind } from '../../../lib/equipos'
@@ -81,7 +82,7 @@ export function FirmasDetailPanel({
     }
   }
 
-  async function guardarCierre(datos: DatosCierre, nueva?: ReunionNueva) {
+  async function guardarCierre(datos: DatosCierre, nueva: ReunionNueva | undefined, participantIds: string[]) {
     const ahora = new Date().toISOString()
     const hoy = todayISO()
     try {
@@ -104,7 +105,7 @@ export function FirmasDetailPanel({
         })
       } else {
         const base = cierre!.evento!
-        ev = { ...base, recap: datos.recap, cerradoAt: ahora, cerradoPor: currentProfile.id }
+        ev = { ...base, participantIds, recap: datos.recap, cerradoAt: ahora, cerradoPor: currentProfile.id }
         await db.updateAgendaEvento(ev)
       }
       await onPatch(entry.id, e => aplicarCierreEnTarjeta(e, ev, datos, currentProfile, hoy, ahora))
@@ -257,7 +258,27 @@ export function FirmasDetailPanel({
     setEditingAction(false)
   }
 
+  // ── cierre de llamadas: el ✓ de una llamada o WhatsApp pregunta si contestó ──
+  const [llamada, setLlamada] = useState(false)
+  async function guardarLlamada(datos: DatosLlamada) {
+    try {
+      const ahora = new Date().toISOString()
+      await onPatch(entry.id, e => aplicarCierreLlamada(e, datos, currentProfile, ahora))
+      // Segundo guardado: la tarea de la llamada se completa antes de crear la del paso nuevo
+      if (datos.contesto && datos.siguiente) {
+        const s = datos.siguiente
+        await onPatch(entry.id, e => conSiguientePaso(e, s))
+      }
+      setLlamada(false)
+      setActionLabel(''); setActionDate('')
+      showToast(!datos.contesto ? 'Apuntado: no contestó' : datos.siguiente ? 'Llamada cerrada · siguiente paso programado' : 'Llamada cerrada')
+    } catch {
+      showToast('No se pudo guardar', 'error')
+    }
+  }
+
   const completeAction = () => {
+    if (esAccionDeLlamada(entry.nextActionKind)) { setLlamada(true); return }
     const log: FirmasComment = {
       id: crypto.randomUUID(),
       text: `✓ Hecho: ${entry.nextAction ?? 'próxima acción'}`,
@@ -752,6 +773,15 @@ export function FirmasDetailPanel({
           </button>
         </div>
       </div>
+      {llamada && (
+        <CerrarLlamadaModal
+          tarjeta={entry}
+          profiles={profiles}
+          currentProfile={currentProfile}
+          onClose={() => setLlamada(false)}
+          onGuardar={guardarLlamada}
+        />
+      )}
       {cierre && (
         <CerrarReunionModal
           evento={cierre.evento}

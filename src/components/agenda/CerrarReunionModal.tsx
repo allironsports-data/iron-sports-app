@@ -7,7 +7,7 @@
 // modal del evento y la propia tarjeta.
 
 import { useState } from 'react'
-import { X, Handshake } from 'lucide-react'
+import { X, Handshake, Users } from 'lucide-react'
 import type { AgendaEvento, FirmasEntry, FirmasStatus } from '../../types'
 import type { Profile } from '../../contexts/AuthContext'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
@@ -15,7 +15,7 @@ import { hoyISO, parseDia, sumarDias } from '../../lib/fechas'
 import { FIRMAS_CONFIG, FIRMAS_STATUSES, FIRMAS_ACTION_KIND_META } from '../../views/captacion/firmas/helpers'
 import type { DatosCierre } from '../../views/captacion/firmas/cierreReunion'
 
-const CAMPO = 'w-full text-xs border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-blue-200'
+export const CAMPO = 'w-full text-xs border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-blue-200'
 
 /** Datos del evento nuevo cuando se registra una reunión que no estaba apuntada */
 export interface ReunionNueva {
@@ -36,10 +36,78 @@ interface Props {
   profiles: Profile[]
   currentProfile: Profile
   onClose: () => void
-  onGuardar: (datos: DatosCierre, nueva?: ReunionNueva) => Promise<void>
+  /** `participantIds`: quiénes asistieron (se guardan en el evento, también al cerrar uno ya apuntado) */
+  onGuardar: (datos: DatosCierre, nueva: ReunionNueva | undefined, participantIds: string[]) => Promise<void>
 }
 
 const TIPOS_REUNION = ['Reunión', 'Visita presencial', 'Videollamada', 'Cita', 'Comida', 'Reunión con jugador']
+
+
+/** Estatus de la tarjeta + siguiente paso: lo comparten el cierre de reunión y el de llamada */
+export function TarjetaCierreCampos({
+  tarjeta, profiles, estatus, setEstatus, conSiguiente, setConSiguiente, kind, setKind, label, setLabel, date, setDate, assigneeId, setAssigneeId,
+}: {
+  tarjeta: FirmasEntry
+  profiles: Profile[]
+  estatus: FirmasStatus | ''
+  setEstatus: (s: FirmasStatus) => void
+  conSiguiente: boolean
+  setConSiguiente: (v: boolean) => void
+  kind: string
+  setKind: (k: string) => void
+  label: string
+  setLabel: (v: string) => void
+  date: string
+  setDate: (v: string) => void
+  assigneeId: string
+  setAssigneeId: (v: string) => void
+}) {
+  return (
+    <>
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-slate-600">Estatus de la tarjeta</label>
+        <div className="flex flex-wrap gap-1">
+          {FIRMAS_STATUSES.map(s => {
+            const c = FIRMAS_CONFIG[s]
+            const on = estatus === s
+            return (
+              <button key={s} type="button" onClick={() => setEstatus(s)}
+                className={`px-2 py-1 rounded-full text-[11px] font-semibold border transition-colors ${on ? `${c.bg} ${c.text} ${c.border} ring-1 ring-current/30` : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'}`}>
+                {c.label}{s === tarjeta.status ? ' (actual)' : ''}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="space-y-1.5 border border-slate-200 rounded-lg p-3 bg-slate-50/60">
+        <label className="flex items-center gap-2 text-xs font-medium text-slate-600 cursor-pointer">
+          <input type="checkbox" checked={conSiguiente} onChange={e => setConSiguiente(e.target.checked)} />
+          Siguiente paso <span className="text-slate-400 font-normal">(próxima acción de la tarjeta; crea la tarea en el tablero)</span>
+        </label>
+        {conSiguiente && (
+          <>
+            <div className="flex items-center gap-1 flex-wrap">
+              {Object.entries(FIRMAS_ACTION_KIND_META).map(([k, meta]) => (
+                <button key={k} type="button" onClick={() => setKind(k)} title={meta.label}
+                  className={`px-1.5 py-0.5 rounded-md text-[11px] transition-colors ${kind === k ? 'bg-primary/10 text-primary font-semibold ring-1 ring-primary/30' : 'text-slate-400 hover:bg-slate-100'}`}>
+                  {meta.icon} <span className="hidden sm:inline">{meta.label}</span>
+                </button>
+              ))}
+            </div>
+            <input value={label} onChange={e => setLabel(e.target.value)} placeholder={`${FIRMAS_ACTION_KIND_META[kind]?.label ?? 'Acción'}: ¿qué hay que hacer?`} className={CAMPO} />
+            <div className="grid grid-cols-2 gap-2">
+              <input type="date" value={date} onChange={e => setDate(e.target.value)} className={CAMPO} aria-label="Fecha del siguiente paso" />
+              <select value={assigneeId} onChange={e => setAssigneeId(e.target.value)} className={CAMPO} aria-label="Quién lo hace">
+                {profiles.map(p => <option key={p.id} value={p.id}>{p.avatar} · {p.name.split(' ')[0]}</option>)}
+              </select>
+            </div>
+          </>
+        )}
+      </div>
+    </>
+  )
+}
 
 export function CerrarReunionModal({ evento, tarjeta, playerName, profiles, currentProfile, onClose, onGuardar }: Props) {
   const registrar = !evento
@@ -57,7 +125,9 @@ export function CerrarReunionModal({ evento, tarjeta, playerName, profiles, curr
   const [fecha, setFecha] = useState(hoyISO())
   const [hora, setHora] = useState('')
   const [lugar, setLugar] = useState('')
-  const [participantIds, setParticipantIds] = useState<string[]>([currentProfile.id])
+  const [participantIds, setParticipantIds] = useState<string[]>(
+    evento?.participantIds.length ? evento.participantIds : [currentProfile.id],
+  )
   const [guardando, setGuardando] = useState(false)
   useEscapeKey(onClose)
 
@@ -74,7 +144,7 @@ export function CerrarReunionModal({ evento, tarjeta, playerName, profiles, curr
       }
       await onGuardar(datos, registrar
         ? { tipo, titulo: titulo.trim(), fecha, hora: hora || undefined, lugar: lugar.trim() || undefined, participantIds }
-        : undefined)
+        : undefined, participantIds)
     } finally {
       setGuardando(false)
     }
@@ -128,22 +198,30 @@ export function CerrarReunionModal({ evento, tarjeta, playerName, profiles, curr
                   <input value={lugar} onChange={e => setLugar(e.target.value)} placeholder="Opcional" className={CAMPO} />
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <label className="text-xs font-medium text-slate-600 flex-shrink-0">Asistieron</label>
-                <div className="flex flex-wrap gap-1">
-                  {profiles.map(p => {
-                    const sel = participantIds.includes(p.id)
-                    return (
-                      <button key={p.id} type="button" title={p.name} aria-pressed={sel}
-                        onClick={() => setParticipantIds(prev => sel ? prev.filter(x => x !== p.id) : [...prev, p.id])}
-                        className={`w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-bold transition-colors ${sel ? 'bg-primary text-white ring-2 ring-blue-200' : 'bg-white text-slate-400 border border-slate-200 hover:border-slate-400'}`}>
-                        {p.avatar}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
             </>
+          )}
+
+          {/* Quién asistió: igual que en el resto de eventos. Al cerrar una ya apuntada
+              vienen marcados los del evento, por si se sumó alguien más del equipo. */}
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-medium text-slate-600 flex-shrink-0 flex items-center gap-1.5"><Users className="w-3.5 h-3.5 text-slate-400" /> Asistieron</label>
+            <div className="flex flex-wrap gap-1">
+              {profiles.map(p => {
+                const sel = participantIds.includes(p.id)
+                return (
+                  <button key={p.id} type="button" title={p.name} aria-pressed={sel}
+                    onClick={() => setParticipantIds(prev => sel ? prev.filter(x => x !== p.id) : [...prev, p.id])}
+                    className={`w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-bold transition-colors ${sel ? 'bg-primary text-white ring-2 ring-blue-200' : 'bg-white text-slate-400 border border-slate-200 hover:border-slate-400'}`}>
+                    {p.avatar}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          {participantIds.length > 0 && (
+            <p className="text-[11px] text-slate-400 -mt-1.5">
+              {participantIds.map(id => profiles.find(p => p.id === id)?.name.split(' ')[0]).filter(Boolean).join(', ')}
+            </p>
           )}
 
           <div className="space-y-1">
@@ -154,49 +232,13 @@ export function CerrarReunionModal({ evento, tarjeta, playerName, profiles, curr
           </div>
 
           {tarjeta ? (
-            <>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-600">Estatus de la tarjeta</label>
-                <div className="flex flex-wrap gap-1">
-                  {FIRMAS_STATUSES.map(s => {
-                    const c = FIRMAS_CONFIG[s]
-                    const on = estatus === s
-                    return (
-                      <button key={s} type="button" onClick={() => setEstatus(s)}
-                        className={`px-2 py-1 rounded-full text-[11px] font-semibold border transition-colors ${on ? `${c.bg} ${c.text} ${c.border} ring-1 ring-current/30` : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'}`}>
-                        {c.label}{s === tarjeta.status ? ' (actual)' : ''}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              <div className="space-y-1.5 border border-slate-200 rounded-lg p-3 bg-slate-50/60">
-                <label className="flex items-center gap-2 text-xs font-medium text-slate-600 cursor-pointer">
-                  <input type="checkbox" checked={conSiguiente} onChange={e => setConSiguiente(e.target.checked)} />
-                  Siguiente paso <span className="text-slate-400 font-normal">(próxima acción de la tarjeta; crea la tarea en el tablero)</span>
-                </label>
-                {conSiguiente && (
-                  <>
-                    <div className="flex items-center gap-1 flex-wrap">
-                      {Object.entries(FIRMAS_ACTION_KIND_META).map(([k, meta]) => (
-                        <button key={k} type="button" onClick={() => setKind(k)} title={meta.label}
-                          className={`px-1.5 py-0.5 rounded-md text-[11px] transition-colors ${kind === k ? 'bg-primary/10 text-primary font-semibold ring-1 ring-primary/30' : 'text-slate-400 hover:bg-slate-100'}`}>
-                          {meta.icon} <span className="hidden sm:inline">{meta.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                    <input value={label} onChange={e => setLabel(e.target.value)} placeholder={`${FIRMAS_ACTION_KIND_META[kind]?.label ?? 'Acción'}: ¿qué hay que hacer?`} className={CAMPO} />
-                    <div className="grid grid-cols-2 gap-2">
-                      <input type="date" value={date} onChange={e => setDate(e.target.value)} className={CAMPO} aria-label="Fecha del siguiente paso" />
-                      <select value={assigneeId} onChange={e => setAssigneeId(e.target.value)} className={CAMPO} aria-label="Quién lo hace">
-                        {profiles.map(p => <option key={p.id} value={p.id}>{p.avatar} · {p.name.split(' ')[0]}</option>)}
-                      </select>
-                    </div>
-                  </>
-                )}
-              </div>
-            </>
+            <TarjetaCierreCampos
+              tarjeta={tarjeta} profiles={profiles}
+              estatus={estatus} setEstatus={setEstatus}
+              conSiguiente={conSiguiente} setConSiguiente={setConSiguiente}
+              kind={kind} setKind={setKind} label={label} setLabel={setLabel}
+              date={date} setDate={setDate} assigneeId={assigneeId} setAssigneeId={setAssigneeId}
+            />
           ) : (
             <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
               {playerName} no está en el pipeline de Firmar: el recap queda en el evento, pero no hay tarjeta donde apuntar el siguiente paso.

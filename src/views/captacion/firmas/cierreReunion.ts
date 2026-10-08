@@ -116,3 +116,72 @@ export function aplicarCierreEnTarjeta(
   }
   return out
 }
+
+// ── Cerrar una llamada (próxima acción de tipo llamada o WhatsApp) ────
+// Al marcarla hecha se pregunta si contestó. Si no, se apunta y ya; si sí,
+// recap, estatus si cambia y siguiente paso, como en una reunión.
+
+export const esAccionDeLlamada = (kind?: string): boolean => kind === 'llamada' || kind === 'whatsapp'
+
+export interface DatosLlamada {
+  contesto: boolean
+  recap?: string
+  siguiente?: SiguientePaso
+  estatus?: FirmasStatus
+}
+
+/**
+ * La llamada hecha: apunte con resultado (contestó / no contestó) y recap,
+ * la próxima acción se retira (App completa su tarea), y el estatus si
+ * cambia. El siguiente paso NO va aquí: se pone con `conSiguientePaso` en
+ * un segundo guardado, para que la tarea de la llamada se complete antes
+ * de crear la del paso nuevo (si no, se reescribiría la misma tarea).
+ */
+export function aplicarCierreLlamada(f: FirmasEntry, datos: DatosLlamada, autor: Autor, ahora: string = new Date().toISOString()): FirmasEntry {
+  const recap = datos.recap?.trim()
+  const log: FirmasComment = {
+    id: crypto.randomUUID(),
+    text: `✓ Hecho: ${f.nextAction ?? 'llamada'}${recap ? `\n${recap}` : ''}`,
+    date: ahora,
+    author: autor.name,
+    authorId: autor.id,
+    kind: esAccionDeLlamada(f.nextActionKind) ? (f.nextActionKind as FirmasComment['kind']) : 'llamada',
+    outcome: datos.contesto ? 'contesto' : 'no_contesto',
+  }
+  let comments = [...f.comments, log]
+  let out: FirmasEntry = {
+    ...f,
+    nextAction: undefined, nextActionDate: undefined, nextActionAssignee: undefined, nextActionKind: undefined,
+    comments,
+  }
+  if (datos.contesto && datos.estatus && datos.estatus !== f.status) {
+    comments = [...comments, {
+      id: crypto.randomUUID(),
+      text: `${FIRMAS_CONFIG[f.status].label} → ${FIRMAS_CONFIG[datos.estatus].label}`,
+      date: ahora,
+      author: autor.name,
+      authorId: autor.id,
+      kind: 'estatus',
+    }]
+    out = {
+      ...out,
+      status: datos.estatus,
+      statusUpdatedAt: ahora,
+      signedAt: datos.estatus === 'firmado' ? (f.signedAt ?? ahora) : f.signedAt,
+      comments,
+    }
+  }
+  return out
+}
+
+/** Pone el siguiente paso como próxima acción de la tarjeta (segundo guardado tras el cierre) */
+export function conSiguientePaso(f: FirmasEntry, s: SiguientePaso): FirmasEntry {
+  if (!s.label.trim() && !s.date) return f
+  return {
+    ...f,
+    nextAction: s.label.trim() || undefined,
+    nextActionDate: s.date || undefined,
+    nextActionAssignee: s.assigneeId || undefined,
+    nextActionKind: s.kind || undefined,
+  }
+}

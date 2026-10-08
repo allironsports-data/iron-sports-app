@@ -21,8 +21,9 @@ import { resumenSemanal } from "../lib/resumenSemanal";
 import { CalendarioSemanal } from "./CalendarioSemanal";
 import { EventoModal, type EventoBorrador } from "../components/agenda/EventoModal";
 import { CerrarReunionModal } from "../components/agenda/CerrarReunionModal";
+import { CerrarLlamadaModal } from "../components/agenda/CerrarLlamadaModal";
 import { esReunionCerrable, horaActual } from "../lib/reuniones";
-import { apunteDeEvento, aplicarCierreEnTarjeta, type DatosCierre } from "./captacion/firmas/cierreReunion";
+import { apunteDeEvento, aplicarCierreEnTarjeta, aplicarCierreLlamada, conSiguientePaso, esAccionDeLlamada, type DatosCierre, type DatosLlamada } from "./captacion/firmas/cierreReunion";
 import { ViajeModal } from "../components/agenda/ViajeModal";
 import { TareaModal } from "../components/agenda/TareaModal";
 import { RegistroContactoModal, type RegistroContacto } from "../components/agenda/RegistroContactoModal";
@@ -367,6 +368,8 @@ export function Dashboard({
   const [informeDatos, setInformeDatos] = useState<Task | null>(null);
   // Reunión del pipeline que se está cerrando (recap + siguiente paso)
   const [cierre, setCierre] = useState<AgendaEvento | null>(null);
+  // Llamada del pipeline que se está marcando hecha (¿contestó?)
+  const [llamada, setLlamada] = useState<FirmasEntry | null>(null);
   // "HH:MM" de ahora, cada 5 minutos: una reunión de hoy pasa a «sin cerrar» cuando llega su hora
   const [ahoraHora, setAhoraHora] = useState(() => horaActual());
   useEffect(() => {
@@ -515,8 +518,35 @@ export function Dashboard({
     }
   }
 
+  // Tarea de una llamada o WhatsApp del pipeline que se está completando:
+  // se pregunta si contestó; la tarea la completa App al retirar la acción.
+  const llamadaDeFirmar = (antes: Task, despues: Task) =>
+    despues.status === 'completada' && antes.status !== 'completada'
+      ? (firmasEntries ?? []).find(f => f.nextActionTaskId === antes.id && esAccionDeLlamada(f.nextActionKind))
+      : undefined;
+
+  async function guardarLlamada(tarjeta: FirmasEntry, datos: DatosLlamada) {
+    if (!onPatchFirmasEntry) return;
+    try {
+      const ahora = new Date().toISOString();
+      await onPatchFirmasEntry(tarjeta.id, f => aplicarCierreLlamada(f, datos, currentProfile, ahora));
+      // Segundo guardado: así la tarea de la llamada se completa antes de crear la del paso nuevo
+      if (datos.contesto && datos.siguiente) {
+        const s = datos.siguiente;
+        await onPatchFirmasEntry(tarjeta.id, f => conSiguientePaso(f, s));
+      }
+      setLlamada(null);
+      if (detailTask && tarjeta.nextActionTaskId === detailTask.id) setDetailTask(null);
+      showToast(!datos.contesto ? 'Apuntado: no contestó' : datos.siguiente ? 'Llamada cerrada · siguiente paso programado' : 'Llamada cerrada', 'success');
+    } catch {
+      showToast('No se pudo guardar. Inténtalo de nuevo.', 'error');
+    }
+  }
+
   /** Guarda la tarea; si es de contacto y se está completando, antes pregunta qué pasó. true = guardada ya. */
   async function guardarTareaOPreguntar(antes: Task, despues: Task): Promise<boolean> {
+    const tarjetaLlamada = llamadaDeFirmar(antes, despues);
+    if (tarjetaLlamada) { setLlamada(tarjetaLlamada); return false; }
     if (pideRegistro(antes, despues)) { setRegistro(despues); return false; }
     if (pideInformeDatos(antes, despues)) { setInformeDatos(despues); return false; }
     if (guardarTarea) await Promise.resolve(guardarTarea(despues));
@@ -647,9 +677,9 @@ export function Dashboard({
     const ev = eventos.find(x => x.id === eventoId);
     if (ev) { setEventoModal(null); setCierre(ev); }
   }
-  async function guardarCierre(ev: AgendaEvento, datos: DatosCierre) {
+  async function guardarCierre(ev: AgendaEvento, datos: DatosCierre, participantIds: string[]) {
     const ahora = new Date().toISOString();
-    const cerrado: AgendaEvento = { ...ev, recap: datos.recap, cerradoAt: ahora, cerradoPor: currentProfile.id };
+    const cerrado: AgendaEvento = { ...ev, participantIds, recap: datos.recap, cerradoAt: ahora, cerradoPor: currentProfile.id };
     try {
       await updateAgendaEvento(cerrado);
       setEventos(prev => prev.map(x => x.id === cerrado.id ? cerrado : x));
@@ -1127,6 +1157,9 @@ export function Dashboard({
       }
       // Acción de Firmar sin tarea vinculada: hecha = retirarla de la tarjeta, con su apunte
       if (it.origen === 'firmar' && it.ref.firmasEntryId && estado === 'completada') {
+        const tarjeta = (firmasEntries ?? []).find(f => f.id === it.ref.firmasEntryId);
+        // Una llamada o WhatsApp pregunta antes si contestó
+        if (tarjeta && esAccionDeLlamada(tarjeta.nextActionKind)) { setLlamada(tarjeta); return; }
         await onPatchFirmasEntry?.(it.ref.firmasEntryId, e => ({
           ...e,
           nextAction: undefined, nextActionDate: undefined, nextActionAssignee: undefined, nextActionKind: undefined,
@@ -3010,6 +3043,16 @@ export function Dashboard({
         />
       )}
 
+      {llamada && (
+        <CerrarLlamadaModal
+          tarjeta={(firmasEntries ?? []).find(f => f.id === llamada.id) ?? llamada}
+          profiles={profiles}
+          currentProfile={currentProfile}
+          onClose={() => setLlamada(null)}
+          onGuardar={(datos) => guardarLlamada(llamada, datos)}
+        />
+      )}
+
       {cierre && (
         <CerrarReunionModal
           evento={cierre}
@@ -3018,7 +3061,7 @@ export function Dashboard({
           profiles={profiles}
           currentProfile={currentProfile}
           onClose={() => setCierre(null)}
-          onGuardar={(datos) => guardarCierre(cierre, datos)}
+          onGuardar={(datos, _nueva, participantIds) => guardarCierre(cierre, datos, participantIds)}
         />
       )}
 
