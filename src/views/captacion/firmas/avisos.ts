@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
-import type { Player, FirmasEntry, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, Ofrecimiento } from '../../../types'
+import type { Player, FirmasEntry, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, Ofrecimiento, AgendaEvento } from '../../../types'
 import { normConclusion, todayISO, fmtDate } from '../helpers'
 import { norm as normSearch } from '../../../lib/texto'
 import { hoyISO, sumarDias } from '../../../lib/fechas'
 import { teamsAlike, equipoMatchKind } from '../../../lib/equipos'
 import { AVISO_TITULO } from './helpers'
+import { reunionSinCerrar, horaActual } from '../../../lib/reuniones'
 
 // ── Avisos del pipeline ──────────────────────────────────────────────
 // Cruces con el resto de la app: cosas que pasan FUERA de Firmar y que
@@ -48,7 +49,7 @@ export interface GrupoAviso {
 }
 
 export function useFirmasAvisos({
-  entries, scoutingPlayers, scoutingReports, scoutingMatches, matchPlayers, ofrecimientos, players,
+  entries, scoutingPlayers, scoutingReports, scoutingMatches, matchPlayers, ofrecimientos, players, eventos = [],
 }: {
   entries: FirmasEntry[]
   scoutingPlayers: ScoutingPlayer[]
@@ -57,6 +58,8 @@ export function useFirmasAvisos({
   matchPlayers: ScoutingMatchPlayer[]
   ofrecimientos: Ofrecimiento[]
   players: Player[]
+  /** Eventos de agenda: reuniones del pipeline sin cerrar */
+  eventos?: AgendaEvento[]
 }) {
   const spById = useMemo(() => {
     const m: Record<string, ScoutingPlayer> = {}
@@ -149,6 +152,20 @@ export function useFirmasAvisos({
       }
     })
 
+    // reunión o visita ya pasada y sin cerrar (sin recap ni siguiente paso)
+    {
+      const hoy = hoyISO()
+      const ahora = horaActual()
+      const porJugador: Record<string, FirmasEntry> = {}
+      for (const e of active) if (e.scoutingPlayerId) porJugador[e.scoutingPlayerId] = e
+      for (const ev of eventos) {
+        if (!ev.scoutingPlayerId || !reunionSinCerrar(ev, hoy, ahora)) continue
+        const e = porJugador[ev.scoutingPlayerId]
+        if (!e) continue
+        out.push({ icon: '🤝', tone: 'amber', entryId: e.id, kind: 'reunion', text: `${ev.titulo || ev.tipo} con ${e.playerName} el ${fmtDate(ev.fecha)} sin cerrar — apunta el recap y el siguiente paso` })
+      }
+    }
+
     // también nos lo han ofrecido: hay un ofrecimiento abierto sobre el mismo jugador
     active.forEach(e => {
       const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
@@ -221,7 +238,7 @@ export function useFirmasAvisos({
 
     const rank = { red: 0, amber: 1, blue: 2, green: 3 }
     return out.sort((a, b) => rank[a.tone] - rank[b.tone] || a.text.localeCompare(b.text))
-  }, [entries, spById, scoutingMatches, matchPlayers, reportsByPlayer, ofrecimientos, players])
+  }, [entries, spById, scoutingMatches, matchPlayers, reportsByPlayer, ofrecimientos, players, eventos])
 
   // Avisos silenciados: cada uno decide qué tipos no quiere ver. Se guarda en
   // este navegador, así que no molesta a nadie más.

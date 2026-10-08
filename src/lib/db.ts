@@ -2141,6 +2141,9 @@ function dbToAgendaEvento(row: Record<string, unknown>): AgendaEvento {
     zona: (row.zona as string) ?? undefined,
     authorId: (row.author_id as string) ?? undefined,
     activityRef: (row.activity_ref as string) ?? undefined,
+    recap: (row.recap as string) ?? undefined,
+    cerradoAt: (row.cerrado_at as string) ?? undefined,
+    cerradoPor: (row.cerrado_por as string) ?? undefined,
     createdAt: row.created_at as string,
   }
 }
@@ -2149,18 +2152,19 @@ function dbToAgendaEvento(row: Record<string, unknown>): AgendaEvento {
 // (migration_agenda_eventos_lugar.sql), fecha_fin y zona (migration_agenda_viajes.sql).
 // Cada una se manda solo si existe (se ve al leer) o si trae valor; y si la
 // base rechaza alguna (42703), el evento se guarda sin ellas.
-const COLUMNAS_OPCIONALES_EVENTO = ['lugar', 'fecha_fin', 'zona'] as const
+// recap, cerrado_at y cerrado_por: migration_agenda_eventos_cierre.sql.
+const COLUMNAS_OPCIONALES_EVENTO = ['lugar', 'fecha_fin', 'zona', 'recap', 'cerrado_at', 'cerrado_por'] as const
 const columnasEvento = new Set<string>()
 
 function faltaColumnaEvento(error: unknown, fila: Record<string, unknown>): boolean {
   if (!esColumnaInexistente(error) || !COLUMNAS_OPCIONALES_EVENTO.some(c => c in fila)) return false
-  console.warn('[db] a agenda_eventos le falta alguna columna (lugar, fecha_fin, zona): se guarda sin ellas. Ejecuta migration_agenda_eventos_lugar.sql y migration_agenda_viajes.sql')
+  console.warn('[db] a agenda_eventos le falta alguna columna (lugar, fecha_fin, zona, recap, cerrado_at, cerrado_por): se guarda sin ellas. Ejecuta migration_agenda_eventos_lugar.sql, migration_agenda_viajes.sql y migration_agenda_eventos_cierre.sql')
   for (const c of COLUMNAS_OPCIONALES_EVENTO) { columnasEvento.delete(c); delete fila[c] }
   return true
 }
 
 function agendaEventoToDb(e: Omit<AgendaEvento, 'id' | 'createdAt'>): Record<string, unknown> {
-  const opcionales: Record<string, unknown> = { lugar: e.lugar, fecha_fin: e.fechaFin, zona: e.zona }
+  const opcionales: Record<string, unknown> = { lugar: e.lugar, fecha_fin: e.fechaFin, zona: e.zona, recap: e.recap, cerrado_at: e.cerradoAt, cerrado_por: e.cerradoPor }
   const fila: Record<string, unknown> = {
     titulo: e.titulo,
     tipo: e.tipo,
@@ -2201,6 +2205,13 @@ export async function updateAgendaEvento(e: AgendaEvento): Promise<void> {
   let r = await supabase.from('agenda_eventos').update(fila).eq('id', e.id)
   if (r.error && faltaColumnaEvento(r.error, fila)) r = await supabase.from('agenda_eventos').update(fila).eq('id', e.id)
   if (r.error) throw r.error
+}
+
+/** Un evento concreto (para cerrar una reunión desde la tarjeta de Firmar). null si no existe. */
+export async function fetchAgendaEvento(id: string): Promise<AgendaEvento | null> {
+  const { data, error } = await supabase.from('agenda_eventos').select('*').eq('id', id).maybeSingle()
+  if (error) throw error
+  return data ? dbToAgendaEvento(data as Record<string, unknown>) : null
 }
 
 export async function deleteAgendaEvento(id: string): Promise<void> {

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, lazy, cloneElement, Suspense, type ReactNode as Nodo } from 'react'
 import { CalendarDays, Sun } from 'lucide-react'
 import { useAuth } from './hooks/useAuth'
-import type { Player, Task, ScoutingPlayer, ScoutingReport, ScoutingInfo, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchOurPlayer, ScoutingMatchScout, Ofrecimiento, OfrecimientoOrigen, MemberStatus, Postpartido, FirmasEntry, BoulemaPlayer } from './types'
+import type { Player, Task, ScoutingPlayer, ScoutingReport, ScoutingInfo, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchOurPlayer, ScoutingMatchScout, Ofrecimiento, OfrecimientoOrigen, MemberStatus, Postpartido, FirmasEntry, BoulemaPlayer, AgendaEvento } from './types'
 import { informesPedidos, TIPO_INFORME_LABEL, VEREDICTO_LABEL } from './lib/ofrecidos'
 import { leerCopia, guardarCopia, limpiarCopias } from './lib/cacheLocal'
 import * as db from './lib/db'
@@ -76,7 +76,7 @@ const SYNC_TABLES = [
   'member_status', 'postpartidos', 'captacion_firmas',
   'scouting_matches', 'scouting_match_players', 'scouting_match_our_players', 'scouting_match_scouts',
   'scouting_reports', 'scouting_infos', 'scouting_players', 'scouting_club_zonas', 'scouting_equipos',
-  'ofrecimientos',
+  'ofrecimientos', 'agenda_eventos',
 ] as const
 
 function Spinner() {
@@ -219,6 +219,9 @@ export default function App() {
   const [matchOurPlayers, setMatchOurPlayers] = useState<ScoutingMatchOurPlayer[]>([])
   const [matchScouts, setMatchScouts] = useState<ScoutingMatchScout[]>([])
   const [ofrecimientos, setOfrecimientos] = useState<Ofrecimiento[]>([])
+  // Eventos de agenda, solo para los avisos del Pipeline (reuniones sin cerrar).
+  // El Dashboard carga y edita su propia copia; esta se refresca por realtime.
+  const [eventos, setEventos] = useState<AgendaEvento[]>([])
   // Copia para los handlers (parches sobre la versión más reciente) y para
   // que los avisos de realtime sepan qué ha cambiado respecto a lo que vi
   const ofrecimientosRef = useRef<Ofrecimiento[]>([])
@@ -488,6 +491,7 @@ export default function App() {
       carga('Nuestros en partido', db.fetchMatchOurPlayers, [] as ScoutingMatchOurPlayer[], v => setMatchOurPlayers(v)),
       carga('Scouts de partido', db.fetchMatchScouts, [] as ScoutingMatchScout[], v => setMatchScouts(v)),
       carga('Ofrecimientos', db.fetchOfrecimientos, [] as Ofrecimiento[], v => { setOfrecimientos(v); ofrecimientosVistosRef.current = new Map(v.map(o => [o.id, o])) }),
+      carga('Eventos de agenda', () => db.fetchAgendaEventos().catch(e => { if (db.esMigracionPendiente(e)) return [] as AgendaEvento[]; throw e }), [] as AgendaEvento[], v => setEventos(v)),
       carga('Estado del equipo', db.fetchMemberStatuses, [] as MemberStatus[], v => setMemberStatuses(v)),
       carga('Postpartidos', db.fetchPostpartidos, [] as Postpartido[], v => setPostpartidos(v)),
       carga('Pipeline de firmas', db.fetchFirmasEntries, [] as FirmasEntry[], v => setFirmasEntries(v)),
@@ -828,6 +832,7 @@ export default function App() {
       case 'scouting_club_zonas':   si(db.fetchClubZonas(), (d) => setClubZonas(zonasAMapa(d))); break
       case 'scouting_equipos':      si(db.fetchEquipos(), (d) => setEquipos(d)); break
       case 'ofrecimientos':         si(db.fetchOfrecimientos(), (d) => setOfrecimientos(d)); break
+      case 'agenda_eventos':        si(db.fetchAgendaEventos().catch(e => { if (db.esMigracionPendiente(e)) return [] as AgendaEvento[]; throw e }), (d) => setEventos(d)); break
     }
   }, [])
 
@@ -1863,6 +1868,7 @@ export default function App() {
       scoutingMatches={scoutingMatches}
       matchPlayers={matchPlayers}
       ofrecimientos={ofrecimientos}
+      eventos={eventos}
       players={players}
       onCreatePlayer={handleAddPlayer}
       onSyncFirmasActionTasks={handleSyncFirmasActionTasks}

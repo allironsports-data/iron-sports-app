@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { LogOut, TrendingUp, Eye, Inbox, PenLine, Activity, MapPin, UserCog, Bell } from 'lucide-react'
 import logoImg from '../../assets/logo.jpeg'
-import type { Player, Task, FirmasEntry, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, Ofrecimiento } from '../../types'
+import type { Player, Task, FirmasEntry, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, Ofrecimiento, AgendaEvento } from '../../types'
 import type { Profile } from '../../contexts/AuthContext'
 import type { PatchFirmasEntry } from '../captacion/helpers'
 import { ToastStack } from '../../components/ToastStack'
@@ -35,6 +35,8 @@ export interface PipelineProps {
   scoutingMatches: ScoutingMatch[]
   matchPlayers: ScoutingMatchPlayer[]
   ofrecimientos: Ofrecimiento[]
+  /** Eventos de agenda (avisos de reuniones sin cerrar) */
+  eventos?: AgendaEvento[]
   players: Player[]
   onCreatePlayer: (p: Player) => Promise<Player>
   onSyncFirmasActionTasks?: () => Promise<number>
@@ -78,6 +80,7 @@ export function Pipeline(props: PipelineProps) {
     matchPlayers: props.matchPlayers,
     ofrecimientos: props.ofrecimientos,
     players: props.players,
+    eventos: props.eventos,
   })
   const { toasts, showToast, dismissToast } = useToast()
 

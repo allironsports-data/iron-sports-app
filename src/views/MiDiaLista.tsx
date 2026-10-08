@@ -38,6 +38,8 @@ export interface MiDiaListaProps {
   onReasignar: (item: AgendaItem, profileId: string) => void | Promise<void>
   onOpenPlayer: (playerId: string) => void
   onOpenScoutingPlayer?: (scoutingPlayerId: string) => void
+  /** Reunión del pipeline sin cerrar: abre el formulario de cierre */
+  onCerrarReunion?: (eventoId: string) => void
   /** Alta rápida en una línea; si no llega, no se pinta */
   onCrear?: (alta: AltaRapida) => Promise<void>
 }
@@ -49,7 +51,7 @@ function tituloDiaCorto(iso: string): string {
 }
 
 export function MiDiaLista({
-  items, hoy, personaId, esYo, profiles, onAbrir, onEstado, onReprogramar, onReasignar, onOpenPlayer, onOpenScoutingPlayer, onCrear,
+  items, hoy, personaId, esYo, profiles, onAbrir, onEstado, onReprogramar, onReasignar, onOpenPlayer, onOpenScoutingPlayer, onCerrarReunion, onCrear,
 }: MiDiaListaProps) {
   // Alta rápida
   const [nueva, setNueva] = useState('')
@@ -147,7 +149,7 @@ export function MiDiaLista({
   const fila = (it: AgendaItem) => (
     <AgendaRow key={it.id} item={it} hoy={hoy} profiles={profiles}
       onAbrir={onAbrir} onEstado={onEstado} onReprogramar={onReprogramar} onReasignar={onReasignar}
-      onOpenPlayer={onOpenPlayer} onOpenScoutingPlayer={onOpenScoutingPlayer} vistaDe={personaId} />
+      onOpenPlayer={onOpenPlayer} onOpenScoutingPlayer={onOpenScoutingPlayer} onCerrarReunion={onCerrarReunion} vistaDe={personaId} />
   )
   /** Filas de un bloque que se pueden arrastrar para ordenarlas (solo en la lista propia) */
   const filasOrdenables = (bloque: AgendaItem[], idBloque: string) => !esYo || bloque.length < 2

@@ -10,7 +10,7 @@
 // final de la fila saca las mismas acciones (incluida reasignar).
 
 import { useRef, useState } from 'react'
-import { Check, CalendarClock, UserRound, ExternalLink, MoreHorizontal } from 'lucide-react'
+import { Check, CalendarClock, UserRound, ExternalLink, MoreHorizontal, Handshake } from 'lucide-react'
 import type { Profile } from '../../contexts/AuthContext'
 import { parseDia, sumarDias } from '../../lib/fechas'
 import {
@@ -40,6 +40,8 @@ export interface AgendaRowProps {
   vistaDe?: string
   /** Abre la ficha de Captación del jugador (tareas ligadas a un jugador de scouting) */
   onOpenScoutingPlayer?: (scoutingPlayerId: string) => void
+  /** Reunión del pipeline sin cerrar: abre el formulario de recap + siguiente paso */
+  onCerrarReunion?: (eventoId: string) => void
   /** Selección múltiple: si llega, sale una casilla delante */
   seleccionada?: boolean
   onSeleccionar?: (item: AgendaItem) => void
@@ -51,7 +53,7 @@ function fechaCorta(iso: string): string {
 
 export function AgendaRow({
   item, hoy, profiles, onAbrir, onEstado, onReprogramar, onReasignar, onOpenPlayer, onOpenScoutingPlayer, vistaDe,
-  seleccionada, onSeleccionar,
+  seleccionada, onSeleccionar, onCerrarReunion,
 }: AgendaRowProps) {
   const [menu, setMenu] = useState<null | 'fecha' | 'persona'>(null)
   const [dx, setDx] = useState(0)
@@ -155,6 +157,15 @@ export function AgendaRow({
           {item.titulo}
           {item.conInforme && <Check className="inline w-3 h-3 ml-1 text-emerald-500" aria-label="Informe hecho" />}
         </span>
+        {item.cierreEventoId && onCerrarReunion && (
+          <button
+            onClick={e => { e.stopPropagation(); onCerrarReunion(item.cierreEventoId!) }}
+            title="Apuntar el recap y el siguiente paso"
+            className="flex-shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-violet-600 text-white hover:bg-violet-700 transition-colors"
+          >
+            <Handshake className="w-3 h-3" /> Cerrar
+          </button>
+        )}
         {adjunto && (
           <span className="flex-shrink-0 text-[11px] italic text-slate-400" title={`La lleva ${persona?.name ?? 'otra persona'}; tú estás como adjunto`}>adjunto</span>
         )}

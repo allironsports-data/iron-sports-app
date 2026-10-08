@@ -1,6 +1,9 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react'
-import { X, Trash2, Pencil, Send, ExternalLink, ChevronDown } from 'lucide-react'
-import type { Player, ScoutingPlayer, ScoutingReport, FirmasEntry, FirmasStatus, FirmasComment } from '../../../types'
+import { X, Trash2, Pencil, Send, ExternalLink, ChevronDown, Handshake } from 'lucide-react'
+import type { Player, ScoutingPlayer, ScoutingReport, FirmasEntry, FirmasStatus, FirmasComment, AgendaEvento } from '../../../types'
+import * as db from '../../../lib/db'
+import { CerrarReunionModal, type ReunionNueva } from '../../../components/agenda/CerrarReunionModal'
+import { aplicarCierreEnTarjeta, type DatosCierre } from './cierreReunion'
 import type { Profile } from '../../../contexts/AuthContext'
 import { ZONAS_PIPELINE as FIRMAS_ZONE_ORDER } from '../../../lib/zonas'
 import { equipoMatchKind } from '../../../lib/equipos'
@@ -52,6 +55,66 @@ export function FirmasDetailPanel({
   // ── edición de apuntes ──
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
   const [editingCommentText, setEditingCommentText] = useState('')
+
+  // ── cierre de reuniones ──
+  // `evento` = cerrar una ya apuntada (desde su apunte del historial);
+  // 'nueva' = registrar una reunión pasada que no se apuntó antes.
+  const [cierre, setCierre] = useState<{ evento?: AgendaEvento } | null>(null)
+  const [cargandoCierre, setCargandoCierre] = useState<string | null>(null)
+
+  async function abrirCierreDeApunte(c: FirmasComment) {
+    if (!c.eventoId || cargandoCierre) return
+    setCargandoCierre(c.id)
+    try {
+      const ev = await db.fetchAgendaEvento(c.eventoId)
+      if (!ev) {
+        // El evento ya no existe: el apunte se queda como cerrado sin recap
+        showToast('El evento de esa reunión ya no existe', 'info')
+        void onPatch(entry.id, e => ({ ...e, comments: e.comments.map(x => x.id === c.id ? { ...x, cierre: undefined } : x) }))
+        return
+      }
+      setCierre({ evento: ev })
+    } catch {
+      showToast('No se pudo cargar la reunión', 'error')
+    } finally {
+      setCargandoCierre(null)
+    }
+  }
+
+  async function guardarCierre(datos: DatosCierre, nueva?: ReunionNueva) {
+    const ahora = new Date().toISOString()
+    const hoy = todayISO()
+    try {
+      let ev: AgendaEvento
+      if (nueva) {
+        ev = await db.createAgendaEvento({
+          titulo: nueva.titulo || `${nueva.tipo} · ${entry.playerName}`,
+          tipo: nueva.tipo,
+          fecha: nueva.fecha,
+          hora: nueva.hora,
+          lugar: nueva.lugar,
+          ambito: 'captacion',
+          playerIds: [],
+          scoutingPlayerId: entry.scoutingPlayerId,
+          participantIds: nueva.participantIds,
+          authorId: currentProfile.id,
+          recap: datos.recap,
+          cerradoAt: ahora,
+          cerradoPor: currentProfile.id,
+        })
+      } else {
+        const base = cierre!.evento!
+        ev = { ...base, recap: datos.recap, cerradoAt: ahora, cerradoPor: currentProfile.id }
+        await db.updateAgendaEvento(ev)
+      }
+      await onPatch(entry.id, e => aplicarCierreEnTarjeta(e, ev, datos, currentProfile, hoy, ahora))
+      setCierre(null)
+      showToast(datos.siguiente ? 'Reunión cerrada · siguiente paso programado' : 'Reunión cerrada')
+    } catch (err) {
+      console.error(err)
+      showToast('No se pudo guardar la reunión', 'error')
+    }
+  }
 
   // ── próxima acción ──
   const [editingAction, setEditingAction] = useState(false)
@@ -617,6 +680,19 @@ export function FirmasDetailPanel({
                           </span>
                         )}
                         <span className="text-[10.5px] text-slate-400">{relativeDate(c.date) || fmtDate(c.date)}</span>
+                        {c.cierre === 'cerrada' && (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">cerrada</span>
+                        )}
+                        {c.cierre === 'pendiente' && (
+                          <button
+                            onClick={() => void abrirCierreDeApunte(c)}
+                            disabled={cargandoCierre === c.id}
+                            title="Apuntar el recap y el siguiente paso"
+                            className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50"
+                          >
+                            <Handshake className="w-3 h-3" /> {cargandoCierre === c.id ? '…' : 'Cerrar reunión'}
+                          </button>
+                        )}
                         {(isAdmin || c.authorId === currentProfile.id) && (
                           // en móvil no hay hover: por debajo de sm los botones se ven siempre
                           <span className="ml-auto flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
@@ -648,6 +724,14 @@ export function FirmasDetailPanel({
 
         {/* footer */}
         <div className="border-t border-slate-200 px-4 py-2 flex items-center gap-2">
+          <button
+            onClick={() => setCierre({})}
+            title="Una reunión que ya ha pasado y no estaba apuntada: queda en la agenda y aquí, con recap y siguiente paso"
+            className="inline-flex items-center gap-1 text-[11px] font-semibold text-violet-700 hover:text-violet-900"
+          >
+            <Handshake className="w-3.5 h-3.5" />
+            Registrar reunión
+          </button>
           {entry.trelloUrl && (
             <a
               href={entry.trelloUrl}
@@ -668,6 +752,17 @@ export function FirmasDetailPanel({
           </button>
         </div>
       </div>
+      {cierre && (
+        <CerrarReunionModal
+          evento={cierre.evento}
+          tarjeta={entry}
+          playerName={entry.playerName}
+          profiles={profiles}
+          currentProfile={currentProfile}
+          onClose={() => setCierre(null)}
+          onGuardar={guardarCierre}
+        />
+      )}
     </>
   )
 }

@@ -42,6 +42,10 @@ interface Props {
   onDelete?: () => Promise<void>
   /** Estatus en el pipeline Firmar del jugador de Captación elegido, si está en él */
   estatusPipeline?: (scoutingPlayerId: string) => string | undefined
+  /** Solo al editar una reunión del pipeline: abre el cierre (recap + siguiente paso) */
+  onCerrarReunion?: () => void
+  /** Solo al editar: la reunión ya está cerrada (recap y quién) */
+  cierre?: { recap?: string; cerradoAt: string; por?: string }
 }
 
 const AMBITOS: { id: EventoAmbito; label: string }[] = [
@@ -52,7 +56,7 @@ const AMBITOS: { id: EventoAmbito; label: string }[] = [
 
 const CAMPO = 'w-full text-xs border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-blue-200'
 
-export function EventoModal({ players, scoutingPlayers, profiles, currentProfile, inicial, editando, onClose, onSave, onDelete, estatusPipeline, cabecera }: Props) {
+export function EventoModal({ players, scoutingPlayers, profiles, currentProfile, inicial, editando, onClose, onSave, onDelete, estatusPipeline, cabecera, onCerrarReunion, cierre }: Props) {
   const tipoInicial = inicial?.tipo ?? EVENTO_TIPOS[0]
   const esTipoDeLista = (EVENTO_TIPOS as readonly string[]).includes(tipoInicial)
   const [tipo, setTipo] = useState<string>(esTipoDeLista ? tipoInicial : 'custom')
@@ -319,6 +323,19 @@ export function EventoModal({ players, scoutingPlayers, profiles, currentProfile
             </p>
           )}
 
+          {cierre && (
+            <div className="border border-emerald-200 bg-emerald-50 rounded-lg px-3 py-2 text-xs">
+              <div className="font-semibold text-emerald-800">✓ Reunión cerrada{cierre.por ? ` por ${cierre.por}` : ''} · {new Date(cierre.cerradoAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}</div>
+              {cierre.recap && <p className="mt-0.5 text-slate-700 whitespace-pre-wrap">{cierre.recap}</p>}
+            </div>
+          )}
+          {!cierre && onCerrarReunion && (
+            <button type="button" onClick={onCerrarReunion}
+              className="w-full flex items-center justify-between gap-2 border border-violet-200 bg-violet-50 rounded-lg px-3 py-2 text-xs text-violet-800 hover:bg-violet-100 transition-colors">
+              <span><b>Cerrar reunión</b> · recap y siguiente paso en la tarjeta de Firmar</span>
+              <span className="text-violet-400">→</span>
+            </button>
+          )}
           <div className="space-y-1">
             <label className="text-xs font-medium text-slate-600">Notas <span className="text-slate-400 font-normal">(opcional)</span></label>
             <textarea value={notas} onChange={e => setNotas(e.target.value)} rows={3} placeholder="Detalles del evento…" className={`${CAMPO} resize-none`} />

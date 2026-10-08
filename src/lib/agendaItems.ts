@@ -19,6 +19,7 @@ import { fechaLocal, sumarDias } from './fechas'
 import { diasDeViaje } from './viajes'
 import { SERVICIO_META, tipoDeServicio, tituloDeServicio, participantesDeServicio } from './serviciosAnalisis'
 import { norm } from './texto'
+import { reunionSinCerrar } from './reuniones'
 
 export type AgendaTipo = 'tarea' | 'llamada' | 'telefono' | 'reunion' | 'postpartido' | 'partido' | 'evento' | 'viaje'
 export type AgendaOrigen = 'tarea' | 'firmar' | 'postpartido' | 'captacion' | 'evento' | 'ofrecido'
@@ -55,6 +56,8 @@ export interface AgendaItem {
   categoria?: string
   /** Partidos: esa persona ya ha metido su informe del partido */
   conInforme?: boolean
+  /** Reunión del pipeline sin cerrar: id del evento (la fila enseña «Cerrar reunión») */
+  cierreEventoId?: string
   /** Dónde es (eventos con lugar) */
   lugar?: string
   estado: AgendaEstado
@@ -90,6 +93,8 @@ export interface AgendaInput {
   activities?: PlayerActivity[]
   /** Eventos de agenda (tabla agenda_eventos) */
   eventos?: AgendaEvento[]
+  /** "HH:MM" de ahora: una reunión de hoy cuenta como pasada si su hora ya llegó */
+  ahoraHora?: string
   /** «partido|iniciales» de cada informe de partido ya escrito */
   informesPartido?: Set<string>
   /** Informes pedidos en Ofrecidos y aún sin escribir: uno por ofrecimiento, persona y tipo */
@@ -426,6 +431,29 @@ export function construirAgenda(input: AgendaInput): AgendaItem[] {
       })
       continue
     }
+    // Reunión del pipeline ya pasada y sin cerrar: pendiente de hoy para quienes
+    // asistieron, hasta que alguien apunte el recap y el siguiente paso
+    const sinCerrar = reunionSinCerrar(e, hoy, input.ahoraHora)
+      && firmasEntries.some(f => f.scoutingPlayerId === e.scoutingPlayerId && f.status !== 'firmado')
+    if (sinCerrar && hoy >= rango.desde && hoy <= rango.hasta) {
+      items.push({
+        id: `cierre:${e.id}`,
+        tipo: 'reunion',
+        titulo: `Cerrar reunión: ${e.titulo || e.tipo}`,
+        personId: e.participantIds[0] ?? e.authorId ?? '',
+        otrosIds: e.participantIds.slice(1),
+        fecha: hoy,
+        playerNombre: input.nombreScouting?.(e.scoutingPlayerId ?? ''),
+        scoutingPlayerId: e.scoutingPlayerId,
+        categoria: 'Reunión sin cerrar',
+        estado: 'pendiente',
+        prioridadAlta: false,
+        origen: 'evento',
+        abrir: { tipo: 'evento', eventoId: e.id },
+        ref: { eventoId: e.id },
+        cierreEventoId: e.id,
+      })
+    }
     if (e.fecha < rango.desde || e.fecha > rango.hasta) continue
     const jugador = e.playerIds.length > 0 ? jugadoresPorId.get(e.playerIds[0]) : undefined
     const mas = e.playerIds.length - 1
@@ -451,6 +479,7 @@ export function construirAgenda(input: AgendaInput): AgendaItem[] {
       origen: 'evento',
       abrir: { tipo: 'evento', eventoId: e.id },
       ref: { eventoId: e.id },
+      cierreEventoId: sinCerrar ? e.id : undefined,
     })
   }
 

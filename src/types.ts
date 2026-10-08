@@ -514,6 +514,10 @@ export interface FirmasComment {
   authorId?: string   // profiles.id si el autor es un usuario de la app
   kind?: FirmasCommentKind   // sin valor = nota (comentarios importados de Trello)
   outcome?: 'contesto' | 'no_contesto'  // resultado rápido en llamada/whatsapp
+  /** Apunte que nace de un evento de agenda (reunión, visita…): su id */
+  eventoId?: string
+  /** Reuniones: pendiente de cerrar (recap + siguiente paso) o ya cerrada */
+  cierre?: 'pendiente' | 'cerrada'
 }
 
 export interface FirmasEntry {
@@ -586,6 +590,10 @@ export interface AgendaEvento {
   authorId?: string
   /** id (o group_id) de las filas de player_activities que generó, para no contarlo dos veces */
   activityRef?: string
+  /** Cierre de la reunión (migration_agenda_eventos_cierre.sql): qué salió y quién lo apuntó */
+  recap?: string
+  cerradoAt?: string           // ISO
+  cerradoPor?: string          // profiles.id
   createdAt: string
 }
 

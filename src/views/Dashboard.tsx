@@ -20,6 +20,9 @@ import { itemEsDe, seccionesDelDia } from "../lib/agendaItems";
 import { resumenSemanal } from "../lib/resumenSemanal";
 import { CalendarioSemanal } from "./CalendarioSemanal";
 import { EventoModal, type EventoBorrador } from "../components/agenda/EventoModal";
+import { CerrarReunionModal } from "../components/agenda/CerrarReunionModal";
+import { esReunionCerrable, horaActual } from "../lib/reuniones";
+import { apunteDeEvento, aplicarCierreEnTarjeta, type DatosCierre } from "./captacion/firmas/cierreReunion";
 import { ViajeModal } from "../components/agenda/ViajeModal";
 import { TareaModal } from "../components/agenda/TareaModal";
 import { RegistroContactoModal, type RegistroContacto } from "../components/agenda/RegistroContactoModal";
@@ -362,6 +365,14 @@ export function Dashboard({
   const [registro, setRegistro] = useState<Task | null>(null);
   // Tarea de tipo «Informe» de un jugador que se está completando: se pregunta si registrar el informe de datos
   const [informeDatos, setInformeDatos] = useState<Task | null>(null);
+  // Reunión del pipeline que se está cerrando (recap + siguiente paso)
+  const [cierre, setCierre] = useState<AgendaEvento | null>(null);
+  // "HH:MM" de ahora, cada 5 minutos: una reunión de hoy pasa a «sin cerrar» cuando llega su hora
+  const [ahoraHora, setAhoraHora] = useState(() => horaActual());
+  useEffect(() => {
+    const t = setInterval(() => setAhoraHora(horaActual()), 5 * 60 * 1000);
+    return () => clearInterval(t);
+  }, []);
   // Viaje abierto (id): enseña a qué jugadores del pipeline se puede visitar
   const [viajeId, setViajeId] = useState<string | null>(null);
   useAtras(!!viajeId, () => setViajeId(null), 'viaje');
@@ -420,18 +431,9 @@ export function Dashboard({
         await onPatchFirmasEntry(antes.id, f => ({ ...f, comments: f.comments.filter(c => c.id !== idApunte(ev.id)) }));
       }
       if (!ahora) return;
-      const futuro = ev.fecha > hoyISO();
-      const cuando = parseDia(ev.fecha).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }) + (ev.hora ? ` ${ev.hora}` : '');
-      const t = ev.tipo.toLowerCase();
-      const apunte = {
-        id: idApunte(ev.id),
-        text: [`📅 ${ev.tipo}${ev.titulo ? `: ${ev.titulo}` : ''}`, futuro ? `programado para el ${cuando}` : undefined, ev.lugar ? `en ${ev.lugar}` : undefined, ev.notas].filter(Boolean).join(' — '),
-        // El historial se ordena por fecha: lo ya ocurrido va en su día; lo futuro, cuando se apunta
-        date: futuro ? new Date().toISOString() : new Date(`${ev.fecha}T${ev.hora || '12:00'}:00`).toISOString(),
-        author: currentProfile.name,
-        authorId: currentProfile.id,
-        kind: (t.startsWith('llamada') ? 'llamada' : /^(reuni|videollamada|cita|comida|visita)/.test(t) ? 'reunion' : 'nota') as 'llamada' | 'reunion' | 'nota',
-      };
+      // Mismo apunte que usa el cierre (views/captacion/firmas/cierreReunion):
+      // una reunión queda marcada «pendiente de cerrar» hasta que se cierra
+      const apunte = apunteDeEvento(ev, currentProfile, hoyISO());
       await onPatchFirmasEntry(ahora.id, f => ({ ...f, comments: [...f.comments.filter(c => c.id !== apunte.id), apunte] }));
     } catch (err) { console.error('No se pudo apuntar el evento en la tarjeta de Firmar:', err); }
   }
@@ -636,6 +638,30 @@ export function Dashboard({
       showToast('Evento eliminado', 'info');
     } catch {
       showToast('No se pudo eliminar. Inténtalo de nuevo.', 'error');
+    }
+  }
+
+  // ── Cerrar una reunión del pipeline: recap en el evento y en la tarjeta,
+  // siguiente paso como próxima acción (que crea su tarea), estatus si cambia.
+  function abrirCierre(eventoId: string) {
+    const ev = eventos.find(x => x.id === eventoId);
+    if (ev) { setEventoModal(null); setCierre(ev); }
+  }
+  async function guardarCierre(ev: AgendaEvento, datos: DatosCierre) {
+    const ahora = new Date().toISOString();
+    const cerrado: AgendaEvento = { ...ev, recap: datos.recap, cerradoAt: ahora, cerradoPor: currentProfile.id };
+    try {
+      await updateAgendaEvento(cerrado);
+      setEventos(prev => prev.map(x => x.id === cerrado.id ? cerrado : x));
+      const tarjeta = tarjetaDe(ev.scoutingPlayerId);
+      if (tarjeta && onPatchFirmasEntry) {
+        await onPatchFirmasEntry(tarjeta.id, f => aplicarCierreEnTarjeta(f, cerrado, datos, currentProfile, hoyISO(), ahora));
+      }
+      setCierre(null);
+      showToast(datos.siguiente ? 'Reunión cerrada · siguiente paso programado' : 'Reunión cerrada', 'success');
+    } catch (err) {
+      console.error(err);
+      showToast('No se pudo cerrar la reunión. Inténtalo de nuevo.', 'error');
     }
   }
   const [managerFilter, setManagerFilter] = useState<string>("all");
@@ -846,12 +872,12 @@ export function Dashboard({
       hoy: todayStr,
       tasks: tasks.filter(t => !(t.adminOnly && !esAdmin)),
       firmasEntries: firmasEntries ?? [],
-      postpartidos, scoutingMatches, matchScouts, profiles, players, eventos, informesPartido, informesPedidos,
+      postpartidos, scoutingMatches, matchScouts, profiles, players, eventos, informesPartido, informesPedidos, ahoraHora,
       // Los fines de contrato solo los ven los admins
       vencimientos: esAdmin,
       nombreScouting: (id: string) => porId.get(id),
     };
-  }, [todayStr, tasks, esAdmin, firmasEntries, postpartidos, scoutingMatches, matchScouts, profiles, players, eventos, scoutingPlayers, informesPartido, informesPedidos]);
+  }, [todayStr, tasks, esAdmin, firmasEntries, postpartidos, scoutingMatches, matchScouts, profiles, players, eventos, scoutingPlayers, informesPartido, informesPedidos, ahoraHora]);
   const agendaItems = useMemo(
     () => construirAgenda({ ...agendaBase, activities: actsDia, rango: { desde: todayStr, hasta: diaHasta } }),
     [agendaBase, actsDia, todayStr, diaHasta],
@@ -1546,7 +1572,7 @@ export function Dashboard({
                 {deHoy.slice(0, 5).map(it => (
                   <AgendaRow key={it.id} item={it} hoy={todayStr} profiles={profiles}
                     onAbrir={agendaAbrir} onEstado={agendaEstado} onReprogramar={agendaReprogramar} onReasignar={agendaReasignar}
-                    onOpenPlayer={onSelectPlayer} onOpenScoutingPlayer={onOpenScoutingPlayer} />
+                    onOpenPlayer={onSelectPlayer} onOpenScoutingPlayer={onOpenScoutingPlayer} onCerrarReunion={abrirCierre} />
                 ))}
               </div>
             </div>
@@ -1623,6 +1649,7 @@ export function Dashboard({
               onReasignar={agendaReasignar}
               onOpenPlayer={onSelectPlayer}
               onOpenScoutingPlayer={onOpenScoutingPlayer}
+              onCerrarReunion={abrirCierre}
               onCrear={onAddGeneralTask ? crearTareaRapida : undefined}
             />
           )}
@@ -2968,6 +2995,11 @@ export function Dashboard({
           onSave={guardarEvento}
           onDelete={eventoModal.original ? borrarEvento : undefined}
           estatusPipeline={(id) => tarjetaDe(id)?.status}
+          onCerrarReunion={eventoModal.original && esReunionCerrable(eventoModal.original) && !eventoModal.original.cerradoAt
+            ? () => abrirCierre(eventoModal.original!.id) : undefined}
+          cierre={eventoModal.original?.cerradoAt
+            ? { recap: eventoModal.original.recap, cerradoAt: eventoModal.original.cerradoAt, por: profiles.find(p => p.id === eventoModal.original?.cerradoPor)?.name.split(' ')[0] }
+            : undefined}
           cabecera={!eventoModal.original && onAddGeneralTask ? (
             <TipoNuevo valor="evento" onCambiar={() => {
               setTareaInicial({ assigneeId: eventoModal.inicial.participantIds?.[0], dueDate: eventoModal.inicial.fecha });
@@ -2975,6 +3007,18 @@ export function Dashboard({
               setShowAddGeneralTask(true);
             }} />
           ) : undefined}
+        />
+      )}
+
+      {cierre && (
+        <CerrarReunionModal
+          evento={cierre}
+          tarjeta={tarjetaDe(cierre.scoutingPlayerId)}
+          playerName={(cierre.scoutingPlayerId && scoutingPlayers.find(p => p.id === cierre.scoutingPlayerId)?.fullName) || cierre.titulo || cierre.tipo}
+          profiles={profiles}
+          currentProfile={currentProfile}
+          onClose={() => setCierre(null)}
+          onGuardar={(datos) => guardarCierre(cierre, datos)}
         />
       )}
 
