@@ -83,9 +83,24 @@ describe('aplicarCierreEnTarjeta', () => {
     expect(ap.date).toBe(previo.date)
     expect(ap.text).toContain('✓ Cerrada: Buena reunión, el padre quiere firmar')
 
-    expect(out).toMatchObject({ status: 'templado', statusUpdatedAt: '2026-10-08T10:00:00Z', nextAction: 'Llamar al padre', nextActionDate: '2026-10-15', nextActionAssignee: 'p-pp', nextActionKind: 'llamada' })
+    expect(out).toMatchObject({ status: 'templado', statusUpdatedAt: '2026-10-08T10:00:00Z' })
     const log = out.comments.find(c => c.kind === 'estatus')!
     expect(log.text).toBe('Caliente → Templado')
+    // el siguiente paso va en un segundo guardado
+    expect(out.nextAction).toBeUndefined()
+    expect(conSiguientePaso(out, { kind: 'llamada', label: 'Llamar al padre', date: '2026-10-15', assigneeId: 'p-pp' }))
+      .toMatchObject({ nextAction: 'Llamar al padre', nextActionDate: '2026-10-15', nextActionAssignee: 'p-pp', nextActionKind: 'llamada' })
+  })
+
+  it('si la reunión era la próxima acción de la tarjeta, cerrarla la retira (la tarea la completa App)', () => {
+    const f = tarjeta({ nextAction: 'Reunión con el padre', nextActionKind: 'reunion', nextActionDate: '2026-10-07', nextActionEventoId: 'ev1', nextActionTaskId: 't1' })
+    const out = aplicarCierreEnTarjeta(f, evento(), { recap: 'ok' }, AUTOR, HOY)
+    expect(out.nextAction).toBeUndefined()
+    expect(out.nextActionEventoId).toBeUndefined()
+    expect(out.nextActionTaskId).toBe('t1')
+    // otra reunión distinta no toca la acción
+    const otra = aplicarCierreEnTarjeta(f, evento({ id: 'ev2' }), { recap: 'ok' }, AUTOR, HOY)
+    expect(otra.nextAction).toBe('Reunión con el padre')
   })
   it('sin apunte previo lo crea; sin estatus ni siguiente paso no toca nada más', () => {
     const out = aplicarCierreEnTarjeta(tarjeta(), evento(), { recap: 'ok' }, AUTOR, HOY)

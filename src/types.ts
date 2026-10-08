@@ -538,6 +538,8 @@ export interface FirmasEntry {
   nextActionTaskId?: string    // tarea real del tablero generada por la próxima acción (sync bidireccional)
   nextActionDate?: string      // "YYYY-MM-DD"
   nextActionAssignee?: string  // profiles.id
+  /** Acción de tipo Reunión: el evento de agenda que la representa (hora, lugar, asistentes, cierre) */
+  nextActionEventoId?: string
   signedAt?: string            // ISO — cuándo pasó a «firmado»
   /** Marcado a mano como jugador de techo alto: filtro en el pipeline para seguir a los top de cada zona */
   potencialTop?: boolean

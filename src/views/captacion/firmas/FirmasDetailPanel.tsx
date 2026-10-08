@@ -109,6 +109,11 @@ export function FirmasDetailPanel({
         await db.updateAgendaEvento(ev)
       }
       await onPatch(entry.id, e => aplicarCierreEnTarjeta(e, ev, datos, currentProfile, hoy, ahora))
+      // Segundo guardado: la tarea de la reunión se completa antes de crear la del paso nuevo
+      if (datos.siguiente) {
+        const s = datos.siguiente
+        await onPatch(entry.id, e => conSiguientePaso(e, s))
+      }
       setCierre(null)
       showToast(datos.siguiente ? 'Reunión cerrada · siguiente paso programado' : 'Reunión cerrada')
     } catch (err) {
@@ -277,8 +282,28 @@ export function FirmasDetailPanel({
     }
   }
 
+  // Reunión con evento en la agenda: el ✓ es cerrarla (recap + siguiente paso)
+  async function completarReunion() {
+    if (!entry.nextActionEventoId || cargandoCierre) return false
+    setCargandoCierre('accion')
+    try {
+      const ev = await db.fetchAgendaEvento(entry.nextActionEventoId)
+      if (!ev) return false
+      setCierre({ evento: ev })
+      return true
+    } catch { return false } finally { setCargandoCierre(null) }
+  }
+
   const completeAction = () => {
     if (esAccionDeLlamada(entry.nextActionKind)) { setLlamada(true); return }
+    if (entry.nextActionKind === 'reunion' && entry.nextActionEventoId) {
+      void completarReunion().then(ok => { if (!ok) completarSinMas() })
+      return
+    }
+    completarSinMas()
+  }
+
+  const completarSinMas = () => {
     const log: FirmasComment = {
       id: crypto.randomUUID(),
       text: `✓ Hecho: ${entry.nextAction ?? 'próxima acción'}`,
@@ -471,7 +496,7 @@ export function FirmasDetailPanel({
                         {actionAssigneeProfile ? ` · ${actionAssigneeProfile.avatar || actionAssigneeProfile.name}` : ''}
                       </span>
                       <span className="ml-auto flex gap-1 flex-shrink-0">
-                        <button onClick={completeAction} className="px-2 py-0.5 rounded-md bg-green-600 text-white text-[11px] font-medium hover:bg-green-700" title="Marcar hecha (queda en el historial)">✓</button>
+                        <button onClick={completeAction} disabled={cargandoCierre === 'accion'} className="px-2 py-0.5 rounded-md bg-green-600 text-white text-[11px] font-medium hover:bg-green-700 disabled:opacity-50" title={entry.nextActionEventoId ? 'Cerrar la reunión (recap y siguiente paso)' : 'Marcar hecha (queda en el historial)'}>✓</button>
                         <button
                           onClick={() => { setActionLabel(entry.nextAction ?? ''); setActionDate(entry.nextActionDate ?? ''); setActionAssignee(entry.nextActionAssignee ?? currentProfile.id); setActionKind(entry.nextActionKind ?? 'llamada'); setEditingAction(true) }}
                           className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-white"

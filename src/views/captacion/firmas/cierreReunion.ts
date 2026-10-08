@@ -6,9 +6,12 @@ import { parseDia } from '../../../lib/fechas'
 // ── Cerrar una reunión sobre la tarjeta de Firmar ───────────────────
 // Lo que un cierre deja en la tarjeta, como función pura sobre la entrada:
 //   · el apunte del evento pasa a «cerrada» con el recap debajo
-//   · el siguiente paso se convierte en la próxima acción (que a su vez
-//     crea la tarea en el tablero: App ya lo sincroniza)
+//   · si la reunión era la próxima acción de la tarjeta, la acción se
+//     retira (App completa su tarea al verlo)
 //   · si se cambia el estatus, queda el apunte automático de siempre
+// El siguiente paso NO va aquí: se pone con `conSiguientePaso` en un
+// segundo guardado, para que la tarea de la reunión se complete antes de
+// crear la del paso nuevo.
 // Lo llaman el Dashboard (cerrar desde Mi día o el evento) y el panel de
 // la tarjeta (cerrar desde el historial o registrar una reunión pasada).
 
@@ -85,6 +88,12 @@ export function aplicarCierreEnTarjeta(
 
   let out: FirmasEntry = { ...f, comments }
 
+  // Era la próxima acción de la tarjeta: hecha. (nextActionTaskId se deja:
+  // App completa esa tarea al ver que la acción ya no está.)
+  if (f.nextActionEventoId && f.nextActionEventoId === ev.id) {
+    out = { ...out, nextAction: undefined, nextActionDate: undefined, nextActionAssignee: undefined, nextActionKind: undefined, nextActionEventoId: undefined }
+  }
+
   if (datos.estatus && datos.estatus !== f.status) {
     const log: FirmasComment = {
       id: crypto.randomUUID(),
@@ -101,17 +110,6 @@ export function aplicarCierreEnTarjeta(
       statusUpdatedAt: ahora,
       signedAt: datos.estatus === 'firmado' ? (f.signedAt ?? ahora) : f.signedAt,
       comments,
-    }
-  }
-
-  const s = datos.siguiente
-  if (s && (s.label.trim() || s.date)) {
-    out = {
-      ...out,
-      nextAction: s.label.trim() || undefined,
-      nextActionDate: s.date || undefined,
-      nextActionAssignee: s.assigneeId || undefined,
-      nextActionKind: s.kind || undefined,
     }
   }
   return out

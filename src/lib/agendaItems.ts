@@ -175,10 +175,14 @@ export function construirAgenda(input: AgendaInput): AgendaItem[] {
   const usadas = new Set<string>() // tareas que ya salen como acción de Firmar o postpartido
 
   // ── Próximas acciones de Firmar ──
+  const eventosPorId = new Map(eventos.map(e => [e.id, e]))
   for (const e of firmasEntries) {
     if (e.status === 'firmado' || !(e.nextAction || e.nextActionDate)) continue
     const task = e.nextActionTaskId ? tareasPorId.get(e.nextActionTaskId) : undefined
     if (task) usadas.add(task.id)
+    // Una reunión con evento en la agenda sale como evento (con hora, lugar y
+    // el cierre cuando pasa), no también como acción: sería la misma fila dos veces
+    if (e.nextActionEventoId && eventosPorId.has(e.nextActionEventoId)) continue
     items.push({
       id: `firmar:${e.id}`,
       tipo: tipoDeAccionFirmar(e.nextActionKind),

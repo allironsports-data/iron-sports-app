@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, type Dispatch, type SetStateAction } from "react";
 import { TaskDetailPanel } from "../components/TaskDetailPanel";
 import { BUILD_ID, CHANGELOG } from "../changelog";
 import { ConfirmModal } from "../components/ConfirmModal";
@@ -32,7 +32,7 @@ import { TipoNuevo } from "../components/agenda/TipoNuevo";
 import { useActividadesRango } from "../hooks/useActividadesRango";
 import {
   createPlayerActivity, createGroupActivity, deletePlayerActivity, deleteGroupActivity, fetchActivitiesByAuthor, createScoutingMatch,
-  fetchAgendaEventos, createAgendaEvento, updateAgendaEvento, deleteAgendaEvento, esMigracionPendiente,
+  createAgendaEvento, updateAgendaEvento, deleteAgendaEvento, esMigracionPendiente,
 } from "../lib/db";
 import type { Profile } from "../contexts/AuthContext";
 import type { AppNotification } from "../App";
@@ -94,6 +94,9 @@ interface Props {
   informesPedidos?: { ofrecimientoId: string; jugador: string; equipo?: string; avatar: string; tipo: string; pedidoPor?: string }[];
   /** Abre la ficha de un ofrecimiento (Captación → Ofrecidos) */
   onOpenOfrecido?: (ofrecimientoId: string) => void;
+  /** Eventos de agenda: los carga App (y los refresca por realtime); aquí se crean, editan y cierran */
+  eventos: AgendaEvento[];
+  setEventos: Dispatch<SetStateAction<AgendaEvento[]>>;
   /** Asigna un scout (iniciales) a un partido de Captación */
   onAddMatchScout?: (matchId: string, scout: string, viewMode?: 'campo' | 'video') => Promise<void>;
   /** Abre la ficha de un partido de Captación */
@@ -180,6 +183,8 @@ export function Dashboard({
   informesPartido,
   informesPedidos,
   onOpenOfrecido,
+  eventos,
+  setEventos,
   onAddMatchScout,
   onOpenMatch,
   onSetMatchSeen,
@@ -356,8 +361,7 @@ export function Dashboard({
     }
   }
 
-  // ── Eventos de agenda (tabla agenda_eventos; opcional hasta migrar) ──
-  const [eventos, setEventos] = useState<AgendaEvento[]>([]);
+  // ── Eventos de agenda (tabla agenda_eventos; opcional hasta migrar): estado de App ──
   // Sube al crear/editar/borrar un evento: invalida las actividades cacheadas
   const [actsVersion, setActsVersion] = useState(0);
   // Modal de evento: valores de partida y, si se edita, el evento original
@@ -381,14 +385,6 @@ export function Dashboard({
   useAtras(!!viajeId, () => setViajeId(null), 'viaje');
   // Valores de partida de «Nueva tarea» cuando se abre desde una celda del calendario
   const [tareaInicial, setTareaInicial] = useState<{ assigneeId?: string; dueDate?: string }>({});
-  useEffect(() => {
-    let vivo = true;
-    fetchAgendaEventos()
-      .then(evs => { if (vivo) setEventos(evs); })
-      .catch(() => {}); // tabla sin migrar: el calendario funciona con lo demás
-    return () => { vivo = false; };
-  }, []);
-
   function openAddEvent(inicial: Partial<EventoBorrador> = {}) {
     setEventoModal({ inicial: { fecha: fechaLocal(new Date()), participantIds: [currentProfile.id], ...inicial } });
   }
@@ -547,6 +543,13 @@ export function Dashboard({
   async function guardarTareaOPreguntar(antes: Task, despues: Task): Promise<boolean> {
     const tarjetaLlamada = llamadaDeFirmar(antes, despues);
     if (tarjetaLlamada) { setLlamada(tarjetaLlamada); return false; }
+    // Tarea de una reunión del pipeline con evento: completarla es cerrar la reunión
+    if (despues.status === 'completada' && antes.status !== 'completada') {
+      const tarjetaReunion = (firmasEntries ?? []).find(f => f.nextActionTaskId === antes.id && f.nextActionEventoId);
+      if (tarjetaReunion?.nextActionEventoId && eventos.some(e => e.id === tarjetaReunion.nextActionEventoId)) {
+        abrirCierre(tarjetaReunion.nextActionEventoId); return false;
+      }
+    }
     if (pideRegistro(antes, despues)) { setRegistro(despues); return false; }
     if (pideInformeDatos(antes, despues)) { setInformeDatos(despues); return false; }
     if (guardarTarea) await Promise.resolve(guardarTarea(despues));
@@ -686,6 +689,11 @@ export function Dashboard({
       const tarjeta = tarjetaDe(ev.scoutingPlayerId);
       if (tarjeta && onPatchFirmasEntry) {
         await onPatchFirmasEntry(tarjeta.id, f => aplicarCierreEnTarjeta(f, cerrado, datos, currentProfile, hoyISO(), ahora));
+        // Segundo guardado: si la reunión era la próxima acción, su tarea se completa antes de crear la del paso nuevo
+        if (datos.siguiente) {
+          const s = datos.siguiente;
+          await onPatchFirmasEntry(tarjeta.id, f => conSiguientePaso(f, s));
+        }
       }
       setCierre(null);
       showToast(datos.siguiente ? 'Reunión cerrada · siguiente paso programado' : 'Reunión cerrada', 'success');
@@ -1160,6 +1168,8 @@ export function Dashboard({
         const tarjeta = (firmasEntries ?? []).find(f => f.id === it.ref.firmasEntryId);
         // Una llamada o WhatsApp pregunta antes si contestó
         if (tarjeta && esAccionDeLlamada(tarjeta.nextActionKind)) { setLlamada(tarjeta); return; }
+        // Una reunión con evento se cierra (recap + siguiente paso)
+        if (tarjeta?.nextActionEventoId && eventos.some(e => e.id === tarjeta.nextActionEventoId)) { abrirCierre(tarjeta.nextActionEventoId); return; }
         await onPatchFirmasEntry?.(it.ref.firmasEntryId, e => ({
           ...e,
           nextAction: undefined, nextActionDate: undefined, nextActionAssignee: undefined, nextActionKind: undefined,

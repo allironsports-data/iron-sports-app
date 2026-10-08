@@ -3,6 +3,8 @@ import { CalendarDays, Sun } from 'lucide-react'
 import { useAuth } from './hooks/useAuth'
 import type { Player, Task, ScoutingPlayer, ScoutingReport, ScoutingInfo, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchOurPlayer, ScoutingMatchScout, Ofrecimiento, OfrecimientoOrigen, MemberStatus, Postpartido, FirmasEntry, BoulemaPlayer, AgendaEvento } from './types'
 import { informesPedidos, TIPO_INFORME_LABEL, VEREDICTO_LABEL } from './lib/ofrecidos'
+import { apunteDeEvento } from './views/captacion/firmas/cierreReunion'
+import { idApunteEvento } from './lib/reuniones'
 import { leerCopia, guardarCopia, limpiarCopias } from './lib/cacheLocal'
 import * as db from './lib/db'
 import { supabase } from './lib/supabase'
@@ -222,6 +224,8 @@ export default function App() {
   // Eventos de agenda, solo para los avisos del Pipeline (reuniones sin cerrar).
   // El Dashboard carga y edita su propia copia; esta se refresca por realtime.
   const [eventos, setEventos] = useState<AgendaEvento[]>([])
+  const eventosRef = useRef<AgendaEvento[]>([])
+  useEffect(() => { eventosRef.current = eventos }, [eventos])
   // Copia para los handlers (parches sobre la versión más reciente) y para
   // que los avisos de realtime sepan qué ha cambiado respecto a lo que vi
   const ofrecimientosRef = useRef<Ofrecimiento[]>([])
@@ -1486,6 +1490,64 @@ export default function App() {
     }
   }
 
+  /**
+   * Firmar ⇄ Agenda: una próxima acción de tipo «Reunión» con fecha es un
+   * evento de la agenda (hora, lugar y asistentes se completan desde él, y
+   * entra en el circuito de cierre). Si la acción cambia, el evento la sigue;
+   * si se retira sin haberse celebrado (fecha futura), el evento se borra.
+   */
+  const syncFirmasActionEvento = async (prev: FirmasEntry | undefined, next: FirmasEntry): Promise<FirmasEntry> => {
+    if (!profile) return next
+    const quiere = next.status !== 'firmado' && next.nextActionKind === 'reunion' && !!next.nextActionDate
+    const evId = next.nextActionEventoId
+    const ev = evId ? eventosRef.current.find(e => e.id === evId) : undefined
+    const hoy = hoyISO()
+    try {
+      if (quiere) {
+        const asistente = next.nextActionAssignee
+        if (ev) {
+          const participantIds = asistente && !ev.participantIds.includes(asistente) ? [...ev.participantIds, asistente] : ev.participantIds
+          const titulo = next.nextAction || ev.titulo
+          if (ev.fecha !== next.nextActionDate || ev.titulo !== titulo || participantIds !== ev.participantIds) {
+            const actualizado: AgendaEvento = { ...ev, fecha: next.nextActionDate!, titulo, participantIds }
+            await db.updateAgendaEvento(actualizado)
+            setEventos(p => p.map(e => e.id === actualizado.id ? actualizado : e))
+            const apunte = apunteDeEvento(actualizado, profile, hoy)
+            const previo = next.comments.find(c => c.id === apunte.id)
+            return { ...next, comments: [...next.comments.filter(c => c.id !== apunte.id), previo ? { ...previo, text: apunte.text } : apunte] }
+          }
+          return next
+        }
+        if (evId) return next   // tiene id pero aún no está en memoria: no se duplica
+        const creado = await db.createAgendaEvento({
+          titulo: next.nextAction || `Reunión · ${next.playerName}`,
+          tipo: 'Reunión',
+          fecha: next.nextActionDate!,
+          ambito: 'captacion',
+          playerIds: [],
+          scoutingPlayerId: next.scoutingPlayerId,
+          participantIds: asistente ? [asistente] : [],
+          authorId: profile.id,
+        })
+        setEventos(p => [creado, ...p])
+        const apunte = apunteDeEvento(creado, profile, hoy)
+        return { ...next, nextActionEventoId: creado.id, comments: [...next.comments.filter(c => c.id !== apunte.id), apunte] }
+      }
+      // Ya no es una reunión con fecha (hecha, retirada o cambiada de tipo)
+      if (prev?.nextActionEventoId && ev && !ev.cerradoAt && ev.fecha > hoy) {
+        // No llegó a celebrarse: fuera de la agenda y del historial
+        await db.deleteAgendaEvento(ev.id)
+        setEventos(p => p.filter(e => e.id !== ev.id))
+        return { ...next, nextActionEventoId: undefined, comments: next.comments.filter(c => c.id !== idApunteEvento(ev.id)) }
+      }
+      return next.nextActionEventoId ? { ...next, nextActionEventoId: undefined } : next
+    } catch (err) {
+      // Sin la tabla de eventos (migración pendiente) la acción sigue siendo solo tarea
+      if (!db.esMigracionPendiente(err)) console.error('No se pudo sincronizar el evento de la reunión:', err)
+      return next
+    }
+  }
+
   /** Crea tareas para las acciones ya existentes que aún no tienen (backfill de la Agenda) */
   const handleSyncFirmasActionTasks = async (): Promise<number> => {
     const pending = firmasEntries.filter(f =>
@@ -1557,7 +1619,7 @@ export default function App() {
       // nada que haya cambiado entre medias.
       setFirmasEntries(prev => prev.map(x => x.id === id ? aplicarCambio(x) : x))
       try {
-        const conTarea = await syncFirmasActionTask(before, merged)
+        const conTarea = await syncFirmasActionEvento(before, await syncFirmasActionTask(before, merged))
         // La tarjeta se escribe entera: antes de hacerlo se mira cómo está AHORA
         // en la base y solo se aplica encima lo que ha cambiado este usuario.
         // Así la nota que otro apuntó hace un segundo no desaparece.
@@ -2324,6 +2386,8 @@ export default function App() {
         informesPartido={informesPartido}
         informesPedidos={informesPedidosPendientes}
         onOpenOfrecido={irAOfrecido}
+        eventos={eventos}
+        setEventos={setEventos}
         onAddMatchScout={handleAddMatchScout}
         onOpenMatch={(id) => setFlotante({ tipo: 'partido', id })}
         onSetMatchSeen={async (id, scout, visto) => {

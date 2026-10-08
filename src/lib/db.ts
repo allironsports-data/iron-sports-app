@@ -1605,6 +1605,7 @@ function dbToFirmasEntry(row: Record<string, unknown>): FirmasEntry {
     nextActionTaskId: (row.next_action_task_id as string) ?? undefined,
     nextActionDate: (row.next_action_date as string) ?? undefined,
     nextActionAssignee: (row.next_action_assignee as string) ?? undefined,
+    nextActionEventoId: (row.next_action_evento_id as string) ?? undefined,
     signedAt: (row.signed_at as string) ?? undefined,
     potencialTop: (row.potencial_top as boolean) ?? false,
     createdAt: row.created_at as string,
@@ -1635,18 +1636,27 @@ export async function fetchFirmasEntries(): Promise<FirmasEntry[]> {
   }
 }
 
-// captacion_firmas.potencial_top: opcional hasta ejecutar
-// migration_firmas_potencial_top.sql. Si la columna no existe, se guarda sin ella.
-let firmasSinPotencialTop = false
-function sinPotencialTop(fila: Record<string, unknown>, error: unknown): Record<string, unknown> | null {
-  if (firmasSinPotencialTop || !esColumnaInexistente(error)) return null
-  if (!/potencial_top/.test((error as { message?: string } | null)?.message ?? '')) return null
-  firmasSinPotencialTop = true
-  console.warn('[db] captacion_firmas no tiene columna potencial_top: se guarda sin ella (ejecuta migration_firmas_potencial_top.sql)')
+// Columnas de captacion_firmas añadidas después: potencial_top
+// (migration_firmas_potencial_top.sql) y next_action_evento_id
+// (migration_firmas_next_action_evento.sql). Si una no existe aún, se
+// guarda sin ella y se recuerda para no reintentar en cada escritura.
+const COLUMNAS_OPCIONALES_FIRMAS = ['potencial_top', 'next_action_evento_id'] as const
+const firmasColumnasAusentes = new Set<string>()
+function sinColumnasAusentes(fila: Record<string, unknown>, error: unknown): Record<string, unknown> | null {
+  if (!esColumnaInexistente(error)) return null
+  const msg = (error as { message?: string } | null)?.message ?? ''
+  const falta = COLUMNAS_OPCIONALES_FIRMAS.find(c => !firmasColumnasAusentes.has(c) && msg.includes(c))
+  if (!falta) return null
+  firmasColumnasAusentes.add(falta)
+  console.warn(`[db] captacion_firmas no tiene columna ${falta}: se guarda sin ella (ejecuta la migración correspondiente)`)
   const copia = { ...fila }
-  delete copia.potencial_top
+  for (const c of firmasColumnasAusentes) delete copia[c]
   return copia
 }
+const columnasOpcionalesFirmas = (e: Pick<FirmasEntry, 'potencialTop' | 'nextActionEventoId'>): Record<string, unknown> => ({
+  ...(firmasColumnasAusentes.has('potencial_top') ? {} : { potencial_top: e.potencialTop ?? false }),
+  ...(firmasColumnasAusentes.has('next_action_evento_id') ? {} : { next_action_evento_id: e.nextActionEventoId ?? null }),
+})
 
 export async function createFirmasEntry(e: Omit<FirmasEntry, 'id' | 'createdAt' | 'updatedAt'>): Promise<FirmasEntry> {
   const fila: Record<string, unknown> = {
@@ -1667,10 +1677,10 @@ export async function createFirmasEntry(e: Omit<FirmasEntry, 'id' | 'createdAt' 
     next_action_date: e.nextActionDate ?? null,
     next_action_assignee: e.nextActionAssignee ?? null,
     signed_at: e.signedAt ?? null,
-    ...(firmasSinPotencialTop ? {} : { potencial_top: e.potencialTop ?? false }),
+    ...columnasOpcionalesFirmas(e),
   }
   let { data, error } = await supabase.from('captacion_firmas').insert(fila).select().single()
-  const reintento = error ? sinPotencialTop(fila, error) : null
+  const reintento = error ? sinColumnasAusentes(fila, error) : null
   if (reintento) ({ data, error } = await supabase.from('captacion_firmas').insert(reintento).select().single())
   if (error) throw error
   return dbToFirmasEntry(data)
@@ -1711,10 +1721,10 @@ export async function updateFirmasEntry(e: FirmasEntry): Promise<void> {
     next_action_assignee: e.nextActionAssignee ?? null,
     signed_at: e.signedAt ?? null,
     updated_at: new Date().toISOString(),
-    ...(firmasSinPotencialTop ? {} : { potencial_top: e.potencialTop ?? false }),
+    ...columnasOpcionalesFirmas(e),
   }
   let { error } = await supabase.from('captacion_firmas').update(fila).eq('id', e.id)
-  const reintento = error ? sinPotencialTop(fila, error) : null
+  const reintento = error ? sinColumnasAusentes(fila, error) : null
   if (reintento) ({ error } = await supabase.from('captacion_firmas').update(reintento).eq('id', e.id))
   if (error) throw error
 }

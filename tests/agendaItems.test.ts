@@ -69,6 +69,19 @@ describe('construirAgenda · Firmar', () => {
     })
   })
 
+  it('una acción Reunión con evento en la agenda sale solo como evento', () => {
+    const ev: AgendaEvento = { id: 'ev1', titulo: 'Reunión con el padre', tipo: 'Reunión', fecha: HOY, ambito: 'captacion', playerIds: [], scoutingPlayerId: 'sp1', participantIds: [YO], createdAt: '' }
+    const items = construirAgenda(base({
+      eventos: [ev],
+      firmasEntries: [firma({ id: 'f1', playerName: 'Unai', scoutingPlayerId: 'sp1', nextAction: 'Reunión con el padre', nextActionKind: 'reunion', nextActionDate: HOY, nextActionEventoId: 'ev1' })],
+    }))
+    expect(items.map(i => i.id)).toEqual(['evento:ev1'])
+    // si el evento no está (borrado, o sin migrar), la acción vuelve a salir
+    expect(construirAgenda(base({
+      firmasEntries: [firma({ id: 'f1', playerName: 'Unai', nextAction: 'Reunión', nextActionKind: 'reunion', nextActionDate: HOY, nextActionEventoId: 'ev1' })],
+    })).map(i => i.id)).toEqual(['firmar:f1'])
+  })
+
   it('sin responsable de la acción, es del primer encargado y el resto la ven', () => {
     const [it0] = construirAgenda(base({ firmasEntries: [firma({ id: 'f1', managers: [YO, OTRO], nextAction: 'Reunión', nextActionKind: 'reunion' })] }))
     expect(it0.tipo).toBe('reunion')
