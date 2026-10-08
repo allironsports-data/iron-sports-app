@@ -30,6 +30,7 @@ function dbToPlayer(row: Record<string, unknown>): Player {
     // undefined si la migración de estado no se ha ejecutado aún; la app lo
     // trata como «activo» (ver lib/estadoJugador.ts)
     estado: (row.estado as Player['estado']) ?? undefined,
+    prioridad: (row.prioridad as Player['prioridad']) || undefined,
     // undefined si la migración de updated_at no se ha ejecutado aún
     updatedAt: (row.updated_at as string) ?? undefined,
     performance: [],
@@ -67,6 +68,7 @@ function playerToDb(p: Partial<Player>) {
     info: p.info,
     hidden_from_management: p.hiddenFromManagement ?? false,
     estado: p.estado ?? 'activo',
+    prioridad: p.prioridad ?? null,
     partner_origen: p.partnerOrigen ?? null,
     shared_with_partners: p.sharedWithPartners ?? false,
   }
@@ -80,7 +82,8 @@ function playerToDb(p: Partial<Player>) {
 // ficha se guarda igual.
 //   · estado                                → migration_player_estado.sql
 //   · partner_origen, shared_with_partners  → migration_partners.sql
-const COLUMNAS_OPCIONALES_PLAYER = ['estado', 'partner_origen', 'shared_with_partners'] as const
+//   · prioridad                             → migration_player_prioridad.sql
+const COLUMNAS_OPCIONALES_PLAYER = ['estado', 'partner_origen', 'shared_with_partners', 'prioridad'] as const
 const playersSinColumna = new Set<string>()
 
 /** Apaga la columna opcional de la que se queja el error. false si el error no va de eso. */

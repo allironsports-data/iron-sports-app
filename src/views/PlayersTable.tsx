@@ -95,6 +95,12 @@ export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onLogo
       setValue: (p, v) => ({ ...p, birthDate: v }),
     },
     {
+      key: "prioridad", label: "Prioridad", width: "min-w-[90px]", type: "select",
+      options: ["A", "B", "C"],
+      getValue: (p) => p.prioridad || "",
+      setValue: (p, v) => ({ ...p, prioridad: (v || undefined) as Player["prioridad"] }),
+    },
+    {
       key: "foot", label: "Pie hábil", width: "min-w-[100px]", type: "select",
       options: ["derecho", "izquierdo", "ambidiestro"],
       getValue: (p) => p.foot || "",

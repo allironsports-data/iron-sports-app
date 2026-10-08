@@ -21,6 +21,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-08',
     items: [
+      'Jugadores: prioridad A, B o C por jugador. Se pone desde la ficha (editar → Equipo → Prioridad, o en la tabla editable) y sale como chapa junto al nombre en tarjetas, lista y tabla, y en la ficha. Nuevo filtro «Prioridad» en la lista (incluye «Sin prioridad»). Los que no tienen prioridad no llevan chapa',
       'Captación → Ofrecidos (nueva pestaña): jugadores que nos ofrece alguien de fuera (agente, intermediario, club, familia, Boulema). Cada ofrecimiento lleva quién lo ofrece y su contacto, las condiciones pedidas (operación, coste, salario, comisión, contrato actual, fecha límite para contestar), un responsable en AIS y una cadena de informes por niveles: en cada nivel se pide a una o varias personas un tipo de informe (técnico, entorno, mercado o personalidad) y cada una contesta con su veredicto (OK, no, más vídeo). Cuando hay suficiente, el responsable lo pasa a «Decidir» y lo acepta o lo descarta',
       'Ofrecidos: la lista es una línea por jugador (quién ofrece, responsable, estado, de quién está pendiente y fecha límite). Todo lo demás está en la ficha, que se abre al pulsar la fila. Filtros: abiertos / decidir / cerrados, «solo los míos» y origen',
       'Ofrecidos → Responder: un informe técnico se guarda como informe de partido en la ficha de Captación del jugador (y si no existe, se crea la ficha con los datos del ofrecimiento); entorno, mercado y personalidad se guardan como infos de esa misma ficha. El veredicto se propone desde la conclusión (Firmar/Seguir → OK, Descartar → No, Más vídeo → Más vídeo) y se puede cambiar',
@@ -34,6 +35,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Boulema: las «Peticiones» pasan a Captación → Ofrecidos con origen Boulema (las que había se migran, con sus informes ya enlazados contados como OK). Boulema se queda con Mantenimiento y un acceso directo a sus ofrecimientos. Los avisos del Pipeline que decían «petición en Boulema» ahora dicen «ofrecimiento abierto»',
     ],
     adminItems: [
+      'Requiere ejecutar migration_player_prioridad.sql (columna prioridad en players). Sin ella la prioridad no se guarda',
       'Requiere ejecutar migration_firmas_next_action_evento.sql (columna next_action_evento_id en captacion_firmas). Sin ella, las acciones de tipo Reunión siguen siendo solo tarea, como hasta ahora',
       'Requiere ejecutar migration_agenda_eventos_cierre.sql (recap y fecha de cierre en agenda_eventos, y realtime de esa tabla). Sin ella, el cierre queda solo en el historial de la tarjeta y la reunión sigue saliendo como pendiente',
       'Requiere ejecutar migration_ofrecimientos.sql en Supabase (crea la tabla ofrecimientos con sus permisos, realtime y la migración de boulema_peticiones, que se deja intacta por si hay que volver atrás). Sin ejecutarla, la pestaña sale vacía y no se puede crear nada',

@@ -6,7 +6,9 @@ import type {
   DistributionEntry, ClubNegotiation, Club,
   PlayerActivity, Postpartido, ScoutingMatch,
 } from "../types";
-import { calcAge, PLAYER_ESTADOS, type PlayerEstado } from "../types";
+import { calcAge, PLAYER_ESTADOS, PLAYER_PRIORIDADES, type PlayerEstado, type PlayerPrioridad } from "../types";
+import { PRIORIDAD_META } from "../lib/prioridadJugador";
+import { PrioridadBadge } from "../components/PrioridadBadge";
 import { estadoDe, ESTADO_META } from "../lib/estadoJugador";
 import type { Profile } from "../contexts/AuthContext";
 import { uploadContractPdf, urlDocumento, fetchNotes, createNote, updateNote, deleteNote,
@@ -216,7 +218,7 @@ export function PlayerDetail({
           {avatarText}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-slate-900 truncate">{player.name}</p>
+          <p className="text-sm font-semibold text-slate-900 truncate flex items-center gap-1.5"><PrioridadBadge prioridad={player.prioridad} /><span className="truncate">{player.name}</span></p>
           <p className="text-xs text-slate-500 truncate">{player.positions.join(" / ")} · {calcAge(player.birthDate)} años</p>
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -283,7 +285,7 @@ export function PlayerDetail({
                 <div className="w-14 h-14 rounded-xl bg-slate-100 flex items-center justify-center text-lg font-bold text-slate-400 mx-auto mb-2">
                   {avatarText}
                 </div>
-                <p className="text-sm font-semibold text-slate-900 leading-tight">{player.name}</p>
+                <p className="text-sm font-semibold text-slate-900 leading-tight flex items-center justify-center gap-1.5"><PrioridadBadge prioridad={player.prioridad} /><span>{player.name}</span></p>
                 <p className="text-xs text-slate-500 mt-0.5">
                   {player.positions.join(" / ")} · {calcAge(player.birthDate)} años
                 </p>
@@ -1634,6 +1636,7 @@ function EditPlayerModal({ player, profiles, onClose, onSave }: {
   const [nationality2, setNationality2] = useState(nat2Inicial);
   const [partner, setPartner] = useState(player.partner ?? "");
   const [estado, setEstado] = useState<PlayerEstado>(estadoDe(player));
+  const [prioridad, setPrioridad] = useState<PlayerPrioridad | ''>(player.prioridad ?? '');
   const [managed1, setManaged1] = useState(player.managedBy[0] ?? "");
   const [managed2, setManaged2] = useState(player.managedBy[1] ?? "");
   const [reprStart, setReprStart] = useState(player.representationContract.start ?? "");
@@ -1684,6 +1687,7 @@ function EditPlayerModal({ player, profiles, onClose, onSave }: {
         clubs,
         partner: partner || undefined,
         estado,
+        prioridad: prioridad || undefined,
         managedBy: [managed1, managed2].filter(Boolean),
         info: { ...player.info, phone },
         representationContract: { ...player.representationContract, start: reprStart, end: reprEnd },
@@ -1791,6 +1795,19 @@ function EditPlayerModal({ player, profiles, onClose, onSave }: {
                 ))}
               </select>
               <p className="text-[11px] text-slate-400 mt-1">{ESTADO_META[estado].ayuda}</p>
+            </div>
+            <div className="mt-3">
+              <label className="block text-xs font-medium text-slate-600 mb-1">Prioridad</label>
+              <div className="flex items-center gap-1.5">
+                {PLAYER_PRIORIDADES.map(p => (
+                  <button key={p} type="button" onClick={() => setPrioridad(prioridad === p ? '' : p)} title={PRIORIDAD_META[p].ayuda}
+                    className={`w-9 h-9 rounded-lg border text-sm font-extrabold transition-colors ${prioridad === p ? PRIORIDAD_META[p].chip + ' ring-2 ring-offset-1 ring-slate-300' : 'bg-white text-slate-400 border-slate-200 hover:border-slate-400'}`}>
+                    {p}
+                  </button>
+                ))}
+                {prioridad && <button type="button" onClick={() => setPrioridad('')} className="text-[11px] text-slate-400 hover:text-slate-600 ml-1">Quitar</button>}
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">{prioridad ? PRIORIDAD_META[prioridad].ayuda : 'Sin prioridad asignada'}</p>
             </div>
           </div>
 

@@ -206,6 +206,10 @@ export interface PlayerInfo {
 export const PLAYER_ESTADOS = ['activo', 'inactivo', 'partner'] as const
 export type PlayerEstado = typeof PLAYER_ESTADOS[number]
 
+/** Prioridad del jugador para nosotros (migration_player_prioridad.sql). Sin valor = sin asignar. */
+export const PLAYER_PRIORIDADES = ['A', 'B', 'C'] as const
+export type PlayerPrioridad = typeof PLAYER_PRIORIDADES[number]
+
 export interface Player {
   id: string;
   name: string;
@@ -224,6 +228,8 @@ export interface Player {
   sharedWithPartners?: boolean;
   /** activo | inactivo | partner. Sin migrar, o sin valor, se trata como activo. */
   estado?: PlayerEstado;
+  /** A | B | C. Vacío = sin prioridad asignada. */
+  prioridad?: PlayerPrioridad;
   representationContract: RepresentationContract;
   clubContract: ClubContract;
   contractHistory: { club: string; period: string; type: string }[];

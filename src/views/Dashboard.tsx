@@ -72,6 +72,9 @@ import {
 import { POSITIONS, POSITION_CODES, positionLabel } from "../lib/positions";
 import { opcionesPartner, jugadorEsDePartner, PARTNER_TODOS } from "../lib/partners";
 import { estadoDe, jugadorEsDeEstado, contarPorEstado, ESTADO_META, ESTADO_TODOS, type FiltroEstado } from "../lib/estadoJugador";
+import { jugadorEsDePrioridad, SIN_PRIORIDAD } from "../lib/prioridadJugador";
+import { PrioridadBadge } from "../components/PrioridadBadge";
+import { PLAYER_PRIORIDADES } from "../types";
 
 const PRIMARY = "hsl(220,72%,26%)";
 
@@ -776,6 +779,7 @@ export function Dashboard({
   const [posFilters, setPosFilters] = useState<string[]>([]);
   const [yearFilters, setYearFilters] = useState<string[]>([]);
   const [activityFilter, setActivityFilter] = useState(false);
+  const [prioFilters, setPrioFilters] = useState<string[]>([]);
 
 
 
@@ -1041,7 +1045,8 @@ export function Dashboard({
     const matchPos = posFilters.length === 0 || (p.positions[0] && posFilters.includes(p.positions[0]));
     const matchYear = yearFilters.length === 0 || (p.birthDate && yearFilters.includes(p.birthDate.slice(0, 4)));
     const matchActivity = !activityFilter || tasks.some(t => t.playerId === p.id && t.status !== "completada");
-    return matchPartner && matchSearch && matchManager && matchPos && matchYear && matchActivity;
+    const matchPrio = jugadorEsDePrioridad(p.prioridad, prioFilters);
+    return matchPartner && matchSearch && matchManager && matchPos && matchYear && matchActivity && matchPrio;
   });
 
 
@@ -2075,10 +2080,17 @@ export function Dashboard({
             selected={yearFilters}
             onChange={setYearFilters}
           />
+          <MultiSelectFilter
+            label="Prioridad"
+            options={[...PLAYER_PRIORIDADES, SIN_PRIORIDAD]}
+            selected={prioFilters}
+            onChange={setPrioFilters}
+            optionLabel={(v) => v === SIN_PRIORIDAD ? 'Sin prioridad' : `Prioridad ${v}`}
+          />
           <FilterCheck label="Con actividad" checked={activityFilter} onClick={() => setActivityFilter(v => !v)} />
-          {(posFilters.length > 0 || yearFilters.length > 0 || activityFilter) && (
+          {(posFilters.length > 0 || yearFilters.length > 0 || activityFilter || prioFilters.length > 0) && (
             <button
-              onClick={() => { setPosFilters([]); setYearFilters([]); setActivityFilter(false); }}
+              onClick={() => { setPosFilters([]); setYearFilters([]); setActivityFilter(false); setPrioFilters([]); }}
               className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 px-2 py-1.5"
             >
               <X className="w-3 h-3" /> Limpiar
@@ -2152,7 +2164,10 @@ export function Dashboard({
                     </button>
                   )}
 
-                  <h3 className="text-base sm:text-lg font-bold text-slate-900 truncate pr-8">{player.name}</h3>
+                  <h3 className="text-base sm:text-lg font-bold text-slate-900 truncate pr-8 flex items-center gap-2">
+                    <PrioridadBadge prioridad={player.prioridad} size="md" />
+                    <span className="truncate">{player.name}</span>
+                  </h3>
                   {/* La chapa solo sale cuando NO es activo: si la llevaran
                       todos, dejaría de significar nada */}
                   {estadoDe(player) !== 'activo' && (
@@ -2234,6 +2249,7 @@ export function Dashboard({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       {isBday && <span className="text-sm">🎂</span>}
+                      <PrioridadBadge prioridad={player.prioridad} />
                       <p className="text-sm font-semibold text-slate-800 truncate">{player.name}</p>
                       {estadoDe(player) !== 'activo' && (
                         <span
@@ -2301,6 +2317,7 @@ export function Dashboard({
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50 text-[11px] text-slate-500 uppercase tracking-wider">
                   <th className="text-left px-4 py-2.5 font-semibold">Jugador</th>
+                  <th className="text-left px-3 py-2.5 font-semibold" title="Prioridad">Prio</th>
                   <th className="text-left px-3 py-2.5 font-semibold">Posición</th>
                   <th className="text-left px-3 py-2.5 font-semibold">Edad</th>
                   <th className="text-left px-3 py-2.5 font-semibold">Nac.</th>
@@ -2347,6 +2364,8 @@ export function Dashboard({
                           </div>
                         </div>
                       </td>
+                      {/* Prioridad */}
+                      <td className="px-3 py-2.5"><PrioridadBadge prioridad={player.prioridad} vacio /></td>
                       {/* Position */}
                       <td className="px-3 py-2.5 text-xs text-slate-600 whitespace-nowrap">
                         {player.positions[0]}{player.positions[1] ? <span className="text-slate-400"> / {player.positions[1]}</span> : ''}
