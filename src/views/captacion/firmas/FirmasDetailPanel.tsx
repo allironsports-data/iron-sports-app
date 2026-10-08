@@ -303,6 +303,29 @@ export function FirmasDetailPanel({
     completarSinMas()
   }
 
+  // Quitar la acción sin hacerla (se apuntó mal, ya no procede). Queda un
+  // apunte para que se sepa; la tarea y el evento los recoge App.
+  const removeAction = () => {
+    const log: FirmasComment = {
+      id: crypto.randomUUID(),
+      text: `✕ Retirada: ${entry.nextAction ?? 'próxima acción'}`,
+      date: new Date().toISOString(),
+      author: currentProfile.name,
+      authorId: currentProfile.id,
+      kind: 'nota',
+    }
+    const prev = { nextAction: entry.nextAction, nextActionDate: entry.nextActionDate, nextActionAssignee: entry.nextActionAssignee, nextActionKind: entry.nextActionKind }
+    setEditingAction(false)
+    setActionLabel(''); setActionDate('')
+    void onPatch(entry.id, e => ({
+      ...e,
+      nextAction: undefined, nextActionDate: undefined, nextActionAssignee: undefined, nextActionKind: undefined,
+      comments: [...e.comments, log],
+    }))
+    showToast('Acción retirada', 'info', { label: 'Deshacer', fn: () =>
+      void onPatch(entry.id, e => ({ ...e, ...prev, comments: e.comments.filter(c => c.id !== log.id) })) })
+  }
+
   const completarSinMas = () => {
     const log: FirmasComment = {
       id: crypto.randomUUID(),
@@ -486,6 +509,11 @@ export function FirmasDetailPanel({
                         <button onClick={() => setEditingAction(false)} aria-label="Cancelar" className="px-2 py-1 rounded-lg text-[11px] text-slate-500 hover:bg-slate-100"><X className="w-3 h-3" /></button>
                         <button onClick={saveAction} className="px-2.5 py-1 rounded-lg bg-primary text-white text-[11px] font-medium hover:bg-primary/90">OK</button>
                       </div>
+                      {(entry.nextAction || entry.nextActionDate) && (
+                        <button onClick={removeAction} className="mt-1 inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-red-600" title="Quitar la próxima acción sin marcarla hecha">
+                          <Trash2 className="w-3 h-3" /> Quitar esta acción
+                        </button>
+                      )}
                     </div>
                   ) : entry.nextAction || entry.nextActionDate ? (
                     <div className={`mt-1 flex items-center gap-2 border rounded-lg px-2.5 py-1.5 ${actionOverdue ? 'border-red-200 bg-red-50/60' : 'border-blue-200 bg-blue-50/50'}`}>
