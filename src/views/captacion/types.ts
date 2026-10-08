@@ -1,5 +1,5 @@
 import type { CaptacionTab } from './helpers'
-import type { Player, ScoutingPlayer, ScoutingReport, ScoutingInfo, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchOurPlayer, ScoutingMatchScout, BoulemaPeticion, FirmasEntry } from '../../types'
+import type { Player, ScoutingPlayer, ScoutingReport, ScoutingInfo, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchOurPlayer, ScoutingMatchScout, Ofrecimiento, OfrecimientoOrigen, FirmasEntry } from '../../types'
 import type { Profile } from '../../contexts/AuthContext'
 import type { Equipo as EquipoCatalogo } from '../../lib/db'
 import type { Zona } from '../../lib/zonas'
@@ -72,7 +72,17 @@ export interface Props {
   /** Para los avisos del pipeline Firmar y el alta en Mantenimiento al firmar */
   players: Player[]
   onCreatePlayer: (p: Player) => Promise<Player>
-  boulemaPeticiones: BoulemaPeticion[]
+  /** Pestaña Ofrecidos: jugadores que nos ofrecen de fuera */
+  ofrecimientos: Ofrecimiento[]
+  onCreateOfrecimiento: (o: Omit<Ofrecimiento, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Ofrecimiento>
+  onPatchOfrecimiento: (id: string, fn: (o: Ofrecimiento) => Ofrecimiento) => Promise<void>
+  onDeleteOfrecimiento: (id: string) => Promise<void>
+  /** Abrir la ficha de un ofrecimiento al entrar (desde Mi día, la campana…) */
+  openOfrecidoId?: string | null
+  onOpenOfrecidoConsumed?: () => void
+  /** Filtro de origen al entrar en Ofrecidos (acceso directo desde Boulema) */
+  ofrecidosOrigen?: OfrecimientoOrigen | null
+  onOfrecidosOrigenConsumed?: () => void
   /** Solo para leer: la etiqueta de pipeline que sale en las listas de jugadores */
   firmasEntries: FirmasEntry[]
   onCreateFirmasEntry: (e: Omit<FirmasEntry, 'id' | 'createdAt' | 'updatedAt'>) => Promise<FirmasEntry>

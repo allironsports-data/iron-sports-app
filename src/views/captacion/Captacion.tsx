@@ -32,13 +32,14 @@ import { MatchDetailModal } from './partidos/MatchDetailModal'
 import { MergeMatchesModal } from './partidos/MergeMatchesModal'
 import { ActualizarPlantilla } from './partidos/ActualizarPlantilla'
 import { MatchFormPanel, type MatchFormState } from './partidos/MatchFormPanel'
+import { OfrecidosTab } from './ofrecidos/OfrecidosTab'
 import { useAtras } from '../../hooks/useAtras'
 
 export type { Props } from './types'
 
 // ── Main component ───────────────────────────────────────────
 
-const CAPT_TABS: readonly CaptacionTab[] = ['jugadores', 'conclusiones', 'contratos', 'equipos', 'informes', 'partidos', 'planificacion']
+const CAPT_TABS: readonly CaptacionTab[] = ['jugadores', 'conclusiones', 'contratos', 'equipos', 'informes', 'partidos', 'planificacion', 'ofrecidos']
 const esCaptTab = (t: unknown): t is CaptacionTab => typeof t === 'string' && (CAPT_TABS as readonly string[]).includes(t)
 
 export function Captacion({
@@ -93,6 +94,14 @@ export function Captacion({
   players,
   firmasEntries,
   onCreateFirmasEntry,
+  ofrecimientos,
+  onCreateOfrecimiento,
+  onPatchOfrecimiento,
+  onDeleteOfrecimiento,
+  openOfrecidoId,
+  onOpenOfrecidoConsumed,
+  ofrecidosOrigen,
+  onOfrecidosOrigenConsumed,
 }: Props) {
   const isAdmin = currentProfile.is_admin
 
@@ -131,6 +140,12 @@ export function Captacion({
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openMatchId])
+
+  // Navegación externa: abrir la ficha de un ofrecimiento (Mi día, campana)
+  useEffect(() => {
+    if (openOfrecidoId || ofrecidosOrigen) setCaptTab('ofrecidos')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openOfrecidoId, ofrecidosOrigen])
 
   // Navegación externa: abrir una pestaña (botón flotante «Planificación»)
   useEffect(() => {
@@ -1461,6 +1476,7 @@ export function Captacion({
             {([
               ['partidos', 'Partidos'], ['jugadores', 'Jugadores'], ['informes', 'Informes recientes'], ['planificacion', 'Planificación'],
               ['conclusiones', `Conclusiones${newCandidatesCount > 0 ? ` (${newCandidatesCount})` : ''}`], ['contratos', 'Fin de contrato'], ['equipos', 'Equipos'],
+              ['ofrecidos', `Ofrecidos${ofrecidosPendientesMios > 0 ? ` (${ofrecidosPendientesMios})` : ''}`],
             ] as [CaptacionTab, string][]).filter(([id]) => !restricted || RESTRICTED_TABS.includes(id)).map(([id, label]) => (
               <option key={id} value={id}>{label}</option>
             ))}
@@ -1475,6 +1491,7 @@ export function Captacion({
             { id: 'informes' as CaptacionTab, label: 'Informes recientes', labelMobile: 'Informes', icon: <FileText className="w-3.5 h-3.5" /> },
             { id: 'partidos' as CaptacionTab, label: 'Partidos', labelMobile: 'Partidos', icon: <ClipboardList className="w-3.5 h-3.5" /> },
             { id: 'planificacion' as CaptacionTab, label: 'Planificación', labelMobile: 'Planif.', icon: <CalendarDays className="w-3.5 h-3.5" /> },
+            { id: 'ofrecidos' as CaptacionTab, label: 'Ofrecidos', labelMobile: 'Ofrecidos', icon: <Inbox className="w-3.5 h-3.5" /> },
           ]).filter(t => !restricted || RESTRICTED_TABS.includes(t.id)).map(t => (
             <button
               key={t.id}
@@ -1493,6 +1510,13 @@ export function Captacion({
                   captTab === t.id ? 'bg-white/25 text-white' : 'bg-amber-400 text-amber-950'
                 }`}>
                   {newCandidatesCount > 99 ? '99+' : newCandidatesCount}
+                </span>
+              )}
+              {t.id === 'ofrecidos' && ofrecidosPendientesMios > 0 && (
+                <span className={`min-w-[16px] text-center text-[10px] font-bold rounded-full px-1 ${
+                  captTab === t.id ? 'bg-white/25 text-white' : 'bg-blue-100 text-blue-700'
+                }`}>
+                  {ofrecidosPendientesMios}
                 </span>
               )}
             </button>
@@ -1664,7 +1688,30 @@ export function Captacion({
         />
       )}
 
-      {/* ── BOULEMA TAB ──────────────────────────────────────── */}
+      {/* ── OFRECIDOS TAB ────────────────────────────────────── */}
+      {captTab === 'ofrecidos' && (
+        <OfrecidosTab
+          ofrecimientos={ofrecimientos}
+          profiles={profiles}
+          currentProfile={currentProfile}
+          scoutingPlayers={scoutingPlayers}
+          scoutingReports={scoutingReports}
+          scoutingInfos={scoutingInfos}
+          onCreate={onCreateOfrecimiento}
+          onPatch={onPatchOfrecimiento}
+          onDelete={onDeleteOfrecimiento}
+          onAddPlayer={onAddPlayer}
+          onAddReport={onAddReport}
+          onAddInfo={onAddScoutingInfo}
+          abrirJugador={(id) => abrirJugador(id)}
+          showToast={showToast}
+          openId={openOfrecidoId}
+          onOpenConsumed={onOpenOfrecidoConsumed}
+          origenInicial={ofrecidosOrigen}
+          onOrigenConsumed={onOfrecidosOrigenConsumed}
+        />
+      )}
+
       {/* ── Side panel (persists across tabs) ─────────────────── */}
       {panelNode}
 
