@@ -149,7 +149,8 @@ $$;
 
 -- ── Migración de las peticiones de Boulema ───────────────────────────
 -- Cada petición → un ofrecimiento con origen 'boulema', un nivel 1 con un
--- paso técnico por persona pedida. Si ya había un informe enlazado escrito
+-- paso técnico por persona pedida. report_id y requested_from se pasan a
+-- texto antes de trocearlos: según la instalación, report_id es uuid. Si ya había un informe enlazado escrito
 -- por esa persona, el paso queda en 'ok' con su reportId.
 do $mig$
 declare
@@ -170,15 +171,15 @@ begin
     where not exists (select 1 from public.ofrecimientos o where o.boulema_peticion_id = b.id)
   loop
     pasos := '[]'::jsonb;
-    for av in select trim(x) from unnest(string_to_array(coalesce(p.requested_from, ''), ',')) x where trim(x) <> '' loop
+    for av in select trim(x) from unnest(string_to_array(coalesce(p.requested_from::text, ''), ',')) x where trim(x) <> '' loop
       veredicto := 'pendiente';
       rep_id := null;
       -- ¿alguno de los informes enlazados lo escribió esta persona?
       for rep in
         select r.id, r.conclusion
-          from unnest(string_to_array(coalesce(p.report_id, ''), ',')) rid
+          from unnest(string_to_array(coalesce(p.report_id::text, ''), ',')) rid
           join public.scouting_reports r on r.id::text = trim(rid)
-         where r.persona = av
+         where trim(rid) <> '' and r.persona = av
          limit 1
       loop
         rep_id := rep.id::text;

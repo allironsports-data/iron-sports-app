@@ -16,7 +16,7 @@ import { OfrecidoFormModal } from './OfrecidoFormModal'
 // Una línea por jugador. Todo lo demás (condiciones, cadena, informes,
 // contactos) está en la ficha, que se abre al pulsar la fila.
 
-type Filtro = 'abiertos' | 'decidir' | 'cerrados'
+type Filtro = 'todos' | 'abiertos' | 'decidir' | 'cerrados'
 
 // Fuera del componente a propósito: definidos dentro se desmontarían y
 // volverían a montar en cada tecla del buscador.
@@ -75,7 +75,7 @@ export function OfrecidosTab({
   const esAncha = useIsDesktop(760)
   const yo = currentProfile.avatar
 
-  const [filtro, setFiltro] = useState<Filtro>('abiertos')
+  const [filtro, setFiltro] = useState<Filtro>('todos')
   const [soloMios, setSoloMios] = useState<boolean | null>(null)
   const [origen, setOrigen] = useState<OfrecimientoOrigen | 'all'>('all')
   const [busqueda, setBusqueda] = useState('')
@@ -88,7 +88,7 @@ export function OfrecidosTab({
   useEffect(() => {
     if (openId) {
       const o = ofrecimientos.find(x => x.id === openId)
-      if (o) { setFichaId(o.id); if (estaCerrado(o)) setFiltro('cerrados') }
+      if (o) setFichaId(o.id)
       onOpenConsumed?.()
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -98,35 +98,42 @@ export function OfrecidosTab({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [origenInicial])
 
-  // «Solo los míos» por defecto si llevo alguno o me han pedido algo
+  // «Solo los míos»: los que llevo yo o en los que me han pedido informe.
+  // Apagado al entrar: por defecto se ve todo.
   const esMio = (o: Ofrecimiento) => o.responsable === yo || pasosPendientes(o).some(p => p.paso.avatar === yo)
-  const tengoAlguno = useMemo(() => ofrecimientos.some(o => !estaCerrado(o) && esMio(o)), [ofrecimientos, yo]) // eslint-disable-line react-hooks/exhaustive-deps
-  const soloMiosActivo = soloMios ?? tengoAlguno
+  const soloMiosActivo = soloMios ?? false
+
+  // Los contadores de Abiertos / Decidir / Cerrados cuentan sobre lo que
+  // dejan pasar el resto de filtros (míos, origen, búsqueda): si no, decían
+  // «43» con una sola fila en pantalla.
+  const base = useMemo(() => {
+    const q = busquedaDeb.trim().toLowerCase()
+    return ofrecimientos.filter(o => {
+      if (soloMiosActivo && !esMio(o)) return false
+      if (origen !== 'all' && o.origen !== origen) return false
+      if (q && !`${o.playerName} ${o.team ?? ''} ${o.ofreceNombre ?? ''}`.toLowerCase().includes(q)) return false
+      return true
+    })
+  }, [ofrecimientos, soloMiosActivo, origen, busquedaDeb, yo]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const conteo = useMemo(() => {
     let abiertos = 0, decidir = 0, cerrados = 0
-    for (const o of ofrecimientos) {
+    for (const o of base) {
       if (estaCerrado(o)) cerrados++
       else if (o.estado === 'decidir') decidir++
       else abiertos++
     }
     return { abiertos, decidir, cerrados }
-  }, [ofrecimientos])
+  }, [base])
 
-  const lista = useMemo(() => {
-    const q = busquedaDeb.trim().toLowerCase()
-    return ofrecimientos
-      .filter(o => {
-        if (filtro === 'cerrados') { if (!estaCerrado(o)) return false }
-        else if (filtro === 'decidir') { if (o.estado !== 'decidir' || estaCerrado(o)) return false }
-        else if (estaCerrado(o) || o.estado === 'decidir') return false
-        if (soloMiosActivo && !esMio(o)) return false
-        if (origen !== 'all' && o.origen !== origen) return false
-        if (q && !`${o.playerName} ${o.team ?? ''} ${o.ofreceNombre ?? ''}`.toLowerCase().includes(q)) return false
-        return true
-      })
-      .sort((a, b) => ordenLista(a, b, hoy))
-  }, [ofrecimientos, filtro, soloMiosActivo, origen, busquedaDeb, hoy, yo]) // eslint-disable-line react-hooks/exhaustive-deps
+  const lista = useMemo(() => base
+    .filter(o => {
+      if (filtro === 'todos') return true
+      if (filtro === 'cerrados') return estaCerrado(o)
+      if (filtro === 'decidir') return o.estado === 'decidir' && !estaCerrado(o)
+      return !estaCerrado(o) && o.estado !== 'decidir'
+    })
+    .sort((a, b) => ordenLista(a, b, hoy)), [base, filtro, hoy])
 
   const ficha = fichaId ? ofrecimientos.find(o => o.id === fichaId) : undefined
 
@@ -143,7 +150,7 @@ export function OfrecidosTab({
         {/* ── filtros ── */}
         <div className="flex flex-wrap items-center gap-2">
           <div className="inline-flex bg-slate-100 rounded-lg p-0.5 gap-0.5">
-            {([['abiertos', 'Abiertos', conteo.abiertos], ['decidir', 'Decidir', conteo.decidir], ['cerrados', 'Cerrados', conteo.cerrados]] as [Filtro, string, number][]).map(([id, label, n]) => (
+            {([['todos', 'Todos', base.length], ['abiertos', 'Abiertos', conteo.abiertos], ['decidir', 'Decidir', conteo.decidir], ['cerrados', 'Cerrados', conteo.cerrados]] as [Filtro, string, number][]).map(([id, label, n]) => (
               <button key={id} onClick={() => setFiltro(id)}
                 className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${filtro === id ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
                 {label} <span className={`ml-0.5 text-[10px] ${filtro === id ? 'text-slate-400' : 'text-slate-400'}`}>{n}</span>
@@ -152,7 +159,7 @@ export function OfrecidosTab({
           </div>
           <button onClick={() => setSoloMios(!soloMiosActivo)} title="Los que llevo yo o en los que me han pedido informe"
             className={`text-xs font-semibold rounded-lg px-2.5 py-1.5 border transition-colors ${soloMiosActivo ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
-            Solo los míos
+            Solo los míos{soloMiosActivo && base.length < ofrecimientos.length ? ` · ${ofrecimientos.length - base.length} más` : ''}
           </button>
           <select value={origen} onChange={e => setOrigen(e.target.value as OfrecimientoOrigen | 'all')} aria-label="Origen"
             className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700">
