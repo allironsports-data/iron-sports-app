@@ -401,21 +401,70 @@ export interface ScoutingMatchScout {
   createdAt: string
 }
 
-export interface BoulemaPeticion {
+// ── OFRECIMIENTOS ───────────────────────────────────────────
+// Jugadores que nos ofrece alguien de fuera (agente, club, familia,
+// Boulema…). Sustituye a las antiguas «peticiones de Boulema»: misma ficha
+// ligera, pero con responsable, condiciones pedidas, cadena de informes por
+// niveles y contactos con quien lo ofrece. Ver migration_ofrecimientos.sql.
+
+export type OfrecimientoOrigen = 'boulema' | 'agente' | 'intermediario' | 'club' | 'familia' | 'otro'
+export type OfrecimientoOperacion = 'libre' | 'cesion' | 'traspaso' | 'representacion'
+/** abierto = nuevo o en informes (se distingue por si hay niveles) */
+export type OfrecimientoEstado = 'abierto' | 'decidir' | 'aceptado' | 'descartado'
+/** técnico = informe de partido (scouting_reports); el resto, scouting_infos */
+export type TipoInformePedido = 'tecnico' | 'entorno' | 'mercado' | 'personalidad'
+export type PasoVeredicto = 'pendiente' | 'ok' | 'no' | 'mas'
+
+/** Una persona a la que se le ha pedido un informe dentro de un nivel */
+export interface OfrecimientoPaso {
+  avatar: string              // profiles.avatar
+  tipo: TipoInformePedido
+  veredicto: PasoVeredicto
+  reportId?: string           // scouting_reports.id (técnico)
+  infoId?: string             // scouting_infos.id (entorno/mercado/personalidad)
+  respondidoAt?: string       // ISO
+  comentario?: string         // nota corta para el responsable
+}
+
+export interface OfrecimientoNivel {
+  n: number                   // 1, 2, 3…
+  pedidoPor: string           // avatar
+  pedidoAt: string            // ISO
+  mensaje?: string
+  pasos: OfrecimientoPaso[]
+}
+
+export interface Ofrecimiento {
   id: string
   playerName: string
   position?: string
   birthYear?: string
-  birthMonth?: string     // "1"–"12", important for African players (18y rule)
+  birthMonth?: string         // "1"–"12"
   team?: string
-  country?: string        // country where player currently plays
-  nationality?: string    // player's nationality
-  offeredBy?: string      // who brought/offered this player
-  requestedFrom: string[] // profile.avatar[] of who should write the report
+  country?: string
+  nationality?: string
+  scoutingPlayerId?: string   // ficha de Captación, si existe
+  origen: OfrecimientoOrigen
+  ofreceNombre?: string
+  ofreceContacto?: string
+  condOperacion?: OfrecimientoOperacion
+  condCoste?: string
+  condSalario?: string
+  condComision?: string
+  condFinContrato?: string
+  fechaLimite?: string        // "YYYY-MM-DD"
   notes?: string
-  requestedBy: string     // profile.avatar of requester
-  reportIds: string[]     // ScoutingReport.id[] — multiple reports can exist
+  responsable?: string        // avatar
+  estado: OfrecimientoEstado
+  decididoPor?: string
+  decididoAt?: string
+  decisionNota?: string
+  niveles: OfrecimientoNivel[]
+  /** Contactos con quien lo ofrece: mismo formato que el historial de Firmar */
+  contactos: FirmasComment[]
+  createdBy?: string
   createdAt: string
+  updatedAt: string
 }
 
 // Jugador de Boulema (mantenimiento light — réplica ligera del nuestro)

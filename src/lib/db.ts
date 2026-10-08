@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 import { dedupePorId } from './coleccion'
-import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation, ScoutingPlayer, ScoutingReport, ScoutingInfo, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchOurPlayer, ScoutingMatchScout, BoulemaPeticion, ClubLog, PlayerMeeting, PlayerActivity, MemberStatus, Postpartido, FirmasEntry, BoulemaPlayer, AgendaEvento } from '../types'
+import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation, ScoutingPlayer, ScoutingReport, ScoutingInfo, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchOurPlayer, ScoutingMatchScout, Ofrecimiento, ClubLog, PlayerMeeting, PlayerActivity, MemberStatus, Postpartido, FirmasEntry, BoulemaPlayer, AgendaEvento } from '../types'
 
 // ── helpers ──────────────────────────────────────────────────
 
@@ -1724,74 +1724,104 @@ export async function deleteFirmasEntry(id: string): Promise<void> {
   if (error) throw error
 }
 
-// ── Boulema peticiones ───────────────────────────────────────
+// ── Ofrecimientos ──────────────────────────────────────────────
+// Jugadores que nos ofrecen de fuera. Niveles y contactos van en jsonb:
+// la ficha los lee y escribe enteros (como los comments de Firmar).
 
-function dbToBoulemaPeticion(row: Record<string, unknown>): BoulemaPeticion {
-  const rawFrom = (row.requested_from as string) ?? ''
-  const rawIds  = (row.report_id as string) ?? ''
+function dbToOfrecimiento(row: Record<string, unknown>): Ofrecimiento {
+  const t = (v: unknown) => (typeof v === 'string' && v !== '' ? v : undefined)
   return {
     id: row.id as string,
     playerName: row.player_name as string,
-    position: (row.position as string) ?? undefined,
-    birthYear: (row.birth_year as string) ?? undefined,
-    birthMonth: (row.birth_month as string) ?? undefined,
-    team: (row.team as string) ?? undefined,
-    country: (row.country as string) ?? undefined,
-    nationality: (row.nationality as string) ?? undefined,
-    offeredBy: (row.offered_by as string) ?? undefined,
-    requestedFrom: rawFrom ? rawFrom.split(',').map(s => s.trim()).filter(Boolean) : [],
-    notes: (row.notes as string) ?? undefined,
-    requestedBy: row.requested_by as string,
-    reportIds: rawIds ? rawIds.split(',').map(s => s.trim()).filter(Boolean) : [],
+    position: t(row.position),
+    birthYear: t(row.birth_year),
+    birthMonth: t(row.birth_month),
+    team: t(row.team),
+    country: t(row.country),
+    nationality: t(row.nationality),
+    scoutingPlayerId: t(row.scouting_player_id),
+    origen: (t(row.origen) as Ofrecimiento['origen']) ?? 'otro',
+    ofreceNombre: t(row.ofrece_nombre),
+    ofreceContacto: t(row.ofrece_contacto),
+    condOperacion: t(row.cond_operacion) as Ofrecimiento['condOperacion'],
+    condCoste: t(row.cond_coste),
+    condSalario: t(row.cond_salario),
+    condComision: t(row.cond_comision),
+    condFinContrato: t(row.cond_fin_contrato),
+    fechaLimite: t(row.fecha_limite),
+    notes: t(row.notes),
+    responsable: t(row.responsable),
+    estado: (t(row.estado) as Ofrecimiento['estado']) ?? 'abierto',
+    decididoPor: t(row.decidido_por),
+    decididoAt: t(row.decidido_at),
+    decisionNota: t(row.decision_nota),
+    niveles: Array.isArray(row.niveles) ? (row.niveles as Ofrecimiento['niveles']) : [],
+    contactos: Array.isArray(row.contactos) ? (row.contactos as Ofrecimiento['contactos']) : [],
+    createdBy: t(row.created_by),
     createdAt: row.created_at as string,
+    updatedAt: (row.updated_at as string) ?? (row.created_at as string),
   }
 }
 
-export async function fetchBoulemaPeticiones(): Promise<BoulemaPeticion[]> {
-  const filas = await leerTodo<Record<string, unknown>>('boulema_peticiones', (d, h) =>
-    supabase.from('boulema_peticiones').select('*').order('created_at', { ascending: false }).order('id').range(d, h))
-  return filas.map(dbToBoulemaPeticion)
+function ofrecimientoToDb(o: Omit<Ofrecimiento, 'id' | 'createdAt' | 'updatedAt'>): Record<string, unknown> {
+  return {
+    player_name: o.playerName,
+    position: o.position ?? null,
+    birth_year: o.birthYear ?? null,
+    birth_month: o.birthMonth ?? null,
+    team: o.team ?? null,
+    country: o.country ?? null,
+    nationality: o.nationality ?? null,
+    scouting_player_id: o.scoutingPlayerId ?? null,
+    origen: o.origen,
+    ofrece_nombre: o.ofreceNombre ?? null,
+    ofrece_contacto: o.ofreceContacto ?? null,
+    cond_operacion: o.condOperacion ?? null,
+    cond_coste: o.condCoste ?? null,
+    cond_salario: o.condSalario ?? null,
+    cond_comision: o.condComision ?? null,
+    cond_fin_contrato: o.condFinContrato ?? null,
+    fecha_limite: o.fechaLimite ?? null,
+    notes: o.notes ?? null,
+    responsable: o.responsable ?? null,
+    estado: o.estado,
+    decidido_por: o.decididoPor ?? null,
+    decidido_at: o.decididoAt ?? null,
+    decision_nota: o.decisionNota ?? null,
+    niveles: o.niveles,
+    contactos: o.contactos,
+    created_by: o.createdBy ?? null,
+  }
 }
 
-export async function createBoulemaPeticion(p: Omit<BoulemaPeticion, 'id' | 'createdAt'>): Promise<BoulemaPeticion> {
-  const { data, error } = await supabase.from('boulema_peticiones').insert({
-    player_name: p.playerName,
-    position: p.position ?? null,
-    birth_year: p.birthYear ?? null,
-    birth_month: p.birthMonth ?? null,
-    team: p.team ?? null,
-    country: p.country ?? null,
-    nationality: p.nationality ?? null,
-    offered_by: p.offeredBy ?? null,
-    requested_from: p.requestedFrom.join(','),
-    notes: p.notes ?? null,
-    requested_by: p.requestedBy,
-    report_id: p.reportIds.join(',') || null,
-  }).select().single()
+/** Devuelve [] si la tabla aún no existe (migration_ofrecimientos.sql sin ejecutar). */
+export async function fetchOfrecimientos(): Promise<Ofrecimiento[]> {
+  try {
+    const filas = await leerTodo<Record<string, unknown>>('ofrecimientos', (d, h) =>
+      supabase.from('ofrecimientos').select('*').order('created_at', { ascending: false }).order('id').range(d, h))
+    return filas.map(dbToOfrecimiento)
+  } catch (e) {
+    if (esTablaInexistente(e)) return []
+    throw e
+  }
+}
+
+export async function createOfrecimiento(o: Omit<Ofrecimiento, 'id' | 'createdAt' | 'updatedAt'>): Promise<Ofrecimiento> {
+  const { data, error } = await supabase.from('ofrecimientos').insert(ofrecimientoToDb(o)).select().single()
   if (error) throw error
-  return dbToBoulemaPeticion(data)
+  return dbToOfrecimiento(data)
 }
 
-export async function updateBoulemaPeticion(p: BoulemaPeticion): Promise<void> {
-  const { error } = await supabase.from('boulema_peticiones').update({
-    player_name: p.playerName,
-    position: p.position ?? null,
-    birth_year: p.birthYear ?? null,
-    birth_month: p.birthMonth ?? null,
-    team: p.team ?? null,
-    country: p.country ?? null,
-    nationality: p.nationality ?? null,
-    offered_by: p.offeredBy ?? null,
-    requested_from: p.requestedFrom.join(','),
-    notes: p.notes ?? null,
-    requested_by: p.requestedBy,
-    report_id: p.reportIds.join(',') || null,
-  }).eq('id', p.id)
+export async function updateOfrecimiento(o: Ofrecimiento): Promise<Ofrecimiento> {
+  const { data, error } = await supabase.from('ofrecimientos')
+    .update({ ...ofrecimientoToDb(o), updated_at: new Date().toISOString() })
+    .eq('id', o.id).select().single()
   if (error) throw error
+  return dbToOfrecimiento(data)
 }
 
-export async function deleteBoulemaPeticion(id: string): Promise<void> {
-  const { error } = await supabase.from('boulema_peticiones').delete().eq('id', id)
+export async function deleteOfrecimiento(id: string): Promise<void> {
+  const { error } = await supabase.from('ofrecimientos').delete().eq('id', id)
   if (error) throw error
 }
 
@@ -2190,6 +2220,7 @@ export const FILA_REALTIME = {
   scouting_matches: dbToScoutingMatch,
   scouting_match_players: dbToMatchPlayer,
   scouting_match_scouts: dbToMatchScout,
+  ofrecimientos: dbToOfrecimiento,
 } as const
 
 // ── ZONAS DE CLUBES ──────────────────────────────────────────────────
