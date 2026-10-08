@@ -5,7 +5,8 @@ import type { Ofrecimiento, TipoInformePedido } from '../../../types'
 import { useEscapeKey } from '../../../hooks/useEscapeKey'
 import { conNivelNuevo, nivelActivo, pasosPendientes } from '../../../lib/ofrecidos'
 import { FormRow, Spinner } from '../comun'
-import { INPUT, Modal, PickPersonas, PickTipos } from './comun'
+import { Modal, PickPersonas, PickTipos } from './comun'
+import { INPUT } from './estilos'
 
 // ── Pedir un nivel más de informes ──────────────────────────────────
 

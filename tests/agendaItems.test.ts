@@ -262,13 +262,13 @@ describe('construirAgenda · sesiones de videoanálisis del jugador', () => {
   })
 })
 
-describe('construirAgenda · Boulema y vencimientos', () => {
-  it('un informe de Boulema pedido es una tarea pendiente de quien tiene que escribirlo', () => {
-    const items = construirAgenda(base({ peticionesBoulema: [
-      { id: 'b1', jugador: 'Diallo', equipo: 'ASEC', avatar: 'PP' }, { id: 'b1', jugador: 'Diallo', avatar: 'ZZ' },
+describe('construirAgenda · Ofrecidos y vencimientos', () => {
+  it('un informe pedido en Ofrecidos es una tarea pendiente de quien tiene que escribirlo', () => {
+    const items = construirAgenda(base({ informesPedidos: [
+      { ofrecimientoId: 'b1', jugador: 'Diallo', equipo: 'ASEC', avatar: 'PP', tipo: 'técnico' }, { ofrecimientoId: 'b1', jugador: 'Diallo', avatar: 'ZZ', tipo: 'técnico' },
     ] }))
     expect(items).toHaveLength(1)
-    expect(items[0]).toMatchObject({ id: 'boulema:b1:PP', tipo: 'tarea', origen: 'boulema', personId: OTRO, titulo: 'Informe Boulema — Diallo (ASEC)', abrir: { tipo: 'boulema' } })
+    expect(items[0]).toMatchObject({ id: 'ofrecido:b1:PP:técnico', tipo: 'tarea', origen: 'ofrecido', personId: OTRO, titulo: 'Informe técnico pedido — Diallo (ASEC)', abrir: { tipo: 'ofrecido', ofrecimientoId: 'b1' } })
     expect(permisosItem(items[0]).estado).toBe(false)
   })
 

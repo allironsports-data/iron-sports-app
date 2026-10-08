@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef, lazy, cloneElement, Suspense, type ReactNode as Nodo } from 'react'
 import { CalendarDays, Sun } from 'lucide-react'
 import { useAuth } from './hooks/useAuth'
-import type { Player, Task, ScoutingPlayer, ScoutingReport, ScoutingInfo, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchOurPlayer, ScoutingMatchScout, BoulemaPeticion, MemberStatus, Postpartido, FirmasEntry, BoulemaPlayer } from './types'
+import type { Player, Task, ScoutingPlayer, ScoutingReport, ScoutingInfo, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchOurPlayer, ScoutingMatchScout, Ofrecimiento, OfrecimientoOrigen, MemberStatus, Postpartido, FirmasEntry, BoulemaPlayer } from './types'
+import { informesPedidos, TIPO_INFORME_LABEL, VEREDICTO_LABEL } from './lib/ofrecidos'
 import { leerCopia, guardarCopia, limpiarCopias } from './lib/cacheLocal'
 import * as db from './lib/db'
 import { supabase } from './lib/supabase'
@@ -75,6 +76,7 @@ const SYNC_TABLES = [
   'member_status', 'postpartidos', 'captacion_firmas',
   'scouting_matches', 'scouting_match_players', 'scouting_match_our_players', 'scouting_match_scouts',
   'scouting_reports', 'scouting_infos', 'scouting_players', 'scouting_club_zonas', 'scouting_equipos',
+  'ofrecimientos',
 ] as const
 
 function Spinner() {
@@ -195,6 +197,9 @@ export default function App() {
   const [captacionOpenFirmasId, setCaptacionOpenFirmasId] = useState<string | null>(null)
   // Abrir una pestaña concreta de Captación (botón flotante «Planificación»)
   const [captacionOpenTab, setCaptacionOpenTab] = useState<'planificacion' | null>(null)
+  // Abrir la ficha de un ofrecimiento (Mi día, campana) o la pestaña filtrada por origen (desde Boulema)
+  const [captacionOpenOfrecidoId, setCaptacionOpenOfrecidoId] = useState<string | null>(null)
+  const [ofrecidosOrigen, setOfrecidosOrigen] = useState<OfrecimientoOrigen | null>(null)
   // Abrir un partido concreto en Captación (desde «Mi día»)
   const [captacionOpenMatchId, setCaptacionOpenMatchId] = useState<string | null>(null)
   // Abrir una tarea concreta en el tablero (desde «Mi día»)
@@ -213,7 +218,13 @@ export default function App() {
   // Jugadores nuestros asignados a mano a un partido (Planificación)
   const [matchOurPlayers, setMatchOurPlayers] = useState<ScoutingMatchOurPlayer[]>([])
   const [matchScouts, setMatchScouts] = useState<ScoutingMatchScout[]>([])
-  const [boulemaPeticiones, setBoulemaPeticiones] = useState<BoulemaPeticion[]>([])
+  const [ofrecimientos, setOfrecimientos] = useState<Ofrecimiento[]>([])
+  // Copia para los handlers (parches sobre la versión más reciente) y para
+  // que los avisos de realtime sepan qué ha cambiado respecto a lo que vi
+  const ofrecimientosRef = useRef<Ofrecimiento[]>([])
+  useEffect(() => { ofrecimientosRef.current = ofrecimientos }, [ofrecimientos])
+  const ofrecimientosVistosRef = useRef<Map<string, Ofrecimiento>>(new Map())
+  const ofrecimientoQueue = useRef(new Map<string, Promise<void>>())
   const [firmasEntries, setFirmasEntries] = useState<FirmasEntry[]>([])
   const [boulemaPlayers, setBoulemaPlayers] = useState<BoulemaPlayer[]>([])
   // Correcciones de zona hechas a mano (la clasificación por defecto vive en src/lib/zonas.ts)
@@ -244,16 +255,11 @@ export default function App() {
     [scoutingReports],
   )
 
-  // Informes de Boulema pedidos y sin escribir: uno por petición y persona a la
-  // que se le pidió. Salen en Tareas como pendiente de esa persona. (Hook: aquí arriba.)
-  const peticionesBoulemaPendientes = useMemo(() => {
-    const autorDe = new Map(scoutingReports.map(r => [r.id, r.persona]))
-    return boulemaPeticiones.flatMap(p => {
-      const yaEscribieron = new Set(p.reportIds.map(id => autorDe.get(id)).filter(Boolean))
-      return p.requestedFrom.filter(av => !yaEscribieron.has(av))
-        .map(av => ({ id: p.id, jugador: p.playerName, equipo: p.team, avatar: av }))
-    })
-  }, [boulemaPeticiones, scoutingReports])
+  // Informes pedidos en Ofrecidos y sin escribir: uno por ofrecimiento, persona
+  // y tipo. Salen en Tareas y Mi día como pendiente de esa persona. (Hook: aquí arriba.)
+  const informesPedidosPendientes = useMemo(() => informesPedidos(ofrecimientos).map(p => ({
+    ...p, tipo: TIPO_INFORME_LABEL[p.tipo].toLowerCase(),
+  })), [ofrecimientos])
 
   // DEBE declararse aquí arriba: es un hook y no puede ir después de los
   // returns tempranos (loading/login) — romperlo deja la app en blanco.
@@ -481,7 +487,7 @@ export default function App() {
       carga('Alineaciones', db.fetchMatchPlayers, [] as ScoutingMatchPlayer[], v => setMatchPlayers(v as ScoutingMatchPlayer[])),
       carga('Nuestros en partido', db.fetchMatchOurPlayers, [] as ScoutingMatchOurPlayer[], v => setMatchOurPlayers(v)),
       carga('Scouts de partido', db.fetchMatchScouts, [] as ScoutingMatchScout[], v => setMatchScouts(v)),
-      carga('Peticiones Boulema', db.fetchBoulemaPeticiones, [] as BoulemaPeticion[], v => setBoulemaPeticiones(v)),
+      carga('Ofrecimientos', db.fetchOfrecimientos, [] as Ofrecimiento[], v => { setOfrecimientos(v); ofrecimientosVistosRef.current = new Map(v.map(o => [o.id, o])) }),
       carga('Estado del equipo', db.fetchMemberStatuses, [] as MemberStatus[], v => setMemberStatuses(v)),
       carga('Postpartidos', db.fetchPostpartidos, [] as Postpartido[], v => setPostpartidos(v)),
       carga('Pipeline de firmas', db.fetchFirmasEntries, [] as FirmasEntry[], v => setFirmasEntries(v)),
@@ -751,6 +757,36 @@ export default function App() {
           addNotification(`Nueva propuesta pendiente: ${pName} → ${cName}`, 'negotiation', playerId)
         }
       })
+      // Ofrecidos: me ponen de responsable, me piden un informe, o alguien
+      // contesta en un ofrecimiento que llevo yo. Se compara con la última
+      // versión que vio ESTE handler (no con el estado, que lo actualiza el
+      // canal de datos y puede llegar antes).
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ofrecimientos' }, (payload: { eventType: string; new: Record<string, unknown> }) => {
+        if (payload.eventType === 'DELETE') return
+        const row = payload.new
+        if (!row || typeof row.id !== 'string') return
+        const nuevo = db.FILA_REALTIME.ofrecimientos(row)
+        const antes = ofrecimientosVistosRef.current.get(nuevo.id)
+        ofrecimientosVistosRef.current.set(nuevo.id, nuevo)
+        const yo = profile.avatar
+        const nombre = nuevo.playerName
+        if (nuevo.responsable === yo && (antes ? antes.responsable !== yo : nuevo.createdBy !== yo)) {
+          addNotification(`Ofrecidos · ${nombre}: te han puesto de responsable`, 'task_new')
+        }
+        const clave = (n: number, av: string, tipo: string) => `${n}|${av}|${tipo}`
+        const pasosAntes = new Map<string, string>()
+        for (const n of antes?.niveles ?? []) for (const p of n.pasos) pasosAntes.set(clave(n.n, p.avatar, p.tipo), p.veredicto)
+        for (const n of nuevo.niveles) for (const p of n.pasos) {
+          const prev = pasosAntes.get(clave(n.n, p.avatar, p.tipo))
+          const tipo = TIPO_INFORME_LABEL[p.tipo]?.toLowerCase() ?? p.tipo
+          if (prev === undefined && p.avatar === yo && p.veredicto === 'pendiente' && n.pedidoPor !== yo) {
+            addNotification(`Ofrecidos · ${nombre}: ${n.pedidoPor} te pide informe ${tipo}`, 'task_new')
+          }
+          if (prev === 'pendiente' && p.veredicto !== 'pendiente' && p.avatar !== yo && (nuevo.responsable === yo || n.pedidoPor === yo)) {
+            addNotification(`Ofrecidos · ${nombre}: ${p.avatar} ha respondido ${tipo} — ${VEREDICTO_LABEL[p.veredicto] ?? p.veredicto}`, 'task_new')
+          }
+        }
+      })
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
@@ -791,6 +827,7 @@ export default function App() {
       case 'scouting_players':      si(db.fetchScoutingPlayers(), (d) => setScoutingPlayers(d as ScoutingPlayer[])); break
       case 'scouting_club_zonas':   si(db.fetchClubZonas(), (d) => setClubZonas(zonasAMapa(d))); break
       case 'scouting_equipos':      si(db.fetchEquipos(), (d) => setEquipos(d)); break
+      case 'ofrecimientos':         si(db.fetchOfrecimientos(), (d) => setOfrecimientos(d)); break
     }
   }, [])
 
@@ -830,6 +867,7 @@ export default function App() {
       scouting_matches: aplicar(setScoutingMatches, db.FILA_REALTIME.scouting_matches),
       scouting_match_players: aplicar(setMatchPlayers, db.FILA_REALTIME.scouting_match_players),
       scouting_match_scouts: aplicar(setMatchScouts, db.FILA_REALTIME.scouting_match_scouts),
+      ofrecimientos: aplicar(setOfrecimientos, db.FILA_REALTIME.ofrecimientos),
     }
     for (const t of SYNC_TABLES) {
       channel = channel.on('postgres_changes', { event: '*', schema: 'public', table: t }, (payload: unknown) => {
@@ -1568,17 +1606,32 @@ export default function App() {
     setBoulemaPlayers(prev => prev.filter(x => x.id !== id))
   }
 
-  const handleAddBoulemaPeticion = async (p: Omit<BoulemaPeticion, 'id' | 'createdAt'>) => {
-    const saved = await db.createBoulemaPeticion(p)
-    setBoulemaPeticiones(prev => [saved, ...prev])
+  // ── Ofrecidos ──────────────────────────────────────────────
+  const handleCreateOfrecimiento = async (o: Omit<Ofrecimiento, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const saved = await db.createOfrecimiento(o)
+    setOfrecimientos(prev => prev.some(x => x.id === saved.id) ? prev : [saved, ...prev])
+    ofrecimientosVistosRef.current.set(saved.id, saved)
+    return saved
   }
-  const handleUpdateBoulemaPeticion = async (p: BoulemaPeticion) => {
-    await db.updateBoulemaPeticion(p)
-    setBoulemaPeticiones(prev => prev.map(x => x.id === p.id ? p : x))
+  // Parche sobre la versión más reciente, y en cola por id: niveles y
+  // contactos van en jsonb entero, dos guardados a la vez se pisarían.
+  const handlePatchOfrecimiento = (id: string, fn: (o: Ofrecimiento) => Ofrecimiento): Promise<void> => {
+    const anterior = ofrecimientoQueue.current.get(id) ?? Promise.resolve()
+    const run = anterior.catch(() => {}).then(async () => {
+      const actual = ofrecimientosRef.current.find(o => o.id === id)
+      if (!actual) throw new Error('El ofrecimiento ya no existe')
+      const saved = await db.updateOfrecimiento(fn(actual))
+      ofrecimientosRef.current = ofrecimientosRef.current.map(o => o.id === id ? saved : o)
+      ofrecimientosVistosRef.current.set(id, saved)
+      setOfrecimientos(prev => prev.map(o => o.id === id ? saved : o))
+    })
+    ofrecimientoQueue.current.set(id, run)
+    return run
   }
-  const handleDeleteBoulemaPeticion = async (id: string) => {
-    await db.deleteBoulemaPeticion(id)
-    setBoulemaPeticiones(prev => prev.filter(x => x.id !== id))
+  const handleDeleteOfrecimiento = async (id: string) => {
+    await db.deleteOfrecimiento(id)
+    setOfrecimientos(prev => prev.filter(x => x.id !== id))
+    ofrecimientosVistosRef.current.delete(id)
   }
 
   // ── helpers ─────────────────────────────────────────────────
@@ -1613,6 +1666,11 @@ export default function App() {
   function irAFichaScouting(playerId: string) {
     setCaptacionOpenPlayerId(playerId)
     irA('captacion', 'jugadores')
+  }
+
+  function irAOfrecido(id: string) {
+    setCaptacionOpenOfrecidoId(id)
+    irA('captacion', 'ofrecidos')
   }
 
   function irATarea(taskId: string) {
@@ -1777,7 +1835,14 @@ export default function App() {
       onOpenMatchConsumed={() => setCaptacionOpenMatchId(null)}
       players={players}
       onCreatePlayer={handleAddPlayer}
-      boulemaPeticiones={boulemaPeticiones}
+      ofrecimientos={ofrecimientos}
+      onCreateOfrecimiento={handleCreateOfrecimiento}
+      onPatchOfrecimiento={handlePatchOfrecimiento}
+      onDeleteOfrecimiento={handleDeleteOfrecimiento}
+      openOfrecidoId={captacionOpenOfrecidoId}
+      onOpenOfrecidoConsumed={() => setCaptacionOpenOfrecidoId(null)}
+      ofrecidosOrigen={ofrecidosOrigen}
+      onOfrecidosOrigenConsumed={() => setOfrecidosOrigen(null)}
       firmasEntries={firmasEntries}
       onCreateFirmasEntry={handleCreateFirmasEntry}
       clubZonas={clubZonas}
@@ -1797,7 +1862,7 @@ export default function App() {
       scoutingReports={scoutingReports}
       scoutingMatches={scoutingMatches}
       matchPlayers={matchPlayers}
-      boulemaPeticiones={boulemaPeticiones}
+      ofrecimientos={ofrecimientos}
       players={players}
       onCreatePlayer={handleAddPlayer}
       onSyncFirmasActionTasks={handleSyncFirmasActionTasks}
@@ -2125,21 +2190,15 @@ export default function App() {
       return (
         <Boulema
           profiles={profiles}
-          currentProfile={profile}
           scoutingPlayers={scoutingPlayers}
-          scoutingReports={scoutingReports}
-          boulemaPeticiones={boulemaPeticiones}
-          onAddBoulemaPeticion={handleAddBoulemaPeticion}
-          onUpdateBoulemaPeticion={handleUpdateBoulemaPeticion}
-          onDeleteBoulemaPeticion={handleDeleteBoulemaPeticion}
+          ofrecimientosBoulema={ofrecimientos.filter(o => o.origen === 'boulema' && o.estado !== 'aceptado' && o.estado !== 'descartado').length}
+          onGoToOfrecidos={() => { setOfrecidosOrigen('boulema'); irA('captacion', 'ofrecidos') }}
           onAddPlayer={handleAddScoutingPlayer}
-          onAddReport={handleAddScoutingReport}
           boulemaPlayers={boulemaPlayers}
           onAddBoulemaPlayer={handleAddBoulemaPlayer}
           onUpdateBoulemaPlayer={handleUpdateBoulemaPlayer}
           onDeleteBoulemaPlayer={handleDeleteBoulemaPlayer}
           onGoToSection={(s) => irA(s)}
-          onOpenScoutingPlayer={irAFichaScouting}
           onLogout={signOut}
           onAdmin={profile.is_admin ? abrirAdmin : undefined}
           tab={subTabs.boulema}
@@ -2257,7 +2316,8 @@ export default function App() {
         onOpenSearch={() => setSearchOpen(true)}
         onOpenScoutingPlayer={(id) => setFlotante({ tipo: 'scouting', id })}
         informesPartido={informesPartido}
-        peticionesBoulema={peticionesBoulemaPendientes}
+        informesPedidos={informesPedidosPendientes}
+        onOpenOfrecido={irAOfrecido}
         onAddMatchScout={handleAddMatchScout}
         onOpenMatch={(id) => setFlotante({ tipo: 'partido', id })}
         onSetMatchSeen={async (id, scout, visto) => {

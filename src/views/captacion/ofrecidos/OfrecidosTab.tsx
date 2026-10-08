@@ -7,7 +7,8 @@ import { useDebounce } from '../../../hooks/useDebounce'
 import { EmptyState } from '../../../components/EmptyState'
 import { ORIGEN_LABEL, ORIGENES, estadoVisible, estaCerrado, ordenLista, pasosPendientes, diasHastaLimite } from '../../../lib/ofrecidos'
 import { type ShowToast, todayISO, fmtDate } from '../helpers'
-import { Avatar, EstadoChip, ESTADO_BORDE, OrigenChip, TipoChip } from './comun'
+import { Avatar, EstadoChip, OrigenChip, TipoChip } from './comun'
+import { ESTADO_BORDE } from './estilos'
 import { OfrecidoFicha, type PatchOfrecimiento } from './OfrecidoFicha'
 import { OfrecidoFormModal } from './OfrecidoFormModal'
 
@@ -16,6 +17,31 @@ import { OfrecidoFormModal } from './OfrecidoFormModal'
 // contactos) está en la ficha, que se abre al pulsar la fila.
 
 type Filtro = 'abiertos' | 'decidir' | 'cerrados'
+
+// Fuera del componente a propósito: definidos dentro se desmontarían y
+// volverían a montar en cada tecla del buscador.
+function Pendiente({ o, profiles, yo }: { o: Ofrecimiento; profiles: Profile[]; yo: string }) {
+  if (estaCerrado(o)) return <span className="text-[11px] text-slate-400">cerrado {o.decididoAt ? fmtDate(o.decididoAt) : ''}</span>
+  const pend = pasosPendientes(o)
+  if (o.estado === 'decidir' && pend.length === 0) return <span className="text-[11px] text-slate-400">{o.niveles.length} nivel{o.niveles.length !== 1 ? 'es' : ''} · todo contestado</span>
+  if (pend.length === 0) return <span className="text-[11px] text-slate-400">{o.niveles.length ? 'todo contestado' : 'sin pedir'}</span>
+  const avatares = [...new Set(pend.map(p => p.paso.avatar))].slice(0, 3)
+  const tipos = [...new Set(pend.map(p => p.paso.tipo))]
+  return (
+    <span className="flex items-center gap-1 flex-wrap">
+      {avatares.map(a => <Avatar key={a} avatar={a} profiles={profiles} primario={a === yo} />)}
+      {pend.length > 3 && <span className="text-[10px] text-slate-400">+{pend.length - 3}</span>}
+      {tipos.map(t => <TipoChip key={t} tipo={t} small />)}
+    </span>
+  )
+}
+
+function Limite({ o, hoy }: { o: Ofrecimiento; hoy: string }) {
+  const d = diasHastaLimite(o, hoy)
+  if (d === null || estaCerrado(o)) return <span className="text-[11px] text-slate-300">—</span>
+  const urgente = d <= 3
+  return <span className={`text-[11px] font-semibold ${urgente ? 'text-red-600' : 'text-slate-500'}`}>{fmtDate(o.fechaLimite).replace(/ \d{4}$/, '')}</span>
+}
 
 export interface OfrecidosTabProps {
   ofrecimientos: Ofrecimiento[]
@@ -111,29 +137,6 @@ export function OfrecidosTab({
     setFichaId(creado.id)
   }
 
-  function Pendiente({ o }: { o: Ofrecimiento }) {
-    if (estaCerrado(o)) return <span className="text-[11px] text-slate-400">cerrado {o.decididoAt ? fmtDate(o.decididoAt) : ''}</span>
-    const pend = pasosPendientes(o)
-    if (o.estado === 'decidir' && pend.length === 0) return <span className="text-[11px] text-slate-400">{o.niveles.length} nivel{o.niveles.length !== 1 ? 'es' : ''} · todo contestado</span>
-    if (pend.length === 0) return <span className="text-[11px] text-slate-400">{o.niveles.length ? 'todo contestado' : 'sin pedir'}</span>
-    const avatares = [...new Set(pend.map(p => p.paso.avatar))].slice(0, 3)
-    const tipos = [...new Set(pend.map(p => p.paso.tipo))]
-    return (
-      <span className="flex items-center gap-1 flex-wrap">
-        {avatares.map(a => <Avatar key={a} avatar={a} profiles={profiles} primario={a === yo} />)}
-        {pend.length > 3 && <span className="text-[10px] text-slate-400">+{pend.length - 3}</span>}
-        {tipos.map(t => <TipoChip key={t} tipo={t} small />)}
-      </span>
-    )
-  }
-
-  function Limite({ o }: { o: Ofrecimiento }) {
-    const d = diasHastaLimite(o, hoy)
-    if (d === null || estaCerrado(o)) return <span className="text-[11px] text-slate-300">—</span>
-    const urgente = d <= 3
-    return <span className={`text-[11px] font-semibold ${urgente ? 'text-red-600' : 'text-slate-500'}`}>{fmtDate(o.fechaLimite).replace(/ \d{4}$/, '')}</span>
-  }
-
   return (
     <div className="flex-1 w-full px-3 sm:px-6 py-4">
       <div className="max-w-6xl mx-auto space-y-3">
@@ -191,8 +194,8 @@ export function OfrecidosTab({
                   <span className="min-w-0 truncate"><OrigenChip origen={o.origen} nombre={o.ofreceNombre} /></span>
                   <span>{o.responsable ? <Avatar avatar={o.responsable} profiles={profiles} primario /> : <span className="text-[10px] text-amber-600 font-semibold">sin</span>}</span>
                   <span><EstadoChip e={e} /></span>
-                  <span className="min-w-0"><Pendiente o={o} /></span>
-                  <span className="text-right"><Limite o={o} /></span>
+                  <span className="min-w-0"><Pendiente o={o} profiles={profiles} yo={yo} /></span>
+                  <span className="text-right"><Limite o={o} hoy={hoy} /></span>
                 </button>
               )
             })}

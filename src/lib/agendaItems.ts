@@ -21,7 +21,7 @@ import { SERVICIO_META, tipoDeServicio, tituloDeServicio, participantesDeServici
 import { norm } from './texto'
 
 export type AgendaTipo = 'tarea' | 'llamada' | 'telefono' | 'reunion' | 'postpartido' | 'partido' | 'evento' | 'viaje'
-export type AgendaOrigen = 'tarea' | 'firmar' | 'postpartido' | 'captacion' | 'evento' | 'boulema'
+export type AgendaOrigen = 'tarea' | 'firmar' | 'postpartido' | 'captacion' | 'evento' | 'ofrecido'
 export type AgendaEstado = Task['status']
 
 /** A dónde lleva «abrir»: la pantalla natural de cada item. Lo resuelve la vista. */
@@ -32,7 +32,7 @@ export type AgendaDestino =
   | { tipo: 'partido'; matchId: string }
   | { tipo: 'jugador'; playerId: string }
   | { tipo: 'evento'; eventoId: string }
-  | { tipo: 'boulema' }
+  | { tipo: 'ofrecido'; ofrecimientoId: string }
 
 export interface AgendaItem {
   /** Único en la lista: origen + id (y scout, en partidos con varios) */
@@ -92,8 +92,8 @@ export interface AgendaInput {
   eventos?: AgendaEvento[]
   /** «partido|iniciales» de cada informe de partido ya escrito */
   informesPartido?: Set<string>
-  /** Informes de Boulema pedidos y aún sin escribir: uno por petición y persona */
-  peticionesBoulema?: { id: string; jugador: string; equipo?: string; avatar: string }[]
+  /** Informes pedidos en Ofrecidos y aún sin escribir: uno por ofrecimiento, persona y tipo */
+  informesPedidos?: { ofrecimientoId: string; jugador: string; equipo?: string; avatar: string; tipo: string; pedidoPor?: string }[]
   /** true = incluir los fines de contrato (de representación y con el club). Solo para admins. */
   vencimientos?: boolean
   /** Nombres de jugadores de Captación, para los eventos que apuntan a uno */
@@ -322,21 +322,21 @@ export function construirAgenda(input: AgendaInput): AgendaItem[] {
     })
   }
 
-  // ── Informes de Boulema pendientes: una tarea para quien tiene que escribirlo ──
-  for (const pet of input.peticionesBoulema ?? []) {
+  // ── Informes pedidos en Ofrecidos: una tarea para quien tiene que escribirlo ──
+  for (const pet of input.informesPedidos ?? []) {
     const personId = perfilPorAvatar.get(pet.avatar)
     if (!personId) continue
     items.push({
-      id: `boulema:${pet.id}:${pet.avatar}`,
+      id: `ofrecido:${pet.ofrecimientoId}:${pet.avatar}:${pet.tipo}`,
       tipo: 'tarea',
-      titulo: `Informe Boulema — ${pet.jugador}${pet.equipo ? ` (${pet.equipo})` : ''}`,
+      titulo: `Informe ${pet.tipo} pedido — ${pet.jugador}${pet.equipo ? ` (${pet.equipo})` : ''}`,
       personId,
       otrosIds: [],
-      categoria: 'Boulema',
+      categoria: 'Ofrecidos',
       estado: 'pendiente',
       prioridadAlta: false,
-      origen: 'boulema',
-      abrir: { tipo: 'boulema' },
+      origen: 'ofrecido',
+      abrir: { tipo: 'ofrecido', ofrecimientoId: pet.ofrecimientoId },
       ref: {},
     })
   }
@@ -465,9 +465,9 @@ export function itemEsDe(it: AgendaItem, profileId: string): boolean {
 /** Lo que se puede cambiar de cada item desde la lista */
 export function permisosItem(it: AgendaItem): { estado: boolean; enCurso: boolean; reprogramar: boolean; reasignar: boolean } {
   switch (it.origen) {
-    // Un evento no se «hace»; y un informe de Boulema se completa escribiéndolo en Boulema, no desde aquí
+    // Un evento no se «hace»; y un informe pedido en Ofrecidos se completa escribiéndolo allí, no desde aquí
     case 'evento':
-    case 'boulema':    return { estado: false, enCurso: false, reprogramar: false, reasignar: false }
+    case 'ofrecido':   return { estado: false, enCurso: false, reprogramar: false, reasignar: false }
     // La fecha y los scouts de un partido se cambian en Captación; aquí solo «visto»
     case 'captacion':  return { estado: true, enCurso: false, reprogramar: false, reasignar: false }
     // Sin tarea vinculada no hay dónde guardar el «en curso»

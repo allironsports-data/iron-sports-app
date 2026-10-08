@@ -7,7 +7,8 @@ import { useEscapeKey } from '../../../hooks/useEscapeKey'
 import { INFO_TIPO_DE, TIPO_INFORME_LABEL, VEREDICTO_LABEL, birthdateDe, conRespuesta, veredictoDesdeConclusion } from '../../../lib/ofrecidos'
 import { FormRow, Spinner } from '../comun'
 import { REPORT_TEMPLATE, todayISO } from '../helpers'
-import { Avatar, INPUT, Modal, PickTipos, TipoChip } from './comun'
+import { Avatar, Modal, PickTipos, TipoChip } from './comun'
+import { INPUT } from './estilos'
 
 // ── Responder a un paso de la cadena ────────────────────────────────
 // Técnico → informe de partido de siempre (scouting_reports), en la ficha

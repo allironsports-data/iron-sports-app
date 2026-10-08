@@ -5,9 +5,6 @@ import { TIPO_INFORME_LABEL, TIPOS_INFORME, VEREDICTO_LABEL, ORIGEN_LABEL, type 
 // ── Piezas pequeñas de la pestaña Ofrecidos ─────────────────────────
 // Solo componentes (Vite Fast Refresh); las constantes están en lib/ofrecidos.
 
-export const INPUT = 'w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400'
-export const INPUT_SM = 'w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30'
-
 const TIPO_CLS: Record<TipoInformePedido, string> = {
   tecnico:      'text-blue-700 border-blue-200 bg-blue-50',
   entorno:      'text-emerald-700 border-emerald-200 bg-emerald-50',
@@ -22,12 +19,6 @@ const ESTADO_CLS: Record<EstadoVisible['clave'], string> = {
   aceptado:   'bg-green-50 text-green-700 border-green-200',
   descartado: 'bg-red-50 text-red-600 border-red-200',
   caducado:   'bg-amber-50 text-amber-700 border-amber-200',
-}
-
-/** Borde izquierdo de la fila en la lista, según estado */
-export const ESTADO_BORDE: Record<EstadoVisible['clave'], string> = {
-  nuevo: 'border-l-slate-300', informes: 'border-l-blue-500', decidir: 'border-l-orange-500',
-  aceptado: 'border-l-green-500', descartado: 'border-l-red-400', caducado: 'border-l-amber-500',
 }
 
 const VEREDICTO_CLS: Record<PasoVeredicto, string> = {

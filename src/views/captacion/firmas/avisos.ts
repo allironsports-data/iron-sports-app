@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { Player, FirmasEntry, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, BoulemaPeticion } from '../../../types'
+import type { Player, FirmasEntry, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, Ofrecimiento } from '../../../types'
 import { normConclusion, todayISO, fmtDate } from '../helpers'
 import { norm as normSearch } from '../../../lib/texto'
 import { hoyISO, sumarDias } from '../../../lib/fechas'
@@ -48,14 +48,14 @@ export interface GrupoAviso {
 }
 
 export function useFirmasAvisos({
-  entries, scoutingPlayers, scoutingReports, scoutingMatches, matchPlayers, boulemaPeticiones, players,
+  entries, scoutingPlayers, scoutingReports, scoutingMatches, matchPlayers, ofrecimientos, players,
 }: {
   entries: FirmasEntry[]
   scoutingPlayers: ScoutingPlayer[]
   scoutingReports: ScoutingReport[]
   scoutingMatches: ScoutingMatch[]
   matchPlayers: ScoutingMatchPlayer[]
-  boulemaPeticiones: BoulemaPeticion[]
+  ofrecimientos: Ofrecimiento[]
   players: Player[]
 }) {
   const spById = useMemo(() => {
@@ -149,12 +149,13 @@ export function useFirmasAvisos({
       }
     })
 
-    // también está en Boulema: petición de informe sobre el mismo jugador
+    // también nos lo han ofrecido: hay un ofrecimiento abierto sobre el mismo jugador
     active.forEach(e => {
       const sp = e.scoutingPlayerId ? spById[e.scoutingPlayerId] : undefined
       const names = new Set([normSearch(e.playerName), ...(sp ? [normSearch(sp.fullName)] : [])])
-      const pet = boulemaPeticiones.find(p => names.has(normSearch(p.playerName)))
-      if (pet) out.push({ icon: '📥', tone: 'blue', entryId: e.id, kind: 'boulema', text: `Hay una petición en Boulema sobre ${e.playerName} (pedida por ${pet.requestedBy})` })
+      const ofr = ofrecimientos.find(o => o.estado !== 'aceptado' && o.estado !== 'descartado'
+        && ((e.scoutingPlayerId && o.scoutingPlayerId === e.scoutingPlayerId) || names.has(normSearch(o.playerName))))
+      if (ofr) out.push({ icon: '📥', tone: 'blue', entryId: e.id, kind: 'boulema', text: `Hay un ofrecimiento abierto sobre ${e.playerName}${ofr.ofreceNombre ? ` (lo ofrece ${ofr.ofreceNombre})` : ''}${ofr.responsable ? ` · responsable ${ofr.responsable}` : ''}` })
     })
 
     // cambio de club en su ficha de scouting
@@ -220,7 +221,7 @@ export function useFirmasAvisos({
 
     const rank = { red: 0, amber: 1, blue: 2, green: 3 }
     return out.sort((a, b) => rank[a.tone] - rank[b.tone] || a.text.localeCompare(b.text))
-  }, [entries, spById, scoutingMatches, matchPlayers, reportsByPlayer, boulemaPeticiones, players])
+  }, [entries, spById, scoutingMatches, matchPlayers, reportsByPlayer, ofrecimientos, players])
 
   // Avisos silenciados: cada uno decide qué tipos no quiere ver. Se guarda en
   // este navegador, así que no molesta a nadie más.

@@ -201,6 +201,13 @@ export function Captacion({
 
   // Candidatos "nuevos": cumplen umbral y no están ocultados (o suman
   // informes nuevos desde que se ocultaron) → badge en la pestaña
+  // Pestaña Ofrecidos: cuántos me tocan (llevo yo o me han pedido informe), sin contar cerrados
+  const ofrecidosPendientesMios = useMemo(() => ofrecimientos.filter(o =>
+    o.estado !== 'aceptado' && o.estado !== 'descartado' && (
+      o.responsable === currentProfile.avatar
+      || o.niveles.some(n => n.pasos.some(p => p.veredicto === 'pendiente' && p.avatar === currentProfile.avatar))
+    )).length, [ofrecimientos, currentProfile.avatar])
+
   const newCandidatesCount = useMemo(() =>
     scoutingPlayers.filter(p => {
       const n = llamarCountByPlayer[p.id] ?? 0

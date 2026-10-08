@@ -86,8 +86,10 @@ interface Props {
   matchScouts?: ScoutingMatchScout[];
   /** «partido|iniciales» de cada informe de partido ya escrito */
   informesPartido?: Set<string>;
-  /** Informes de Boulema pedidos y sin escribir (uno por petición y persona) */
-  peticionesBoulema?: { id: string; jugador: string; equipo?: string; avatar: string }[];
+  /** Informes pedidos en Ofrecidos y sin escribir (uno por ofrecimiento, persona y tipo) */
+  informesPedidos?: { ofrecimientoId: string; jugador: string; equipo?: string; avatar: string; tipo: string; pedidoPor?: string }[];
+  /** Abre la ficha de un ofrecimiento (Captación → Ofrecidos) */
+  onOpenOfrecido?: (ofrecimientoId: string) => void;
   /** Asigna un scout (iniciales) a un partido de Captación */
   onAddMatchScout?: (matchId: string, scout: string, viewMode?: 'campo' | 'video') => Promise<void>;
   /** Abre la ficha de un partido de Captación */
@@ -172,7 +174,8 @@ export function Dashboard({
   onOpenSearch,
   onOpenScoutingPlayer,
   informesPartido,
-  peticionesBoulema,
+  informesPedidos,
+  onOpenOfrecido,
   onAddMatchScout,
   onOpenMatch,
   onSetMatchSeen,
@@ -843,12 +846,12 @@ export function Dashboard({
       hoy: todayStr,
       tasks: tasks.filter(t => !(t.adminOnly && !esAdmin)),
       firmasEntries: firmasEntries ?? [],
-      postpartidos, scoutingMatches, matchScouts, profiles, players, eventos, informesPartido, peticionesBoulema,
+      postpartidos, scoutingMatches, matchScouts, profiles, players, eventos, informesPartido, informesPedidos,
       // Los fines de contrato solo los ven los admins
       vencimientos: esAdmin,
       nombreScouting: (id: string) => porId.get(id),
     };
-  }, [todayStr, tasks, esAdmin, firmasEntries, postpartidos, scoutingMatches, matchScouts, profiles, players, eventos, scoutingPlayers, informesPartido, peticionesBoulema]);
+  }, [todayStr, tasks, esAdmin, firmasEntries, postpartidos, scoutingMatches, matchScouts, profiles, players, eventos, scoutingPlayers, informesPartido, informesPedidos]);
   const agendaItems = useMemo(
     () => construirAgenda({ ...agendaBase, activities: actsDia, rango: { desde: todayStr, hasta: diaHasta } }),
     [agendaBase, actsDia, todayStr, diaHasta],
@@ -1056,7 +1059,7 @@ export function Dashboard({
     if (d.tipo === 'firmar') return onOpenFirmar?.(d.entryId);
     if (d.tipo === 'partido') return onOpenMatch?.(d.matchId);
     if (d.tipo === 'jugador') return onSelectPlayer(d.playerId);
-    if (d.tipo === 'boulema') return onViewChange?.('boulema');
+    if (d.tipo === 'ofrecido') return onOpenOfrecido?.(d.ofrecimientoId);
     if (d.tipo === 'evento') {
       const ev = eventos.find(x => x.id === d.eventoId);
       if (!ev) return;

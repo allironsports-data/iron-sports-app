@@ -7,7 +7,8 @@ import { buscarJugadoresParecidos } from '../../../lib/duplicados'
 import { ORIGENES, ORIGEN_LABEL, OPERACIONES, OPERACION_LABEL, conNivelNuevo } from '../../../lib/ofrecidos'
 import { FormRow, Spinner } from '../comun'
 import { POSITIONS_SCOUTING, MONTHS_ES } from '../helpers'
-import { INPUT, Modal, PickPersonas, PickTipos } from './comun'
+import { Modal, PickPersonas, PickTipos } from './comun'
+import { INPUT } from './estilos'
 
 // ── Alta y edición de un ofrecimiento ───────────────────────────────
 // Al crear, se puede pedir ya el nivel 1 (personas + tipos). Al editar,

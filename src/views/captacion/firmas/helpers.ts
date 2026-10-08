@@ -19,7 +19,7 @@ export const AVISO_TITULO: Record<string, string> = {
   'visto':         'Vistos hace poco en un partido',
   'juega':         'Su equipo juega pronto',
   'informe':       'Informes nuevos',
-  'boulema':       'Con petición en Boulema',
+  'boulema':       'Con ofrecimiento abierto',
   'firmado':       'Firmados sin ficha en Mantenimiento',
 }
 

@@ -10,7 +10,8 @@ import {
 } from '../../../lib/ofrecidos'
 import { FIRMAS_KIND_META } from '../firmas/helpers'
 import { type ShowToast, fmtDate, relativeDate, todayISO, CONCLUSION_STYLE } from '../helpers'
-import { Avatar, EstadoChip, TipoChip, VeredictoChip, INPUT_SM } from './comun'
+import { Avatar, EstadoChip, TipoChip, VeredictoChip } from './comun'
+import { INPUT_SM } from './estilos'
 import { ResponderModal } from './ResponderModal'
 import { NuevoNivelModal } from './NuevoNivelModal'
 

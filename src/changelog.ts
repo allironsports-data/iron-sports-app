@@ -19,6 +19,21 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-10-08',
+    items: [
+      'Captación → Ofrecidos (nueva pestaña): jugadores que nos ofrece alguien de fuera (agente, intermediario, club, familia, Boulema). Cada ofrecimiento lleva quién lo ofrece y su contacto, las condiciones pedidas (operación, coste, salario, comisión, contrato actual, fecha límite para contestar), un responsable en AIS y una cadena de informes por niveles: en cada nivel se pide a una o varias personas un tipo de informe (técnico, entorno, mercado o personalidad) y cada una contesta con su veredicto (OK, no, más vídeo). Cuando hay suficiente, el responsable lo pasa a «Decidir» y lo acepta o lo descarta',
+      'Ofrecidos: la lista es una línea por jugador (quién ofrece, responsable, estado, de quién está pendiente y fecha límite). Todo lo demás está en la ficha, que se abre al pulsar la fila. Filtros: abiertos / decidir / cerrados, «solo los míos» y origen',
+      'Ofrecidos → Responder: un informe técnico se guarda como informe de partido en la ficha de Captación del jugador (y si no existe, se crea la ficha con los datos del ofrecimiento); entorno, mercado y personalidad se guardan como infos de esa misma ficha. El veredicto se propone desde la conclusión (Firmar/Seguir → OK, Descartar → No, Más vídeo → Más vídeo) y se puede cambiar',
+      'Ofrecidos: historial de contactos con quien lo ofrece (llamada, WhatsApp, reunión, nota, con «contestó / no contestó»), como en las tarjetas de Firmar. Al aceptar o descartar se puede apuntar qué se le ha contestado',
+      'Ofrecidos: los informes pedidos salen en Mi día y en Tareas de cada persona (con el tipo delante) y abren la ficha del ofrecimiento. Avisos en la campana: te ponen de responsable, te piden un informe, alguien contesta en un ofrecimiento que llevas tú',
+      'Boulema: las «Peticiones» pasan a Captación → Ofrecidos con origen Boulema (las que había se migran, con sus informes ya enlazados contados como OK). Boulema se queda con Mantenimiento y un acceso directo a sus ofrecimientos. Los avisos del Pipeline que decían «petición en Boulema» ahora dicen «ofrecimiento abierto»',
+    ],
+    adminItems: [
+      'Requiere ejecutar migration_ofrecimientos.sql en Supabase (crea la tabla ofrecimientos con sus permisos, realtime y la migración de boulema_peticiones, que se deja intacta por si hay que volver atrás). Sin ejecutarla, la pestaña sale vacía y no se puede crear nada',
+      'Las cuentas «solo Captación» no ven Ofrecidos (lleva condiciones económicas), igual que no veían las peticiones de Boulema',
+    ],
+  },
+  {
     date: '2026-10-03',
     items: [
       'Ficha de partido: las sugerencias son del equipo exacto. «Otros partidos de estos equipos» solo enseña partidos del mismo equipo (club y categoría: Betis Juv A no es Betis B), y en «Sugeridos» van primero los jugadores del equipo exacto, luego los vistos antes con ese equipo, y los de otros equipos del club al final, marcados como «otro equipo del club». Se quita «Pegar alineación», que no se usaba',
