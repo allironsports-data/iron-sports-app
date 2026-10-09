@@ -364,10 +364,17 @@ export function construirAgenda(input: AgendaInput): AgendaItem[] {
   // ── Eventos (player_activities). Un evento de grupo es una fila por
   //    jugador con el mismo groupId: aquí sale una sola vez. ──
   // Las actividades que nacieron de un evento de agenda ya salen como evento.
+  // Se emparejan por el enlace que guarda el evento y, por si falta (eventos
+  // antiguos o editados), también por contenido: misma fecha, jugador, tipo y
+  // título. La actividad se apunta como «título — notas», de ahí el corte.
   const yaComoEvento = new Set(eventos.map(e => e.activityRef).filter(Boolean) as string[])
+  const claveEvento = (fecha: string, playerId: string, tipo: string, titulo: string) =>
+    `${fecha}|${playerId}|${norm(tipo)}|${norm(titulo)}`
+  const mismoContenido = new Set(eventos.flatMap(e => e.playerIds.map(pid => claveEvento(e.fecha, pid, e.tipo, e.titulo || e.tipo))))
   const grupos = new Set<string>()
   for (const a of activities) {
     if (yaComoEvento.has(a.groupId ?? a.id)) continue
+    if (a.date && mismoContenido.has(claveEvento(a.date.slice(0, 10), a.playerId, a.type, (a.notes ?? '').split(' — ')[0] || a.type))) continue
     if (!a.date || a.date < rango.desde || a.date > rango.hasta) continue
     if (a.groupId) {
       if (grupos.has(a.groupId)) continue

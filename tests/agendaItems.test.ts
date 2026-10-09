@@ -226,6 +226,18 @@ describe('construirAgenda · eventos de agenda', () => {
     expect(items.map(i => i.id)).toEqual(['evento:act2', 'evento:a'])
   })
 
+  it('sin el enlace guardado, la actividad se empareja por contenido (fecha, jugador, tipo y título)', () => {
+    const items = construirAgenda(base({
+      players: [jugador('j1', 'Iker')],
+      eventos: [ev({ id: 'a', titulo: 'Tema pago CR', tipo: 'Llamada', playerIds: ['j1'] })],
+      activities: [
+        evento({ id: 'gemela', type: 'Llamada', notes: 'Tema pago CR — Contestó' }),
+        evento({ id: 'otra', type: 'Llamada', notes: 'Otro asunto' }),
+      ],
+    }))
+    expect(items.map(i => i.id).sort()).toEqual(['evento:a', 'evento:otra'])
+  })
+
   it('un evento pasado no es una tarea: ni hecha, ni vencida', () => {
     const items = construirAgenda(base({
       rango: { desde: '2026-09-20', hasta: HOY },
