@@ -43,10 +43,15 @@ describe('niveles y respuestas', () => {
   })
 
   it('los pendientes salen uno por persona, con tipo y nivel', () => {
-    expect(informesPedidos([base])).toEqual([
+    expect(informesPedidos([base])).toMatchObject([
       { ofrecimientoId: 'x', jugador: 'x', equipo: 'Antiguoko', avatar: 'AV', tipo: 'tecnico', nivel: 1, pedidoPor: 'PP' },
       { ofrecimientoId: 'x', jugador: 'x', equipo: 'Antiguoko', avatar: 'RP', tipo: 'tecnico', nivel: 1, pedidoPor: 'PP' },
     ])
+  })
+
+  it('cada pendiente lleva fecha: la límite del ofrecimiento o siete días desde que se abrió', () => {
+    expect(informesPedidos([base]).every(p => p.fecha === '2026-10-08')).toBe(true)
+    expect(informesPedidos([{ ...base, fechaLimite: '2026-10-03' }]).every(p => p.fecha === '2026-10-03')).toBe(true)
   })
 
   it('una respuesta marca solo ese paso y conserva los demás', () => {

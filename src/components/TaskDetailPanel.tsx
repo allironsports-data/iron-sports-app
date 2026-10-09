@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { X, Trash2, ChevronRight, Send } from "lucide-react";
 import { TASK_LABELS, type Task, type Player, type TaskLabel, type FirmasEntry } from "../types";
-import { parseDia, esVencida } from "../lib/fechas";
+import { parseDia, esVencida, hoyISO, sumarDias } from '../lib/fechas'
+import { viernesSemana } from '../lib/agendaItems';
 import { RECURRENCIAS, RECURRENCIA_LABEL, type Recurrencia } from "../lib/recurrencia";
 import type { Profile } from "../contexts/AuthContext";
 import * as db from "../lib/db";
@@ -345,7 +346,16 @@ export function TaskDetailPanel({
                           onChange={e => setDueDate(e.target.value)}
                           className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
                         />
-                        {isOverdue && <p className="text-[11px] text-red-500 mt-0.5">Vencida</p>}
+                        <div className="mt-1.5 flex items-center gap-1 flex-wrap">
+                          {([['Hoy', hoyISO()], ['Mañana', sumarDias(hoyISO(), 1)], ['Esta semana', viernesSemana(hoyISO())], ['Algún día', '']] as const).map(([txt, f]) => (
+                            <button key={txt} type="button" onClick={() => setDueDate(f)}
+                              title={txt === 'Algún día' ? 'Sin fecha: va a la bandeja' : txt === 'Esta semana' ? 'El viernes' : undefined}
+                              className={`text-[10.5px] px-1.5 py-0.5 rounded border transition-colors ${dueDate === f ? 'border-primary text-primary bg-blue-50 font-semibold' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>
+                              {txt}
+                            </button>
+                          ))}
+                        </div>
+                        {isOverdue && <p className="text-[11px] text-red-500 mt-0.5">Con retraso</p>}
                       </>
                     ) : task.dueDate ? (
                       <>

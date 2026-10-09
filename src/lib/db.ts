@@ -660,6 +660,23 @@ export async function createComment(taskId: string, authorId: string, content: s
   return dbToComment(data)
 }
 
+/**
+ * ISO de la última nota (comentario) de cada tarea pedida. Sirve para los
+ * procesos (tareas en curso): si llevan una semana sin nota, piden actualización.
+ */
+export async function fetchUltimasNotas(taskIds: string[]): Promise<Record<string, string>> {
+  if (taskIds.length === 0) return {}
+  const { data, error } = await supabase
+    .from('task_comments').select('task_id, created_at')
+    .in('task_id', taskIds).order('created_at', { ascending: false })
+  if (error) throw error
+  const out: Record<string, string> = {}
+  for (const r of (data ?? []) as { task_id: string; created_at: string }[]) {
+    if (!out[r.task_id]) out[r.task_id] = r.created_at
+  }
+  return out
+}
+
 export async function uploadAttachment(
   commentId: string,
   uploadedBy: string,

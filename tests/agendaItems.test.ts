@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   construirAgenda, seccionesDelDia, itemEsDe, permisosItem, siguienteEstado, categoriasDe,
   coincideTexto, lunesSiguiente, tipoDeAccionFirmar, tipoDeEvento, estaArchivada, type AgendaInput,
+  esCita, esInformePendiente, procesosSinActualizar, pendientesDeCierre, viernesSemana, diasEntre,
 } from '../src/lib/agendaItems'
 import type { Task, ScoutingMatch, ScoutingMatchScout, FirmasEntry, Postpartido, Player, PlayerActivity, AgendaEvento } from '../src/types'
 
@@ -328,7 +329,9 @@ describe('seccionesDelDia', () => {
       task({ id: 'vieja', dueDate: '2026-09-20' }),
       task({ id: 'mas-vieja', dueDate: '2026-09-10' }),
       task({ id: 'hoy-b', dueDate: HOY }),
-      task({ id: 'hoy-a', dueDate: HOY, status: 'en_progreso' }),
+      task({ id: 'hoy-a', dueDate: HOY, priority: 'alta' }),
+      task({ id: 'proceso', dueDate: HOY, status: 'en_progreso' }),
+      task({ id: 'proceso-lejos', dueDate: '2026-11-20', status: 'en_progreso' }),
       task({ id: 'manana', dueDate: '2026-10-02' }),
       task({ id: 'limite', dueDate: '2026-10-08' }),
       task({ id: 'lejos', dueDate: '2026-10-09' }),
@@ -341,23 +344,154 @@ describe('seccionesDelDia', () => {
   const s = seccionesDelDia(items, HOY)
   const ids = (xs: { id: string }[]) => xs.map(x => x.id.replace(/^\w+:/, ''))
 
-  it('vencidas, de la más antigua a la más reciente', () => {
+  it('agenda de hoy: las citas, por hora', () => {
+    expect(ids(s.agenda)).toEqual(['m2', 'm1'])
+  })
+  it('para hacer hoy: lo atrasado primero (lo más antiguo arriba), luego lo de hoy por prioridad', () => {
+    expect(ids(s.hoy)).toEqual(['mas-vieja', 'vieja', 'hoy-a', 'hoy-b'])
     expect(ids(s.vencidas)).toEqual(['mas-vieja', 'vieja'])
   })
-  it('hoy: primero lo que tiene hora, por hora; luego en curso', () => {
-    expect(ids(s.hoy)).toEqual(['m2', 'm1', 'hoy-a', 'hoy-b'])
+  it('los procesos (en curso) salen siempre, tengan la fecha que tengan, y no se repiten', () => {
+    expect(ids(s.procesos).sort()).toEqual(['proceso', 'proceso-lejos'])
+    expect(ids(s.hoy)).not.toContain('proceso')
+    expect(s.masAdelante.map(i => i.id)).not.toContain('tarea:proceso-lejos')
   })
   it('próximos 7 días agrupados por día; lo de después va a «más adelante»', () => {
     expect(s.proximos.map(g => [g.dia, ids(g.items)])).toEqual([['2026-10-02', ['manana']], ['2026-10-08', ['limite']]])
     expect(ids(s.masAdelante)).toEqual(['lejos'])
   })
-  it('sin fecha y hechas hoy (lo de otros días no sale)', () => {
-    expect(ids(s.sinFecha)).toEqual(['sin'])
+  it('bandeja (sin fecha) y hechas hoy (lo de otros días no sale)', () => {
+    expect(ids(s.bandeja)).toEqual(['sin'])
     expect(ids(s.hechasHoy)).toEqual(['hecha'])
   })
   it('ningún item abierto se queda fuera', () => {
-    const n = s.vencidas.length + s.hoy.length + s.proximos.reduce((a, g) => a + g.items.length, 0) + s.masAdelante.length + s.sinFecha.length
+    const n = s.agenda.length + s.hoy.length + s.procesos.length + s.proximos.reduce((a, g) => a + g.items.length, 0) + s.masAdelante.length + s.bandeja.length
     expect(n).toBe(items.filter(i => i.estado !== 'completada').length)
+  })
+  it('una cita pasada ya ocurrió: no es trabajo atrasado', () => {
+    const its = construirAgenda(base({
+      scoutingMatches: [match({ id: 'pasado', date: '2026-09-28', assignedTo: 'NB' })],
+      rango: { desde: '2026-09-25', hasta: '2026-10-08' },
+    }))
+    const sec = seccionesDelDia(its, HOY)
+    expect(sec.hoy).toEqual([])
+    expect(sec.vencidas).toEqual([])
+  })
+})
+
+describe('cita frente a trabajo', () => {
+  it('partidos y eventos son citas; tareas, acciones de Firmar y «cerrar reunión» son trabajo', () => {
+    const ev: AgendaEvento = {
+      id: 'e1', titulo: 'Reunión con Yarek', tipo: 'Reunión', fecha: HOY, hora: '10:00', ambito: 'general',
+      playerIds: [], participantIds: [YO], createdAt: '',
+    }
+    const its = construirAgenda(base({
+      tasks: [task({ id: 't1', dueDate: HOY })],
+      scoutingMatches: [match({ id: 'm1', assignedTo: 'NB' })],
+      eventos: [ev],
+      firmasEntries: [firma({ id: 'f1', nextAction: 'Llamar', nextActionDate: HOY, nextActionKind: 'llamada' })],
+    }))
+    const porId = Object.fromEntries(its.map(i => [i.id, i]))
+    expect(esCita(porId['partido:m1'])).toBe(true)
+    expect(esCita(porId['evento:e1'])).toBe(true)
+    expect(esCita(porId['tarea:t1'])).toBe(false)
+    expect(esCita(porId['firmar:f1'])).toBe(false)
+  })
+})
+
+describe('postpartidos: fecha automática', () => {
+  it('sin fecha en la tarea, se quiere a los dos días del partido (nunca «algún día»)', () => {
+    const its = construirAgenda(base({
+      scoutingMatches: [match({ id: 'm1', date: '2026-09-26' })],
+      tasks: [task({ id: 't1', label: 'Postpartido' })],
+      postpartidos: [pp({ id: 'pp1', matchId: 'm1', taskId: 't1', playerName: 'Iker' })],
+    }))
+    expect(its.find(i => i.id === 'postpartido:pp1')?.fecha).toBe('2026-09-28')
+    expect(seccionesDelDia(its, HOY).bandeja).toEqual([])
+  })
+})
+
+describe('informe de partido pendiente', () => {
+  const partidos = [
+    match({ id: 'reciente', date: '2026-09-29' }),
+    match({ id: 'viejo', date: '2026-09-20' }),
+    match({ id: 'con-informe', date: '2026-09-30' }),
+  ]
+  const scouts = [
+    scout({ matchId: 'reciente', scout: 'NB', status: 'visto' }),
+    scout({ matchId: 'reciente', scout: 'PP', status: 'pendiente' }),
+    scout({ matchId: 'viejo', scout: 'NB', status: 'visto' }),
+    scout({ matchId: 'con-informe', scout: 'NB', status: 'visto' }),
+  ]
+  it('partido visto sin informe en los últimos 3 días: trabajo de hoy, de ese scout', () => {
+    const its = construirAgenda(base({ scoutingMatches: partidos, matchScouts: scouts, informesPartido: new Set(['con-informe|NB']) }))
+    const pendientes = its.filter(esInformePendiente)
+    expect(pendientes.map(i => i.id)).toEqual(['informe:reciente:NB'])
+    expect(pendientes[0]).toMatchObject({ titulo: 'Informe de Athletic vs Real', personId: YO, fecha: HOY, abrir: { tipo: 'partido', matchId: 'reciente' } })
+    // Es trabajo (no cita) y se completa escribiendo el informe, no desde la lista
+    expect(esCita(pendientes[0])).toBe(false)
+    expect(seccionesDelDia(its, HOY).hoy.map(i => i.id)).toContain('informe:reciente:NB')
+    expect(permisosItem(pendientes[0])).toEqual({ estado: false, enCurso: false, reprogramar: false, reasignar: false })
+  })
+  it('sin la lista de informes no se inventa nada', () => {
+    const its = construirAgenda(base({ scoutingMatches: partidos, matchScouts: scouts }))
+    expect(its.some(esInformePendiente)).toBe(false)
+  })
+})
+
+describe('procesos: actualización semanal', () => {
+  const tasks = [
+    task({ id: 'al-dia', status: 'en_progreso', createdAt: '2026-08-01T00:00:00Z' }),
+    task({ id: 'desatendido', status: 'en_progreso', createdAt: '2026-08-01T00:00:00Z' }),
+    task({ id: 'nunca', status: 'en_progreso', createdAt: '2026-09-20T00:00:00Z' }),
+    task({ id: 'de-otro', status: 'en_progreso', assigneeId: OTRO, watchers: [YO], createdAt: '2026-08-01T00:00:00Z' }),
+    task({ id: 'pendiente', createdAt: '2026-08-01T00:00:00Z' }),
+  ]
+  const its = construirAgenda(base({
+    tasks,
+    ultimaNotaTarea: { 'al-dia': '2026-09-29T09:00:00Z', 'desatendido': '2026-09-20T09:00:00Z' },
+  }))
+  const porId = Object.fromEntries(its.map(i => [i.id, i]))
+  it('cada tarea en curso lleva cuántos días hace de su última nota (sin nota: desde que se creó)', () => {
+    expect(porId['tarea:al-dia'].proceso).toEqual({ ultimaActualizacion: '2026-09-29T09:00:00Z', diasSinActualizar: 2 })
+    expect(porId['tarea:desatendido'].proceso?.diasSinActualizar).toBe(11)
+    expect(porId['tarea:nunca'].proceso).toEqual({ ultimaActualizacion: undefined, diasSinActualizar: 11 })
+    expect(porId['tarea:pendiente'].proceso).toBeUndefined()
+  })
+  it('piden actualización los míos con 7 días o más sin nota, el más desatendido primero', () => {
+    expect(procesosSinActualizar(its, YO).map(i => i.id)).toEqual(['tarea:desatendido', 'tarea:nunca'])
+    // El de otro lo sigo, pero la nota semanal se la pide a él
+    expect(procesosSinActualizar(its, OTRO).map(i => i.id)).toEqual(['tarea:de-otro'])
+  })
+})
+
+describe('cierre del día', () => {
+  const its = construirAgenda(base({
+    tasks: [task({ id: 'abierta', dueDate: HOY }), task({ id: 'atrasada', dueDate: '2026-09-25' }), task({ id: 'proceso', status: 'en_progreso' })],
+    scoutingMatches: [match({ id: 'm1', assignedTo: 'NB' })],
+  }))
+  const s = seccionesDelDia(its, HOY)
+  it('antes de las 18:00 no se propone nada', () => {
+    expect(pendientesDeCierre(s, '17:59')).toEqual([])
+    expect(pendientesDeCierre(s)).toEqual([])
+  })
+  it('a partir de las 18:00, el trabajo de hoy que sigue abierto y se puede mover (ni citas ni procesos)', () => {
+    expect(pendientesDeCierre(s, '18:00').map(i => i.id)).toEqual(['tarea:atrasada', 'tarea:abierta'])
+  })
+})
+
+describe('fechas blandas', () => {
+  it('viernes de esta semana; en fin de semana, el siguiente', () => {
+    expect(viernesSemana('2026-10-01')).toBe('2026-10-02') // jueves
+    expect(viernesSemana('2026-10-02')).toBe('2026-10-02') // viernes
+    expect(viernesSemana('2026-10-03')).toBe('2026-10-09') // sábado
+    expect(viernesSemana('2026-10-04')).toBe('2026-10-09') // domingo
+    expect(viernesSemana('2026-10-05')).toBe('2026-10-09') // lunes
+  })
+  it('diasEntre cuenta días naturales', () => {
+    expect(diasEntre('2026-09-20', '2026-10-01')).toBe(11)
+    expect(diasEntre('2026-10-01', '2026-10-01')).toBe(0)
+    expect(diasEntre('2026-10-02', '2026-10-01')).toBe(-1)
   })
 })
 

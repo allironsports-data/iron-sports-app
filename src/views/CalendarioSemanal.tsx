@@ -13,7 +13,7 @@ import { useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Maximize2, CalendarDays, Check, Plane } from 'lucide-react'
 import type { Profile } from '../contexts/AuthContext'
 import { parseDia, sumarDias, fechaLocal, lunesDe } from '../lib/fechas'
-import { itemEsDe, type AgendaItem } from '../lib/agendaItems'
+import { itemEsDe, type AgendaItem, esCita } from '../lib/agendaItems'
 import { diasDeSemana, entradasPorDia, solapesPorDia, type EntradaCalendario } from '../lib/calendario'
 import { AGENDA_TIPO_META, GRUPOS_TIPO } from '../components/agenda/tipoMeta'
 import { useIsDesktop } from '../hooks/useIsDesktop'
@@ -163,8 +163,11 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
   // ── El equipo ese día: qué tiene cada uno (no solo «la tarea en curso») ──
   // No depende de los filtros de arriba: es la foto del día entero.
   const equipoDelDia = (dia: string) => {
-    // Hoy cuenta también lo que está en curso aunque tenga otra fecha (o ninguna)
-    const delDia = items.filter(it => it.fecha === dia || (dia === hoy && it.estado === 'en_progreso'))
+    // Hoy cuenta también lo que está en curso (tenga la fecha que tenga) y el
+    // trabajo atrasado: una tarea vencida es de hoy, con retraso
+    const delDia = items.filter(it => it.fecha === dia
+      || (dia === hoy && it.estado === 'en_progreso' && !esCita(it))
+      || (dia === hoy && it.estado !== 'completada' && !!it.fecha && it.fecha < hoy && !esCita(it)))
     const yo = profiles.find(p => p.id === currentProfile.id) ?? currentProfile
     const guardarNota = () => {
       if (notaBorrador !== null && notaBorrador.trim() !== (notas[yo.id] ?? '')) void onGuardarMiNota?.(notaBorrador)
@@ -187,10 +190,13 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
           const enCurso = abiertos.filter(it => it.estado === 'en_progreso')
           const delDiaSuyo = abiertos.filter(it => it.estado !== 'en_progreso' && it.fecha === dia)
             .sort((a, b) => (a.hora ?? '99').localeCompare(b.hora ?? '99'))
+          //  · CON RETRASO: trabajo con fecha pasada y sin hacer. Solo hoy.
+          const conRetraso = abiertos.filter(it => it.estado !== 'en_progreso' && !!it.fecha && it.fecha < dia)
+            .sort((a, b) => (a.fecha ?? '').localeCompare(b.fecha ?? ''))
           const hechos = suyos.length - abiertos.length
           const esYo = p.id === yo.id
           const nota = notas[p.id]
-          return { p, suyos, abiertos, enCurso, delDiaSuyo, hechos, esYo, nota }
+          return { p, suyos, abiertos, enCurso, conRetraso, delDiaSuyo, hechos, esYo, nota }
         })
         // Quien no tiene nada ese día no merece una tarjeta vacía del tamaño
         // de las demás (dejaba la rejilla llena de huecos): van todos juntos
@@ -200,7 +206,7 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
         return (<>
       {conAlgo.length > 0 && (
       <div className="mb-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 items-start">
-        {conAlgo.map(({ p, suyos, abiertos, enCurso, delDiaSuyo, hechos, esYo, nota }) => {
+        {conAlgo.map(({ p, suyos, abiertos, enCurso, conRetraso, delDiaSuyo, hechos, esYo, nota }) => {
           return (
             <div key={p.id} className={`rounded-lg border bg-white px-2.5 py-1.5 ${esYo ? 'border-blue-200' : 'border-slate-200'} ${personaId === p.id ? 'ring-1 ring-primary' : ''}`}>
               <button onClick={() => setPersonaId(id => id === p.id ? 'all' : p.id)} title="Ver solo lo suyo" className="w-full flex items-center gap-1.5 text-left">
@@ -208,12 +214,13 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
                 <span className="text-xs font-semibold text-slate-800 truncate">{p.name.split(' ')[0]}{esYo && <span className="font-normal text-slate-400"> (yo)</span>}</span>
                 <span className="ml-auto text-[11px] text-slate-400 tabular-nums flex-shrink-0">
                   {abiertos.length === 0 ? (suyos.length > 0 ? 'todo hecho' : 'nada')
-                    : [enCurso.length > 0 ? `${enCurso.length} en curso` : '', delDiaSuyo.length > 0 ? `${delDiaSuyo.length} ${dia === hoy ? 'hoy' : 'ese día'}` : ''].filter(Boolean).join(' · ')}
+                    : [enCurso.length > 0 ? `${enCurso.length} en curso` : '', conRetraso.length > 0 ? `${conRetraso.length} con retraso` : '', delDiaSuyo.length > 0 ? `${delDiaSuyo.length} ${dia === hoy ? 'hoy' : 'ese día'}` : ''].filter(Boolean).join(' · ')}
                   {hechos > 0 && abiertos.length > 0 && ` · ${hechos} ✓`}
                 </span>
               </button>
               {([
                 ['En curso', enCurso, 'text-blue-600 font-semibold'],
+                ['Con retraso', conRetraso, 'text-red-600'],
                 [dia === hoy ? 'Para hoy' : 'Ese día', delDiaSuyo, 'text-slate-600'],
               ] as const).map(([titulo, lista, cls]) => lista.length > 0 && (
                 <div key={titulo} className="mt-1">

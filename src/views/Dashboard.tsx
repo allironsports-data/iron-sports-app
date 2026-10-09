@@ -16,7 +16,7 @@ import type { AltaRapida } from "../lib/altaRapida";
 import { tituloDia } from "../lib/miDia";
 import { MiDiaLista } from "./MiDiaLista";
 import { AgendaRow } from "../components/agenda/AgendaRow";
-import { itemEsDe, seccionesDelDia } from "../lib/agendaItems";
+import { itemEsDe, seccionesDelDia, DIAS_POSTPARTIDO } from "../lib/agendaItems";
 import { resumenSemanal } from "../lib/resumenSemanal";
 import { CalendarioSemanal } from "./CalendarioSemanal";
 import { EventoModal, type EventoBorrador } from "../components/agenda/EventoModal";
@@ -94,7 +94,13 @@ interface Props {
   /** «partido|iniciales» de cada informe de partido ya escrito */
   informesPartido?: Set<string>;
   /** Informes pedidos en Ofrecidos y sin escribir (uno por ofrecimiento, persona y tipo) */
-  informesPedidos?: { ofrecimientoId: string; jugador: string; equipo?: string; avatar: string; tipo: string; pedidoPor?: string }[];
+  informesPedidos?: { ofrecimientoId: string; jugador: string; equipo?: string; avatar: string; tipo: string; pedidoPor?: string; fecha?: string }[];
+  /** Procesos (tareas en curso): ISO de la última nota de cada uno */
+  ultimasNotas?: Record<string, string>;
+  /** Escribe la actualización semanal de un proceso (nota en la tarea) */
+  onActualizarProceso?: (taskId: string, texto: string) => Promise<void>;
+  /** Se ha escrito una nota en una tarea desde el panel: App lo apunta como actualización */
+  onNotaTarea?: (taskId: string, iso: string) => void;
   /** Abre la ficha de un ofrecimiento (Captación → Ofrecidos) */
   onOpenOfrecido?: (ofrecimientoId: string) => void;
   /** Eventos de agenda: los carga App (y los refresca por realtime); aquí se crean, editan y cierran */
@@ -185,6 +191,9 @@ export function Dashboard({
   onOpenScoutingPlayer,
   informesPartido,
   informesPedidos,
+  ultimasNotas,
+  onActualizarProceso,
+  onNotaTarea,
   onOpenOfrecido,
   eventos,
   setEventos,
@@ -339,7 +348,8 @@ export function Dashboard({
         priority: 'media',
         status: 'pendiente',
         label: 'Postpartido',
-        dueDate: ppDue || undefined,
+        // Sin fecha elegida, a los dos días del partido: un postpartido nunca es un «algún día»
+        dueDate: ppDue || sumarDias(match.date, DIAS_POSTPARTIDO),
         createdAt: new Date().toISOString(),
         comments: [],
       };
@@ -443,6 +453,8 @@ export function Dashboard({
   // Tarea ⇄ pipeline: un comentario en la tarea de una próxima acción de Firmar
   // («conseguir el contacto»…) queda también en el historial de su tarjeta.
   function comentarioAFirmar(task: Task, texto: string) {
+    // Una nota en una tarea en curso cuenta como su actualización semanal
+    onNotaTarea?.(task.id, new Date().toISOString());
     const tarjeta = (firmasEntries ?? []).find(f => f.nextActionTaskId === task.id);
     if (!tarjeta || !onPatchFirmasEntry) return;
     onPatchFirmasEntry(tarjeta.id, f => ({
@@ -915,11 +927,12 @@ export function Dashboard({
       tasks: tasks.filter(t => !(t.adminOnly && !esAdmin)),
       firmasEntries: firmasEntries ?? [],
       postpartidos, scoutingMatches, matchScouts, profiles, players, eventos, informesPartido, informesPedidos, ahoraHora,
+      ultimaNotaTarea: ultimasNotas,
       // Los fines de contrato solo los ven los admins
       vencimientos: esAdmin,
       nombreScouting: (id: string) => porId.get(id),
     };
-  }, [todayStr, tasks, esAdmin, firmasEntries, postpartidos, scoutingMatches, matchScouts, profiles, players, eventos, scoutingPlayers, informesPartido, informesPedidos, ahoraHora]);
+  }, [todayStr, tasks, esAdmin, firmasEntries, postpartidos, scoutingMatches, matchScouts, profiles, players, eventos, scoutingPlayers, informesPartido, informesPedidos, ahoraHora, ultimasNotas]);
   const agendaItems = useMemo(
     () => construirAgenda({ ...agendaBase, activities: actsDia, rango: { desde: todayStr, hasta: diaHasta } }),
     [agendaBase, actsDia, todayStr, diaHasta],
@@ -1205,7 +1218,8 @@ export function Dashboard({
         priority: a.prioridadAlta ? 'alta' : 'media',
         status: 'pendiente',
         label: a.label,
-        dueDate: a.dueDate,
+        // Desde «Mi día» lo normal es que sea para hoy; a la bandeja se manda desde la fila
+        dueDate: a.dueDate ?? todayStr,
         createdAt: new Date().toISOString(),
         comments: [],
       }));
@@ -1601,7 +1615,7 @@ export function Dashboard({
         {/* Mi día en pequeño: lo de hoy (y lo vencido), solo en Equipo y Postpartidos */}
         {(activeTab === 'equipo' || activeTab === 'postpartidos') && (() => {
           const mio = seccionesDelDia(agendaItems.filter(it => itemEsDe(it, currentProfile.id)), todayStr);
-          const deHoy = [...mio.hoy, ...mio.vencidas];
+          const deHoy = [...mio.hoy, ...mio.procesos, ...mio.agenda];
           if (deHoy.length === 0) return null;
           return (
             <div className="mb-4 bg-white border border-slate-200 rounded-lg">
@@ -1609,7 +1623,7 @@ export function Dashboard({
                 <Sun className="w-3.5 h-3.5 text-amber-500" />
                 <span className="text-xs font-semibold text-slate-700">Mis tareas de hoy</span>
                 <span className="text-[11px] text-slate-400">
-                  {mio.hoy.length} para hoy{mio.vencidas.length > 0 && <span className="text-red-500 font-semibold"> · {mio.vencidas.length} vencida{mio.vencidas.length !== 1 ? 's' : ''}</span>}
+                  {mio.hoy.length} para hoy{mio.vencidas.length > 0 && <span className="text-red-500 font-semibold"> · {mio.vencidas.length} con retraso</span>}{mio.procesos.length > 0 && <> · {mio.procesos.length} en curso</>}{mio.agenda.length > 0 && <> · {mio.agenda.length} en agenda</>}
                 </span>
                 <button onClick={() => { setVistaTareas('lista'); setDiaPersonaId(currentProfile.id); setInternalTab(null); onViewChange?.('tareas'); }}
                   className="ml-auto text-[11px] font-semibold text-blue-600 hover:underline">
@@ -1699,6 +1713,8 @@ export function Dashboard({
               onOpenScoutingPlayer={onOpenScoutingPlayer}
               onCerrarReunion={abrirCierre}
               onCrear={onAddGeneralTask ? crearTareaRapida : undefined}
+              ahoraHora={ahoraHora}
+              onActualizarProceso={onActualizarProceso}
             />
           )}
 

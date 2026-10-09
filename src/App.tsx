@@ -277,6 +277,30 @@ export default function App() {
     ...p, tipo: TIPO_INFORME_LABEL[p.tipo].toLowerCase(),
   })), [ofrecimientos])
 
+  // Procesos (tareas en curso, p. ej. «Renovación de X»): ISO de la última
+  // nota de cada uno. Con una semana sin nota, Mi día exige actualizarlo.
+  // Solo se consulta para las que están en curso, que son pocas.
+  const [ultimasNotas, setUltimasNotas] = useState<Record<string, string>>({})
+  const idsEnCurso = useMemo(
+    () => tasks.filter(t => t.status === 'en_progreso').map(t => t.id).sort().join(','),
+    [tasks])
+  useEffect(() => {
+    if (!idsEnCurso) return
+    let vivo = true
+    db.fetchUltimasNotas(idsEnCurso.split(','))
+      .then(m => { if (vivo) setUltimasNotas(prev => ({ ...prev, ...m })) })
+      .catch(() => { /* sin red: se vuelve a pedir cuando cambien las tareas */ })
+    return () => { vivo = false }
+  }, [idsEnCurso])
+  const anotarNotaTarea = useCallback((taskId: string, iso: string) => {
+    setUltimasNotas(prev => ({ ...prev, [taskId]: iso }))
+  }, [])
+  const handleActualizarProceso = useCallback(async (taskId: string, texto: string) => {
+    if (!profile) return
+    const c = await db.createComment(taskId, profile.id, texto)
+    anotarNotaTarea(taskId, c.createdAt)
+  }, [profile, anotarNotaTarea])
+
   // DEBE declararse aquí arriba: es un hook y no puede ir después de los
   // returns tempranos (loading/login) — romperlo deja la app en blanco.
   const firmasSyncGuard = useRef(false)
@@ -2394,6 +2418,9 @@ export default function App() {
         onOpenScoutingPlayer={(id) => setFlotante({ tipo: 'scouting', id })}
         informesPartido={informesPartido}
         informesPedidos={informesPedidosPendientes}
+        ultimasNotas={ultimasNotas}
+        onActualizarProceso={handleActualizarProceso}
+        onNotaTarea={anotarNotaTarea}
         onOpenOfrecido={irAOfrecido}
         eventos={eventos}
         setEventos={setEventos}

@@ -63,6 +63,12 @@ export interface AgendaItem {
   estado: AgendaEstado
   /** Día (AAAA-MM-DD local) en que se completó, si se sabe */
   hechaEl?: string
+  /**
+   * Tarea en curso («proceso», como una renovación): no tiene fecha de fin
+   * porque depende de muchas cosas, pero exige una nota cada semana.
+   * `ultimaActualizacion` = ISO de la última nota (o nada si nunca hubo).
+   */
+  proceso?: { ultimaActualizacion?: string; diasSinActualizar: number }
   prioridadAlta: boolean
   origen: AgendaOrigen
   abrir: AgendaDestino
@@ -97,8 +103,10 @@ export interface AgendaInput {
   ahoraHora?: string
   /** «partido|iniciales» de cada informe de partido ya escrito */
   informesPartido?: Set<string>
-  /** Informes pedidos en Ofrecidos y aún sin escribir: uno por ofrecimiento, persona y tipo */
-  informesPedidos?: { ofrecimientoId: string; jugador: string; equipo?: string; avatar: string; tipo: string; pedidoPor?: string }[]
+  /** Informes pedidos en Ofrecidos y aún sin escribir: uno por ofrecimiento, persona y tipo. `fecha` = para cuándo */
+  informesPedidos?: { ofrecimientoId: string; jugador: string; equipo?: string; avatar: string; tipo: string; pedidoPor?: string; fecha?: string }[]
+  /** ISO de la última nota (comentario) de cada tarea, para saber si un proceso está al día */
+  ultimaNotaTarea?: Record<string, string>
   /** true = incluir los fines de contrato (de representación y con el club). Solo para admins. */
   vencimientos?: boolean
   /** Nombres de jugadores de Captación, para los eventos que apuntan a uno */
@@ -160,8 +168,27 @@ function diaDe(iso?: string): string | undefined {
   return isNaN(d.getTime()) ? undefined : fechaLocal(d)
 }
 
+/** Días naturales entre dos AAAA-MM-DD (positivo si `hasta` es después) */
+export function diasEntre(desde: string, hasta: string): number {
+  const [y1, m1, d1] = desde.split('-').map(Number)
+  const [y2, m2, d2] = hasta.split('-').map(Number)
+  return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86400000)
+}
+
+/** Un partido visto sin informe sale como trabajo pendiente durante estos días */
+export const DIAS_INFORME_PARTIDO = 3
+/** Un postpartido se quiere a los dos días del partido */
+export const DIAS_POSTPARTIDO = 2
+
 export function construirAgenda(input: AgendaInput): AgendaItem[] {
   const { hoy, firmasEntries, postpartidos, scoutingMatches, matchScouts, profiles, players, activities = [], eventos = [], rango } = input
+  // Tarea en curso = proceso: cuántos días lleva sin una nota
+  const procesoDe = (t?: Task): AgendaItem['proceso'] => {
+    if (!t || t.status !== 'en_progreso') return undefined
+    const ultima = input.ultimaNotaTarea?.[t.id]
+    const dia = diaDe(ultima ?? t.createdAt)
+    return { ultimaActualizacion: ultima, diasSinActualizar: dia ? Math.max(0, diasEntre(dia, hoy)) : 0 }
+  }
   const archivadas = new Set<string>()
   const tasks = input.tasks.filter(t => {
     if (!estaArchivada(t, hoy)) return true
@@ -193,6 +220,7 @@ export function construirAgenda(input: AgendaInput): AgendaItem[] {
       playerNombre: e.playerName,
       categoria: 'Scouting',
       estado: task && task.status !== 'completada' ? task.status : 'pendiente',
+      proceso: procesoDe(task),
       prioridadAlta: task?.priority === 'alta',
       origen: 'firmar',
       abrir: { tipo: 'firmar', entryId: e.id },
@@ -215,11 +243,14 @@ export function construirAgenda(input: AgendaInput): AgendaItem[] {
       titulo: match ? `Postpartido ${match.homeTeam} vs ${match.awayTeam}` : (task?.title ?? 'Postpartido'),
       personId: pp.assigneeId ?? task?.assigneeId ?? '',
       otrosIds: task?.watchers ?? [],
-      fecha: task?.dueDate,
+      // Sin fecha en la tarea, se quiere a los dos días del partido: un
+      // postpartido es lo más fechable que hay, no un «algún día»
+      fecha: task?.dueDate ?? (match ? sumarDias(match.date, DIAS_POSTPARTIDO) : undefined),
       playerId: jugador?.id,
       playerNombre: jugador?.name ?? pp.playerName,
       categoria: 'Postpartido',
       estado: task?.status ?? (pp.videoUrl ? 'completada' : 'pendiente'),
+      proceso: procesoDe(task),
       hechaEl: diaDe(task?.completedAt),
       prioridadAlta: task?.priority === 'alta',
       origen: 'postpartido',
@@ -244,6 +275,7 @@ export function construirAgenda(input: AgendaInput): AgendaItem[] {
       playerNombre: jugador?.name ?? (t.scoutingPlayerId ? input.nombreScouting?.(t.scoutingPlayerId) : undefined),
       categoria: t.label,
       estado: t.status,
+      proceso: procesoDe(t),
       hechaEl: diaDe(t.completedAt),
       prioridadAlta: t.priority === 'alta',
       origen: 'tarea',
@@ -297,6 +329,38 @@ export function construirAgenda(input: AgendaInput): AgendaItem[] {
     }
   }
 
+  // ── Partido ya visto y sin informe: es trabajo de hoy, durante unos días ──
+  // Solo si quien llama ha pasado la lista de informes (si no, no se sabe).
+  if (input.informesPartido && hoy >= rango.desde && hoy <= rango.hasta) {
+    const desde = sumarDias(hoy, -DIAS_INFORME_PARTIDO)
+    for (const m of scoutingMatches) {
+      if (m.date < desde || m.date > hoy) continue
+      const scouts = scoutsPorPartido.get(m.id)
+      const vistos = scouts && scouts.length > 0
+        ? scouts.filter(s => s.status === 'visto').map(s => s.scout)
+        : (m.assignedTo && m.status === 'visto' ? [m.assignedTo] : [])
+      for (const sc of vistos) {
+        if (input.informesPartido.has(`${m.id}|${sc}`)) continue
+        const personId = perfilPorAvatar.get(sc)
+        if (!personId) continue
+        items.push({
+          id: `informe:${m.id}:${sc}`,
+          tipo: 'tarea',
+          titulo: `Informe de ${m.homeTeam} vs ${m.awayTeam}`,
+          personId,
+          otrosIds: [],
+          fecha: hoy,
+          categoria: 'Informe de partido',
+          estado: 'pendiente',
+          prioridadAlta: false,
+          origen: 'captacion',
+          abrir: { tipo: 'partido', matchId: m.id },
+          ref: { matchId: m.id, scout: sc },
+        })
+      }
+    }
+  }
+
   // ── Eventos (player_activities). Un evento de grupo es una fila por
   //    jugador con el mismo groupId: aquí sale una sola vez. ──
   // Las actividades que nacieron de un evento de agenda ya salen como evento.
@@ -341,6 +405,7 @@ export function construirAgenda(input: AgendaInput): AgendaItem[] {
       titulo: `Informe ${pet.tipo} pedido — ${pet.jugador}${pet.equipo ? ` (${pet.equipo})` : ''}`,
       personId,
       otrosIds: [],
+      fecha: pet.fecha,
       categoria: 'Ofrecidos',
       estado: 'pendiente',
       prioridadAlta: false,
@@ -501,8 +566,11 @@ export function permisosItem(it: AgendaItem): { estado: boolean; enCurso: boolea
     // Un evento no se «hace»; y un informe pedido en Ofrecidos se completa escribiéndolo allí, no desde aquí
     case 'evento':
     case 'ofrecido':   return { estado: false, enCurso: false, reprogramar: false, reasignar: false }
-    // La fecha y los scouts de un partido se cambian en Captación; aquí solo «visto»
-    case 'captacion':  return { estado: true, enCurso: false, reprogramar: false, reasignar: false }
+    // La fecha y los scouts de un partido se cambian en Captación; aquí solo «visto».
+    // Un informe pendiente se completa escribiéndolo en la ficha del partido.
+    case 'captacion':  return esInformePendiente(it)
+      ? { estado: false, enCurso: false, reprogramar: false, reasignar: false }
+      : { estado: true, enCurso: false, reprogramar: false, reasignar: false }
     // Sin tarea vinculada no hay dónde guardar el «en curso»
     case 'firmar':     return { estado: true, enCurso: !!it.ref.taskId, reprogramar: true, reasignar: true }
     case 'postpartido': return { estado: !!it.ref.taskId, enCurso: !!it.ref.taskId, reprogramar: !!it.ref.taskId, reasignar: !!it.ref.taskId }
@@ -519,16 +587,42 @@ export function siguienteEstado(it: AgendaItem): AgendaEstado {
 }
 
 // ── Secciones de «Mi día» ────────────────────────────────────────────
+//
+// El día tiene dos naturalezas y se separan: la AGENDA (citas: partidos,
+// eventos, viajes… se asiste, no se «hace») y el TRABAJO (tareas, llamadas,
+// postpartidos, informes… se hace o no se hace). Lo atrasado no es una
+// sección aparte: es trabajo de hoy, con retraso, y va el primero. Las
+// tareas en curso son procesos: salen siempre. Lo que no tiene fecha es
+// «algún día» y vive en la bandeja, fuera del día.
 
 export interface SeccionesDia {
-  vencidas: AgendaItem[]
+  /** Citas de hoy, por hora */
+  agenda: AgendaItem[]
+  /** Para hacer hoy: trabajo con fecha de hoy o anterior (lo atrasado primero) */
   hoy: AgendaItem[]
+  /** Subconjunto de `hoy` con la fecha ya pasada (para contadores y avisos) */
+  vencidas: AgendaItem[]
+  /** Tareas en curso (procesos): tengan la fecha que tengan, la más desatendida primero */
+  procesos: AgendaItem[]
   /** Próximos 7 días, un grupo por día con algo */
   proximos: { dia: string; items: AgendaItem[] }[]
   /** Con fecha a más de 7 días: no se pierden de vista */
   masAdelante: AgendaItem[]
-  sinFecha: AgendaItem[]
+  /** Sin fecha («algún día»): no es del día, se mira aparte */
+  bandeja: AgendaItem[]
   hechasHoy: AgendaItem[]
+}
+
+/** Informe de partido pendiente (partido visto sin informe): trabajo, aunque venga de Captación */
+export function esInformePendiente(it: AgendaItem): boolean {
+  return it.origen === 'captacion' && it.categoria === 'Informe de partido'
+}
+
+/** Cita (se asiste) frente a trabajo (se hace). «Cerrar reunión» y el informe pendiente son trabajo. */
+export function esCita(it: AgendaItem): boolean {
+  if (it.origen === 'captacion') return !esInformePendiente(it)
+  if (it.origen === 'evento') return !it.cierreEventoId || it.id.startsWith('evento:')
+  return false
 }
 
 const porTitulo = (a: AgendaItem, b: AgendaItem) => a.titulo.localeCompare(b.titulo)
@@ -549,35 +643,80 @@ function ordenDelDia(a: AgendaItem, b: AgendaItem): number {
 const porFecha = (a: AgendaItem, b: AgendaItem) =>
   (a.fecha ?? '').localeCompare(b.fecha ?? '') || ordenDelDia(a, b)
 
+/** Procesos: el que lleva más días sin nota, primero */
+const porDesatencion = (a: AgendaItem, b: AgendaItem) =>
+  (b.proceso?.diasSinActualizar ?? 0) - (a.proceso?.diasSinActualizar ?? 0) || porTitulo(a, b)
+
 export function seccionesDelDia(items: AgendaItem[], hoy: string): SeccionesDia {
   const limite = sumarDias(hoy, 7)
-  const s: SeccionesDia = { vencidas: [], hoy: [], proximos: [], masAdelante: [], sinFecha: [], hechasHoy: [] }
+  const s: SeccionesDia = { agenda: [], hoy: [], vencidas: [], procesos: [], proximos: [], masAdelante: [], bandeja: [], hechasHoy: [] }
   const porDia = new Map<string, AgendaItem[]>()
   for (const it of items) {
     if (it.estado === 'completada') {
       if (it.hechaEl === hoy) s.hechasHoy.push(it)
       continue
     }
-    if (!it.fecha) { s.sinFecha.push(it); continue }
+    const cita = esCita(it)
+    // Un proceso es de hoy siempre: tenga fecha, no la tenga, o sea para dentro de un mes
+    if (it.estado === 'en_progreso' && !cita) { s.procesos.push(it); continue }
+    if (!it.fecha) { s.bandeja.push(it); continue }
     if (it.fecha < hoy) {
-      // Un evento o un partido pasado no es una tarea vencida: simplemente ya ocurrió
-      if (it.origen !== 'evento' && it.origen !== 'captacion') s.vencidas.push(it)
+      // Una cita pasada simplemente ya ocurrió; el trabajo atrasado es de hoy, con retraso
+      if (!cita) { s.hoy.push(it); s.vencidas.push(it) }
     }
-    else if (it.fecha === hoy) s.hoy.push(it)
+    else if (it.fecha === hoy) (cita ? s.agenda : s.hoy).push(it)
     else if (it.fecha <= limite) {
       const arr = porDia.get(it.fecha)
       if (arr) arr.push(it); else porDia.set(it.fecha, [it])
     } else s.masAdelante.push(it)
   }
+  s.agenda.sort(ordenDelDia)
+  // Hoy: lo atrasado primero (lo más antiguo arriba), luego lo de hoy
+  s.hoy.sort((a, b) => {
+    const ra = a.fecha! < hoy, rb = b.fecha! < hoy
+    if (ra !== rb) return ra ? -1 : 1
+    return ra ? porFecha(a, b) : ordenDelDia(a, b)
+  })
   s.vencidas.sort(porFecha)
-  s.hoy.sort(ordenDelDia)
+  s.procesos.sort(porDesatencion)
   s.proximos = [...porDia.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([dia, its]) => ({ dia, items: its.sort(ordenDelDia) }))
   s.masAdelante.sort(porFecha)
-  s.sinFecha.sort(ordenDelDia)
+  s.bandeja.sort(ordenDelDia)
   s.hechasHoy.sort(porTitulo)
   return s
+}
+
+// ── Procesos: actualización semanal obligatoria ──────────────────────
+
+/** Un proceso sin nota desde hace tantos días pide actualización */
+export const DIAS_ACTUALIZACION_PROCESO = 7
+
+/** Procesos de los que `personaId` es responsable y llevan una semana o más sin nota */
+export function procesosSinActualizar(items: AgendaItem[], personaId: string): AgendaItem[] {
+  return items
+    .filter(it => it.estado === 'en_progreso' && it.proceso && it.personId === personaId
+      && !!it.ref.taskId && it.proceso.diasSinActualizar >= DIAS_ACTUALIZACION_PROCESO)
+    .sort(porDesatencion)
+}
+
+// ── Cierre del día ───────────────────────────────────────────────────
+
+/** A partir de esta hora, lo que queda abierto para hoy pide decidir qué se hace con ello */
+export const HORA_CIERRE_DIA = '18:00'
+
+/** Trabajo de hoy que sigue abierto y se puede mover (si ya es hora de cerrar el día) */
+export function pendientesDeCierre(s: SeccionesDia, ahoraHora?: string): AgendaItem[] {
+  if (!ahoraHora || ahoraHora < HORA_CIERRE_DIA) return []
+  return s.hoy.filter(it => permisosItem(it).reprogramar)
+}
+
+/** Viernes de esta semana (el mismo día si hoy es viernes); en fin de semana, el viernes siguiente */
+export function viernesSemana(hoy: string): string {
+  const [y, m, d] = hoy.split('-').map(Number)
+  const dow = (new Date(y, m - 1, d, 12).getDay() + 6) % 7 // 0 = lunes
+  return sumarDias(hoy, dow <= 4 ? 4 - dow : 11 - dow)
 }
 
 /** Categorías presentes, con su recuento, de más a menos */

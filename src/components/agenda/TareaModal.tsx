@@ -12,7 +12,7 @@ import type { Profile } from '../../contexts/AuthContext'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { norm } from '../../lib/texto'
 import { hoyISO, sumarDias } from '../../lib/fechas'
-import { lunesSiguiente } from '../../lib/agendaItems'
+import { lunesSiguiente, viernesSemana } from '../../lib/agendaItems'
 import { RECURRENCIAS, RECURRENCIA_LABEL, type Recurrencia } from '../../lib/recurrencia'
 
 type Ambito = 'general' | 'mantenimiento' | 'captacion'
@@ -43,7 +43,8 @@ export function TareaModal({ profiles, players, scoutingPlayers, currentProfileI
   const [scoutingPlayerId, setScoutingPlayerId] = useState('')
   const [q, setQ] = useState('')
   const [assigneeId, setAssigneeId] = useState(inicial?.assigneeId ?? currentProfileId)
-  const [dueDate, setDueDate] = useState(inicial?.dueDate ?? '')
+  // Toda tarea lleva fecha, aunque sea blanda: por defecto hoy. «Algún día» = sin fecha (bandeja).
+  const [dueDate, setDueDate] = useState(inicial?.dueDate ?? hoy)
   const [label, setLabel] = useState<TaskLabel | ''>('')
   const [alta, setAlta] = useState(false)
   const [recurrence, setRecurrence] = useState<Recurrencia | ''>('')
@@ -170,13 +171,14 @@ export function TareaModal({ profiles, players, scoutingPlayers, currentProfileI
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Para cuándo <span className="text-slate-400 font-normal">(opcional)</span></label>
+              <label className="text-xs font-medium text-slate-600">Para cuándo</label>
               <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={CAMPO} />
             </div>
           </div>
           <div className="flex items-center gap-1.5 flex-wrap -mt-1">
-            {([['Hoy', hoy], ['Mañana', sumarDias(hoy, 1)], ['Próxima semana', lunesSiguiente(hoy)], ['Sin fecha', '']] as const).map(([txt, f]) => (
+            {([['Hoy', hoy], ['Mañana', sumarDias(hoy, 1)], ['Esta semana', viernesSemana(hoy)], ['Próxima semana', lunesSiguiente(hoy)], ['Algún día', '']] as const).map(([txt, f]) => (
               <button key={txt} type="button" onClick={() => setDueDate(f)}
+                title={txt === 'Algún día' ? 'Sin fecha: va a la bandeja, no sale en Mi día ni en el calendario' : txt === 'Esta semana' ? 'El viernes' : undefined}
                 className={`text-[11px] px-2 py-0.5 rounded border transition-colors ${dueDate === f ? 'border-primary text-primary bg-blue-50 font-semibold' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>
                 {txt}
               </button>

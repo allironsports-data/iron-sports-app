@@ -14,7 +14,7 @@ import { Check, CalendarClock, UserRound, ExternalLink, MoreHorizontal, Handshak
 import type { Profile } from '../../contexts/AuthContext'
 import { parseDia, sumarDias } from '../../lib/fechas'
 import {
-  permisosItem, siguienteEstado, lunesSiguiente,
+  permisosItem, siguienteEstado, lunesSiguiente, viernesSemana, diasEntre, DIAS_ACTUALIZACION_PROCESO,
   type AgendaItem, type AgendaEstado,
 } from '../../lib/agendaItems'
 import { AGENDA_TIPO_META } from './tipoMeta'
@@ -75,11 +75,18 @@ export function AgendaRow({
   // Adjunto: no soy el responsable, solo la sigo
   const adjunto = !!vistaDe && item.personId !== vistaDe
 
+  // Atrasada: no se enseña la fecha, sino cuánto lleva de retraso (la fecha va en el título)
+  const retraso = vencida ? diasEntre(item.fecha!, hoy) : 0
   const textoFecha = !item.fecha
     ? ''
+    : vencida
+      ? `${retraso} d de retraso`
     : item.fecha === hoy
       ? (item.hora ?? 'hoy')
       : `${fechaCorta(item.fecha)}${item.hora ? ` · ${item.hora}` : ''}`
+  // Proceso (tarea en curso): cuánto lleva sin nota; en rojo cuando ya toca actualizar
+  const proceso = item.estado === 'en_progreso' ? item.proceso : undefined
+  const procesoDesatendido = !!proceso && proceso.diasSinActualizar >= DIAS_ACTUALIZACION_PROCESO
 
   const colorEstado = hecha ? '#10b981' : item.estado === 'en_progreso' ? '#3b82f6' : undefined
   const tituloEstado = !puedeEstado ? undefined
@@ -197,8 +204,16 @@ export function AgendaRow({
             {item.categoria}
           </span>
         )}
+        {proceso && (
+          <span
+            title={proceso.ultimaActualizacion ? `Última nota: ${new Date(proceso.ultimaActualizacion).toLocaleDateString('es-ES')}` : 'Sin ninguna nota todavía'}
+            className={`hidden sm:inline flex-shrink-0 text-[10.5px] font-medium px-1.5 py-0.5 rounded border ${procesoDesatendido ? 'bg-red-50 text-red-600 border-red-200' : 'bg-blue-50 text-blue-700 border-blue-100'}`}
+          >
+            {proceso.diasSinActualizar === 0 ? 'nota hoy' : `sin nota ${proceso.diasSinActualizar} d`}
+          </span>
+        )}
         {textoFecha && (
-          <span className={`flex-shrink-0 text-[11px] tabular-nums ${vencida ? 'text-red-500 font-semibold' : 'text-slate-400'}`}>{textoFecha}</span>
+          <span title={vencida ? `Era para el ${fechaCorta(item.fecha!)}` : undefined} className={`flex-shrink-0 text-[11px] tabular-nums ${vencida ? 'text-red-500 font-semibold' : 'text-slate-400'}`}>{textoFecha}</span>
         )}
         <span
           className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold ${persona ? 'text-white bg-primary' : 'text-slate-400 border border-dashed border-slate-300'}`}
@@ -249,7 +264,7 @@ export function AgendaRow({
           <div className="absolute right-1.5 top-full -mt-0.5 z-20 w-44 bg-white border border-slate-200 rounded-lg shadow-lg py-1 text-xs text-slate-700">
             {menu === 'fecha' && (<>
               {([
-                ['Hoy', hoy], ['Mañana', sumarDias(hoy, 1)], ['Próxima semana', lunesSiguiente(hoy)],
+                ['Hoy', hoy], ['Mañana', sumarDias(hoy, 1)], ['Esta semana', viernesSemana(hoy)], ['Próxima semana', lunesSiguiente(hoy)],
               ] as const).map(([txt, f]) => (
                 <button key={txt} onClick={() => { setMenu(null); setAcciones(false); onReprogramar?.(item, f) }}
                   className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-slate-50 text-left">
@@ -266,8 +281,9 @@ export function AgendaRow({
               </label>
               {item.fecha && item.origen === 'tarea' && (
                 <button onClick={() => { setMenu(null); onReprogramar?.(item, undefined) }}
+                  title="Sin fecha: deja de salir en Mi día y en el calendario; se recupera desde la bandeja"
                   className="w-full px-3 py-1.5 hover:bg-slate-50 text-left text-slate-500 border-t border-slate-100">
-                  Quitar fecha
+                  A la bandeja (algún día)
                 </button>
               )}
             </>)}

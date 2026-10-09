@@ -2,6 +2,7 @@ import type {
   Ofrecimiento, OfrecimientoNivel, OfrecimientoPaso, OfrecimientoOrigen, OfrecimientoOperacion,
   TipoInformePedido, PasoVeredicto, ScoutingInfoTipo,
 } from '../types'
+import { sumarDias } from './fechas'
 
 // ── Ofrecidos: lógica pura ───────────────────────────────────────────
 // Todo lo que decide «en qué punto está» un ofrecimiento vive aquí, sin
@@ -91,12 +92,16 @@ export interface InformePedido {
   tipo: TipoInformePedido
   nivel: number
   pedidoPor: string
+  /** Para cuándo se quiere: la fecha límite del ofrecimiento o siete días desde que se abrió */
+  fecha?: string
 }
 export function informesPedidos(ofrecimientos: Ofrecimiento[]): InformePedido[] {
   const out: InformePedido[] = []
   for (const o of ofrecimientos) {
     for (const { nivel, paso } of pasosPendientes(o)) {
-      out.push({ ofrecimientoId: o.id, jugador: o.playerName, equipo: o.team, avatar: paso.avatar, tipo: paso.tipo, nivel: nivel.n, pedidoPor: nivel.pedidoPor })
+      const abierto = o.createdAt?.slice(0, 10)
+      const fecha = o.fechaLimite ?? (abierto && /^\d{4}-\d{2}-\d{2}$/.test(abierto) ? sumarDias(abierto, 7) : undefined)
+      out.push({ ofrecimientoId: o.id, jugador: o.playerName, equipo: o.team, avatar: paso.avatar, tipo: paso.tipo, nivel: nivel.n, pedidoPor: nivel.pedidoPor, fecha })
     }
   }
   return out

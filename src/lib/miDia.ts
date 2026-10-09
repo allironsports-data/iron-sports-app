@@ -152,17 +152,17 @@ export function construirMiDia(input: MiDiaInput): MiDiaItem[] {
     })
   }
 
-  // ── Tareas: vencidas, de hoy, o en curso sin fecha ──
+  // ── Tareas: vencidas, de hoy, o en curso (un proceso es de hoy siempre) ──
   for (const t of tasks) {
     if (t.status === 'completada' || !tareaDe(t, profileId)) continue
     if (tareasDeAcciones.has(t.id) || tareasDePostpartidos.has(t.id)) continue
-    const toca = t.dueDate ? t.dueDate <= hoy : t.status === 'en_progreso'
+    const toca = t.status === 'en_progreso' || (!!t.dueDate && t.dueDate <= hoy)
     if (!toca) continue
     const vencido = !!t.dueDate && t.dueDate < hoy
     const jugador = t.playerId && t.playerId !== 'general' ? nombreJugador(t.playerId) : undefined
     const sub = [
       jugador, t.label, t.priority === 'alta' ? 'Prioridad alta' : undefined,
-      vencido ? `vencía el ${fechaCorta(t.dueDate!)}` : !t.dueDate ? 'En curso' : undefined,
+      vencido ? `vencía el ${fechaCorta(t.dueDate!)}` : t.status === 'en_progreso' ? 'En curso' : undefined,
     ].filter(Boolean).join(' · ')
     items.push({
       id: `tarea:${t.id}`, tipo: 'tarea', titulo: t.title, subtitulo: sub || 'Tarea',
