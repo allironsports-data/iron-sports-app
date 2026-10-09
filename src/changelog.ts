@@ -21,6 +21,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-09',
     items: [
+      'Admin → Stats Captación → nueva pestaña «Base de datos»: de qué está hecha la base de jugadores. Agencias (jugadores, en Llamar, % Llamar, en pipeline, informes; ordenable y descargable), nacionalidades, equipos con más jugadores, posiciones, categorías, zonas, quintas y pie, y qué parte de la base tiene cada dato relleno',
       'Agencia y nacionalidad: también lista cerrada. Al escribir se sugiere lo que ya existe (y para nacionalidad, la lista de países en castellano); una nueva se añade desde el propio campo tras confirmar. En Captación la nacionalidad va en dos campos (principal y segunda), como en Mantenimiento',
       'Categoría del jugador: la pone el equipo. Al elegir el equipo se rellena sola; si el equipo no tenía categoría, la que escribas se guarda para él y no hay que ponerla dos veces. En la tabla de jugadores, cambiar el equipo cambia también la categoría',
       'Equipo: el campo es ahora una lista cerrada en toda la app (ficha de jugador de Captación y su tabla, jugador de Mantenimiento, partidos, Actualizar plantilla, Boulema, Ofrecidos, alta en Distribución). Escribes y eliges entre los equipos que ya existen (con su categoría y zona al lado); si no es ninguno, «Añadir como equipo nuevo» pide categoría y zona antes de crearlo. Lo escrito sin elegir se descarta: se acabaron los «Villarreal Cad Roda» / «Villarreal Roda Cad» duplicados',

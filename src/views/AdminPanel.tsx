@@ -97,6 +97,7 @@ export function AdminPanel({ profiles, tasks, players, scoutingPlayers, scouting
             scoutingMatches={scoutingMatches}
             firmasEntries={firmasEntries}
             profiles={profiles}
+            clubZonas={clubZonas}
           />
         )}
         {tab === 'controlEquipos' && <EstadisticasTab filas={filasEquipos} desde={desdeTemporada} />}

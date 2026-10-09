@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react'
-import { ClipboardList, Users, PenLine, UserSearch, Brain } from 'lucide-react'
+import { ClipboardList, Users, PenLine, UserSearch, Brain, Database } from 'lucide-react'
 import { ScoutStats } from './ScoutStats'
 import { ModeloLlamar } from './ModeloLlamar'
+import { StatsBaseDatos } from './StatsBaseDatos'
+import type { Zona } from '../lib/zonas'
 import type { ScoutingPlayer, ScoutingReport, ScoutingMatch, FirmasEntry, FirmasStatus } from '../types'
 import type { Profile } from '../contexts/AuthContext'
 
@@ -47,10 +49,11 @@ interface Props {
   scoutingMatches: ScoutingMatch[]
   firmasEntries: FirmasEntry[]
   profiles: Profile[]
+  clubZonas: Record<string, Zona>
 }
 
-export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatches, firmasEntries, profiles }: Props) {
-  const [statsTab, setStatsTab] = useState<'general' | 'scouts' | 'modelo'>('general')
+export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatches, firmasEntries, profiles, clubZonas }: Props) {
+  const [statsTab, setStatsTab] = useState<'general' | 'scouts' | 'modelo' | 'base'>('general')
   // ── statistics ──
   const stats = useMemo(() => {
     // Índice por id: evita un `find` lineal por cada informe
@@ -210,6 +213,7 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
           { id: 'general' as const, label: 'Visión general', icon: <ClipboardList className="w-3.5 h-3.5" /> },
           { id: 'scouts' as const, label: 'Scouts', icon: <UserSearch className="w-3.5 h-3.5" /> },
           { id: 'modelo' as const, label: 'Modelo de Llamar', icon: <Brain className="w-3.5 h-3.5" /> },
+          { id: 'base' as const, label: 'Base de datos', icon: <Database className="w-3.5 h-3.5" /> },
         ]).map(t => (
           <button
             key={t.id}
@@ -222,6 +226,10 @@ export function CaptacionStats({ scoutingPlayers, scoutingReports, scoutingMatch
           </button>
         ))}
       </div>
+
+      {statsTab === 'base' && (
+        <StatsBaseDatos scoutingPlayers={scoutingPlayers} scoutingReports={scoutingReports} firmasEntries={firmasEntries} clubZonas={clubZonas} />
+      )}
 
       {statsTab === 'modelo' && (
         <ModeloLlamar
