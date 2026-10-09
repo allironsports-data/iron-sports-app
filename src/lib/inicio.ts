@@ -29,6 +29,7 @@ export interface Acceso {
 /** Los accesos de la Home, en este orden. Tareas no está: es el bloque del día de arriba. */
 export const ACCESOS: Acceso[] = [
   { id: 'mantenimiento', nombre: 'Mantenimiento', icono: 'home',           desc: 'Tareas, calendario, jugadores y equipo',   destino: { tipo: 'seccion', seccion: 'tareas' } },
+  { id: 'portfolio',     nombre: 'Portfolio',     icono: 'users',          desc: 'Nuestros jugadores de Mantenimiento',      destino: { tipo: 'seccion', seccion: 'jugadores' } },
   { id: 'calendario',    nombre: 'Calendario',    icono: 'calendar-days',  desc: 'La semana de todo el equipo',              destino: { tipo: 'seccion', seccion: 'tareas', tab: 'calendario' } },
   { id: 'postpartidos',  nombre: 'Postpartidos',  icono: 'clipboard-list', desc: 'Vídeos pendientes tras cada partido',      destino: { tipo: 'seccion', seccion: 'tareas', tab: 'postpartidos' } },
   { id: 'captacion',     nombre: 'Captación',     icono: 'eye',            desc: 'Partidos, informes, equipos y ofrecidos',  destino: { tipo: 'seccion', seccion: 'captacion' } },
@@ -66,8 +67,11 @@ export function contadoresInicio(a: {
   partidosSemana: number
   tarjetasAbiertas: number
   ofrecidosADecidir: number
+  /** Jugadores de la plantilla (Portfolio) */
+  jugadores: number
 }): Record<string, Contador> {
   const out: Record<string, Contador> = {}
+  if (a.jugadores > 0) out.portfolio = { texto: plural(a.jugadores, 'jugador', 'jugadores') }
   const misPostpartidos = [...a.mias.hoy, ...a.mias.procesos, ...a.mias.masAdelante, ...a.mias.bandeja, ...a.mias.proximos.flatMap(g => g.items)]
     .filter(it => it.tipo === 'postpartido').length
   if (misPostpartidos > 0) out.postpartidos = { texto: plural(misPostpartidos, 'pendiente', 'pendientes') }

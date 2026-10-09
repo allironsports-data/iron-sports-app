@@ -60,16 +60,17 @@ describe('contadoresInicio', () => {
       firmasEntries: [firma({ id: 'f1', nextAction: 'Llamar', nextActionDate: '2026-09-25', nextActionAssignee: OTRO })],
     }))
     const mias = seccionesDelDia(items.filter(i => i.personId === YO), HOY)
-    const c = contadoresInicio({ mias, equipo: items, hoy: HOY, partidosSemana: 3, tarjetasAbiertas: 5, ofrecidosADecidir: 2 })
+    const c = contadoresInicio({ mias, equipo: items, hoy: HOY, partidosSemana: 3, tarjetasAbiertas: 5, ofrecidosADecidir: 2, jugadores: 42 })
     expect(c.postpartidos).toEqual({ texto: '1 pendiente' })
     expect(c.planificacion).toEqual({ texto: '3 partidos esta semana' })
     expect(c.ofrecidos).toEqual({ texto: '2 a decidir', alerta: true })
     // En Pipeline manda lo que espera decisión (la acción atrasada de otro) sobre el total de tarjetas
     expect(c.pipeline).toEqual({ texto: '1 esperando decisión', alerta: true })
     expect(c.tareas).toBeUndefined()
+    expect(c.portfolio).toEqual({ texto: '42 jugadores' })
   })
   it('sin nada que espere, Pipeline enseña las tarjetas abiertas', () => {
-    const c = contadoresInicio({ mias: seccionesDelDia([], HOY), equipo: [], hoy: HOY, partidosSemana: 0, tarjetasAbiertas: 5, ofrecidosADecidir: 0 })
+    const c = contadoresInicio({ mias: seccionesDelDia([], HOY), equipo: [], hoy: HOY, partidosSemana: 0, tarjetasAbiertas: 5, ofrecidosADecidir: 0, jugadores: 0 })
     expect(c.pipeline).toEqual({ texto: '5 tarjetas abiertas' })
     expect(Object.keys(c)).toEqual(['pipeline'])
   })
@@ -77,7 +78,7 @@ describe('contadoresInicio', () => {
 
 describe('ACCESOS', () => {
   it('el orden acordado, sin Tareas ni Contactos; Administración solo para admins', () => {
-    expect(ACCESOS.map(a => a.id)).toEqual(['mantenimiento', 'calendario', 'postpartidos', 'captacion', 'cjugadores', 'planificacion', 'ofrecidos', 'pipeline', 'distribucion', 'boulema', 'admin'])
+    expect(ACCESOS.map(a => a.id)).toEqual(['mantenimiento', 'portfolio', 'calendario', 'postpartidos', 'captacion', 'cjugadores', 'planificacion', 'ofrecidos', 'pipeline', 'distribucion', 'boulema', 'admin'])
     expect(ACCESOS.filter(a => a.admin).map(a => a.id)).toEqual(['admin'])
   })
 })
