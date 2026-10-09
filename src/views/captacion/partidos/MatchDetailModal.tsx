@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { Search, X, Plus, Pencil, Maximize2, AlertTriangle } from 'lucide-react'
+import { Search, X, Plus, Pencil, Maximize2, AlertTriangle, UserPlus } from 'lucide-react'
 import type { ScoutingPlayer, ScoutingReport, ScoutingMatch } from '../../../types'
 import type { Profile } from '../../../contexts/AuthContext'
 import * as db from '../../../lib/db'
@@ -10,6 +10,7 @@ import { POS_GROUPS, grupoDe as posGroupOf, type PosGroup } from '../../../lib/c
 import { AssessmentChip, Spinner, FichaCarcasa } from '../comun'
 import { type ShowToast, type MatchScoutInfo, type ConclusionOption, type SuggestWhy, CONCLUSION_OPTIONS, normConclusion, CONCLUSION_STYLE, MONTHS_ES, birthYearFromBirthdate, personaToName, fmtDate, SUGGEST_ORDER, SUGGEST_LABEL, SEARCH_LIMIT, scoutColor } from '../helpers'
 import { MatchExpandedView } from './MatchExpandedView'
+import { NuevoJugadorPartidoModal, type DatosJugadorNuevo } from './NuevoJugadorPartidoModal'
 import { useAtras } from '../../../hooks/useAtras'
 
 // ── MatchDetailModal — ficha del partido ─────────────────────
@@ -69,7 +70,7 @@ export function MatchDetailModal({
   onClose, onEdit, onToggleStatus,
   onAddScout, onRemoveScout, onSetScoutStatus, onSetScoutMode,
   onAddMatchPlayer, onRemoveMatchPlayer, onAddReport, onUpdateReport, onDeleteReport, onLinkReportToMatch, onOpenEquipo,
-  onFixPlayerTeam, onOpenPlayer, onOpenMatch, showToast,
+  onFixPlayerTeam, onOpenPlayer, onOpenMatch, showToast, onCreatePlayer,
   variant = 'modal', nuestros,
 }: {
   match: ScoutingMatch
@@ -101,6 +102,8 @@ export function MatchDetailModal({
   onOpenEquipo: (nombre: string) => void
   /** Crea un jugador que no estaba en la BBDD y lo vincula al partido */
   onCreateAndLinkPlayer: (nombre: string, equipo: string, matchId: string) => Promise<void>
+  /** Crear un jugador con sus datos mínimos (buscador sin resultados) */
+  onCreatePlayer?: (p: DatosJugadorNuevo) => Promise<ScoutingPlayer>
   /** Corrige en la BBDD el equipo de un jugador */
   onFixPlayerTeam: (p: ScoutingPlayer, equipo: string) => Promise<void>
   onOpenPlayer?: (id: string) => void
@@ -113,6 +116,7 @@ export function MatchDetailModal({
   nuestros?: string[]
 }) {
   const [playerSearch, setPlayerSearch] = useState('')
+  const [creandoJugador, setCreandoJugador] = useState(false)
   const [suggYearFilter, setSuggYearFilter] = useState<string | null>(null)
   const [suggPosFilter, setSuggPosFilter] = useState<PosGroup | null>(null)
   const [reportFormFor, setReportFormFor] = useState<string | null>(null)
@@ -393,6 +397,7 @@ export function MatchDetailModal({
             sugeridos={suggestionPool}
             nuestros={nuestros}
             onAddMatchPlayer={handleAddPlayer}
+            onCreatePlayer={onCreatePlayer}
             onAddReport={onAddReport}
             onUpdateReport={onUpdateReport}
             onDeleteReport={onDeleteReport}
@@ -833,6 +838,15 @@ export function MatchDetailModal({
                   className="pl-6 pr-3 py-1 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-violet-400/30 w-48"
                 />
               </div>
+              {onCreatePlayer && (
+                <button
+                  onClick={() => setCreandoJugador(true)}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-lg border border-violet-200 text-violet-700 bg-violet-50 hover:bg-violet-100"
+                  title="Crear un jugador que no existe en Captación y vincularlo al partido"
+                >
+                  <UserPlus className="w-3 h-3" /> Jugador nuevo
+                </button>
+              )}
               {/* Afinado: año y posición */}
               {playerSearch.length < 2 && suggestionPool.length > 0 && (suggYears.length > 1 || suggPosGroups.length > 1) && (
                 <div className="flex flex-wrap items-center gap-1.5">
@@ -888,7 +902,9 @@ export function MatchDetailModal({
                   </div>
                 </div>
               ) : playerSearch.length >= 2 ? (
-                <span className="text-xs text-slate-400 italic">Sin resultados</span>
+                <span className="text-xs text-slate-400 italic">
+                  Sin resultados{onCreatePlayer && <> — <button onClick={() => setCreandoJugador(true)} className="not-italic font-semibold text-violet-700 underline">crear «{playerSearch.trim()}» como jugador nuevo</button></>}
+                </span>
               ) : suggestionPool.length === 0 ? (
                 <span className="text-xs text-slate-400 italic">Busca un jugador para vincularlo al partido</span>
               ) : teamSuggested.length === 0 ? (
@@ -898,6 +914,16 @@ export function MatchDetailModal({
           </div>
         </div>
       </>
+      {creandoJugador && onCreatePlayer && (
+        <NuevoJugadorPartidoModal
+          match={match}
+          scoutingPlayers={scoutingPlayers}
+          nombreInicial={playerSearch.trim()}
+          onClose={() => setCreandoJugador(false)}
+          onCrear={onCreatePlayer}
+          onVincular={async p => { if (await handleAddPlayer(p.id)) setPlayerSearch('') }}
+        />
+      )}
     </FichaCarcasa>
   )
 }

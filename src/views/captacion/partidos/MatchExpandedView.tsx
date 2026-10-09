@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Minimize2, ExternalLink, Search, Plus } from 'lucide-react'
+import { X, Minimize2, ExternalLink, Search, Plus, UserPlus } from 'lucide-react'
 import type { ScoutingPlayer, ScoutingReport, ScoutingMatch } from '../../../types'
 import type { Profile } from '../../../contexts/AuthContext'
 import { useEscapeKey } from '../../../hooks/useEscapeKey'
@@ -8,6 +8,7 @@ import { teamMatchKind } from '../../../lib/equipos'
 import * as db from '../../../lib/db'
 import { guardarBorrador, leerBorrador, borrarBorrador, encolar, esErrorDeRed } from '../../../lib/colaInformes'
 import { AssessmentChip, ReportCard } from '../comun'
+import { NuevoJugadorPartidoModal, type DatosJugadorNuevo } from './NuevoJugadorPartidoModal'
 import { type MatchScoutInfo, type ShowToast, type ConclusionOption, type SuggestWhy, CONCLUSION_OPTIONS, CONCLUSION_STYLE, MONTHS_ES, SUGGEST_LABEL, SUGGEST_ORDER, SEARCH_LIMIT, birthYearFromBirthdate, personaToName, fmtDate, normConclusion, scoutColor } from '../helpers'
 
 // ── MatchExpandedView — vista ampliada del partido ───────────
@@ -23,7 +24,7 @@ type FiltroVeredicto = '' | 'Llamar' | 'Seguir' | 'Descartar' | 'Visto' | 'sin'
 
 export function MatchExpandedView({
   match, scouts, profiles, currentProfile, linkedPlayers, scoutingReports, allMatches, scoutingPlayers, sugeridos,
-  nuestros, onAddMatchPlayer, onAddReport, onUpdateReport, onDeleteReport, showToast, onClose, onOpenPlayer, onOpenEquipo,
+  nuestros, onAddMatchPlayer, onCreatePlayer, onAddReport, onUpdateReport, onDeleteReport, showToast, onClose, onOpenPlayer, onOpenEquipo,
 }: {
   match: ScoutingMatch
   scouts: MatchScoutInfo[]
@@ -39,6 +40,8 @@ export function MatchExpandedView({
   nuestros?: string[]
   /** Vincula un jugador al partido; devuelve si fue bien (la ficha avisa si falla) */
   onAddMatchPlayer: (playerId: string) => Promise<boolean>
+  /** Crear un jugador que no existe en Captación (queda vinculado y con el informe abierto) */
+  onCreatePlayer?: (p: DatosJugadorNuevo) => Promise<ScoutingPlayer>
   onAddReport: (r: ScoutingReport) => void
   onUpdateReport?: (r: ScoutingReport) => Promise<void>
   onDeleteReport?: (id: string) => Promise<void>
@@ -92,6 +95,7 @@ export function MatchExpandedView({
   // Vincular un jugador más al partido (buscador + sugeridos)
   const [busquedaNuevo, setBusquedaNuevo] = useState('')
   const [vinculando, setVinculando] = useState<string | null>(null)
+  const [creandoJugador, setCreandoJugador] = useState(false)
 
   useEscapeKey(() => { if (formPara) setFormPara(null); else onClose() })
 
@@ -536,6 +540,15 @@ export function MatchExpandedView({
                 className="pl-7 pr-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white w-56 focus:outline-none focus:ring-2 focus:ring-violet-400/30"
               />
             </div>
+            {onCreatePlayer && (
+              <button
+                onClick={() => setCreandoJugador(true)}
+                className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-violet-200 text-violet-700 bg-violet-50 hover:bg-violet-100"
+                title="Crear un jugador que no existe en Captación y vincularlo"
+              >
+                <UserPlus className="w-3.5 h-3.5" /> Jugador nuevo
+              </button>
+            )}
           </div>
           <div className="mt-2">
             {candidatos.length > 0 ? (
@@ -568,11 +581,23 @@ export function MatchExpandedView({
               </div>
             ) : (
               <span className="text-xs text-slate-400 italic">
-                {buscandoNuevo ? 'Sin resultados' : 'Ningún sugerido para estos equipos — busca por nombre para vincular a alguien'}
+                {buscandoNuevo
+                  ? <>Sin resultados{onCreatePlayer && <> — <button onClick={() => setCreandoJugador(true)} className="not-italic font-semibold text-violet-700 underline">crear «{busquedaNuevo.trim()}» como jugador nuevo</button></>}</>
+                  : 'Ningún sugerido para estos equipos — busca por nombre para vincular a alguien'}
               </span>
             )}
           </div>
         </section>
+        {creandoJugador && onCreatePlayer && (
+          <NuevoJugadorPartidoModal
+            match={match}
+            scoutingPlayers={scoutingPlayers}
+            nombreInicial={busquedaNuevo.trim()}
+            onClose={() => setCreandoJugador(false)}
+            onCrear={onCreatePlayer}
+            onVincular={p => vincularYEscribir(p)}
+          />
+        )}
       </div>
     </div>,
     document.body,

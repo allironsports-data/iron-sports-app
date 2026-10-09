@@ -945,6 +945,7 @@ export function Captacion({
         onLinkReportToMatch={handleLinkReportToMatch}
         onOpenEquipo={(nombre) => { setDetailMatchId(null); setCaptTab('equipos'); abrirJugador(null); setPanelEquipo(nombre.trim()) }}
         onCreateAndLinkPlayer={handleCreateAndLinkPlayer}
+        onCreatePlayer={async (datos) => { const saved = await db.createScoutingPlayer(datos); onAddPlayer(saved); return saved }}
         onFixPlayerTeam={handleFixPlayerTeam}
         onOpenPlayer={id => { if (variant === 'modal') setDetailMatchId(null); abrirJugador(id) }}
         onOpenMatch={id => setDetailMatchId(id)}
