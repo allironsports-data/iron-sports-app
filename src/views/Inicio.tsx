@@ -12,13 +12,13 @@
 import { useMemo, useState, type ComponentType } from 'react'
 import {
   Home, Eye, PenLine, TrendingUp, CalendarDays, Shield, Users, Calendar,
-  Trophy, ListTodo, RefreshCw, Handshake, Phone, Smartphone, ClipboardList, Plane, Search, Plus, ChevronRight, LogOut, Inbox,
+  Trophy, ListTodo, RefreshCw, Handshake, Phone, Smartphone, ClipboardList, Plane, Search, Plus, ChevronRight, LogOut, Inbox, Cake,
 } from 'lucide-react'
 import logoImg from '../assets/logo.jpeg'
 import type { Profile } from '../contexts/AuthContext'
-import type { MemberStatus } from '../types'
+import type { MemberStatus, Player } from '../types'
 import { seccionesDelDia, DIAS_ACTUALIZACION_PROCESO, type AgendaItem, type AgendaTipo } from '../lib/agendaItems'
-import { ACCESOS, fraseDelDia, partidosDeHoy, esMioEnInicio, type Contador, type DestinoInicio } from '../lib/inicio'
+import { ACCESOS, fraseDelDia, partidosDeHoy, esMioEnInicio, cumpleanos, type Contador, type DestinoInicio } from '../lib/inicio'
 import { parsearAltaRapida, type AltaRapida } from '../lib/altaRapida'
 import { parseDia } from '../lib/fechas'
 
@@ -41,6 +41,9 @@ export interface InicioProps {
   items: AgendaItem[]
   /** Estado de hoy de quien mira (Oficina, Viaje…), si lo ha puesto */
   miEstado?: MemberStatus
+  /** Jugadores de la plantilla, para los cumpleaños */
+  players: Player[]
+  onOpenPlayer: (playerId: string) => void
   contadores: Record<string, Contador>
   onAbrir: (item: AgendaItem) => void
   onIr: (destino: DestinoInicio) => void
@@ -111,13 +114,16 @@ const Enlace = ({ texto, onClick }: { texto: string; onClick: () => void }) => (
   <button onClick={onClick} className="ml-auto text-[11.5px] font-semibold text-primary hover:underline">{texto} →</button>
 )
 
-export function Inicio({ profile, profiles, hoy, items, miEstado, contadores, onAbrir, onIr, onCrear, onBuscar, onLogout, onAdmin }: InicioProps) {
+export function Inicio({ profile, profiles, hoy, items, miEstado, players, contadores, onAbrir, onIr, onCrear, onBuscar, onLogout, onAdmin, onOpenPlayer }: InicioProps) {
   // Solo lo que llevo yo (lo que sigo como adjunto no es trabajo mío); las citas, si asisto
   const mios = useMemo(() => items.filter(it => esMioEnInicio(it, profile.id)), [items, profile.id])
   const s = useMemo(() => seccionesDelDia(mios, hoy), [mios, hoy])
   const avatarDe = (id: string) => profiles.find(p => p.id === id)?.avatar
   const partidos = useMemo(() => partidosDeHoy(items, hoy, avatarDe), [items, hoy, profiles]) // eslint-disable-line react-hooks/exhaustive-deps
   const frase = fraseDelDia(s)
+  const cumples = useMemo(() => cumpleanos(players, hoy), [players, hoy])
+  const cumplesHoy = cumples.filter(c => c.en === 0)
+  const cumplesProximos = cumples.filter(c => c.en > 0)
 
   // Alta rápida (misma sintaxis que en Mi día: @persona #categoría fecha !)
   const [nueva, setNueva] = useState('')
@@ -202,13 +208,30 @@ export function Inicio({ profile, profiles, hoy, items, miEstado, contadores, on
         {/* El día */}
         <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
           <Bloque titulo="Agenda" Icon={CalendarDays} extra={<Enlace texto="Calendario" onClick={() => onIr({ tipo: 'seccion', seccion: 'tareas', tab: 'calendario' })} />}>
-            {s.agenda.length === 0 ? <Vacio texto="Sin citas hoy." /> : s.agenda.map(it => (
+            {s.agenda.length === 0 && cumplesHoy.length === 0 ? <Vacio texto="Sin citas hoy." /> : s.agenda.map(it => (
               <button key={it.id} onClick={() => onAbrir(it)} className={ROW}>
                 <span className="w-10 text-xs font-semibold text-slate-500 tabular-nums">{it.hora ?? '—'}</span>
                 <IconoTipo tipo={it.tipo} />
                 <div className="min-w-0"><div className="text-[13.5px] font-medium text-slate-800 truncate">{it.titulo}</div><div className="text-[11.5px] text-slate-400 truncate">{[it.playerNombre, it.categoria, it.lugar].filter(Boolean).join(' · ')}</div></div>
               </button>
             ))}
+            {/* Cumpleaños de hoy: una cita más, sin hora; los próximos, en una línea */}
+            {cumplesHoy.map(c => (
+              <button key={c.playerId} onClick={() => onOpenPlayer(c.playerId)} className={ROW}>
+                <span className="w-10 text-xs font-semibold text-slate-500">hoy</span>
+                <span className="w-6 h-6 rounded-md bg-pink-50 text-pink-600 inline-flex items-center justify-center flex-shrink-0"><Cake className="w-3.5 h-3.5" /></span>
+                <div className="min-w-0"><div className="text-[13.5px] font-medium text-slate-800 truncate">{c.nombre}</div><div className="text-[11.5px] text-slate-400 truncate">cumple {c.edad}</div></div>
+              </button>
+            ))}
+            {cumplesProximos.length > 0 && (
+              <p className="px-3.5 py-2 text-[11.5px] text-slate-400 border-t border-slate-100 truncate" title={cumplesProximos.map(c => `${c.nombre} · ${c.edad} · ${parseDia(c.dia).toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric' })}`).join(' · ')}>
+                <Cake className="inline w-3 h-3 align-[-2px] mr-1" />Próximos: {cumplesProximos.map(c => (
+                  <button key={c.playerId} onClick={() => onOpenPlayer(c.playerId)} className="hover:text-slate-700 hover:underline">
+                    <b className="font-semibold text-slate-600">{c.nombre.split(' ')[0]}</b> {c.en === 1 ? 'mañana' : parseDia(c.dia).toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric' })}
+                  </button>
+                )).reduce<React.ReactNode[]>((acc, el, i) => i === 0 ? [el] : [...acc, ' · ', el], [])}
+              </p>
+            )}
           </Bloque>
 
           <Bloque titulo="Partidos del equipo" Icon={Trophy} extra={<Enlace texto="Partidos" onClick={() => onIr({ tipo: 'seccion', seccion: 'captacion', tab: 'partidos' })} />}>

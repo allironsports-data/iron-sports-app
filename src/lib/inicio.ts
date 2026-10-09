@@ -6,6 +6,7 @@
 // contadores que acompañan a cada acceso.
 
 import type { MainSection } from '../components/globalExtras'
+import type { Player } from '../types'
 import { type AgendaItem, type SeccionesDia, esInformePendiente, esCita, itemEsDe, DIAS_ACTUALIZACION_PROCESO } from './agendaItems'
 
 export type DestinoInicio =
@@ -122,4 +123,42 @@ export function fraseDelDia(s: SeccionesDia): string {
   else if (pidenNota.length > 1) partes.push(`${pidenNota.length} procesos piden nota`)
   if (partes.length === 0) return s.procesos.length > 0 ? 'Día despejado. Solo lo que tienes en curso.' : 'Día despejado.'
   return partes.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join('. ') + '.'
+}
+
+// ── Cumpleaños ───────────────────────────────────────────────────────
+
+export interface Cumple {
+  playerId: string
+  nombre: string
+  /** Años que cumple */
+  edad: number
+  /** AAAA-MM-DD del cumpleaños de este año (o del siguiente, si ya pasó) */
+  dia: string
+  /** Días que faltan: 0 = hoy */
+  en: number
+}
+
+const diaDeHoy = (iso: string) => { const [y, m, d] = iso.split('-').map(Number); return Date.UTC(y, m - 1, d) }
+
+/** Jugadores que cumplen años hoy o en los próximos `dias` días, los de hoy primero */
+export function cumpleanos(players: Pick<Player, 'id' | 'name' | 'birthDate'>[], hoy: string, dias = 7): Cumple[] {
+  const [y] = hoy.split('-').map(Number)
+  const t0 = diaDeHoy(hoy)
+  const out: Cumple[] = []
+  for (const p of players) {
+    const b = p.birthDate?.slice(0, 10)
+    if (!b || !/^\d{4}-\d{2}-\d{2}$/.test(b)) continue
+    const [by, bm, bd] = b.split('-').map(Number)
+    // Un 29 de febrero cae en 1 de marzo los años no bisiestos: Date.UTC lo resuelve solo
+    for (const anio of [y, y + 1]) {
+      const t = Date.UTC(anio, bm - 1, bd)
+      const en = Math.round((t - t0) / 86400000)
+      if (en < 0 || en > dias) continue
+      const f = new Date(t)
+      out.push({ playerId: p.id, nombre: p.name, edad: anio - by, en,
+        dia: `${f.getUTCFullYear()}-${String(f.getUTCMonth() + 1).padStart(2, '0')}-${String(f.getUTCDate()).padStart(2, '0')}` })
+      break
+    }
+  }
+  return out.sort((a, b) => a.en - b.en || a.nombre.localeCompare(b.nombre))
 }

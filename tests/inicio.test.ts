@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { construirAgenda, seccionesDelDia, type AgendaInput } from '../src/lib/agendaItems'
-import { fraseDelDia, contadoresInicio, partidosDeHoy, esMioEnInicio, ACCESOS } from '../src/lib/inicio'
+import { fraseDelDia, contadoresInicio, partidosDeHoy, esMioEnInicio, cumpleanos, ACCESOS } from '../src/lib/inicio'
 import type { Task, ScoutingMatch, ScoutingMatchScout, FirmasEntry, AgendaEvento } from '../src/types'
 
 const HOY = '2026-10-01'
@@ -90,5 +90,21 @@ describe('esMioEnInicio', () => {
       eventos: [ev],
     }))
     expect(items.filter(i => esMioEnInicio(i, YO)).map(i => i.id).sort()).toEqual(['evento:e1', 'tarea:mia'])
+  })
+})
+
+describe('cumpleanos', () => {
+  const jug = (id: string, birthDate = '') => ({ id, name: id, birthDate })
+  it('hoy y los próximos 7 días, con la edad que cumplen; los de hoy primero', () => {
+    const c = cumpleanos([
+      jug('hoy', '2007-10-01'), jug('manana', '2010-10-02'), jug('limite', '2005-10-08'), jug('fuera', '2005-10-09'),
+      jug('pasado', '2006-09-30'), jug('sin-fecha'), jug('rota', '31/12/2000'),
+    ], HOY)
+    expect(c.map(x => [x.playerId, x.edad, x.en])).toEqual([['hoy', 19, 0], ['manana', 16, 1], ['limite', 21, 7]])
+    expect(c[0].dia).toBe('2026-10-01')
+  })
+  it('a final de año mira también el año siguiente', () => {
+    const c = cumpleanos([jug('enero', '2008-01-02')], '2026-12-30')
+    expect(c).toEqual([{ playerId: 'enero', nombre: 'enero', edad: 19, en: 3, dia: '2027-01-02' }])
   })
 })
