@@ -19,6 +19,18 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-10-09',
+    items: [
+      'Ficha de partido y vista ampliada: el botón de informe ya no desaparece cuando ya has escrito uno de ese jugador. Pone «+ Informe», «+ Mi informe» (si solo hay de otros) o «+ Otro informe» (si ya escribiste tú), y siempre se puede añadir otro',
+      'Vista ampliada del partido: bloque «Añadir jugador al partido» al pie, con los sugeridos (equipo, historial, otros equipos del club) y buscador por nombre. Al pulsar uno se vincula al partido y se le abre el informe directamente',
+      'Calendario → El equipo ese día: los que no tienen nada ya no ocupan una tarjeta vacía; salen juntos en una línea al final («Sin nada hoy: …»), y las tarjetas de los demás ya no se estiran para igualar alturas',
+    ],
+    adminItems: [
+      'Admin → Uso (nueva pestaña): tiempo de uso de la app por persona (7/30/90 días), días activos, media por día activo, barritas por día, última vez y en qué parte de la app pasa el tiempo cada uno. Se mide mientras la pestaña está visible y la persona toca algo en los últimos 5 minutos, en bloques de 5 min: una pestaña abierta y olvidada no cuenta',
+      'Requiere ejecutar migration_uso_app.sql en Supabase (tabla app_uso con sus permisos y la función uso_app_resumen). Sin ella, la pestaña avisa y la app no apunta nada (no da error al usuario)',
+    ],
+  },
+  {
     date: '2026-10-08',
     items: [
       'Jugadores (solo admins): prioridad A, B o C por jugador. Se pone desde la ficha (editar → Equipo → Prioridad, o en la tabla editable) y sale como chapa junto al nombre en tarjetas, lista y tabla, y en la ficha. Nuevo filtro «Prioridad» en la lista (incluye «Sin prioridad»). Los que no tienen prioridad no llevan chapa. Las cuentas que no son admin no la ven ni la pueden cambiar',

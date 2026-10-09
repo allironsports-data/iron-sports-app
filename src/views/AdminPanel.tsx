@@ -14,6 +14,7 @@ import { AUDIT_TABLAS } from '../lib/dbAudit'
 import { HistorialCambios } from '../components/HistorialCambios'
 import { fechaRelativa } from '../lib/formato'
 import { fetchClientErrors, vaciarErroresAntiguos, type ClientError } from '../lib/dbErrors'
+import { UsoTab } from './admin/UsoTab'
 import { ArrowLeft, LogOut, Shield, UserPlus, Check, X, Edit3, Copy, Trash2, KeyRound, AlertTriangle, BarChart3, Users, ChevronDown, ChevronRight, Clock, CheckCircle2, Circle, Eye, History, Bug, Search, ShieldCheck } from 'lucide-react'
 
 
@@ -39,7 +40,7 @@ interface Props {
   onOpenTable?: () => void
 }
 
-type AdminTab = 'equipo' | 'tareas' | 'captacion' | 'controlEquipos' | 'historial' | 'errores'
+type AdminTab = 'equipo' | 'tareas' | 'captacion' | 'controlEquipos' | 'historial' | 'errores' | 'uso'
 
 export function AdminPanel({ profiles, tasks, players, scoutingPlayers, scoutingReports, scoutingMatches, firmasEntries, equipos, clubZonas, onBack, onRefresh, onLogout, onOpenTable }: Props) {
   const [tab, setTab] = useState<AdminTab>('equipo')
@@ -55,6 +56,7 @@ export function AdminPanel({ profiles, tasks, players, scoutingPlayers, scouting
     { id: 'controlEquipos', label: 'Control de equipos', icon: <ShieldCheck className="w-4 h-4" /> },
     { id: 'historial', label: 'Historial', icon: <History className="w-4 h-4" /> },
     { id: 'errores', label: 'Errores', icon: <Bug className="w-4 h-4" /> },
+    { id: 'uso', label: 'Uso', icon: <Clock className="w-4 h-4" /> },
   ]
 
   return (
@@ -100,6 +102,7 @@ export function AdminPanel({ profiles, tasks, players, scoutingPlayers, scouting
         {tab === 'controlEquipos' && <EstadisticasTab filas={filasEquipos} desde={desdeTemporada} />}
         {tab === 'historial' && <HistorialTab profiles={profiles} />}
         {tab === 'errores' && <ErroresTab profiles={profiles} />}
+        {tab === 'uso' && <UsoTab profiles={profiles} />}
       </main>
     </div>
   )

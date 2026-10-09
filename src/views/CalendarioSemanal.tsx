@@ -177,8 +177,8 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
           ? ' · «En curso» = en lo que está cada uno ahora (sus tareas marcadas en curso, tengan la fecha que tengan) · «Para hoy» = lo que tiene con fecha de hoy'
           : ' · lo que tiene cada uno con fecha de ese día'}
       </p>
-      <div className="mb-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
-        {[yo, ...profiles.filter(p => p.id !== yo.id && !p.hidden_from_status)].map(p => {
+      {(() => {
+        const datos = [yo, ...profiles.filter(p => p.id !== yo.id && !p.hidden_from_status)].map(p => {
           const suyos = delDia.filter(it => itemEsDe(it, p.id))
           const abiertos = suyos.filter(it => it.estado !== 'completada' || !esTarea(it))
           // Dos cosas distintas, y se enseñan por separado:
@@ -190,6 +190,17 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
           const hechos = suyos.length - abiertos.length
           const esYo = p.id === yo.id
           const nota = notas[p.id]
+          return { p, suyos, abiertos, enCurso, delDiaSuyo, hechos, esYo, nota }
+        })
+        // Quien no tiene nada ese día no merece una tarjeta vacía del tamaño
+        // de las demás (dejaba la rejilla llena de huecos): van todos juntos
+        // en una línea al final. Yo salgo siempre en tarjeta (por la nota).
+        const conAlgo = datos.filter(d => d.suyos.length > 0 || d.nota || (d.esYo && dia === hoy))
+        const sinNada = datos.filter(d => !conAlgo.includes(d))
+        return (<>
+      {conAlgo.length > 0 && (
+      <div className="mb-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 items-start">
+        {conAlgo.map(({ p, suyos, abiertos, enCurso, delDiaSuyo, hechos, esYo, nota }) => {
           return (
             <div key={p.id} className={`rounded-lg border bg-white px-2.5 py-1.5 ${esYo ? 'border-blue-200' : 'border-slate-200'} ${personaId === p.id ? 'ring-1 ring-primary' : ''}`}>
               <button onClick={() => setPersonaId(id => id === p.id ? 'all' : p.id)} title="Ver solo lo suyo" className="w-full flex items-center gap-1.5 text-left">
@@ -245,6 +256,21 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
           )
         })}
       </div>
+      )}
+      {sinNada.length > 0 && (
+        <p className="mb-3 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-slate-400">
+          <span>Sin nada {dia === hoy ? 'hoy' : 'ese día'}:</span>
+          {sinNada.map(({ p }) => (
+            <button key={p.id} onClick={() => setPersonaId(id => id === p.id ? 'all' : p.id)} title="Ver solo lo suyo"
+              className={`inline-flex items-center gap-1 rounded-full border bg-white px-1.5 py-0.5 text-slate-500 hover:text-slate-800 ${personaId === p.id ? 'border-primary ring-1 ring-primary' : 'border-slate-200'}`}>
+              <span className="w-4 h-4 rounded-full flex items-center justify-center text-[7px] font-bold text-white bg-slate-400">{p.avatar}</span>
+              {p.name.split(' ')[0]}
+            </button>
+          ))}
+        </p>
+      )}
+        </>)
+      })()}
     </>)
   }
 

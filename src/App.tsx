@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, lazy, cloneElement, Suspense, type ReactNode as Nodo } from 'react'
 import { CalendarDays, Sun } from 'lucide-react'
 import { useAuth } from './hooks/useAuth'
+import { useLatidoUso } from './hooks/useLatidoUso'
 import type { Player, Task, ScoutingPlayer, ScoutingReport, ScoutingInfo, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchOurPlayer, ScoutingMatchScout, Ofrecimiento, OfrecimientoOrigen, MemberStatus, Postpartido, FirmasEntry, BoulemaPlayer, AgendaEvento } from './types'
 import { informesPedidos, TIPO_INFORME_LABEL, VEREDICTO_LABEL } from './lib/ofrecidos'
 import { apunteDeEvento } from './views/captacion/firmas/cierreReunion'
@@ -164,6 +165,14 @@ export default function App() {
   const [showOverview, setShowOverview] = useState(false)
   const [showTable, setShowTable] = useState(false)
   const [showContacts, setShowContacts] = useState(() => window.location.hash === '#contactos')
+  // Uso de la app: cada minuto activo se apunta en qué parte está (Admin → Uso)
+  useLatidoUso(user?.id,
+    showAdmin ? 'admin'
+    : selectedPlayerId ? 'jugador'
+    : selectedClubId ? 'club'
+    : selectedProfileId ? 'miembro'
+    : showContacts ? 'contactos'
+    : mainSection)
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [searchOpen, setSearchOpen] = useState(false)
   const [phase2Loading, setPhase2Loading] = useState(false)
