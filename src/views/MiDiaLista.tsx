@@ -8,7 +8,7 @@
 // El día tiene dos naturalezas: la AGENDA (citas, se asiste) y el TRABAJO
 // (se hace). Lo atrasado no es una sección aparte: es trabajo de hoy, con
 // retraso, y va el primero. Las tareas en curso son PROCESOS: salen siempre
-// y exigen una nota a la semana (si falta, se pide antes de enseñar nada).
+// y exigen una nota a la semana (si falta, un aviso fijo arriba lo pide).
 // Lo que no tiene fecha es «algún día»: vive en la BANDEJA, fuera del día.
 // Por la tarde, lo que queda abierto pide decidir qué se hace con ello.
 //
@@ -253,15 +253,15 @@ export function MiDiaLista({
     : fila(it)
   const personaAlta = alta.assigneeId ? profiles.find(p => p.id === alta.assigneeId) : undefined
 
-  // ── Actualización semanal obligatoria: hasta que no se anota, no hay día ──
-  if (porActualizar.length > 0) {
-    return (
-      <div className="bg-white border border-amber-300 rounded-lg overflow-hidden">
+  // ── Actualización semanal obligatoria: el aviso no se puede cerrar, pero
+  //    no tapa el día (la agenda y el trabajo siguen debajo) ──
+  const panelActualizacion = porActualizar.length > 0 && (
+      <div className="mb-4 bg-white border border-amber-300 rounded-lg overflow-hidden">
         <div className="px-4 py-3 bg-amber-50 border-b border-amber-200">
           <h3 className="text-sm font-bold text-amber-900 flex items-center gap-2"><RefreshCw className="w-4 h-4" /> Actualización semanal de tus procesos</h3>
           <p className="text-xs text-amber-800 mt-0.5">
             {porActualizar.length === 1 ? 'Un proceso lleva' : `${porActualizar.length} procesos llevan`} más de {DIAS_ACTUALIZACION_PROCESO} días sin una nota.
-            Escribe en qué punto está cada uno (o marca «Sin novedades») y después sale tu día.
+            Escribe en qué punto está cada uno (o marca «Sin novedades»). Este aviso no se quita hasta entonces; tu día sigue debajo.
           </p>
         </div>
         {errorNota && <p className="mx-4 mt-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{errorNota}</p>}
@@ -308,11 +308,12 @@ export function MiDiaLista({
           })}
         </div>
       </div>
-    )
-  }
+  )
 
   return (
     <div>
+      {panelActualizacion}
+
       {/* Alta rápida: título @persona #categoría fecha ! */}
       {onCrear && vista === 'dia' && (
         <div className="mb-3">
