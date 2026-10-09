@@ -2462,6 +2462,7 @@ export default function App() {
               activeClubId={selectedClubId ?? undefined}
               onBack={() => irA('tareas')}
               onGoToJugadores={() => irA('jugadores')}
+              onGoToInicio={() => irA('inicio')}
               onGoToCaptacion={() => irA('captacion')}
               onGoToPipeline={() => irA('pipeline')}
               onGoToBoulema={() => irA('boulema')}

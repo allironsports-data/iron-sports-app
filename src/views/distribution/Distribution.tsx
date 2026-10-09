@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import {
-  ChevronRight, Check, Trash2, LogOut,
-  TrendingUp, AlertCircle, ChevronDown, Eye, Inbox, PenLine,
+  ChevronRight, Check, Trash2, LogOut, TrendingUp, AlertCircle, ChevronDown, Eye, Inbox, PenLine, Home,
 } from 'lucide-react'
 import { useAtras } from '../../hooks/useAtras'
 import logoImg from '../../assets/logo.jpeg'
@@ -52,6 +51,7 @@ export interface Props {
   currentProfile: Profile
   profiles: Profile[]
   onBack: () => void          // go to Tareas
+  onGoToInicio?: () => void
   onGoToJugadores?: () => void
   onGoToCaptacion?: () => void
   onGoToPipeline?: () => void
@@ -87,7 +87,7 @@ export interface Props {
 
 export function Distribution({
   players, clubs: clubsAll, entries, negotiations: negotiationsAll, currentProfile, profiles,
-  onBack, onGoToCaptacion, onGoToPipeline, onGoToBoulema, onLogout, onAdmin, onSelectPlayer, onSelectClub,
+  onBack, onGoToInicio, onGoToCaptacion, onGoToPipeline, onGoToBoulema, onLogout, onAdmin, onSelectPlayer, onSelectClub,
   tab: tabProp, onTabChange,
   onCreateClub, onUpdateClub, onDeleteClub,
   onCreateEntry, onUpdateEntry, onDeleteEntry,
@@ -612,6 +612,15 @@ export function Distribution({
 
         {/* Level 1: main sections */}
         <div className={`max-w-6xl mx-auto px-3 sm:px-6 items-center border-t border-slate-100 overflow-x-auto scrollbar-none ${restricted ? 'hidden' : 'hidden sm:flex'}`}>
+          {onGoToInicio && (
+            <button
+              onClick={onGoToInicio}
+              className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
+            >
+              <Home className="w-3.5 h-3.5" />
+              Inicio
+            </button>
+          )}
           <button
             onClick={onBack}
             className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
