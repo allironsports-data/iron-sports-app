@@ -14,6 +14,7 @@ import { isValidName } from '../../../lib/validate'
 import { buscarJugadoresParecidos } from '../../../lib/duplicados'
 import { POSITIONS_SCOUTING } from '../helpers'
 import { Spinner } from '../comun'
+import { NacionalidadInput } from '../../../components/NacionalidadInput'
 
 const CAMPO = 'w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400'
 
@@ -142,7 +143,7 @@ export function NuevoJugadorPartidoModal({ match, scoutingPlayers, nombreInicial
             </div>
             <div>
               <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Nacionalidad</label>
-              <input value={nationality} onChange={e => setNationality(e.target.value)} placeholder="Opcional" className={CAMPO} />
+              <NacionalidadInput value={nationality} onChange={setNationality} placeholder="Opcional" className={CAMPO} />
             </div>
           </div>
 

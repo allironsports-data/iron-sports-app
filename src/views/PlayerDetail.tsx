@@ -10,6 +10,7 @@ import { calcAge, PLAYER_ESTADOS, PLAYER_PRIORIDADES, type PlayerEstado, type Pl
 import { PRIORIDAD_META } from "../lib/prioridadJugador";
 import { PrioridadBadge } from "../components/PrioridadBadge";
 import { EquipoInput } from '../components/EquipoInput'
+import { NacionalidadInput } from '../components/NacionalidadInput'
 import { estadoDe, ESTADO_META } from "../lib/estadoJugador";
 import type { Profile } from "../contexts/AuthContext";
 import { uploadContractPdf, urlDocumento, fetchNotes, createNote, updateNote, deleteNote,
@@ -1600,6 +1601,17 @@ function TF({ label, value, onChange, type = "text", required = false, placehold
 }
 
 /* ---- Edit Player Modal ---- */
+/** Nacionalidad: lista cerrada de países (ver NacionalidadInput) */
+function EFNacionalidad({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div>
+      <label className="block text-xs font-medium text-slate-600 mb-1">{label}</label>
+      <NacionalidadInput value={value} onChange={onChange}
+        className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2" />
+    </div>
+  );
+}
+
 /** Club del jugador: lista cerrada de equipos (ver EquipoInput) */
 function EFEquipo({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
@@ -1740,8 +1752,8 @@ function EditPlayerModal({ player, profiles, isAdmin, onClose, onSave }: {
             <EF label="Teléfono" value={phone} onChange={setPhone} type="tel" />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <EF label="Nacionalidad" value={nationality} onChange={setNationality} />
-            <EF label="Segunda nacionalidad" value={nationality2} onChange={setNationality2} />
+            <EFNacionalidad label="Nacionalidad" value={nationality} onChange={setNationality} />
+            <EFNacionalidad label="Segunda nacionalidad" value={nationality2} onChange={setNationality2} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

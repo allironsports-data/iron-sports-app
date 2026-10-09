@@ -8,6 +8,7 @@ import { useDebounce } from "../hooks/useDebounce";
 import { useToast } from "../hooks/useToast";
 import { ToastStack } from "../components/ToastStack";
 import { isValidDate } from "../lib/validate";
+import { NacionalidadInput } from "../components/NacionalidadInput";
 
 interface Props {
   players: Player[];
@@ -33,7 +34,7 @@ type ColumnDef = {
   width: string;
   getValue: (p: Player) => string;
   setValue: (p: Player, value: string) => Player;
-  type?: "text" | "date" | "select" | "number";
+  type?: "text" | "date" | "select" | "number" | "nacionalidad";
   options?: string[];
 };
 
@@ -73,7 +74,7 @@ export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onLogo
       setValue: (p, v) => ({ ...p, name: v }),
     },
     {
-      key: "nationality", label: "Nacionalidad", width: "min-w-[120px]",
+      key: "nationality", label: "Nacionalidad", width: "min-w-[120px]", type: "nacionalidad",
       // La nacionalidad se guarda como "Principal / Segunda" en un solo campo.
       getValue: (p) => p.nationality.split("/").map(s => s.trim()).filter(Boolean)[0] ?? "",
       setValue: (p, v) => {
@@ -82,7 +83,7 @@ export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onLogo
       },
     },
     {
-      key: "nationality2", label: "2ª nacionalidad", width: "min-w-[120px]",
+      key: "nationality2", label: "2ª nacionalidad", width: "min-w-[120px]", type: "nacionalidad",
       getValue: (p) => p.nationality.split("/").map(s => s.trim()).filter(Boolean)[1] ?? "",
       setValue: (p, v) => {
         const first = p.nationality.split("/").map(s => s.trim()).filter(Boolean)[0] ?? "";
@@ -226,17 +227,18 @@ export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onLogo
     return true;
   };
 
-  const confirmEdit = () => {
+  // `valor` llega del campo de lista cerrada (nacionalidad): elige y confirma en el mismo paso
+  const confirmEdit = (valor: string = editValue) => {
     if (!editing) return false;
     const col = columns.find(c => c.key === editing.field)!;
-    if (!isEditValueValid(col, editValue)) {
+    if (!isEditValueValid(col, valor)) {
       setEditInvalid(true);
       return false;
     }
     const player = getPlayer(editing.playerId);
     const currentValue = col.getValue(player);
-    if (editValue !== currentValue) {
-      const updated = col.setValue(player, editValue);
+    if (valor !== currentValue) {
+      const updated = col.setValue(player, valor);
       setPendingChanges(prev => new Map(prev).set(editing.playerId, updated));
     }
     setEditing(null);
@@ -385,12 +387,21 @@ export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onLogo
                         return (
                           <td key={col.key} className={`px-3 py-2 ${col.width}`}>
                             {isEditing ? (
-                              col.type === "select" ? (
+                              col.type === "nacionalidad" ? (
+                                <NacionalidadInput
+                                  autoFocus
+                                  value={editValue}
+                                  onChange={(v) => { setEditValue(v); confirmEdit(v); }}
+                                  onSalir={cancelEdit}
+                                  onKeyDown={handleKeyDown}
+                                  className="w-full rounded border border-blue-300 px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
+                                />
+                              ) : col.type === "select" ? (
                                 <select
                                   ref={inputRef as React.RefObject<HTMLSelectElement>}
                                   value={editValue}
                                   onChange={(e) => setEditValue(e.target.value)}
-                                  onBlur={confirmEdit}
+                                  onBlur={() => confirmEdit()}
                                   onKeyDown={handleKeyDown}
                                   className="w-full rounded border border-blue-300 px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-200"
                                 >
@@ -405,7 +416,7 @@ export function PlayersTable({ players, profiles, onUpdatePlayer, onBack, onLogo
                                   type={col.type || "text"}
                                   value={editValue}
                                   onChange={(e) => { setEditValue(e.target.value); setEditInvalid(false); }}
-                                  onBlur={confirmEdit}
+                                  onBlur={() => confirmEdit()}
                                   onKeyDown={handleKeyDown}
                                   aria-invalid={editInvalid}
                                   className={`w-full rounded border px-1.5 py-1 text-xs focus:outline-none focus:ring-2 ${

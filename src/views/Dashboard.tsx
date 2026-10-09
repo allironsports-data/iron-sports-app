@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, type Dispatch, type SetStateAction } from "react";
 import { TaskDetailPanel } from "../components/TaskDetailPanel";
 import { EquipoInput } from '../components/EquipoInput'
+import { NacionalidadInput } from '../components/NacionalidadInput'
 import { BUILD_ID, CHANGELOG } from "../changelog";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { EmptyState } from "../components/EmptyState";
@@ -3750,8 +3751,8 @@ function AddPlayerModal({ profiles, onClose, onAdd }: {
             <F label="Fecha de nacimiento" value={birthDate} onChange={(v) => { setBirthDate(v); if (errors.birthDate) setErrors(prev => ({ ...prev, birthDate: undefined })); }} type="date" required error={errors.birthDate} />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <F label="Nacionalidad" value={nationality} onChange={setNationality} required />
-            <F label="Segunda nacionalidad" value={nationality2} onChange={setNationality2} />
+            <FNacionalidad label="Nacionalidad" value={nationality} onChange={setNationality} />
+            <FNacionalidad label="Segunda nacionalidad" value={nationality2} onChange={setNationality2} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -3818,6 +3819,17 @@ function AddPlayerModal({ profiles, onClose, onAdd }: {
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+/** Nacionalidad: lista cerrada de países (ver NacionalidadInput) */
+function FNacionalidad({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div>
+      <label className="block text-xs font-medium text-slate-600 mb-1">{label}</label>
+      <NacionalidadInput value={value} onChange={onChange}
+        className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
     </div>
   );
 }

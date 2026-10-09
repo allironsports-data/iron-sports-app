@@ -1024,6 +1024,15 @@ export function Captacion({
     }
     setSavingPlayer(true)
     try {
+      // La categoría vive en el equipo: si el equipo aún no la tiene, se guarda la escrita
+      // aquí y la próxima vez saldrá sola (sin tener que ponerla dos veces)
+      if (payload.team && payload.categoria) {
+        const enCatalogo = equipos.find(e => normEquipo(e.nombre) === normEquipo(payload.team))
+        if (!enCatalogo?.categoria) {
+          onSaveEquipo({ nombre: enCatalogo?.nombre ?? payload.team, club: enCatalogo?.club ?? clubBase(payload.team), categoria: payload.categoria })
+            .catch(() => { /* no bloquea el guardado del jugador */ })
+        }
+      }
       if (showEditPlayer && editTarget) {
         const updated = {
           ...editTarget,

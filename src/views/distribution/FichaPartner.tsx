@@ -15,6 +15,7 @@ import { isValidName, isValidDate } from '../../lib/validate'
 import { parseDia } from '../../lib/fechas'
 import { BtnSpinner, Avatar } from './shared'
 import { ModalShell } from './modales'
+import { NacionalidadInput } from '../../components/NacionalidadInput'
 
 const PIES: { id: NonNullable<Player['foot']>; label: string }[] = [
   { id: 'derecho', label: 'Diestro' },
@@ -147,7 +148,7 @@ export function FichaPartner({ player, editable, onClose, onSave }: {
           </div>
           <div>
             <label className={etiqueta}>Nacionalidad</label>
-            <input value={nationality} onChange={e => setNationality(e.target.value)} className={campo} />
+            <NacionalidadInput value={nationality} onChange={setNationality} className={campo} />
           </div>
         </div>
         <div>

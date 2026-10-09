@@ -12,6 +12,7 @@ import { norm } from '../../lib/texto'
 import { BtnSpinner, Avatar } from './shared'
 import { CONDITIONS, NEG_STATUSES, STATUS_CONFIG, PRIORITY_CONFIG } from './constantes'
 import { EquipoInput } from '../../components/EquipoInput'
+import { NacionalidadInput } from '../../components/NacionalidadInput'
 
 // ── Modales de Distribución ───────────────────────────────────
 
@@ -250,10 +251,7 @@ export function AddPlayerModal({ players, existingPlayerIds, season, onClose, on
             {POSITIONS.map(p => <option key={p.code} value={p.code}>{positionLabel(p.code)}</option>)}
           </select>
           <div className="flex gap-2">
-            <input value={newNationality} onChange={e => setNewNationality(e.target.value)}
-              placeholder="Nacionalidad"
-              className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-            />
+            <div className="flex-1"><NacionalidadInput value={newNationality} onChange={setNewNationality} placeholder="Nacionalidad" /></div>
             <div className="w-32">
               <input value={newBirthYear} onChange={e => { setNewBirthYear(e.target.value); if (yearError) setYearError('') }}
                 placeholder="Año nacimiento"

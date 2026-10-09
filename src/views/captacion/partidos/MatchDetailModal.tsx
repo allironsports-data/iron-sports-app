@@ -403,7 +403,9 @@ export function MatchDetailModal({
             onDeleteReport={onDeleteReport}
             showToast={showToast}
             onClose={() => setAmpliado(false)}
-            onOpenPlayer={onOpenPlayer}
+            // La ficha del jugador se abre debajo de esta capa: hay que cerrarla antes
+            onOpenPlayer={onOpenPlayer ? (id) => { setAmpliado(false); onOpenPlayer(id) } : undefined}
+            onFixPlayerTeam={onFixPlayerTeam}
             onOpenEquipo={(n) => { setAmpliado(false); onOpenEquipo(n) }}
           />
         )}

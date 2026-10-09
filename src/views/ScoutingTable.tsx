@@ -4,6 +4,10 @@ import * as db from '../lib/db'
 import { Save, X, Check } from 'lucide-react'
 import { isValidDate } from '../lib/validate'
 import { EquipoInput } from '../components/EquipoInput'
+import { AgenciaInput } from '../components/AgenciaInput'
+import { NacionalidadInput } from '../components/NacionalidadInput'
+
+const CELDA_COMBO = 'w-full rounded border border-blue-300 px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white'
 
 // Tabla de edición rápida de jugadores de scouting (Captación > Jugadores
 // > modo Edición). Mismo patrón que PlayersTable de jugadores propios:
@@ -29,7 +33,7 @@ type ColumnDef = {
   width: string
   getValue: (p: ScoutingPlayer) => string
   setValue: (p: ScoutingPlayer, value: string) => ScoutingPlayer
-  type?: 'text' | 'date' | 'select' | 'equipo'
+  type?: 'text' | 'date' | 'select' | 'equipo' | 'agencia' | 'nacionalidad'
   options?: string[]
 }
 
@@ -94,12 +98,12 @@ export function ScoutingTable({ players, onUpdatePlayer, showToast }: Props) {
       setValue: (p, v) => ({ ...p, assessment: (v || undefined) as ScoutingAssessment | undefined }),
     },
     {
-      key: 'nationality', label: 'Nacionalidad', width: 'min-w-[110px]',
+      key: 'nationality', label: 'Nacionalidad', width: 'min-w-[110px]', type: 'nacionalidad',
       getValue: p => p.nationality ?? '',
       setValue: (p, v) => ({ ...p, nationality: v.trim() || undefined }),
     },
     {
-      key: 'agency', label: 'Agencia', width: 'min-w-[110px]',
+      key: 'agency', label: 'Agencia', width: 'min-w-[110px]', type: 'agencia',
       getValue: p => p.agency ?? '',
       setValue: (p, v) => ({ ...p, agency: v.trim() || undefined }),
     },
@@ -154,13 +158,13 @@ export function ScoutingTable({ players, onUpdatePlayer, showToast }: Props) {
 
   // `valor` llega del campo Equipo (lista cerrada): elige y confirma en el mismo paso,
   // antes de que el estado editValue se haya actualizado
-  const confirmEdit = (valor: string = editValue): boolean => {
+  const confirmEdit = (valor: string = editValue, extra?: Partial<ScoutingPlayer>): boolean => {
     if (!editing) return false
     const col = columns.find(c => c.key === editing.field)!
     if (!isEditValueValid(col, valor)) { setEditInvalid(true); return false }
     const player = getPlayer(editing.playerId)
-    if (valor !== col.getValue(player)) {
-      const updated = col.setValue(player, valor)
+    if (valor !== col.getValue(player) || extra) {
+      const updated = { ...col.setValue(player, valor), ...extra }
       setPendingChanges(prev => new Map(prev).set(editing.playerId, updated))
     }
     setEditing(null)
@@ -274,11 +278,16 @@ export function ScoutingTable({ players, onUpdatePlayer, showToast }: Props) {
                             <EquipoInput
                               autoFocus
                               value={editValue}
-                              onChange={v => { setEditValue(v); confirmEdit(v) }}
+                              // La categoría es la del equipo: cambia con él
+                              onChange={(v, eq) => { setEditValue(v); confirmEdit(v, eq?.categoria ? { categoria: eq.categoria } : undefined) }}
                               onSalir={cancelEdit}
                               onKeyDown={handleKeyDown}
-                              className="w-full rounded border border-blue-300 px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
+                              className={CELDA_COMBO}
                             />
+                          ) : col.type === 'agencia' ? (
+                            <AgenciaInput autoFocus value={editValue} onChange={v => { setEditValue(v); confirmEdit(v) }} onSalir={cancelEdit} onKeyDown={handleKeyDown} className={CELDA_COMBO} />
+                          ) : col.type === 'nacionalidad' ? (
+                            <NacionalidadInput autoFocus value={editValue} onChange={v => { setEditValue(v); confirmEdit(v) }} onSalir={cancelEdit} onKeyDown={handleKeyDown} className={CELDA_COMBO} />
                           ) : col.type === 'select' ? (
                             <select
                               ref={inputRef as React.RefObject<HTMLSelectElement>}

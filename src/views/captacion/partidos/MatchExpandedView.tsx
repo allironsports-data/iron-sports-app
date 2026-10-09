@@ -4,7 +4,7 @@ import { X, Minimize2, ExternalLink, Search, Plus, UserPlus } from 'lucide-react
 import type { ScoutingPlayer, ScoutingReport, ScoutingMatch } from '../../../types'
 import type { Profile } from '../../../contexts/AuthContext'
 import { useEscapeKey } from '../../../hooks/useEscapeKey'
-import { teamMatchKind } from '../../../lib/equipos'
+import { teamMatchKind, avisoEquipoPartido } from '../../../lib/equipos'
 import * as db from '../../../lib/db'
 import { guardarBorrador, leerBorrador, borrarBorrador, encolar, esErrorDeRed } from '../../../lib/colaInformes'
 import { AssessmentChip, ReportCard } from '../comun'
@@ -24,7 +24,7 @@ type FiltroVeredicto = '' | 'Llamar' | 'Seguir' | 'Descartar' | 'Visto' | 'sin'
 
 export function MatchExpandedView({
   match, scouts, profiles, currentProfile, linkedPlayers, scoutingReports, allMatches, scoutingPlayers, sugeridos,
-  nuestros, onAddMatchPlayer, onCreatePlayer, onAddReport, onUpdateReport, onDeleteReport, showToast, onClose, onOpenPlayer, onOpenEquipo,
+  nuestros, onAddMatchPlayer, onCreatePlayer, onFixPlayerTeam, onAddReport, onUpdateReport, onDeleteReport, showToast, onClose, onOpenPlayer, onOpenEquipo,
 }: {
   match: ScoutingMatch
   scouts: MatchScoutInfo[]
@@ -48,6 +48,8 @@ export function MatchExpandedView({
   showToast?: ShowToast
   onClose: () => void
   onOpenPlayer?: (id: string) => void
+  /** Corregir el equipo de la ficha cuando no es ninguno de los que juegan */
+  onFixPlayerTeam?: (p: ScoutingPlayer, equipo: string) => Promise<void>
   onOpenEquipo: (nombre: string) => void
 }) {
   const [filtroScout, setFiltroScout] = useState('')
@@ -96,6 +98,13 @@ export function MatchExpandedView({
   const [busquedaNuevo, setBusquedaNuevo] = useState('')
   const [vinculando, setVinculando] = useState<string | null>(null)
   const [creandoJugador, setCreandoJugador] = useState(false)
+  // Avisos de equipo que el usuario ha dicho que están bien así
+  const [equiposDescartados, setEquiposDescartados] = useState<Set<string>>(new Set())
+  async function corregirEquipo(p: ScoutingPlayer, equipo: string) {
+    if (!onFixPlayerTeam) return
+    try { await onFixPlayerTeam(p, equipo) }
+    catch { showToast?.('No se ha podido cambiar el equipo', 'error') }
+  }
 
   useEscapeKey(() => { if (formPara) setFormPara(null); else onClose() })
 
@@ -436,6 +445,28 @@ export function MatchExpandedView({
                           <span title="Etiqueta actual del jugador"><AssessmentChip a={p.assessment} small /></span>
                           {v && <span title="Veredicto en este partido (el más fuerte de los informes)">{chipVeredicto(v)}</span>}
                         </div>
+                        {/* Equipo de la ficha que no juega este partido: se ofrece corregirlo
+                            aquí mismo (mismo aviso que en la ficha normal del partido) */}
+                        {onFixPlayerTeam && !equiposDescartados.has(p.id) && (() => {
+                          const aviso = avisoEquipoPartido(p.team, match.homeTeam, match.awayTeam)
+                          if (!aviso) return null
+                          return (
+                            <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+                              <span>🔁 Su ficha pone <b>{p.team || 'sin equipo'}</b>, que no juega aquí.</span>
+                              {aviso.sugerido ? (
+                                <button onClick={() => void corregirEquipo(p, aviso.sugerido!)} className="px-2 py-0.5 rounded-md bg-amber-600 text-white font-semibold hover:bg-amber-700">
+                                  Cambiar a {aviso.sugerido}
+                                </button>
+                              ) : (
+                                <>
+                                  <button onClick={() => void corregirEquipo(p, match.homeTeam)} className="px-2 py-0.5 rounded-md bg-amber-600 text-white font-semibold hover:bg-amber-700">{match.homeTeam}</button>
+                                  <button onClick={() => void corregirEquipo(p, match.awayTeam)} className="px-2 py-0.5 rounded-md bg-amber-600 text-white font-semibold hover:bg-amber-700">{match.awayTeam}</button>
+                                </>
+                              )}
+                              <button onClick={() => setEquiposDescartados(prev => new Set(prev).add(p.id))} className="text-amber-600 underline">Está bien así</button>
+                            </div>
+                          )
+                        })()}
                         {(p.clubContract || p.agency || p.nationality) && (
                           <div className="mt-0.5 text-[11px] text-slate-400">
                             {[p.nationality, p.agency && `Agencia: ${p.agency}`, p.clubContract && `Contrato: ${p.clubContract}`].filter(Boolean).join(' · ')}

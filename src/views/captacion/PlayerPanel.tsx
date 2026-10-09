@@ -9,6 +9,9 @@ import { ZONAS, ZONA_CORTA, SIN_ZONA, normEquipo, type Zona } from '../../lib/zo
 import type { buscarJugadoresParecidos } from '../../lib/duplicados'
 import { AssessmentChip, FormRow, InfoItem, Spinner, ReportCard } from './comun'
 import { EquipoInput } from '../../components/EquipoInput'
+import { AgenciaInput } from '../../components/AgenciaInput'
+import { NacionalidadInput } from '../../components/NacionalidadInput'
+import { separarNacionalidades, unirNacionalidades } from '../../lib/paises'
 import { type ShowToast, type CaptacionTab, type ConclusionOption, ASSESSMENT_CONFIG, ALL_ASSESSMENTS, POSITIONS_SCOUTING, CONCLUSION_OPTIONS, MONTHS_ES, REPORT_TEMPLATE, birthYearFromBirthdate, fmtDate, normConclusion } from './helpers'
 import { AddToFirmasButton } from './firmas/AddToFirmasButton'
 import { InfosSection, AddInfoMenu } from './InfosSection'
@@ -404,11 +407,11 @@ export function PlayerPanel({
                 <EquipoInput
                   value={form.team ?? ''}
                   onChange={(team, equipo) => {
-                    // Al elegir uno conocido, la categoría se rellena sola si estaba vacía
+                    // La categoría es la del equipo: al elegir uno conocido se pone sola
                     setForm(f => ({
                       ...f,
                       team,
-                      categoria: equipo?.categoria && !f.categoria ? equipo.categoria : f.categoria,
+                      categoria: equipo?.categoria ?? f.categoria,
                     }))
                   }}
                   className="field" placeholder="Escribe y elige un equipo" />
@@ -419,12 +422,23 @@ export function PlayerPanel({
                     list="lista-categorias"
                     value={form.categoria ?? ''}
                     onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))}
-                    className="field" placeholder="Juveniles, Segunda RFEF..." />
+                    className="field" placeholder="Se toma del equipo" />
+                  <p className="text-[10px] text-slate-400 mt-0.5">La pone el equipo. Si el equipo no la tiene, la que escribas aquí se guarda para él.</p>
                 </FormRow>
-                <FormRow label="Nacionalidad">
-                  <input value={form.nationality ?? ''} onChange={e => setForm(f => ({ ...f, nationality: e.target.value }))}
-                    className="field" placeholder="Española..." />
-                </FormRow>
+                <div className="grid grid-cols-2 gap-2">
+                  <FormRow label="Nacionalidad">
+                    <NacionalidadInput
+                      value={separarNacionalidades(form.nationality)[0] ?? ''}
+                      onChange={v => setForm(f => ({ ...f, nationality: unirNacionalidades([v, separarNacionalidades(f.nationality)[1]]) }))}
+                      className="field" />
+                  </FormRow>
+                  <FormRow label="2ª nacionalidad">
+                    <NacionalidadInput
+                      value={separarNacionalidades(form.nationality)[1] ?? ''}
+                      onChange={v => setForm(f => ({ ...f, nationality: unirNacionalidades([separarNacionalidades(f.nationality)[0], v]) }))}
+                      className="field" placeholder="Opcional" />
+                  </FormRow>
+                </div>
               </div>
               <FormRow label="Assessment">
                 <select value={form.assessment ?? ''} onChange={e => setForm(f => ({ ...f, assessment: (e.target.value as ScoutingAssessment) || undefined }))} className="field">
@@ -433,8 +447,7 @@ export function PlayerPanel({
                 </select>
               </FormRow>
               <FormRow label="Agencia">
-                <input value={form.agency ?? ''} onChange={e => setForm(f => ({ ...f, agency: e.target.value }))}
-                  className="field" placeholder="Representante..." />
+                <AgenciaInput value={form.agency ?? ''} onChange={v => setForm(f => ({ ...f, agency: v }))} className="field" />
               </FormRow>
               <FormRow label="Contrato club">
                 <input value={form.clubContract ?? ''} onChange={e => setForm(f => ({ ...f, clubContract: e.target.value }))}

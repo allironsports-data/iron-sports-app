@@ -5,6 +5,7 @@ import type { ScoutingPlayer, BoulemaPlayer } from '../types'
 import type { Profile } from '../contexts/AuthContext'
 import { ToastStack } from '../components/ToastStack'
 import { EquipoInput } from '../components/EquipoInput'
+import { NacionalidadInput } from '../components/NacionalidadInput'
 import { useToast } from '../hooks/useToast'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import { useIsDesktop } from '../hooks/useIsDesktop'
@@ -98,7 +99,7 @@ function BoulemaPlayerModal({ profiles, initial, onClose, onSave, promote }: {
             </div>
             <div>
               <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Nacionalidad</label>
-              <input value={nationality} onChange={e => setNationality(e.target.value)} className={`mt-1 ${INPUT}`} />
+              <div className="mt-1"><NacionalidadInput value={nationality} onChange={setNationality} className={INPUT} /></div>
             </div>
             <div>
               <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Encargado AIS</label>

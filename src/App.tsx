@@ -24,6 +24,8 @@ import { esZona, zonaDe, clubBase, SIN_ZONA, type Zona } from './lib/zonas'
 import { useFilasEquipos, inicioTemporada, SIN_CATEGORIA } from './views/captacion/filasEquipos'
 import { EquiposContext, type EquiposContextValue } from './contexts/equiposContext'
 import type { OpcionEquipo } from './lib/sugerirEquipos'
+import { CatalogosContext, type CatalogosContextValue } from './contexts/catalogosContext'
+import { separarNacionalidades } from './lib/paises'
 import { teamsAlike } from './lib/equipos'
 import { hoyISO, fechaLocal, lunesDe, sumarDias } from './lib/fechas'
 import { construirAgenda, seccionesDelDia, type AgendaItem } from './lib/agendaItems'
@@ -272,6 +274,19 @@ export default function App() {
     for (const p of scoutingPlayers) if (p.categoria) set.add(p.categoria)
     return [...set].sort((a, b) => a.localeCompare(b, 'es'))
   }, [opcionesEquipo, scoutingPlayers])
+  // Agencias y nacionalidades ya usadas: listas cerradas de esos campos (AgenciaInput, NacionalidadInput)
+  const catalogos = useMemo<CatalogosContextValue>(() => {
+    const ag = new Set<string>(), nac = new Set<string>()
+    for (const p of scoutingPlayers) {
+      if (p.agency?.trim()) ag.add(p.agency.trim())
+      for (const n of separarNacionalidades(p.nationality)) nac.add(n)
+    }
+    for (const p of players) for (const n of separarNacionalidades(p.nationality)) nac.add(n)
+    for (const p of boulemaPlayers) for (const n of separarNacionalidades(p.nationality)) nac.add(n)
+    for (const o of ofrecimientos) for (const n of separarNacionalidades(o.nationality)) nac.add(n)
+    const orden = (a: string, b: string) => a.localeCompare(b, 'es')
+    return { agencias: [...ag].sort(orden), nacionalidades: [...nac].sort(orden) }
+  }, [scoutingPlayers, players, boulemaPlayers, ofrecimientos])
 
   useEffect(() => { playersRef.current = players }, [players])
   useEffect(() => { tasksRef.current = tasks }, [tasks])
@@ -2574,12 +2589,14 @@ export default function App() {
   // El provider envuelve también las fichas flotantes y demás extras
   return (
     <EquiposContext.Provider value={equiposCtx}>
-      {withExtras(
-        <>
-          <BajoCapa oculta={!!encima}>{seccion}</BajoCapa>
-          {encima}
-        </>
-      )}
+      <CatalogosContext.Provider value={catalogos}>
+        {withExtras(
+          <>
+            <BajoCapa oculta={!!encima}>{seccion}</BajoCapa>
+            {encima}
+          </>
+        )}
+      </CatalogosContext.Provider>
     </EquiposContext.Provider>
   )
 }
