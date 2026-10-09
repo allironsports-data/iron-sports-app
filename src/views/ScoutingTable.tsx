@@ -3,6 +3,7 @@ import type { ScoutingPlayer, ScoutingAssessment } from '../types'
 import * as db from '../lib/db'
 import { Save, X, Check } from 'lucide-react'
 import { isValidDate } from '../lib/validate'
+import { EquipoInput } from '../components/EquipoInput'
 
 // Tabla de edición rápida de jugadores de scouting (Captación > Jugadores
 // > modo Edición). Mismo patrón que PlayersTable de jugadores propios:
@@ -28,7 +29,7 @@ type ColumnDef = {
   width: string
   getValue: (p: ScoutingPlayer) => string
   setValue: (p: ScoutingPlayer, value: string) => ScoutingPlayer
-  type?: 'text' | 'date' | 'select'
+  type?: 'text' | 'date' | 'select' | 'equipo'
   options?: string[]
 }
 
@@ -78,7 +79,7 @@ export function ScoutingTable({ players, onUpdatePlayer, showToast }: Props) {
       setValue: (p, v) => ({ ...p, foot: v || undefined }),
     },
     {
-      key: 'team', label: 'Equipo', width: 'min-w-[140px]',
+      key: 'team', label: 'Equipo', width: 'min-w-[140px]', type: 'equipo',
       getValue: p => p.team ?? '',
       setValue: (p, v) => ({ ...p, team: v.trim() || undefined }),
     },
@@ -151,13 +152,15 @@ export function ScoutingTable({ players, onUpdatePlayer, showToast }: Props) {
     return true
   }
 
-  const confirmEdit = (): boolean => {
+  // `valor` llega del campo Equipo (lista cerrada): elige y confirma en el mismo paso,
+  // antes de que el estado editValue se haya actualizado
+  const confirmEdit = (valor: string = editValue): boolean => {
     if (!editing) return false
     const col = columns.find(c => c.key === editing.field)!
-    if (!isEditValueValid(col, editValue)) { setEditInvalid(true); return false }
+    if (!isEditValueValid(col, valor)) { setEditInvalid(true); return false }
     const player = getPlayer(editing.playerId)
-    if (editValue !== col.getValue(player)) {
-      const updated = col.setValue(player, editValue)
+    if (valor !== col.getValue(player)) {
+      const updated = col.setValue(player, valor)
       setPendingChanges(prev => new Map(prev).set(editing.playerId, updated))
     }
     setEditing(null)
@@ -267,12 +270,21 @@ export function ScoutingTable({ players, onUpdatePlayer, showToast }: Props) {
                     return (
                       <td key={col.key} className={`px-3 py-1.5 ${col.width}`}>
                         {isEditing ? (
-                          col.type === 'select' ? (
+                          col.type === 'equipo' ? (
+                            <EquipoInput
+                              autoFocus
+                              value={editValue}
+                              onChange={v => { setEditValue(v); confirmEdit(v) }}
+                              onSalir={cancelEdit}
+                              onKeyDown={handleKeyDown}
+                              className="w-full rounded border border-blue-300 px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
+                            />
+                          ) : col.type === 'select' ? (
                             <select
                               ref={inputRef as React.RefObject<HTMLSelectElement>}
                               value={editValue}
                               onChange={e => setEditValue(e.target.value)}
-                              onBlur={confirmEdit}
+                              onBlur={() => confirmEdit()}
                               onKeyDown={handleKeyDown}
                               className="w-full rounded border border-blue-300 px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
                             >
@@ -285,7 +297,7 @@ export function ScoutingTable({ players, onUpdatePlayer, showToast }: Props) {
                               type={col.type ?? 'text'}
                               value={editValue}
                               onChange={e => { setEditValue(e.target.value); setEditInvalid(false) }}
-                              onBlur={confirmEdit}
+                              onBlur={() => confirmEdit()}
                               onKeyDown={handleKeyDown}
                               aria-invalid={editInvalid}
                               className={`w-full rounded border px-1.5 py-1 text-xs focus:outline-none focus:ring-2 ${

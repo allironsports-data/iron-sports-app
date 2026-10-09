@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, type Dispatch, type SetStateAction } from "react";
 import { TaskDetailPanel } from "../components/TaskDetailPanel";
+import { EquipoInput } from '../components/EquipoInput'
 import { BUILD_ID, CHANGELOG } from "../changelog";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { EmptyState } from "../components/EmptyState";
@@ -3803,13 +3804,13 @@ function AddPlayerModal({ profiles, onClose, onAdd }: {
             </div>
             {isLoan ? (
               <div className="grid grid-cols-2 gap-3">
-                <F label="Club propietario" value={club1} onChange={setClub1} />
-                <F label="Club donde juega" value={club2} onChange={setClub2} />
+                <FEquipo label="Club propietario" value={club1} onChange={setClub1} />
+                <FEquipo label="Club donde juega" value={club2} onChange={setClub2} />
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3">
-                <F label="Club (principal)" value={club1} onChange={setClub1} />
-                <F label="Segundo club (opcional)" value={club2} onChange={setClub2} />
+                <FEquipo label="Club (principal)" value={club1} onChange={setClub1} />
+                <FEquipo label="Segundo club (opcional)" value={club2} onChange={setClub2} />
               </div>
             )}
           </div>
@@ -3842,6 +3843,17 @@ function AddPlayerModal({ profiles, onClose, onAdd }: {
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+/** Club del jugador: lista cerrada de equipos (ver EquipoInput) */
+function FEquipo({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div>
+      <label className="block text-xs font-medium text-slate-600 mb-1">{label}</label>
+      <EquipoInput value={value} onChange={onChange}
+        className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
     </div>
   );
 }

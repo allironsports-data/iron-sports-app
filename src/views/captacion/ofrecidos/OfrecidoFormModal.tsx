@@ -9,6 +9,7 @@ import { FormRow, Spinner } from '../comun'
 import { POSITIONS_SCOUTING, MONTHS_ES } from '../helpers'
 import { Modal, PickPersonas, PickTipos } from './comun'
 import { INPUT } from './estilos'
+import { EquipoInput } from '../../../components/EquipoInput'
 
 // ── Alta y edición de un ofrecimiento ───────────────────────────────
 // Al crear, se puede pedir ya el nivel 1 (personas + tipos). Al editar,
@@ -165,7 +166,7 @@ export function OfrecidoFormModal({
           </FormRow>
         </div>
         <div className="grid grid-cols-3 gap-2">
-          <FormRow label="Equipo"><input value={team} onChange={e => setTeam(e.target.value)} placeholder="Club actual" className={INPUT} /></FormRow>
+          <FormRow label="Equipo"><EquipoInput value={team} onChange={setTeam} placeholder="Club actual" className={INPUT} /></FormRow>
           <FormRow label="País"><input value={country} onChange={e => setCountry(e.target.value)} placeholder="Donde juega" className={INPUT} /></FormRow>
           <FormRow label="Nacionalidad"><input value={nationality} onChange={e => setNationality(e.target.value)} className={INPUT} /></FormRow>
         </div>

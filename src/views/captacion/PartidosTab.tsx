@@ -32,10 +32,9 @@ export function PartidosTab({
   hideFutureMatches, setHideFutureMatches, mergeMode, setMergeMode, mergeSelected, setMergeSelected, toggleMergeSelected,
   filteredMatches, matchesPagina, matchPlayersByMatchId, playersById, scoutsByMatch, conteoPorPartido,
   handleToggleMatchStatus, openEditMatch, handleDeleteMatch, onRemoveMatchPlayer, currentProfile, isAdmin,
-  matchPage, setMatchPage, matchTotalPages, renderFichaPartido, nombresEquipos,
+  matchPage, setMatchPage, matchTotalPages, renderFichaPartido,
 }: {
   /** Equipos conocidos, para sugerir al escribir y avisar de nombres nuevos */
-  nombresEquipos: string[]
   detailMatchId: string | null
   setDetailMatchId: React.Dispatch<React.SetStateAction<string | null>>
   isDesktop: boolean
@@ -245,7 +244,6 @@ export function PartidosTab({
           onSave={handleSaveMatch}
           onCancel={() => { setShowAddMatch(false); setEditingMatch(null) }}
           showToast={showToast}
-          equipos={nombresEquipos}
           partidos={scoutingMatches}
           onOpenExisting={id => { setShowAddMatch(false); setEditingMatch(null); setDetailMatchId(id) }}
         />
@@ -401,8 +399,7 @@ export function PartidosTab({
                     onSave={handleSaveMatch}
                     onCancel={() => { setShowAddMatch(false); setEditingMatch(null) }}
                     showToast={showToast}
-                    equipos={nombresEquipos}
-                  />
+                            />
                 )
               }
               const linkedPlayerIds = matchPlayersByMatchId[m.id] ?? []
@@ -526,8 +523,7 @@ export function PartidosTab({
                           key={`edit-${m.id}`}
                           match={m}
                           profiles={profiles}
-                          equipos={nombresEquipos}
-                          onSave={async (f) => { await handleSaveMatch(f); showToast('Partido actualizado') }}
+                                          onSave={async (f) => { await handleSaveMatch(f); showToast('Partido actualizado') }}
                           onCancel={() => { setShowAddMatch(false); setEditingMatch(null) }}
                         />
                       )

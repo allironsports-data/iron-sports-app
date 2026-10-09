@@ -321,8 +321,6 @@ export function Captacion({
   // Se calcula UNA vez aquí (antes también lo hacía EquiposTab por su cuenta) y se pasa por prop
   const desdeTemporada = inicioTemporada()
   const filasEquipos = useFilasEquipos(equipos, scoutingPlayers, scoutingReports, scoutingMatches, clubZonas, desdeTemporada)
-  // Nombres de equipos conocidos, para los formularios de partido
-  const nombresEquipos = useMemo(() => filasEquipos.map(f => f.nombre), [filasEquipos])
   const filaEquipoAbierta = useMemo(
     () => panelEquipo ? filasEquipos.find(f => f.clave === normEquipo(panelEquipo)) ?? null : null,
     [filasEquipos, panelEquipo],
@@ -373,11 +371,7 @@ export function Captacion({
     }
   }
 
-  // Sugerencias del catálogo para los campos Equipo y Categoría
-  const equiposOrdenados = useMemo(
-    () => [...equipos].filter(e => e.activo !== false).sort((a, b) => a.nombre.localeCompare(b.nombre)),
-    [equipos],
-  )
+  // Sugerencias para el campo Categoría (el de Equipo es lista cerrada: ver EquipoInput)
   const categoriasConocidas = useMemo(() => {
     const set = new Set<string>()
     for (const e of equipos) if (e.categoria) set.add(e.categoria)
@@ -1294,8 +1288,6 @@ export function Captacion({
           setZonasAbierto={setZonasAbierto}
           setDetailMatchId={setDetailMatchId}
           categoriasConocidas={categoriasConocidas}
-          equiposOrdenados={equiposOrdenados}
-          equipos={equipos}
           scoutingMatches={scoutingMatches}
           form={form} setForm={setForm} emptyForm={emptyForm}
           playerNameError={playerNameError} setPlayerNameError={setPlayerNameError}
@@ -1629,7 +1621,6 @@ export function Captacion({
       {/* ── PARTIDOS TAB ──────────────────────────────────── */}
       {captTab === 'partidos' && (
         <PartidosTab
-          nombresEquipos={nombresEquipos}
           detailMatchId={detailMatchId} setDetailMatchId={setDetailMatchId}
           isDesktop={isDesktop} isTablaAncha={isTablaAncha}
           misPendientes={misPendientes}

@@ -9,6 +9,7 @@ import type {
 import { calcAge, PLAYER_ESTADOS, PLAYER_PRIORIDADES, type PlayerEstado, type PlayerPrioridad } from "../types";
 import { PRIORIDAD_META } from "../lib/prioridadJugador";
 import { PrioridadBadge } from "../components/PrioridadBadge";
+import { EquipoInput } from '../components/EquipoInput'
 import { estadoDe, ESTADO_META } from "../lib/estadoJugador";
 import type { Profile } from "../contexts/AuthContext";
 import { uploadContractPdf, urlDocumento, fetchNotes, createNote, updateNote, deleteNote,
@@ -1599,6 +1600,17 @@ function TF({ label, value, onChange, type = "text", required = false, placehold
 }
 
 /* ---- Edit Player Modal ---- */
+/** Club del jugador: lista cerrada de equipos (ver EquipoInput) */
+function EFEquipo({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div>
+      <label className="block text-xs font-medium text-slate-600 mb-1">{label}</label>
+      <EquipoInput value={value} onChange={onChange}
+        className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2" />
+    </div>
+  );
+}
+
 function EF({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (v: string) => void; type?: string }) {
   return (
     <div>
@@ -1757,8 +1769,8 @@ function EditPlayerModal({ player, profiles, isAdmin, onClose, onSave }: {
               <label htmlFor="editIsLoan" className="text-xs text-slate-600">Jugador cedido</label>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <EF label={isLoan ? "Club propietario" : "Club principal"} value={club1} onChange={setClub1} />
-              <EF label={isLoan ? "Club donde juega" : "Segundo equipo (opcional)"} value={club2} onChange={setClub2} />
+              <EFEquipo label={isLoan ? "Club propietario" : "Club principal"} value={club1} onChange={setClub1} />
+              <EFEquipo label={isLoan ? "Club donde juega" : "Segundo equipo (opcional)"} value={club2} onChange={setClub2} />
             </div>
           </div>
 

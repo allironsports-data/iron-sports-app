@@ -20,7 +20,10 @@ const rutaInicial = typeof window !== 'undefined' ? parsearHash(window.location.
 import { ConflictModal } from './components/ConflictModal'
 import type { ConflictInfo } from './components/conflict'
 import { BUILD_ID } from './changelog'
-import { esZona, type Zona } from './lib/zonas'
+import { esZona, zonaDe, clubBase, SIN_ZONA, type Zona } from './lib/zonas'
+import { useFilasEquipos, inicioTemporada, SIN_CATEGORIA } from './views/captacion/filasEquipos'
+import { EquiposContext, type EquiposContextValue } from './contexts/equiposContext'
+import type { OpcionEquipo } from './lib/sugerirEquipos'
 import { teamsAlike } from './lib/equipos'
 import { hoyISO } from './lib/fechas'
 import { siguienteFecha } from './lib/recurrencia'
@@ -247,6 +250,21 @@ export default function App() {
   const [clubZonas, setClubZonas] = useState<Record<string, Zona>>({})
   // Catálogo de equipos (pestaña Captación → Equipos)
   const [equipos, setEquipos] = useState<db.Equipo[]>([])
+  // Lista cerrada del campo «Equipo» (components/EquipoInput): la misma que la
+  // pestaña Captación → Equipos, catálogo + equipos con jugadores o partidos.
+  const filasEquiposApp = useFilasEquipos(equipos, scoutingPlayers, scoutingReports, scoutingMatches, clubZonas, inicioTemporada())
+  const opcionesEquipo = useMemo<OpcionEquipo[]>(() => filasEquiposApp.map(f => ({
+    nombre: f.nombre,
+    clave: f.clave,
+    categoria: f.categoria === SIN_CATEGORIA ? undefined : f.categoria,
+    zona: f.zona === SIN_ZONA ? undefined : f.zona,
+  })), [filasEquiposApp])
+  const categoriasEquipo = useMemo(() => {
+    const set = new Set<string>()
+    for (const o of opcionesEquipo) if (o.categoria) set.add(o.categoria)
+    for (const p of scoutingPlayers) if (p.categoria) set.add(p.categoria)
+    return [...set].sort((a, b) => a.localeCompare(b, 'es'))
+  }, [opcionesEquipo, scoutingPlayers])
 
   useEffect(() => { playersRef.current = players }, [players])
   useEffect(() => { tasksRef.current = tasks }, [tasks])
@@ -1373,6 +1391,21 @@ export default function App() {
       return next
     })
   }
+
+  // ── Catálogo para el campo «Equipo» (lista cerrada en toda la app) ──
+  // Las listas se calculan arriba, con el resto de hooks; aquí solo se monta
+  // el valor del contexto con las acciones (alta de equipo y zona del club).
+  const equiposCtx: EquiposContextValue = {
+    opciones: opcionesEquipo,
+    categorias: categoriasEquipo,
+    zonaDeducida: (nombre) => zonaDe(nombre, clubZonas),
+    crear: async ({ nombre, categoria, zona }) => {
+      const club = clubBase(nombre)
+      await handleSaveEquipo({ nombre, club, categoria, manual: true })
+      // La zona es del club: solo se guarda si no es la que ya se deduce
+      if (zona !== zonaDe(nombre, clubZonas)) await handleSetClubZona(club, nombre, zona)
+    },
+  }
   const handleDeleteScoutingPlayer = (id: string) => {
     setScoutingPlayers(prev => prev.filter(x => x.id !== id))
     setScoutingReports(prev => prev.filter(r => r.playerId !== id))
@@ -2443,10 +2476,15 @@ export default function App() {
     )
   })()
 
-  return withExtras(
-    <>
-      <BajoCapa oculta={!!encima}>{seccion}</BajoCapa>
-      {encima}
-    </>
+  // El provider envuelve también las fichas flotantes y demás extras
+  return (
+    <EquiposContext.Provider value={equiposCtx}>
+      {withExtras(
+        <>
+          <BajoCapa oculta={!!encima}>{seccion}</BajoCapa>
+          {encima}
+        </>
+      )}
+    </EquiposContext.Provider>
   )
 }

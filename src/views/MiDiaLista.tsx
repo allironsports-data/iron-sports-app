@@ -137,7 +137,7 @@ export function MiDiaLista({
     [esYo, onActualizarProceso, deLaPersona, personaId],
   )
   // Cierre del día: lo que sigue abierto para hoy, cuando ya es tarde
-  const deCierre = useMemo(() => esYo && !cierreOculto ? pendientesDeCierre(s, ahoraHora) : [], [esYo, cierreOculto, s, ahoraHora])
+  const deCierre = useMemo(() => esYo && !cierreOculto ? pendientesDeCierre(s, personaId, ahoraHora) : [], [esYo, cierreOculto, s, personaId, ahoraHora])
 
   const alternar = (id: SeccionId) => setPlegadas(prev => {
     const n = new Set(prev)

@@ -11,12 +11,12 @@ import type { Profile } from '../../../contexts/AuthContext'
 import { useEscapeKey } from '../../../hooks/useEscapeKey'
 import { COMPETITION_OPTIONS } from '../helpers'
 import { Spinner } from '../comun'
+import { EquipoInput } from '../../../components/EquipoInput'
 import type { MatchFormState } from './MatchFormPanel'
 
 const campo = 'w-full border border-slate-300 rounded-md px-1.5 py-1 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30'
 
-export function MatchEditRow({ match, profiles, onSave, onCancel, equipos = [] }: {
-  equipos?: string[]
+export function MatchEditRow({ match, profiles, onSave, onCancel }: {
   match: ScoutingMatch
   profiles: Profile[]
   onSave: (f: MatchFormState) => Promise<void>
@@ -48,12 +48,11 @@ export function MatchEditRow({ match, profiles, onSave, onCancel, equipos = [] }
         <input type="time" value={form.time} onChange={e => set('time', e.target.value)} className={campo} aria-label="Hora" />
       </td>
       <td className="px-2 py-1.5 align-top">
-        <datalist id="equipos-conocidos-fila">{equipos.map(n => <option key={n} value={n} />)}</datalist>
-        <input autoFocus value={form.homeTeam} onChange={e => set('homeTeam', e.target.value)} onKeyDown={alIntro} list="equipos-conocidos-fila" className={campo} placeholder="Local" aria-label="Local" />
+        <EquipoInput autoFocus value={form.homeTeam} onChange={v => set('homeTeam', v)} onKeyDown={alIntro} className={campo} placeholder="Local" aria-label="Local" />
       </td>
       <td className="px-1 py-1.5 align-top text-center text-[11px] font-bold text-slate-400 pt-2.5">vs</td>
       <td className="px-2 py-1.5 align-top">
-        <input value={form.awayTeam} onChange={e => set('awayTeam', e.target.value)} onKeyDown={alIntro} list="equipos-conocidos-fila" className={campo} placeholder="Visitante" aria-label="Visitante" />
+        <EquipoInput value={form.awayTeam} onChange={v => set('awayTeam', v)} onKeyDown={alIntro} className={campo} placeholder="Visitante" aria-label="Visitante" />
       </td>
       <td className="px-2 py-1.5 align-top">
         <input value={form.competition} onChange={e => set('competition', e.target.value)} onKeyDown={alIntro} list="competition-options-fila" className={campo} placeholder="Competición" aria-label="Competición" />

@@ -467,16 +467,21 @@ describe('procesos: actualización semanal', () => {
 
 describe('cierre del día', () => {
   const its = construirAgenda(base({
-    tasks: [task({ id: 'abierta', dueDate: HOY }), task({ id: 'atrasada', dueDate: '2026-09-25' }), task({ id: 'proceso', status: 'en_progreso' })],
+    tasks: [
+      task({ id: 'abierta', dueDate: HOY }), task({ id: 'atrasada', dueDate: '2026-09-25' }), task({ id: 'proceso', status: 'en_progreso' }),
+      // La lleva otro y yo solo la sigo: no me toca a mí decidir qué se hace con ella
+      task({ id: 'adjunta', dueDate: HOY, assigneeId: OTRO, watchers: [YO] }),
+    ],
     scoutingMatches: [match({ id: 'm1', assignedTo: 'NB' })],
   }))
-  const s = seccionesDelDia(its, HOY)
+  const s = seccionesDelDia(its.filter(it => itemEsDe(it, YO)), HOY)
   it('antes de las 18:00 no se propone nada', () => {
-    expect(pendientesDeCierre(s, '17:59')).toEqual([])
-    expect(pendientesDeCierre(s)).toEqual([])
+    expect(pendientesDeCierre(s, YO, '17:59')).toEqual([])
+    expect(pendientesDeCierre(s, YO)).toEqual([])
   })
-  it('a partir de las 18:00, el trabajo de hoy que sigue abierto y se puede mover (ni citas ni procesos)', () => {
-    expect(pendientesDeCierre(s, '18:00').map(i => i.id)).toEqual(['tarea:atrasada', 'tarea:abierta'])
+  it('a partir de las 18:00, el trabajo de hoy que llevo yo, sigue abierto y se puede mover (ni citas, ni procesos, ni adjuntas)', () => {
+    expect(s.hoy.map(i => i.id)).toContain('tarea:adjunta')
+    expect(pendientesDeCierre(s, YO, '18:00').map(i => i.id)).toEqual(['tarea:atrasada', 'tarea:abierta'])
   })
 })
 

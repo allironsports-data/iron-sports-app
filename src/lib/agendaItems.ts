@@ -706,10 +706,11 @@ export function procesosSinActualizar(items: AgendaItem[], personaId: string): A
 /** A partir de esta hora, lo que queda abierto para hoy pide decidir qué se hace con ello */
 export const HORA_CIERRE_DIA = '18:00'
 
-/** Trabajo de hoy que sigue abierto y se puede mover (si ya es hora de cerrar el día) */
-export function pendientesDeCierre(s: SeccionesDia, ahoraHora?: string): AgendaItem[] {
+/** Trabajo de hoy del que `personaId` es responsable, sigue abierto y se puede mover (si ya es hora de cerrar el día).
+ *  Lo adjunto (lo lleva otra persona) no entra: decidir qué hacer con ello no es cosa de quien solo lo sigue. */
+export function pendientesDeCierre(s: SeccionesDia, personaId: string, ahoraHora?: string): AgendaItem[] {
   if (!ahoraHora || ahoraHora < HORA_CIERRE_DIA) return []
-  return s.hoy.filter(it => permisosItem(it).reprogramar)
+  return s.hoy.filter(it => it.personId === personaId && permisosItem(it).reprogramar)
 }
 
 /** Viernes de esta semana (el mismo día si hoy es viernes); en fin de semana, el viernes siguiente */

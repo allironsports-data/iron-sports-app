@@ -6,6 +6,7 @@ import logoImg from '../assets/logo.jpeg'
 import type { ScoutingPlayer, BoulemaPlayer } from '../types'
 import type { Profile } from '../contexts/AuthContext'
 import { ToastStack } from '../components/ToastStack'
+import { EquipoInput } from '../components/EquipoInput'
 import { useToast } from '../hooks/useToast'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import { useIsDesktop } from '../hooks/useIsDesktop'
@@ -91,7 +92,7 @@ function BoulemaPlayerModal({ profiles, initial, onClose, onSave, promote }: {
             </div>
             <div>
               <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Club</label>
-              <input value={team} onChange={e => setTeam(e.target.value)} className={`mt-1 ${INPUT}`} />
+              <div className="mt-1"><EquipoInput value={team} onChange={setTeam} className={INPUT} /></div>
             </div>
             <div>
               <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">País (donde juega)</label>

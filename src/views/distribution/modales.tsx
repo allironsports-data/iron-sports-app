@@ -11,6 +11,7 @@ import { countryCode3 } from '../../lib/clubTiers'
 import { norm } from '../../lib/texto'
 import { BtnSpinner, Avatar } from './shared'
 import { CONDITIONS, NEG_STATUSES, STATUS_CONFIG, PRIORITY_CONFIG } from './constantes'
+import { EquipoInput } from '../../components/EquipoInput'
 
 // ── Modales de Distribución ───────────────────────────────────
 
@@ -262,10 +263,7 @@ export function AddPlayerModal({ players, existingPlayerIds, season, onClose, on
               {yearError && <p className="text-xs text-red-600 mt-1">{yearError}</p>}
             </div>
           </div>
-          <input value={newClub} onChange={e => setNewClub(e.target.value)}
-            placeholder="Club actual (opcional)"
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-          />
+          <EquipoInput value={newClub} onChange={setNewClub} placeholder="Club actual (opcional)" />
           {sharedFields}
           <button
             onClick={handleCreateIntermediar}

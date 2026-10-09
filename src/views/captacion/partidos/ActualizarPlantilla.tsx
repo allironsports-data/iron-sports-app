@@ -5,6 +5,7 @@ import { parsearAlineacion, emparejar, cambioDeEquipo, type Emparejamiento } fro
 import { useEscapeKey } from '../../../hooks/useEscapeKey'
 import { teamMatchKind } from '../../../lib/equipos'
 import { type ShowToast } from '../helpers'
+import { EquipoInput } from '../../../components/EquipoInput'
 // ── ActualizarPlantilla ──────────────────────────────────────────────
 // Pegas la plantilla de un club (de Sofascore, BeSoccer, Transfermarkt…)
 // y la app pone a todos esos jugadores en ese equipo de una tacada. Es la
@@ -74,16 +75,12 @@ export function ActualizarPlantilla({ scoutingPlayers, onClose, onFixTeam, onCre
         <div className="px-4 py-3 space-y-3 max-h-[70vh] overflow-y-auto">
           <div>
             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Club</label>
-            <input
+            <EquipoInput
               value={equipo}
-              onChange={e => setEquipo(e.target.value)}
-              list="equipos-conocidos"
+              onChange={setEquipo}
               placeholder="Sporting Gijón"
               className="mt-1 w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20"
             />
-            <datalist id="equipos-conocidos">
-              {equiposConocidos.map(t => <option key={t} value={t} />)}
-            </datalist>
           </div>
 
           <div>

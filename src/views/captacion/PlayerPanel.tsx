@@ -8,6 +8,7 @@ import { isValidName } from '../../lib/validate'
 import { ZONAS, ZONA_CORTA, SIN_ZONA, normEquipo, type Zona } from '../../lib/zonas'
 import type { buscarJugadoresParecidos } from '../../lib/duplicados'
 import { AssessmentChip, FormRow, InfoItem, Spinner, ReportCard } from './comun'
+import { EquipoInput } from '../../components/EquipoInput'
 import { type ShowToast, type CaptacionTab, type ConclusionOption, ASSESSMENT_CONFIG, ALL_ASSESSMENTS, POSITIONS_SCOUTING, CONCLUSION_OPTIONS, MONTHS_ES, REPORT_TEMPLATE, birthYearFromBirthdate, fmtDate, normConclusion } from './helpers'
 import { AddToFirmasButton } from './firmas/AddToFirmasButton'
 import { InfosSection, AddInfoMenu } from './InfosSection'
@@ -89,7 +90,7 @@ export function PlayerPanel({
   showAddPlayer, setShowAddPlayer, showEditPlayer, setShowEditPlayer, editTarget,
   // ficha del equipo
   filaEquipoAbierta, renombrando, setRenombrando, guardarRenombre, onSaveEquipo, onSetClubZona, setZonasAbierto, setDetailMatchId,
-  categoriasConocidas, equiposOrdenados, equipos, scoutingMatches,
+  categoriasConocidas, scoutingMatches,
   // formulario de jugador
   form, setForm, emptyForm, playerNameError, setPlayerNameError, jugadoresParecidos, setOcultarParecidos,
   reportCountByPlayer, handleSavePlayer, savingPlayer,
@@ -139,8 +140,6 @@ export function PlayerPanel({
   onSetClubZona: (club: string, nombre: string, zona: Zona | null) => Promise<void>
   setDetailMatchId: React.Dispatch<React.SetStateAction<string | null>>
   categoriasConocidas: string[]
-  equiposOrdenados: EquipoCatalogo[]
-  equipos: EquipoCatalogo[]
   scoutingMatches: ScoutingMatch[]
   form: PlayerFormState
   setForm: React.Dispatch<React.SetStateAction<PlayerFormState>>
@@ -396,31 +395,23 @@ export function PlayerPanel({
                   </select>
                 </FormRow>
               </div>
-              {/* Equipo y categoría: se sugiere el catálogo, pero se puede
-                  escribir cualquier cosa (un equipo nuevo se da de alta solo). */}
-              <datalist id="lista-equipos">
-                {equiposOrdenados.map(e => (
-                  <option key={e.nombre} value={e.nombre}>{e.categoria ?? ''}</option>
-                ))}
-              </datalist>
+              {/* Equipo: lista cerrada (catálogo + equipos con jugadores o partidos).
+                  Uno nuevo se da de alta desde el propio campo, con categoría y zona. */}
               <datalist id="lista-categorias">
                 {categoriasConocidas.map(c => <option key={c} value={c} />)}
               </datalist>
               <FormRow label="Equipo">
-                <input
-                  list="lista-equipos"
+                <EquipoInput
                   value={form.team ?? ''}
-                  onChange={e => {
-                    const team = e.target.value
-                    // Al elegir uno del catálogo, la categoría se rellena sola
-                    const delCatalogo = equipos.find(x => x.nombre === team)
+                  onChange={(team, equipo) => {
+                    // Al elegir uno conocido, la categoría se rellena sola si estaba vacía
                     setForm(f => ({
                       ...f,
                       team,
-                      categoria: delCatalogo?.categoria && !f.categoria ? delCatalogo.categoria : f.categoria,
+                      categoria: equipo?.categoria && !f.categoria ? equipo.categoria : f.categoria,
                     }))
                   }}
-                  className="field" placeholder="Escribe y elige, o pon uno nuevo" />
+                  className="field" placeholder="Escribe y elige un equipo" />
               </FormRow>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <FormRow label="Categoría">
