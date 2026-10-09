@@ -98,3 +98,17 @@ describe('esErrorDeRed', () => {
     expect(esErrorDeRed(null)).toBe(false)
   })
 })
+
+describe('procesarCola · un solo recorrido a la vez', () => {
+  it('dos llamadas simultáneas mandan cada informe una sola vez', async () => {
+    const st = almacen()
+    encolar({ playerId: 'p1', report: informe('p1') }, st)
+    encolar({ playerId: 'p2', report: informe('p2') }, st)
+    const enviados: string[] = []
+    const enviar = async (item: { playerId: string }) => { await new Promise(r => setTimeout(r, 5)); enviados.push(item.playerId) }
+    const [r1, r2] = await Promise.all([procesarCola(enviar, st), procesarCola(enviar, st)])
+    expect(enviados).toEqual(['p1', 'p2'])
+    expect(r1).toEqual(r2)
+    expect(leerCola(st)).toEqual([])
+  })
+})

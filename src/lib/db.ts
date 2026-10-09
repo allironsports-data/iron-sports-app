@@ -1189,8 +1189,14 @@ export async function deleteScoutingPlayer(id: string): Promise<void> {
   if (error) throw error
 }
 
-export async function createScoutingReport(r: Omit<ScoutingReport, 'id' | 'createdAt'>): Promise<ScoutingReport> {
+/**
+ * `id` (opcional): id elegido por el cliente. Lo usa la cola sin conexión para
+ * que un reenvío de un informe que en realidad SÍ llegó al servidor no lo
+ * duplique: la segunda vez choca con el id y se devuelve el que ya estaba.
+ */
+export async function createScoutingReport(r: Omit<ScoutingReport, 'id' | 'createdAt'>, id?: string): Promise<ScoutingReport> {
   const { data, error } = await supabase.from('scouting_reports').insert({
+    ...(id ? { id } : {}),
     player_id: r.playerId,
     fecha: r.fecha ?? new Date().toISOString(),
     titulo: r.titulo ?? null,
@@ -1200,7 +1206,13 @@ export async function createScoutingReport(r: Omit<ScoutingReport, 'id' | 'creat
     match_id: r.matchId ?? null,
     author_id: r.authorId ?? null,
   }).select().single()
-  if (error) throw error
+  if (error) {
+    if (id && (error as { code?: string }).code === '23505') {
+      const { data: previo, error: e2 } = await supabase.from('scouting_reports').select('*').eq('id', id).maybeSingle()
+      if (!e2 && previo) return dbToScoutingReport(previo as Record<string, unknown>)
+    }
+    throw error
+  }
   return dbToScoutingReport(data)
 }
 

@@ -696,7 +696,8 @@ export function Captacion({
   const procesandoColaRef = React.useRef(false)
   const enviarItemRef = React.useRef<(item: ItemCola) => Promise<void>>(async () => {})
   enviarItemRef.current = async (item: ItemCola) => {
-    const saved = await db.createScoutingReport(item.report)
+    // El id del item hace de id del informe: un reenvío no duplica (ver db.createScoutingReport)
+    const saved = await db.createScoutingReport(item.report, item.id)
     onAddReport(saved)
     if (item.matchId) {
       // el informe ya está: un fallo del vínculo no debe dejarlo en la cola (se duplicaría)

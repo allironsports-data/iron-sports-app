@@ -1399,7 +1399,7 @@ export default function App() {
   // ── scouting handlers ────────────────────────────────────────
 
   const handleAddScoutingPlayer = (p: ScoutingPlayer) => {
-    setScoutingPlayers(prev => [...prev, p].sort((a, b) => a.fullName.localeCompare(b.fullName)))
+    setScoutingPlayers(prev => (prev.some(x => x.id === p.id) ? prev.map(x => x.id === p.id ? p : x) : [...prev, p]).sort((a, b) => a.fullName.localeCompare(b.fullName)))
   }
   const handleUpdateScoutingPlayer = (p: ScoutingPlayer) => {
     setScoutingPlayers(prev => prev.map(x => x.id === p.id ? p : x))
@@ -1450,8 +1450,11 @@ export default function App() {
     setScoutingPlayers(prev => prev.filter(x => x.id !== id))
     setScoutingReports(prev => prev.filter(r => r.playerId !== id))
   }
+  // Al guardar, el aviso de realtime puede llegar ANTES que la respuesta del
+  // insert: si ya está (mismo id), se sustituye en vez de añadirse otra vez
+  // (salían informes repetidos en la ficha).
   const handleAddScoutingReport = (r: ScoutingReport) => {
-    setScoutingReports(prev => [r, ...prev])
+    setScoutingReports(prev => prev.some(x => x.id === r.id) ? prev.map(x => x.id === r.id ? r : x) : [r, ...prev])
   }
   const handleUpdateScoutingReport = (r: ScoutingReport) => {
     setScoutingReports(prev => prev.map(x => x.id === r.id ? r : x))
@@ -1460,7 +1463,7 @@ export default function App() {
     setScoutingReports(prev => prev.filter(r => r.id !== id))
   }
   const handleAddScoutingInfo = (i: ScoutingInfo) => {
-    setScoutingInfos(prev => [i, ...prev])
+    setScoutingInfos(prev => prev.some(x => x.id === i.id) ? prev.map(x => x.id === i.id ? i : x) : [i, ...prev])
   }
   const handleUpdateScoutingInfo = (i: ScoutingInfo) => {
     setScoutingInfos(prev => prev.map(x => x.id === i.id ? i : x))

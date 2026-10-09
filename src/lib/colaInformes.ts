@@ -122,9 +122,23 @@ export function quitarDeCola(id: string, st: StorageLike = storagePorDefecto()):
  * apuntado, para reintentar más tarde. Devuelve cuántos se enviaron y
  * cuántos siguen pendientes.
  */
+let procesando: Promise<{ enviados: number; pendientes: number }> | null = null
+
 export async function procesarCola(
   enviar: (item: ItemCola) => Promise<void>,
   st: StorageLike = storagePorDefecto(),
+): Promise<{ enviados: number; pendientes: number }> {
+  // Un solo recorrido a la vez en toda la app. Captación puede estar montada
+  // dos veces (la sección y una ficha flotante), cada una con su temporizador:
+  // si las dos recorren la cola a la vez, el mismo informe se manda dos veces.
+  if (procesando) return procesando
+  procesando = recorrerCola(enviar, st).finally(() => { procesando = null })
+  return procesando
+}
+
+async function recorrerCola(
+  enviar: (item: ItemCola) => Promise<void>,
+  st: StorageLike,
 ): Promise<{ enviados: number; pendientes: number }> {
   let enviados = 0
   for (const item of leerCola(st)) {
