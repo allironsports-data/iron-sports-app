@@ -11,7 +11,7 @@
 
 import { useMemo, useState, type ComponentType } from 'react'
 import {
-  Home, Eye, PenLine, TrendingUp, CalendarDays, Shield,
+  Home, Eye, PenLine, TrendingUp, CalendarDays, Shield, Users, Calendar,
   Trophy, ListTodo, RefreshCw, Handshake, Phone, Smartphone, ClipboardList, Plane, Search, Plus, ChevronRight, LogOut, Inbox,
 } from 'lucide-react'
 import logoImg from '../assets/logo.jpeg'
@@ -25,6 +25,7 @@ import { parseDia } from '../lib/fechas'
 type Icono = ComponentType<{ className?: string }>
 const ICONO_ACCESO: Record<string, Icono> = {
   home: Home, eye: Eye, 'pen-line': PenLine, 'trending-up': TrendingUp, shield: Shield,
+  'calendar-days': CalendarDays, users: Users, 'clipboard-list': ClipboardList, calendar: Calendar, inbox: Inbox,
 }
 const ICONO_TIPO: Record<AgendaTipo, Icono> = {
   tarea: ListTodo, llamada: Phone, telefono: Smartphone, reunion: Handshake, postpartido: ClipboardList,
@@ -66,6 +67,22 @@ function Africa({ className }: { className?: string }) {
 function IconoAcceso({ nombre }: { nombre: string }) {
   const I = nombre === 'africa' ? Africa : (ICONO_ACCESO[nombre] ?? Home)
   return <span className="w-10 h-10 rounded-lg bg-slate-100 text-slate-800 inline-flex items-center justify-center flex-shrink-0"><I className="w-[19px] h-[19px]" /></span>
+}
+
+/** Un recuadro de acceso: icono, nombre, descripción, dato al lado (si aporta) y flecha */
+function Recuadro({ icono, nombre, desc, contador, onClick }: { icono: string; nombre: string; desc: string; contador?: Contador; onClick: () => void }) {
+  return (
+    <button onClick={onClick}
+      className={`${CARD} w-full flex items-center gap-3.5 px-4 py-4 text-left hover:border-slate-300 hover:bg-slate-50/60 transition-colors`}>
+      <IconoAcceso nombre={icono} />
+      <div className="min-w-0 flex-1">
+        <div className="text-[15px] font-semibold text-slate-900 truncate">{nombre}</div>
+        <div className="text-[12.5px] text-slate-500 truncate">{desc}</div>
+      </div>
+      {contador && <span className={`text-[11px] font-semibold whitespace-nowrap ${contador.alerta ? 'text-red-700' : 'text-slate-500'}`}>{contador.texto}</span>}
+      <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
+    </button>
+  )
 }
 
 function IconoTipo({ tipo }: { tipo: AgendaTipo }) {
@@ -233,42 +250,14 @@ export function Inicio({ profile, profiles, hoy, items, miEstado, contadores, on
           </Bloque>
         </div>
 
-        {/* Ir a: todo lo que hay en la app. Los que tienen subpáginas las
-            enseñan debajo; cada una abre su pestaña directamente. */}
+        {/* Ir a: un recuadro por cada acceso, todos iguales, en el orden acordado */}
         <div className="mt-8 mb-3 flex items-baseline gap-3">
           <h2 className="text-[13px] font-semibold uppercase tracking-wider text-slate-500">Ir a</h2>
           <p className="text-xs text-slate-400">todo lo que hay en la app</p>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-start">
-          {accesos.filter(a => a.subs).map(a => (
-            <section key={a.id} className={CARD}>
-              <button onClick={() => onIr(a.destino)} className="w-full flex items-center gap-3.5 px-4 py-4 text-left hover:bg-slate-50/60 rounded-t-xl transition-colors">
-                <IconoAcceso nombre={a.icono} />
-                <div className="min-w-0 flex-1"><div className="text-[15px] font-semibold text-slate-900">{a.nombre}</div><div className="text-[12.5px] text-slate-500 truncate">{a.desc}</div></div>
-                <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
-              </button>
-              <div className="border-t border-slate-100 py-1">
-                {a.subs!.map(sub => {
-                  const c = contadores[sub.id]
-                  return (
-                    <button key={sub.id} onClick={() => onIr(sub.destino)} className="w-full flex items-center gap-2 pl-[3.75rem] pr-4 py-1.5 text-left hover:bg-slate-50 transition-colors">
-                      <span className="text-[13px] text-slate-700">{sub.nombre}</span>
-                      {c && <span className={`ml-auto text-[11px] font-semibold whitespace-nowrap ${c.alerta ? 'text-red-700' : 'text-slate-400'}`}>{c.texto}</span>}
-                    </button>
-                  )
-                })}
-              </div>
-            </section>
-          ))}
-        </div>
-        <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
-          {accesos.filter(a => !a.subs).map(a => (
-            <button key={a.id} onClick={() => onIr(a.destino)}
-              className={`${CARD} flex items-center gap-3.5 px-4 py-4 text-left hover:border-slate-300 hover:bg-slate-50/60 transition-colors`}>
-              <IconoAcceso nombre={a.icono} />
-              <div className="min-w-0 flex-1"><div className="text-[15px] font-semibold text-slate-900">{a.nombre}</div><div className="text-[12.5px] text-slate-500 truncate">{a.desc}</div></div>
-              <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
-            </button>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+          {accesos.map(a => (
+            <Recuadro key={a.id} icono={a.icono} nombre={a.nombre} desc={a.desc} contador={contadores[a.id]} onClick={() => onIr(a.destino)} />
           ))}
         </div>
       </main>
