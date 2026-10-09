@@ -26,8 +26,8 @@ import { EquiposContext, type EquiposContextValue } from './contexts/equiposCont
 import type { OpcionEquipo } from './lib/sugerirEquipos'
 import { teamsAlike } from './lib/equipos'
 import { hoyISO, fechaLocal, lunesDe, sumarDias } from './lib/fechas'
-import { construirAgenda, itemEsDe, seccionesDelDia, type AgendaItem } from './lib/agendaItems'
-import { contadoresInicio, type DestinoInicio } from './lib/inicio'
+import { construirAgenda, seccionesDelDia, type AgendaItem } from './lib/agendaItems'
+import { contadoresInicio, esMioEnInicio, type DestinoInicio } from './lib/inicio'
 import { useActividadesRango } from './hooks/useActividadesRango'
 import { horaActual } from './lib/reuniones'
 import type { AltaRapida } from './lib/altaRapida'
@@ -349,7 +349,7 @@ export default function App() {
     const lunes = fechaLocal(lunesDe(new Date()))
     const domingo = sumarDias(lunes, 6)
     return contadoresInicio({
-      mias: seccionesDelDia(agendaInicio.filter(it => itemEsDe(it, profile.id)), hoyInicio),
+      mias: seccionesDelDia(agendaInicio.filter(it => esMioEnInicio(it, profile.id)), hoyInicio),
       equipo: agendaInicio,
       hoy: hoyInicio,
       partidosSemana: scoutingMatches.filter(m => m.date >= lunes && m.date <= domingo).length,

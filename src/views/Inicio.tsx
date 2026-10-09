@@ -17,8 +17,8 @@ import {
 import logoImg from '../assets/logo.jpeg'
 import type { Profile } from '../contexts/AuthContext'
 import type { MemberStatus } from '../types'
-import { itemEsDe, seccionesDelDia, DIAS_ACTUALIZACION_PROCESO, type AgendaItem, type AgendaTipo } from '../lib/agendaItems'
-import { ACCESOS, fraseDelDia, partidosDeHoy, type Contador, type DestinoInicio } from '../lib/inicio'
+import { seccionesDelDia, DIAS_ACTUALIZACION_PROCESO, type AgendaItem, type AgendaTipo } from '../lib/agendaItems'
+import { ACCESOS, fraseDelDia, partidosDeHoy, esMioEnInicio, type Contador, type DestinoInicio } from '../lib/inicio'
 import { parsearAltaRapida, type AltaRapida } from '../lib/altaRapida'
 import { parseDia } from '../lib/fechas'
 
@@ -112,7 +112,8 @@ const Enlace = ({ texto, onClick }: { texto: string; onClick: () => void }) => (
 )
 
 export function Inicio({ profile, profiles, hoy, items, miEstado, contadores, onAbrir, onIr, onCrear, onBuscar, onLogout, onAdmin }: InicioProps) {
-  const mios = useMemo(() => items.filter(it => itemEsDe(it, profile.id)), [items, profile.id])
+  // Solo lo que llevo yo (lo que sigo como adjunto no es trabajo mío); las citas, si asisto
+  const mios = useMemo(() => items.filter(it => esMioEnInicio(it, profile.id)), [items, profile.id])
   const s = useMemo(() => seccionesDelDia(mios, hoy), [mios, hoy])
   const avatarDe = (id: string) => profiles.find(p => p.id === id)?.avatar
   const partidos = useMemo(() => partidosDeHoy(items, hoy, avatarDe), [items, hoy, profiles]) // eslint-disable-line react-hooks/exhaustive-deps

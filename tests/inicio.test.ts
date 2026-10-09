@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { construirAgenda, seccionesDelDia, type AgendaInput } from '../src/lib/agendaItems'
-import { fraseDelDia, contadoresInicio, partidosDeHoy, ACCESOS } from '../src/lib/inicio'
+import { fraseDelDia, contadoresInicio, partidosDeHoy, esMioEnInicio, ACCESOS } from '../src/lib/inicio'
 import type { Task, ScoutingMatch, ScoutingMatchScout, FirmasEntry, AgendaEvento } from '../src/types'
 
 const HOY = '2026-10-01'
@@ -79,5 +79,16 @@ describe('ACCESOS', () => {
   it('el orden acordado, sin Tareas ni Contactos; Administración solo para admins', () => {
     expect(ACCESOS.map(a => a.id)).toEqual(['mantenimiento', 'calendario', 'postpartidos', 'captacion', 'cjugadores', 'planificacion', 'ofrecidos', 'pipeline', 'distribucion', 'boulema', 'admin'])
     expect(ACCESOS.filter(a => a.admin).map(a => a.id)).toEqual(['admin'])
+  })
+})
+
+describe('esMioEnInicio', () => {
+  it('el trabajo solo si lo llevo; las citas, si asisto', () => {
+    const ev: AgendaEvento = { id: 'e1', titulo: 'Reunión', tipo: 'Reunión', fecha: HOY, hora: '10:00', ambito: 'general', playerIds: [], participantIds: [OTRO, YO], createdAt: '' }
+    const items = construirAgenda(base({
+      tasks: [task({ id: 'mia' }), task({ id: 'adjunto', assigneeId: OTRO, watchers: [YO] })],
+      eventos: [ev],
+    }))
+    expect(items.filter(i => esMioEnInicio(i, YO)).map(i => i.id).sort()).toEqual(['evento:e1', 'tarea:mia'])
   })
 })

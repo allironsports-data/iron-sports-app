@@ -6,7 +6,7 @@
 // contadores que acompañan a cada acceso.
 
 import type { MainSection } from '../components/globalExtras'
-import { type AgendaItem, type SeccionesDia, esInformePendiente, DIAS_ACTUALIZACION_PROCESO } from './agendaItems'
+import { type AgendaItem, type SeccionesDia, esInformePendiente, esCita, itemEsDe, DIAS_ACTUALIZACION_PROCESO } from './agendaItems'
 
 export type DestinoInicio =
   | { tipo: 'seccion'; seccion: MainSection; tab?: string }
@@ -39,6 +39,14 @@ export const ACCESOS: Acceso[] = [
   { id: 'boulema',       nombre: 'Boulema',       icono: 'africa',         desc: 'Jugadores de Boulema y ofrecimientos',     destino: { tipo: 'seccion', seccion: 'boulema' } },
   { id: 'admin',         nombre: 'Administración', icono: 'shield',        desc: 'Cuentas, seguimiento, historial y uso',   destino: { tipo: 'admin' }, admin: true },
 ]
+
+/**
+ * Lo que es de uno en la Home: el trabajo solo si lo lleva (no lo que sigue
+ * como adjunto o encargado del jugador); las citas, si asiste.
+ */
+export function esMioEnInicio(it: AgendaItem, profileId: string): boolean {
+  return esCita(it) ? itemEsDe(it, profileId) : it.personId === profileId
+}
 
 export interface Contador { texto: string; alerta?: boolean }
 
