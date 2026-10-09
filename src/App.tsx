@@ -2129,7 +2129,6 @@ export default function App() {
       profiles={profiles}
       hoy={hoyInicio}
       items={agendaInicio}
-      miEstado={memberStatuses.find(s => s.profileId === profile.id)}
       players={players}
       onOpenPlayer={(id) => navigateToPlayer(id, false)}
       contadores={contadoresDeInicio}

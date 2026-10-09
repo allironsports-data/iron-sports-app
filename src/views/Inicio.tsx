@@ -16,7 +16,7 @@ import {
 } from 'lucide-react'
 import logoImg from '../assets/logo.jpeg'
 import type { Profile } from '../contexts/AuthContext'
-import type { MemberStatus, Player } from '../types'
+import type { Player } from '../types'
 import { seccionesDelDia, DIAS_ACTUALIZACION_PROCESO, type AgendaItem, type AgendaTipo } from '../lib/agendaItems'
 import { ACCESOS, fraseDelDia, partidosDeHoy, esMioEnInicio, cumpleanos, type Contador, type DestinoInicio } from '../lib/inicio'
 import { parsearAltaRapida, type AltaRapida } from '../lib/altaRapida'
@@ -39,8 +39,6 @@ export interface InicioProps {
   hoy: string
   /** Agenda de TODO el equipo para hoy (lib/agendaItems); aquí se filtra lo de cada uno */
   items: AgendaItem[]
-  /** Estado de hoy de quien mira (Oficina, Viaje…), si lo ha puesto */
-  miEstado?: MemberStatus
   /** Jugadores de la plantilla, para los cumpleaños */
   players: Player[]
   onOpenPlayer: (playerId: string) => void
@@ -114,7 +112,7 @@ const Enlace = ({ texto, onClick }: { texto: string; onClick: () => void }) => (
   <button onClick={onClick} className="ml-auto text-[11.5px] font-semibold text-primary hover:underline">{texto} →</button>
 )
 
-export function Inicio({ profile, profiles, hoy, items, miEstado, players, contadores, onAbrir, onIr, onCrear, onBuscar, onLogout, onAdmin, onOpenPlayer }: InicioProps) {
+export function Inicio({ profile, profiles, hoy, items, players, contadores, onAbrir, onIr, onCrear, onBuscar, onLogout, onAdmin, onOpenPlayer }: InicioProps) {
   // Solo lo que llevo yo (lo que sigo como adjunto no es trabajo mío); las citas, si asisto
   const mios = useMemo(() => items.filter(it => esMioEnInicio(it, profile.id)), [items, profile.id])
   const s = useMemo(() => seccionesDelDia(mios, hoy), [mios, hoy])
@@ -148,12 +146,6 @@ export function Inicio({ profile, profiles, hoy, items, miEstado, players, conta
           <img src={logoImg} alt="All Iron Sports" className="h-7 sm:h-8 w-auto rounded" />
           <span className="text-xs font-bold text-slate-800 tracking-wide uppercase hidden sm:block">All Iron Sports</span>
           <div className="flex-1" />
-          {miEstado?.locationType && (
-            <button onClick={() => onIr({ tipo: 'seccion', seccion: 'tareas', tab: 'equipo' })} title="Tu estado de hoy (se cambia en Equipo)"
-              className="hidden sm:inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800 px-2 py-1 rounded hover:bg-slate-100">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Hoy en <b className="font-semibold text-slate-800">{miEstado.locationDetail || miEstado.locationType}</b>
-            </button>
-          )}
           {onAdmin && (
             <button onClick={onAdmin} className="text-xs text-slate-500 hover:text-slate-800 px-2 py-2 sm:py-1 rounded hover:bg-slate-100">Admin</button>
           )}
