@@ -151,7 +151,8 @@ export default function App() {
   const [mainSection, setMainSection] = useState<MainSection>(
     () => rutaInicial?.tipo === 'seccion' ? rutaInicial.seccion
       : rutaInicial?.tipo === 'club' ? 'distribucion'
-      : (sessionStorage.getItem('nav_section') as MainSection) ?? 'inicio'
+      // Sin enlace directo, la app entra siempre por Inicio
+      : 'inicio'
   )
   // Pestaña de segundo nivel de cada sección (Captación → partidos, Pipeline
   // → avisos…). Vive aquí y no en cada sección para poder ir en el hash y
@@ -352,10 +353,10 @@ export default function App() {
       equipo: agendaInicio,
       hoy: hoyInicio,
       partidosSemana: scoutingMatches.filter(m => m.date >= lunes && m.date <= domingo).length,
-      jugadores: players.length,
       tarjetasAbiertas: firmasEntries.filter(e => e.status !== 'firmado').length,
+      ofrecidosADecidir: ofrecimientos.filter(o => o.estado === 'decidir').length,
     })
-  }, [enInicio, profile, agendaInicio, hoyInicio, scoutingMatches, players, firmasEntries])
+  }, [enInicio, profile, agendaInicio, hoyInicio, scoutingMatches, firmasEntries, ofrecimientos])
 
   // DEBE declararse aquí arriba: es un hook y no puede ir después de los
   // returns tempranos (loading/login) — romperlo deja la app en blanco.

@@ -369,10 +369,10 @@ export function MiDiaLista({
         {(s.bandeja.length > 0 || vista === 'bandeja') && (
           <button onClick={() => setVista(v => v === 'dia' ? 'bandeja' : 'dia')}
             title={vista === 'dia' ? 'Lo que no tiene fecha («algún día»): no sale en el día ni en el calendario' : 'Volver al día'}
-            className={`ml-auto inline-flex items-center gap-2 text-sm font-semibold px-3.5 py-2 rounded-xl border-2 shadow-sm transition-colors ${vista === 'bandeja' ? 'bg-slate-800 text-white border-slate-800 hover:bg-slate-700' : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'}`}>
+            className={`ml-auto inline-flex items-center gap-2 text-sm font-medium px-3 py-1.5 rounded-lg border transition-colors ${vista === 'bandeja' ? 'bg-slate-800 text-white border-slate-800 hover:bg-slate-700' : 'bg-amber-50/70 text-amber-900 border-amber-200 hover:bg-amber-100'}`}>
             {vista === 'bandeja'
               ? <><Sun className="w-4 h-4" /> Volver al día</>
-              : <><Inbox className="w-4 h-4" /> Tareas pendientes <span className="inline-flex items-center justify-center min-w-[1.5rem] h-6 px-1.5 rounded-full bg-amber-500 text-white text-xs font-bold">{s.bandeja.length}</span></>}
+              : <><Inbox className="w-4 h-4" /> Tareas pendientes <span className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-amber-200 text-amber-900 text-xs font-bold">{s.bandeja.length}</span></>}
           </button>
         )}
       </div>

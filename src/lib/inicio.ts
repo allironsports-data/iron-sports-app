@@ -21,24 +21,46 @@ export interface Acceso {
   icono: string
   desc: string
   destino: DestinoInicio
+  /** Subpáginas: salen debajo del acceso, cada una abre su pestaña */
+  subs?: { id: string; nombre: string; destino: DestinoInicio }[]
   /** Solo lo ven los admins */
   admin?: boolean
 }
 
 /** Todo lo que hay en la app, en el orden en que sale en la Home */
 export const ACCESOS: Acceso[] = [
-  { id: 'mantenimiento', nombre: 'Mantenimiento', icono: 'home',          desc: 'Tareas, calendario, jugadores y equipo',        destino: { tipo: 'seccion', seccion: 'tareas' } },
-  { id: 'captacion',     nombre: 'Captación',     icono: 'eye',           desc: 'Partidos, informes, equipos y ofrecidos',       destino: { tipo: 'seccion', seccion: 'captacion' } },
-  { id: 'pipeline',      nombre: 'Pipeline',      icono: 'pen-line',      desc: 'Firmar: tarjetas, zonas, encargados y avisos',  destino: { tipo: 'seccion', seccion: 'pipeline' } },
-  { id: 'distribucion',  nombre: 'Distribución',  icono: 'trending-up',   desc: 'Jugadores en mercado, clubes y partners',       destino: { tipo: 'seccion', seccion: 'distribucion' } },
-  { id: 'jugadores',     nombre: 'Jugadores',     icono: 'users',         desc: 'La plantilla, contratos y prioridades',         destino: { tipo: 'seccion', seccion: 'jugadores' } },
-  { id: 'boulema',       nombre: 'Boulema',       icono: 'globe',         desc: 'Jugadores de Boulema y ofrecimientos',          destino: { tipo: 'seccion', seccion: 'boulema' } },
-  { id: 'calendario',    nombre: 'Calendario',    icono: 'calendar-days', desc: 'La semana de todo el equipo',                   destino: { tipo: 'seccion', seccion: 'tareas', tab: 'calendario' } },
-  { id: 'equipo',        nombre: 'Equipo',        icono: 'users-round',   desc: 'Quién hace qué y resumen de la semana',         destino: { tipo: 'seccion', seccion: 'tareas', tab: 'equipo' } },
-  { id: 'contactos',     nombre: 'Contactos',     icono: 'contact',       desc: 'Clubes, agencias y personas',                   destino: { tipo: 'contactos' } },
-  { id: 'mi-dia',        nombre: 'Mi día',        icono: 'sun',           desc: 'Tu agenda, tu trabajo y tus procesos',          destino: { tipo: 'mi-dia' } },
-  { id: 'avisos',        nombre: 'Avisos',        icono: 'bell',          desc: 'Lo que espera una decisión',                    destino: { tipo: 'seccion', seccion: 'pipeline', tab: 'avisos' } },
-  { id: 'admin',         nombre: 'Administración', icono: 'shield',       desc: 'Cuentas, seguimiento, historial y uso',         destino: { tipo: 'admin' }, admin: true },
+  { id: 'mantenimiento', nombre: 'Mantenimiento', icono: 'home', desc: 'Tareas, calendario, jugadores y postpartidos',
+    destino: { tipo: 'mi-dia' },
+    subs: [
+      { id: 'tareas',       nombre: 'Tareas',       destino: { tipo: 'mi-dia' } },
+      { id: 'calendario',   nombre: 'Calendario',   destino: { tipo: 'seccion', seccion: 'tareas', tab: 'calendario' } },
+      { id: 'jugadores',    nombre: 'Jugadores',    destino: { tipo: 'seccion', seccion: 'jugadores' } },
+      { id: 'postpartidos', nombre: 'Postpartidos', destino: { tipo: 'seccion', seccion: 'tareas', tab: 'postpartidos' } },
+    ] },
+  { id: 'captacion', nombre: 'Captación', icono: 'eye', desc: 'Partidos, informes, equipos y ofrecidos',
+    destino: { tipo: 'seccion', seccion: 'captacion' },
+    subs: [
+      { id: 'conclusiones',  nombre: 'Conclusiones',    destino: { tipo: 'seccion', seccion: 'captacion', tab: 'conclusiones' } },
+      { id: 'contratos',     nombre: 'Fin de contrato', destino: { tipo: 'seccion', seccion: 'captacion', tab: 'contratos' } },
+      { id: 'cjugadores',    nombre: 'Jugadores',       destino: { tipo: 'seccion', seccion: 'captacion', tab: 'jugadores' } },
+      { id: 'equipos',       nombre: 'Equipos',         destino: { tipo: 'seccion', seccion: 'captacion', tab: 'equipos' } },
+      { id: 'informes',      nombre: 'Informes',        destino: { tipo: 'seccion', seccion: 'captacion', tab: 'informes' } },
+      { id: 'partidos',      nombre: 'Partidos',        destino: { tipo: 'seccion', seccion: 'captacion', tab: 'partidos' } },
+      { id: 'planificacion', nombre: 'Planificación',   destino: { tipo: 'seccion', seccion: 'captacion', tab: 'planificacion' } },
+      { id: 'ofrecidos',     nombre: 'Ofrecidos',       destino: { tipo: 'seccion', seccion: 'captacion', tab: 'ofrecidos' } },
+    ] },
+  { id: 'pipeline', nombre: 'Pipeline', icono: 'pen-line', desc: 'Firmar: tarjetas, zonas, encargados y avisos',
+    destino: { tipo: 'seccion', seccion: 'pipeline' },
+    subs: [
+      { id: 'firmar',    nombre: 'Firmar',        destino: { tipo: 'seccion', seccion: 'pipeline', tab: 'firmar' } },
+      { id: 'zona',      nombre: 'Por zona',      destino: { tipo: 'seccion', seccion: 'pipeline', tab: 'zona' } },
+      { id: 'encargado', nombre: 'Por encargado', destino: { tipo: 'seccion', seccion: 'pipeline', tab: 'encargado' } },
+      { id: 'avisos',    nombre: 'Avisos',        destino: { tipo: 'seccion', seccion: 'pipeline', tab: 'avisos' } },
+      { id: 'timeline',  nombre: 'Timeline',      destino: { tipo: 'seccion', seccion: 'pipeline', tab: 'timeline' } },
+    ] },
+  { id: 'distribucion', nombre: 'Distribución',   icono: 'trending-up', desc: 'Jugadores en mercado, clubes y partners', destino: { tipo: 'seccion', seccion: 'distribucion' } },
+  { id: 'boulema',      nombre: 'Boulema',        icono: 'africa',      desc: 'Jugadores de Boulema y ofrecimientos',    destino: { tipo: 'seccion', seccion: 'boulema' } },
+  { id: 'admin',        nombre: 'Administración', icono: 'shield',      desc: 'Cuentas, seguimiento, historial y uso',  destino: { tipo: 'admin' }, admin: true },
 ]
 
 export interface Contador { texto: string; alerta?: boolean }
@@ -56,15 +78,17 @@ export function contadoresInicio(a: {
   equipo: AgendaItem[]
   hoy: string
   partidosSemana: number
-  jugadores: number
   tarjetasAbiertas: number
+  ofrecidosADecidir: number
 }): Record<string, Contador> {
   const out: Record<string, Contador> = {}
-  if (a.mias.hoy.length > 0) out.mantenimiento = { texto: plural(a.mias.hoy.length, 'para hoy', 'para hoy') }
-  if (a.partidosSemana > 0) out.captacion = { texto: plural(a.partidosSemana, 'partido esta semana', 'partidos esta semana') }
-  if (a.tarjetasAbiertas > 0) out.pipeline = { texto: plural(a.tarjetasAbiertas, 'tarjeta abierta', 'tarjetas abiertas') }
-  if (a.jugadores > 0) out.jugadores = { texto: String(a.jugadores) }
-  if (a.mias.vencidas.length > 0) out['mi-dia'] = { texto: plural(a.mias.vencidas.length, 'con retraso', 'con retraso'), alerta: true }
+  if (a.mias.hoy.length > 0) out.tareas = { texto: plural(a.mias.hoy.length, 'para hoy', 'para hoy'), alerta: a.mias.vencidas.length > 0 }
+  const misPostpartidos = [...a.mias.hoy, ...a.mias.procesos, ...a.mias.masAdelante, ...a.mias.bandeja, ...a.mias.proximos.flatMap(g => g.items)]
+    .filter(it => it.tipo === 'postpartido').length
+  if (misPostpartidos > 0) out.postpartidos = { texto: plural(misPostpartidos, 'pendiente', 'pendientes') }
+  if (a.partidosSemana > 0) out.partidos = { texto: plural(a.partidosSemana, 'esta semana', 'esta semana') }
+  if (a.ofrecidosADecidir > 0) out.ofrecidos = { texto: plural(a.ofrecidosADecidir, 'a decidir', 'a decidir'), alerta: true }
+  if (a.tarjetasAbiertas > 0) out.firmar = { texto: plural(a.tarjetasAbiertas, 'abierta', 'abiertas') }
   // Lo que espera una decisión en el equipo: acciones de Firmar atrasadas y reuniones sin cerrar
   const esperando = a.equipo.filter(it => it.estado !== 'completada' && (
     (it.origen === 'firmar' && !!it.fecha && it.fecha < a.hoy) || it.categoria === 'Reunión sin cerrar'))

@@ -56,24 +56,26 @@ describe('partidosDeHoy', () => {
 describe('contadoresInicio', () => {
   it('solo cuenta lo que aporta, y en rojo lo que pide atención', () => {
     const items = construirAgenda(base({
-      tasks: [task({ id: 'hoy', dueDate: HOY }), task({ id: 'vieja', dueDate: '2026-09-20' })],
+      tasks: [task({ id: 'hoy', dueDate: HOY }), task({ id: 'vieja', dueDate: '2026-09-20' }), task({ id: 'pp', label: 'Postpartido', dueDate: '2026-10-05' })],
       firmasEntries: [firma({ id: 'f1', nextAction: 'Llamar', nextActionDate: '2026-09-25', nextActionAssignee: OTRO })],
     }))
     const mias = seccionesDelDia(items.filter(i => i.personId === YO), HOY)
-    const c = contadoresInicio({ mias, equipo: items, hoy: HOY, partidosSemana: 3, jugadores: 42, tarjetasAbiertas: 0 })
-    expect(c.mantenimiento).toEqual({ texto: '2 para hoy' })
-    expect(c['mi-dia']).toEqual({ texto: '1 con retraso', alerta: true })
-    expect(c.captacion).toEqual({ texto: '3 partidos esta semana' })
-    expect(c.jugadores).toEqual({ texto: '42' })
-    expect(c.pipeline).toBeUndefined()
+    const c = contadoresInicio({ mias, equipo: items, hoy: HOY, partidosSemana: 3, tarjetasAbiertas: 0, ofrecidosADecidir: 2 })
+    expect(c.tareas).toEqual({ texto: '2 para hoy', alerta: true })
+    expect(c.postpartidos).toEqual({ texto: '1 pendiente' })
+    expect(c.partidos).toEqual({ texto: '3 esta semana' })
+    expect(c.ofrecidos).toEqual({ texto: '2 a decidir', alerta: true })
+    expect(c.firmar).toBeUndefined()
     // La acción atrasada de otro espera decisión: cuenta en Avisos
     expect(c.avisos).toEqual({ texto: '1', alerta: true })
   })
 })
 
 describe('ACCESOS', () => {
-  it('uno por parte de la app, Administración solo para admins', () => {
-    expect(ACCESOS.map(a => a.id)).toEqual(['mantenimiento', 'captacion', 'pipeline', 'distribucion', 'jugadores', 'boulema', 'calendario', 'equipo', 'contactos', 'mi-dia', 'avisos', 'admin'])
+  it('tres grupos con subpáginas y tres accesos simples; Administración solo para admins', () => {
+    expect(ACCESOS.map(a => a.id)).toEqual(['mantenimiento', 'captacion', 'pipeline', 'distribucion', 'boulema', 'admin'])
+    expect(ACCESOS.filter(a => a.subs).map(a => a.id)).toEqual(['mantenimiento', 'captacion', 'pipeline'])
+    expect(ACCESOS.find(a => a.id === 'mantenimiento')!.subs!.map(s => s.nombre)).toEqual(['Tareas', 'Calendario', 'Jugadores', 'Postpartidos'])
     expect(ACCESOS.filter(a => a.admin).map(a => a.id)).toEqual(['admin'])
   })
 })

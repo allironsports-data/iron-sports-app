@@ -11,7 +11,7 @@
 
 import { useMemo, useState, type ComponentType } from 'react'
 import {
-  Home, Eye, PenLine, TrendingUp, Users, Globe, CalendarDays, UsersRound, Contact, Sun, Bell, Shield,
+  Home, Eye, PenLine, TrendingUp, CalendarDays, Shield,
   Trophy, ListTodo, RefreshCw, Handshake, Phone, Smartphone, ClipboardList, Plane, Search, Plus, ChevronRight, LogOut, Inbox,
 } from 'lucide-react'
 import logoImg from '../assets/logo.jpeg'
@@ -24,8 +24,7 @@ import { parseDia } from '../lib/fechas'
 
 type Icono = ComponentType<{ className?: string }>
 const ICONO_ACCESO: Record<string, Icono> = {
-  home: Home, eye: Eye, 'pen-line': PenLine, 'trending-up': TrendingUp, users: Users, globe: Globe,
-  'calendar-days': CalendarDays, 'users-round': UsersRound, contact: Contact, sun: Sun, bell: Bell, shield: Shield,
+  home: Home, eye: Eye, 'pen-line': PenLine, 'trending-up': TrendingUp, shield: Shield,
 }
 const ICONO_TIPO: Record<AgendaTipo, Icono> = {
   tarea: ListTodo, llamada: Phone, telefono: Smartphone, reunion: Handshake, postpartido: ClipboardList,
@@ -53,6 +52,21 @@ export interface InicioProps {
 const NAV1 = 'flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors'
 const CARD = 'bg-white border border-slate-200 rounded-xl'
 const ROW = 'flex items-center gap-2.5 px-3.5 py-2 border-t border-slate-100 hover:bg-slate-50 cursor-pointer text-left w-full'
+
+/** Silueta de África: Boulema es el proyecto africano, y no hay icono de serie */
+function Africa({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden="true">
+      <path d="M8.2 2.6 11.5 2l3.4.6 1.9 1.5-.3 2.6 2.1 2.4 1.6 2.8-.6 1.6-2.2.8-1.3 3.4-1.1 3.6-1.9 1.7-1.4-1.6-.9-3.8-2.3-2.1-1.6-2.6-1.8-.7L4 9.4l.7-2.6L7 4.1z" />
+      <path d="M18.1 13.3l1.6-.4.5 1.3-.9 2.9-1.3.4-.6-1.1z" opacity=".9" />
+    </svg>
+  )
+}
+
+function IconoAcceso({ nombre }: { nombre: string }) {
+  const I = nombre === 'africa' ? Africa : (ICONO_ACCESO[nombre] ?? Home)
+  return <span className="w-10 h-10 rounded-lg bg-slate-100 text-slate-800 inline-flex items-center justify-center flex-shrink-0"><I className="w-[19px] h-[19px]" /></span>
+}
 
 function IconoTipo({ tipo }: { tipo: AgendaTipo }) {
   const I = ICONO_TIPO[tipo]
@@ -219,25 +233,43 @@ export function Inicio({ profile, profiles, hoy, items, miEstado, contadores, on
           </Bloque>
         </div>
 
-        {/* Ir a: todo lo que hay en la app */}
+        {/* Ir a: todo lo que hay en la app. Los que tienen subpáginas las
+            enseñan debajo; cada una abre su pestaña directamente. */}
         <div className="mt-8 mb-3 flex items-baseline gap-3">
           <h2 className="text-[13px] font-semibold uppercase tracking-wider text-slate-500">Ir a</h2>
           <p className="text-xs text-slate-400">todo lo que hay en la app</p>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-          {accesos.map(a => {
-            const I = ICONO_ACCESO[a.icono] ?? Home
-            const c = contadores[a.id]
-            return (
-              <button key={a.id} onClick={() => onIr(a.destino)}
-                className={`${CARD} flex items-center gap-3.5 px-4 py-4 text-left hover:border-slate-300 hover:bg-slate-50/60 transition-colors`}>
-                <span className="w-10 h-10 rounded-lg bg-slate-100 text-slate-800 inline-flex items-center justify-center flex-shrink-0"><I className="w-[19px] h-[19px]" /></span>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-start">
+          {accesos.filter(a => a.subs).map(a => (
+            <section key={a.id} className={CARD}>
+              <button onClick={() => onIr(a.destino)} className="w-full flex items-center gap-3.5 px-4 py-4 text-left hover:bg-slate-50/60 rounded-t-xl transition-colors">
+                <IconoAcceso nombre={a.icono} />
                 <div className="min-w-0 flex-1"><div className="text-[15px] font-semibold text-slate-900">{a.nombre}</div><div className="text-[12.5px] text-slate-500 truncate">{a.desc}</div></div>
-                {c && <span className={`text-[11px] font-semibold whitespace-nowrap ${c.alerta ? 'text-red-700' : 'text-slate-500'}`}>{c.texto}</span>}
                 <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
               </button>
-            )
-          })}
+              <div className="border-t border-slate-100 py-1">
+                {a.subs!.map(sub => {
+                  const c = contadores[sub.id]
+                  return (
+                    <button key={sub.id} onClick={() => onIr(sub.destino)} className="w-full flex items-center gap-2 pl-[3.75rem] pr-4 py-1.5 text-left hover:bg-slate-50 transition-colors">
+                      <span className="text-[13px] text-slate-700">{sub.nombre}</span>
+                      {c && <span className={`ml-auto text-[11px] font-semibold whitespace-nowrap ${c.alerta ? 'text-red-700' : 'text-slate-400'}`}>{c.texto}</span>}
+                    </button>
+                  )
+                })}
+              </div>
+            </section>
+          ))}
+        </div>
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+          {accesos.filter(a => !a.subs).map(a => (
+            <button key={a.id} onClick={() => onIr(a.destino)}
+              className={`${CARD} flex items-center gap-3.5 px-4 py-4 text-left hover:border-slate-300 hover:bg-slate-50/60 transition-colors`}>
+              <IconoAcceso nombre={a.icono} />
+              <div className="min-w-0 flex-1"><div className="text-[15px] font-semibold text-slate-900">{a.nombre}</div><div className="text-[12.5px] text-slate-500 truncate">{a.desc}</div></div>
+              <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
+            </button>
+          ))}
         </div>
       </main>
     </div>
