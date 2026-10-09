@@ -19,6 +19,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-10-10',
+    items: [],
+    adminItems: [
+      'Admin → nueva pestaña «Volumen»: volumen de trabajo del equipo por semana y por mes, sumando tareas completadas, eventos de agenda, partidos vistos, informes, postpartidos, pipeline (Firmar) y distribución. Dos medidas siempre a la vista: bruto (nº de acciones) y puntos (ponderado por esfuerzo, pesos explicados al pie). Serie de 12 periodos del equipo, tabla por persona con reparto por fuente y variación vs. el periodo anterior, detalle por persona al pulsar, y descarga CSV. Sin migración: todo sale de lo que ya hay',
+    ],
+  },
+  {
     date: '2026-10-09',
     items: [
       'Admin → Stats Captación → nueva pestaña «Base de datos»: de qué está hecha la base de jugadores. Agencias (jugadores, en Llamar, % Llamar, en pipeline, informes; ordenable y descargable), nacionalidades, equipos con más jugadores, posiciones, categorías, zonas, quintas y pie, y qué parte de la base tiene cada dato relleno',
@@ -44,6 +51,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-08',
     items: [
+      'Partidos: marcar un partido como visto ya no genera la tarea «Informe de …» en Para hacer y Mi día. Al marcarlo visto, si no tienes informe en ese partido, solo sale un aviso «¿Se te ha olvidado el informe?» con un botón para escribirlo, y en el widget de partidos el scout sale sin la ✓ hasta que lo escribe',
       'Vista ampliada del partido: si la ficha de un jugador vinculado pone un equipo que no juega ese partido («Otros equipos»), sale el mismo aviso que en la ficha normal, con el cambio de equipo a un toque. Y al pulsar el nombre de un jugador se cierra la vista ampliada antes de abrir su ficha, que antes quedaba tapada',
       'Informes repetidos: al guardar un informe podía salir dos o tres veces en la ficha. Dos causas: con red lenta el aviso del servidor llegaba antes que la respuesta del guardado y la app lo añadía dos veces; y si el guardado fallaba por red después de que el servidor lo hubiera grabado, la cola sin conexión lo reenviaba (y, con una ficha flotante abierta, lo reenviaban dos a la vez). Ahora la lista no admite el mismo informe dos veces, la cola se recorre una sola vez por vez y un reenvío de un informe que ya llegó no lo duplica. Los repetidos que ya existan se borran con la papelera de la tarjeta',
       'Partidos: jugador nuevo desde la ficha del partido. Si al buscar a quién vincular no existe, botón «Jugador nuevo» (y un enlace en «Sin resultados» con el nombre ya escrito) que pide lo mínimo (nombre, equipo con los dos del partido a un toque, posición, año, pie, nacionalidad), crea la ficha en Captación, lo vincula al partido y en la vista ampliada abre su informe. Avisa si ya existe alguien parecido y deja vincularlo en su lugar',

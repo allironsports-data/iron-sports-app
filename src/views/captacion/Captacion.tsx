@@ -1121,6 +1121,14 @@ export function Captacion({
   // marca a todos sus scouts, y el partido queda visto cuando lo están todos.
   // Antes eran dos datos sueltos y un partido podía salir «pendiente» en la
   // lista con su único scout en «visto».
+  // Marcar visto no obliga a escribir el informe: si el que marca soy yo y no
+  // tengo informe en ese partido, se pregunta por si se me ha olvidado (nada más).
+  const preguntarInforme = useCallback((m: ScoutingMatch, scout: string) => {
+    if (scout !== currentProfile.avatar) return
+    if (scoutingReports.some(r => r.matchId === m.id && r.persona === scout)) return
+    showToast(`Visto. ¿Se te ha olvidado el informe de ${m.homeTeam} vs ${m.awayTeam}?`, 'info', { label: 'Escribirlo', fn: () => setDetailMatchId(m.id) })
+  }, [currentProfile.avatar, scoutingReports, showToast])
+
   const handleToggleMatchStatus = useCallback(async (m: ScoutingMatch) => {
     try {
       const status = m.status === 'visto' ? 'pendiente' : 'visto'
@@ -1130,10 +1138,15 @@ export function Captacion({
       for (const s of scoutsByMatch[m.id] ?? []) {
         if (s.status !== status) await onSetMatchScoutStatus(m.id, s.scout, status)
       }
+      if (status === 'visto') {
+        const scouts = scoutsByMatch[m.id] ?? []
+        const mios = scouts.length ? scouts.map(s => s.scout) : (m.assignedTo ? [m.assignedTo] : [])
+        if (mios.includes(currentProfile.avatar)) preguntarInforme(m, currentProfile.avatar)
+      }
     } catch {
       showToast('Error al actualizar el estado del partido', 'error')
     }
-  }, [onUpdateMatch, showToast, scoutsByMatch, onSetMatchScoutStatus])
+  }, [onUpdateMatch, showToast, scoutsByMatch, onSetMatchScoutStatus, preguntarInforme, currentProfile.avatar])
 
   /** Guardar un partido ya existente (hora, notas, modo… desde la hoja de Planificación) */
   const guardarPartido = useCallback(async (m: ScoutingMatch) => {
@@ -1184,6 +1197,7 @@ export function Captacion({
         await db.updateScoutingMatch(updated)
         onUpdateMatch(updated)
       }
+      if (status === 'visto') preguntarInforme(m, scout)
     } catch {
       showToast('No se pudo cambiar el estado del scout', 'error')
     }

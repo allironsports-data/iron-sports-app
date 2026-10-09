@@ -176,7 +176,6 @@ export function diasEntre(desde: string, hasta: string): number {
 }
 
 /** Un partido visto sin informe sale como trabajo pendiente durante estos días */
-export const DIAS_INFORME_PARTIDO = 3
 /** Un postpartido se quiere a los dos días del partido */
 export const DIAS_POSTPARTIDO = 2
 
@@ -329,37 +328,10 @@ export function construirAgenda(input: AgendaInput): AgendaItem[] {
     }
   }
 
-  // ── Partido ya visto y sin informe: es trabajo de hoy, durante unos días ──
-  // Solo si quien llama ha pasado la lista de informes (si no, no se sabe).
-  if (input.informesPartido && hoy >= rango.desde && hoy <= rango.hasta) {
-    const desde = sumarDias(hoy, -DIAS_INFORME_PARTIDO)
-    for (const m of scoutingMatches) {
-      if (m.date < desde || m.date > hoy) continue
-      const scouts = scoutsPorPartido.get(m.id)
-      const vistos = scouts && scouts.length > 0
-        ? scouts.filter(s => s.status === 'visto').map(s => s.scout)
-        : (m.assignedTo && m.status === 'visto' ? [m.assignedTo] : [])
-      for (const sc of vistos) {
-        if (input.informesPartido.has(`${m.id}|${sc}`)) continue
-        const personId = perfilPorAvatar.get(sc)
-        if (!personId) continue
-        items.push({
-          id: `informe:${m.id}:${sc}`,
-          tipo: 'tarea',
-          titulo: `Informe de ${m.homeTeam} vs ${m.awayTeam}`,
-          personId,
-          otrosIds: [],
-          fecha: hoy,
-          categoria: 'Informe de partido',
-          estado: 'pendiente',
-          prioridadAlta: false,
-          origen: 'captacion',
-          abrir: { tipo: 'partido', matchId: m.id },
-          ref: { matchId: m.id, scout: sc },
-        })
-      }
-    }
-  }
+  // Un partido visto sin informe NO genera una tarea: marcar visto no obliga
+  // a escribir. En el momento de marcarlo se pregunta si se ha olvidado el
+  // informe (Captación y Mi día), y en el widget de partidos el scout sale
+  // sin la ✓ hasta que lo escribe.
 
   // ── Eventos (player_activities). Un evento de grupo es una fila por
   //    jugador con el mismo groupId: aquí sale una sola vez. ──

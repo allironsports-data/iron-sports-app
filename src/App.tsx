@@ -2336,6 +2336,11 @@ export default function App() {
         scoutingReports={scoutingReports}
         scoutingMatches={scoutingMatches}
         firmasEntries={firmasEntries}
+        eventos={eventos}
+        matchScouts={matchScouts}
+        scoutingInfos={scoutingInfos}
+        postpartidos={postpartidos}
+        negotiations={negotiations}
         equipos={equipos}
         clubZonas={clubZonas}
         onBack={() => setShowAdmin(false)}

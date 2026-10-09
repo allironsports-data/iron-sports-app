@@ -423,34 +423,23 @@ describe('postpartidos: fecha automática', () => {
   })
 })
 
-describe('informe de partido pendiente', () => {
-  const partidos = [
-    match({ id: 'reciente', date: '2026-09-29' }),
-    match({ id: 'viejo', date: '2026-09-20' }),
-    match({ id: 'con-informe', date: '2026-09-30' }),
-  ]
+describe('partido visto sin informe', () => {
+  const partidos = [match({ id: 'reciente', date: '2026-09-29' }), match({ id: 'con-informe', date: '2026-09-30' })]
   const scouts = [
     scout({ matchId: 'reciente', scout: 'NB', status: 'visto' }),
-    scout({ matchId: 'reciente', scout: 'PP', status: 'pendiente' }),
-    scout({ matchId: 'viejo', scout: 'NB', status: 'visto' }),
     scout({ matchId: 'con-informe', scout: 'NB', status: 'visto' }),
   ]
-  it('partido visto sin informe en los últimos 3 días: trabajo de hoy, de ese scout', () => {
+  it('no genera ninguna tarea: marcar visto no obliga a escribir (se pregunta al marcarlo)', () => {
     const its = construirAgenda(base({ scoutingMatches: partidos, matchScouts: scouts, informesPartido: new Set(['con-informe|NB']) }))
-    const pendientes = its.filter(esInformePendiente)
-    expect(pendientes.map(i => i.id)).toEqual(['informe:reciente:NB'])
-    expect(pendientes[0]).toMatchObject({ titulo: 'Informe de Athletic vs Real', personId: YO, fecha: HOY, abrir: { tipo: 'partido', matchId: 'reciente' } })
-    // Es trabajo (no cita) y se completa escribiendo el informe, no desde la lista
-    expect(esCita(pendientes[0])).toBe(false)
-    expect(seccionesDelDia(its, HOY).hoy.map(i => i.id)).toContain('informe:reciente:NB')
-    expect(permisosItem(pendientes[0])).toEqual({ estado: false, enCurso: false, reprogramar: false, reasignar: false })
-  })
-  it('sin la lista de informes no se inventa nada', () => {
-    const its = construirAgenda(base({ scoutingMatches: partidos, matchScouts: scouts }))
     expect(its.some(esInformePendiente)).toBe(false)
+    expect(its.some(i => i.id.startsWith('informe:'))).toBe(false)
+  })
+  it('el partido lleva la marca de informe hecho solo cuando lo hay', () => {
+    const its = construirAgenda(base({ scoutingMatches: partidos, matchScouts: scouts, informesPartido: new Set(['con-informe|NB']), rango: { desde: '2026-09-29', hasta: HOY } }))
+    expect(its.find(i => i.id === 'partido:con-informe:NB')?.conInforme).toBe(true)
+    expect(its.find(i => i.id === 'partido:reciente:NB')?.conInforme).toBe(false)
   })
 })
-
 describe('procesos: actualización semanal', () => {
   const tasks = [
     task({ id: 'al-dia', status: 'en_progreso', createdAt: '2026-08-01T00:00:00Z' }),

@@ -949,7 +949,7 @@ export function Dashboard({
     ? [...CHANGELOG[0].items, ...(CHANGELOG[0].adminItems ?? [])]
     : CHANGELOG[0].items;
   const [showChangelog, setShowChangelog] = useState<boolean>(() => {
-    try { return BUILD_ID !== 'dev' && localStorage.getItem('ais_seen_build') !== BUILD_ID && CHANGELOG.length > 0 } catch { return false }
+    try { return BUILD_ID !== 'dev' && localStorage.getItem('ais_seen_build') !== BUILD_ID && changelogItems.length > 0 } catch { return false }
   });
   const [changelogOpen, setChangelogOpen] = useState(false);
 
@@ -1128,7 +1128,14 @@ export function Dashboard({
   async function agendaEstado(it: AgendaItem, estado: AgendaEstado) {
     try {
       if (it.origen === 'captacion') {
-        if (it.ref.matchId) await onSetMatchSeen?.(it.ref.matchId, it.ref.scout, estado === 'completada');
+        if (!it.ref.matchId) return;
+        await onSetMatchSeen?.(it.ref.matchId, it.ref.scout, estado === 'completada');
+        // Visto sin informe: se pregunta por si se ha olvidado, sin crear ninguna tarea
+        const scout = it.ref.scout ?? profiles.find(p => p.id === it.personId)?.avatar;
+        if (estado === 'completada' && scout === currentProfile.avatar && !informesPartido?.has(`${it.ref.matchId}|${scout}`)) {
+          const matchId = it.ref.matchId;
+          showToast(`Visto. ¿Se te ha olvidado el informe de ${it.titulo}?`, 'info', { label: 'Escribirlo', fn: () => onOpenMatch?.(matchId) });
+        }
         return;
       }
       const task = tareaDeItem(it);
