@@ -2113,7 +2113,7 @@ export default function App() {
     if (d.tab !== undefined) setSubTab(d.seccion, d.tab)
     irA(d.seccion, d.tab || undefined)
   }
-  async function crearDesdeInicio(a: AltaRapida) {
+  const crearDesdeInicio = async (a: AltaRapida) => {
     await handleAddTask({
       id: 't' + Date.now(), playerId: 'general', title: a.titulo, description: '',
       assigneeId: a.assigneeId ?? profile.id, watchers: [], priority: a.prioridadAlta ? 'alta' : 'media',
