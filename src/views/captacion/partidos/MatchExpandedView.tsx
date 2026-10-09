@@ -8,20 +8,22 @@ import { teamMatchKind } from '../../../lib/equipos'
 import * as db from '../../../lib/db'
 import { guardarBorrador, leerBorrador, borrarBorrador, encolar, esErrorDeRed } from '../../../lib/colaInformes'
 import { AssessmentChip, ReportCard } from '../comun'
-import { type MatchScoutInfo, type ShowToast, type ConclusionOption, CONCLUSION_OPTIONS, CONCLUSION_STYLE, MONTHS_ES, birthYearFromBirthdate, personaToName, fmtDate, normConclusion, scoutColor } from '../helpers'
+import { type MatchScoutInfo, type ShowToast, type ConclusionOption, type SuggestWhy, CONCLUSION_OPTIONS, CONCLUSION_STYLE, MONTHS_ES, SUGGEST_LABEL, SUGGEST_ORDER, SEARCH_LIMIT, birthYearFromBirthdate, personaToName, fmtDate, normConclusion, scoutColor } from '../helpers'
 
 // ── MatchExpandedView — vista ampliada del partido ───────────
-// Se abre desde la ficha del partido («Ampliar»). Es SOLO lectura: ocupa
-// toda la pantalla y enseña lo que en la ficha va comprimido en chips:
-// el texto completo de cada informe, los dos equipos en dos columnas,
-// un resumen por scout y filtros para quedarse con lo que interesa
-// (solo «Llamar», solo un scout, solo los que tienen informe…).
+// Se abre desde la ficha del partido («Ampliar»). Ocupa toda la pantalla y
+// enseña lo que en la ficha va comprimido en chips: el texto completo de
+// cada informe, los dos equipos en dos columnas, un resumen por scout y
+// filtros para quedarse con lo que interesa (solo «Llamar», solo un scout,
+// solo los que tienen informe…). Desde aquí también se trabaja el partido:
+// se escriben informes (tantos como haga falta, también varios del mismo
+// scout) y se vinculan jugadores nuevos, que abren su formulario al momento.
 
 type FiltroVeredicto = '' | 'Llamar' | 'Seguir' | 'Descartar' | 'Visto' | 'sin'
 
 export function MatchExpandedView({
-  match, scouts, profiles, currentProfile, linkedPlayers, scoutingReports, allMatches,
-  nuestros, onAddReport, onUpdateReport, onDeleteReport, showToast, onClose, onOpenPlayer, onOpenEquipo,
+  match, scouts, profiles, currentProfile, linkedPlayers, scoutingReports, allMatches, scoutingPlayers, sugeridos,
+  nuestros, onAddMatchPlayer, onAddReport, onUpdateReport, onDeleteReport, showToast, onClose, onOpenPlayer, onOpenEquipo,
 }: {
   match: ScoutingMatch
   scouts: MatchScoutInfo[]
@@ -30,7 +32,13 @@ export function MatchExpandedView({
   linkedPlayers: ScoutingPlayer[]
   scoutingReports: ScoutingReport[]
   allMatches: ScoutingMatch[]
+  /** Todos los jugadores de captación, para buscar a quien vincular */
+  scoutingPlayers: ScoutingPlayer[]
+  /** Candidatos a vincular (mismo equipo, historial…), ya sin los vinculados */
+  sugeridos: { p: ScoutingPlayer; why: SuggestWhy }[]
   nuestros?: string[]
+  /** Vincula un jugador al partido; devuelve si fue bien (la ficha avisa si falla) */
+  onAddMatchPlayer: (playerId: string) => Promise<boolean>
   onAddReport: (r: ScoutingReport) => void
   onUpdateReport?: (r: ScoutingReport) => Promise<void>
   onDeleteReport?: (id: string) => Promise<void>
@@ -81,8 +89,48 @@ export function MatchExpandedView({
   }
   const [filtroVeredicto, setFiltroVeredicto] = useState<FiltroVeredicto>('')
   const [busqueda, setBusqueda] = useState('')
+  // Vincular un jugador más al partido (buscador + sugeridos)
+  const [busquedaNuevo, setBusquedaNuevo] = useState('')
+  const [vinculando, setVinculando] = useState<string | null>(null)
 
   useEscapeKey(() => { if (formPara) setFormPara(null); else onClose() })
+
+  /** Abre el formulario de informe de un jugador recuperando lo que tuviera a medias */
+  function abrirFormulario(playerId: string) {
+    const b = leerBorrador(playerId)
+    setFormPara(playerId); setTexto(b?.text ?? ''); setVeredicto((b?.conclusion ?? '') as ConclusionOption)
+  }
+
+  /** Vincula al jugador y le abre el informe: lo normal es que se vincule para escribir de él */
+  async function vincularYEscribir(p: ScoutingPlayer) {
+    if (vinculando) return
+    setVinculando(p.id)
+    try {
+      if (!(await onAddMatchPlayer(p.id))) return
+      setBusquedaNuevo('')
+      setBusqueda('')             // que no lo tape el filtro de nombre
+      setFiltroVeredicto('')
+      setFiltroScout('')
+      abrirFormulario(p.id)
+    } finally {
+      setVinculando(null)
+    }
+  }
+
+  const linkedIds = useMemo(() => new Set(linkedPlayers.map(p => p.id)), [linkedPlayers])
+  const buscandoNuevo = busquedaNuevo.trim().length >= 2
+  const candidatos = useMemo(() => {
+    if (buscandoNuevo) {
+      const q = busquedaNuevo.trim().toLowerCase()
+      return scoutingPlayers
+        .filter(p => !linkedIds.has(p.id) && p.fullName.toLowerCase().includes(q))
+        .map(p => ({ p, why: 'busqueda' as SuggestWhy }))
+    }
+    // Primero los del equipo exacto, luego historial, club…; dentro, por nombre
+    return sugeridos
+      .filter(x => !linkedIds.has(x.p.id))
+      .sort((a, b) => SUGGEST_ORDER[a.why] - SUGGEST_ORDER[b.why] || a.p.fullName.localeCompare(b.p.fullName))
+  }, [buscandoNuevo, busquedaNuevo, scoutingPlayers, sugeridos, linkedIds])
 
   const day = match.date.slice(8)
   const mon = MONTHS_ES[parseInt(match.date.slice(5, 7)) - 1]
@@ -411,17 +459,14 @@ export function MatchExpandedView({
                             ))}
                           </div>
                         )}
-                        {/* Cada scout escribe SU informe: el botón solo desaparece si ya escribí yo */}
-                        {!mio && formPara !== p.id && (
+                        {/* Siempre se puede escribir: el primero, el mío si ya hay de otros,
+                            o uno más si ya escribí (segunda parte, matiz, otro día…) */}
+                        {formPara !== p.id && (
                           <button
-                            onClick={() => {
-                              // Recupera lo que hubiera a medias de este jugador
-                              const b = leerBorrador(p.id)
-                              setFormPara(p.id); setTexto(b?.text ?? ''); setVeredicto((b?.conclusion ?? '') as ConclusionOption)
-                            }}
+                            onClick={() => abrirFormulario(p.id)}
                             className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold border border-primary text-primary bg-white hover:bg-blue-50 px-2.5 py-1 rounded-lg transition-colors"
                           >
-                            <Plus className="w-3 h-3" /> {infs.length > 0 ? 'Mi informe' : 'Informe'}
+                            <Plus className="w-3 h-3" /> {mio ? 'Otro informe' : infs.length > 0 ? 'Mi informe' : 'Informe'}
                           </button>
                         )}
                         {formPara === p.id && (
@@ -475,6 +520,59 @@ export function MatchExpandedView({
             ))}
           </div>
         )}
+
+        {/* ── Vincular un jugador más y escribirle el informe ── */}
+        <section className="bg-white border border-slate-200 rounded-lg px-3 py-2.5 print:hidden">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Añadir jugador al partido</h3>
+            <span className="text-[11px] text-slate-400">se vincula y se abre su informe</span>
+            <div className="relative ml-auto">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2 top-1/2 -translate-y-1/2" />
+              <input
+                value={busquedaNuevo}
+                onChange={e => setBusquedaNuevo(e.target.value)}
+                placeholder="Buscar jugador para vincular…"
+                aria-label="Buscar jugador para vincular al partido"
+                className="pl-7 pr-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white w-56 focus:outline-none focus:ring-2 focus:ring-violet-400/30"
+              />
+            </div>
+          </div>
+          <div className="mt-2">
+            {candidatos.length > 0 ? (
+              <div className="max-h-48 overflow-y-auto pr-1">
+                <div className="flex flex-wrap gap-1 items-center">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide mr-1 text-slate-400">
+                    {buscandoNuevo
+                      ? (candidatos.length > SEARCH_LIMIT ? `${SEARCH_LIMIT} de ${candidatos.length} — afina la búsqueda:` : `${candidatos.length} resultado${candidatos.length !== 1 ? 's' : ''}:`)
+                      : <span className="text-violet-500">Sugeridos ({candidatos.length}):</span>}
+                  </span>
+                  {candidatos.slice(0, SEARCH_LIMIT).map(({ p, why }) => (
+                    <button
+                      key={p.id}
+                      onClick={() => void vincularYEscribir(p)}
+                      disabled={vinculando !== null}
+                      className={`text-xs bg-white border px-2 py-0.5 rounded-full transition-colors flex items-center gap-1 disabled:opacity-50 ${
+                        why === 'equipo' || why === 'busqueda'
+                          ? 'border-violet-200 text-violet-700 hover:bg-violet-100'
+                          : 'border-slate-200 text-slate-500 hover:bg-slate-100'
+                      }`}
+                    >
+                      <Plus className="w-3 h-3" />{p.fullName}
+                      <span className={why === 'equipo' || why === 'busqueda' ? 'text-violet-400 text-[11px]' : 'text-slate-400 text-[11px]'}>
+                        {[p.birthdate ? `'${p.birthdate.slice(2, 4)}` : null, p.team].filter(Boolean).join(' · ')}
+                        {SUGGEST_LABEL[why]}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <span className="text-xs text-slate-400 italic">
+                {buscandoNuevo ? 'Sin resultados' : 'Ningún sugerido para estos equipos — busca por nombre para vincular a alguien'}
+              </span>
+            )}
+          </div>
+        </section>
       </div>
     </div>,
     document.body,

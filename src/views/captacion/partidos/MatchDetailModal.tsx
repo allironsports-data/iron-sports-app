@@ -236,10 +236,12 @@ export function MatchDetailModal({
     return { lista: lista.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 4), delClub: exactos.length === 0 }
   }, [allMatches, match.id, match.homeTeam, match.awayTeam])
 
-  async function handleAddPlayer(playerId: string) {
+  /** Devuelve si se vinculó: la vista ampliada solo abre el informe si fue bien */
+  async function handleAddPlayer(playerId: string): Promise<boolean> {
     try {
       await onAddMatchPlayer(match.id, playerId)
       setEquiposReciénAñadidos(prev => new Set(prev).add(playerId))
+      return true
     } catch (e) {
       const err = e as { code?: string; message?: string }
       showToast?.(
@@ -247,6 +249,7 @@ export function MatchDetailModal({
           ? 'Ese partido ya no existe (se fusionó con otro). Recarga la página.'
           : `Error al vincular el jugador: ${err?.message ?? 'desconocido'}`,
         'error')
+      return false
     }
   }
 
@@ -386,7 +389,10 @@ export function MatchDetailModal({
             linkedPlayers={linkedPlayers}
             scoutingReports={scoutingReports}
             allMatches={allMatches}
+            scoutingPlayers={scoutingPlayers}
+            sugeridos={suggestionPool}
             nuestros={nuestros}
+            onAddMatchPlayer={handleAddPlayer}
             onAddReport={onAddReport}
             onUpdateReport={onUpdateReport}
             onDeleteReport={onDeleteReport}
@@ -587,8 +593,9 @@ export function MatchDetailModal({
               {playersBySide.flatMap(grupo => grupo.jugadores.map((p, i) => {
                 const pReports = matchReportsByPlayer[p.id] ?? []
                 const isFormOpen = reportFormFor === p.id
-                // Cada scout puede escribir SU informe del mismo jugador en el mismo
-                // partido: el botón solo desaparece si ya escribí yo.
+                // Cada scout escribe SU informe del mismo jugador en el mismo partido,
+                // y el mismo scout puede añadir otro (segunda parte, matiz, otro día…):
+                // el botón no desaparece nunca, solo cambia de nombre.
                 const myReport = pReports.find(r =>
                   (r.authorId && r.authorId === currentProfile.id) || r.persona === currentProfile.avatar)
                 return (
@@ -670,20 +677,18 @@ export function MatchDetailModal({
                           </span>
                         )
                       })}
-                      {!myReport && (
-                        <button
-                          onClick={() => {
-                            setReportFormFor(isFormOpen ? null : p.id)
-                            // Si había algo a medias de este jugador (se fue la señal, se cerró la ficha…), vuelve
-                            const b = isFormOpen ? null : leerBorrador(p.id)
-                            setQuickText(b?.text ?? '')
-                            setQuickConclusion((b?.conclusion ?? '') as ConclusionOption)
-                          }}
-                          className="text-[11px] font-bold border border-primary text-primary bg-white hover:bg-blue-50 px-2.5 py-1 rounded-lg transition-colors"
-                        >
-                          {isFormOpen ? 'Cancelar' : pReports.length > 0 ? '+ Mi informe' : '+ Informe'}
-                        </button>
-                      )}
+                      <button
+                        onClick={() => {
+                          setReportFormFor(isFormOpen ? null : p.id)
+                          // Si había algo a medias de este jugador (se fue la señal, se cerró la ficha…), vuelve
+                          const b = isFormOpen ? null : leerBorrador(p.id)
+                          setQuickText(b?.text ?? '')
+                          setQuickConclusion((b?.conclusion ?? '') as ConclusionOption)
+                        }}
+                        className="text-[11px] font-bold border border-primary text-primary bg-white hover:bg-blue-50 px-2.5 py-1 rounded-lg transition-colors"
+                      >
+                        {isFormOpen ? 'Cancelar' : myReport ? '+ Otro informe' : pReports.length > 0 ? '+ Mi informe' : '+ Informe'}
+                      </button>
                       <button onClick={() => handleRemovePlayer(p.id)} aria-label={`Desvincular a ${p.fullName}`} className="text-slate-300 hover:text-red-500 p-1">
                         <X className="w-3 h-3" />
                       </button>
