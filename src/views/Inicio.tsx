@@ -53,6 +53,8 @@ export interface InicioProps {
 const NAV1 = 'flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors'
 const CARD = 'bg-white border border-slate-200 rounded-xl'
 const ROW = 'flex items-center gap-2.5 px-3.5 py-2 border-t border-slate-100 hover:bg-slate-50 cursor-pointer text-left w-full'
+/** Fila en bloque (título arriba, detalle debajo): para los procesos */
+const ROW_BLOQUE = 'block px-3.5 py-2 border-t border-slate-100 hover:bg-slate-50 cursor-pointer text-left w-full'
 
 /** Silueta de África: Boulema es el proyecto africano, y no hay icono de serie */
 function Africa({ className }: { className?: string }) {
@@ -241,8 +243,11 @@ export function Inicio({ profile, profiles, hoy, items, miEstado, contadores, on
               const dias = it.proceso?.diasSinActualizar ?? 0
               const toca = dias >= DIAS_ACTUALIZACION_PROCESO
               return (
-                <button key={it.id} onClick={() => onAbrir(it)} className={`${ROW} block`}>
-                  <div className="flex items-center gap-2"><div className="text-[13.5px] font-medium text-slate-800 truncate flex-1">{it.titulo}</div><span className={`text-[10.5px] font-semibold px-1.5 py-px rounded whitespace-nowrap ${toca ? 'bg-red-50 text-red-700' : 'bg-slate-100 text-slate-500'}`}>{toca ? 'toca nota' : dias === 0 ? 'nota hoy' : `nota hace ${dias} d`}</span></div>
+                <button key={it.id} onClick={() => onAbrir(it)} className={ROW_BLOQUE}>
+                  <div className="flex items-center gap-2">
+                    <div className="text-[13.5px] font-medium text-slate-800 truncate flex-1 min-w-0">{it.titulo}</div>
+                    <span className={`ml-auto text-[10.5px] font-semibold px-1.5 py-px rounded whitespace-nowrap flex-shrink-0 ${toca ? 'bg-red-50 text-red-700' : 'bg-slate-100 text-slate-500'}`}>{toca ? 'toca nota' : dias === 0 ? 'nota hoy' : `nota hace ${dias} d`}</span>
+                  </div>
                   {it.playerNombre && <div className="text-[11.5px] text-slate-400 truncate">{it.playerNombre}</div>}
                 </button>
               )
