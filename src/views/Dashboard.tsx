@@ -37,39 +37,7 @@ import {
 } from "../lib/db";
 import type { Profile } from "../contexts/AuthContext";
 import type { AppNotification } from "../App";
-import {
-  LogOut,
-  Users,
-  AlertTriangle,
-  Plus,
-  Search,
-  X,
-  Trash2,
-  UserPlus,
-  CheckSquare,
-  Square,
-  Bell,
-  Cake,
-  Calendar,
-  BarChart3,
-  ChevronLeft,
-  ChevronRight,
-  ChevronDown,
-  LayoutList,
-  LayoutGrid,
-  Table,
-  Zap,
-  TrendingUp,
-  Eye,
-  EyeOff,
-  Activity,
-  ExternalLink,
-  RotateCcw,
-  Check,
-  Inbox,
-  Sun,
-  Trophy,
-  PenLine } from "lucide-react";
+import { LogOut, Users, AlertTriangle, Plus, Search, X, Trash2, UserPlus, CheckSquare, Square, Bell, Cake, Calendar, BarChart3, ChevronLeft, ChevronRight, ChevronDown, LayoutList, LayoutGrid, Table, Zap, TrendingUp, Eye, EyeOff, Activity, ExternalLink, RotateCcw, Check, Inbox, Sun, Trophy, PenLine, Home } from 'lucide-react';
 import { POSITIONS, POSITION_CODES, positionLabel } from "../lib/positions";
 import { opcionesPartner, jugadorEsDePartner, PARTNER_TODOS } from "../lib/partners";
 import { estadoDe, jugadorEsDeEstado, contarPorEstado, ESTADO_META, ESTADO_TODOS, type FiltroEstado } from "../lib/estadoJugador";
@@ -81,7 +49,7 @@ const PRIMARY = "hsl(220,72%,26%)";
 
 interface Props {
   view?: 'tareas' | 'jugadores';   // which section to show
-  onViewChange?: (v: 'tareas' | 'jugadores' | 'distribucion' | 'captacion' | 'pipeline' | 'boulema' | 'mi-dia') => void;
+  onViewChange?: (v: 'inicio' | 'tareas' | 'jugadores' | 'distribucion' | 'captacion' | 'pipeline' | 'boulema' | 'mi-dia') => void;
   /** Abrir una tarea concreta al entrar (p. ej. desde «Mi día»); se consume una vez abierta */
   openTaskId?: string | null;
   onOpenTaskConsumed?: () => void;
@@ -1346,6 +1314,13 @@ export function Dashboard({
           <>
             {/* Level 1: main sections */}
             <div className="max-w-6xl mx-auto px-3 sm:px-6 hidden sm:flex items-center border-t border-slate-100 overflow-x-auto scrollbar-none">
+              <button
+                onClick={() => { setInternalTab(null); onViewChange('inicio'); }}
+                className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"
+              >
+                <Home className="w-3.5 h-3.5" />
+                Inicio
+              </button>
               {/* Mantenimiento — always active while Dashboard is mounted */}
               <button className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 border-primary text-primary transition-colors">
                 Mantenimiento

@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react'
-import {
-  Search, X, Plus, LogOut, Trash2,
-  Inbox, TrendingUp, Eye, Users, PenLine} from 'lucide-react'
+import { Search, X, Plus, LogOut, Trash2, Inbox, TrendingUp, Eye, Users, PenLine, Home } from 'lucide-react'
 import logoImg from '../assets/logo.jpeg'
 import type { ScoutingPlayer, BoulemaPlayer } from '../types'
 import type { Profile } from '../contexts/AuthContext'
@@ -157,7 +155,7 @@ interface Props {
   onAddBoulemaPlayer: (p: Omit<BoulemaPlayer, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>
   onUpdateBoulemaPlayer: (p: BoulemaPlayer) => Promise<void>
   onDeleteBoulemaPlayer: (id: string) => Promise<void>
-  onGoToSection: (s: 'tareas' | 'distribucion' | 'captacion' | 'pipeline') => void
+  onGoToSection: (s: 'inicio' | 'tareas' | 'distribucion' | 'captacion' | 'pipeline') => void
   /** Pestaña activa, si la lleva App (va en el hash: «atrás» cambia de pestaña) */
   tab?: string
   onTabChange?: (tab: 'mantenimiento') => void
@@ -218,6 +216,10 @@ export function Boulema({
 
         {/* Level 1: main sections */}
         <div className="max-w-6xl mx-auto px-3 sm:px-6 hidden sm:flex items-center border-t border-slate-100 overflow-x-auto scrollbar-none">
+          <button onClick={() => onGoToSection('inicio')} className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors">
+            <Home className="w-3.5 h-3.5" />
+            Inicio
+          </button>
           <button
             onClick={() => onGoToSection('tareas')}
             className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"

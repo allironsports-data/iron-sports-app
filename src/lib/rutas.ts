@@ -18,9 +18,10 @@ import type { MainSection } from '../components/globalExtras'
 // de scouting, partido, tarjeta de Firmar…) no van en el hash: usan
 // hooks/useAtras, que mete su propia entrada.
 
-export const SECCIONES: readonly MainSection[] = ['tareas', 'jugadores', 'distribucion', 'captacion', 'pipeline', 'boulema', 'mi-dia']
+export const SECCIONES: readonly MainSection[] = ['inicio', 'tareas', 'jugadores', 'distribucion', 'captacion', 'pipeline', 'boulema', 'mi-dia']
 
 export const NOMBRE_SECCION: Record<MainSection, string> = {
+  inicio: 'Inicio',
   tareas: 'Mantenimiento',
   jugadores: 'Jugadores',
   distribucion: 'Distribución',

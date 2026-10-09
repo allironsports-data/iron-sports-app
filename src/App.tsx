@@ -25,7 +25,12 @@ import { useFilasEquipos, inicioTemporada, SIN_CATEGORIA } from './views/captaci
 import { EquiposContext, type EquiposContextValue } from './contexts/equiposContext'
 import type { OpcionEquipo } from './lib/sugerirEquipos'
 import { teamsAlike } from './lib/equipos'
-import { hoyISO } from './lib/fechas'
+import { hoyISO, fechaLocal, lunesDe, sumarDias } from './lib/fechas'
+import { construirAgenda, itemEsDe, seccionesDelDia, type AgendaItem } from './lib/agendaItems'
+import { contadoresInicio, type DestinoInicio } from './lib/inicio'
+import { useActividadesRango } from './hooks/useActividadesRango'
+import { horaActual } from './lib/reuniones'
+import type { AltaRapida } from './lib/altaRapida'
 import { siguienteFecha } from './lib/recurrencia'
 import { reconciliarFirmas } from './lib/firmasMerge'
 import { BajoCapa } from './components/BajoCapa'
@@ -50,6 +55,7 @@ const TeamMemberDetail = lazy(() => import('./views/TeamMemberDetail').then(m =>
 const Boulema          = lazy(() => import('./views/Boulema').then(m => ({ default: m.Boulema })))
 const FirmasFlotante   = lazy(() => import('./views/pipeline/FirmasFlotante').then(m => ({ default: m.FirmasFlotante })))
 const MiDia            = lazy(() => import('./views/MiDia').then(m => ({ default: m.MiDia })))
+const Inicio           = lazy(() => import('./views/Inicio').then(m => ({ default: m.Inicio })))
 
 export interface AppNotification {
   id: string
@@ -145,7 +151,7 @@ export default function App() {
   const [mainSection, setMainSection] = useState<MainSection>(
     () => rutaInicial?.tipo === 'seccion' ? rutaInicial.seccion
       : rutaInicial?.tipo === 'club' ? 'distribucion'
-      : (sessionStorage.getItem('nav_section') as MainSection) ?? 'tareas'
+      : (sessionStorage.getItem('nav_section') as MainSection) ?? 'inicio'
   )
   // Pestaña de segundo nivel de cada sección (Captación → partidos, Pipeline
   // → avisos…). Vive aquí y no en cada sección para poder ir en el hash y
@@ -318,6 +324,38 @@ export default function App() {
     const c = await db.createComment(taskId, profile.id, texto)
     anotarNotaTarea(taskId, c.createdAt)
   }, [profile, anotarNotaTarea])
+
+  // ── Inicio: la agenda de hoy de todo el equipo, con el mismo motor que Mi
+  //    día y el calendario. Solo se calcula con la Home abierta. (Hooks: aquí arriba.)
+  const hoyInicio = hoyISO()
+  const enInicio = mainSection === 'inicio'
+  const actsInicio = useActividadesRango(hoyInicio, hoyInicio, enInicio, 0)
+  const agendaInicio = useMemo<AgendaItem[]>(() => {
+    if (!enInicio || !profile) return []
+    const porId = new Map(scoutingPlayers.map(p => [p.id, p.fullName]))
+    return construirAgenda({
+      hoy: hoyInicio,
+      tasks: profile.is_admin ? tasks : tasks.filter(t => !t.adminOnly),
+      firmasEntries, postpartidos, scoutingMatches, matchScouts, profiles, players,
+      activities: actsInicio, eventos, informesPartido, informesPedidos: informesPedidosPendientes,
+      ahoraHora: horaActual(), ultimaNotaTarea: ultimasNotas, vencimientos: !!profile.is_admin,
+      nombreScouting: (id: string) => porId.get(id),
+      rango: { desde: hoyInicio, hasta: hoyInicio },
+    })
+  }, [enInicio, profile, hoyInicio, tasks, firmasEntries, postpartidos, scoutingMatches, matchScouts, profiles, players, actsInicio, eventos, informesPartido, informesPedidosPendientes, ultimasNotas, scoutingPlayers])
+  const contadoresDeInicio = useMemo(() => {
+    if (!enInicio || !profile) return {}
+    const lunes = fechaLocal(lunesDe(new Date()))
+    const domingo = sumarDias(lunes, 6)
+    return contadoresInicio({
+      mias: seccionesDelDia(agendaInicio.filter(it => itemEsDe(it, profile.id)), hoyInicio),
+      equipo: agendaInicio,
+      hoy: hoyInicio,
+      partidosSemana: scoutingMatches.filter(m => m.date >= lunes && m.date <= domingo).length,
+      jugadores: players.length,
+      tarjetasAbiertas: firmasEntries.filter(e => e.status !== 'firmado').length,
+    })
+  }, [enInicio, profile, agendaInicio, hoyInicio, scoutingMatches, players, firmasEntries])
 
   // DEBE declararse aquí arriba: es un hook y no puede ir después de los
   // returns tempranos (loading/login) — romperlo deja la app en blanco.
@@ -2051,6 +2089,55 @@ export default function App() {
     </Suspense>
   )
 
+  // «Inicio»: la Home. Cada fila abre su pantalla natural; los accesos
+  // llevan a cada sección (o a Contactos / Admin, que no son secciones).
+  function abrirDesdeInicio(it: AgendaItem) {
+    const d = it.abrir
+    if (d.tipo === 'firmar') return irAFirmas(d.entryId)
+    if (d.tipo === 'partido') { setFlotante({ tipo: 'partido', id: d.matchId }); return }
+    if (d.tipo === 'jugador') return navigateToPlayer(d.playerId, false)
+    if (d.tipo === 'ofrecido') return irAOfrecido(d.ofrecimientoId)
+    if (d.tipo === 'evento') return irA('tareas', 'calendario')
+    if (d.tipo === 'postpartido') return d.taskId ? irATarea(d.taskId) : irA('tareas', 'postpartidos')
+    return irATarea(d.taskId)
+  }
+  function irDesdeInicio(d: DestinoInicio) {
+    if (d.tipo === 'admin') return abrirAdmin()
+    if (d.tipo === 'contactos') { irA('inicio'); setShowContacts(true); return }
+    if (d.tipo === 'mi-dia') {
+      // Mi día es la lista de Tareas (no el tablero), sin pestaña interna
+      sessionStorage.setItem('nav_tareas_vista', 'lista')
+      setSubTab('tareas', '')
+      return irA('tareas')
+    }
+    if (d.tab !== undefined) setSubTab(d.seccion, d.tab)
+    irA(d.seccion, d.tab || undefined)
+  }
+  async function crearDesdeInicio(a: AltaRapida) {
+    await handleAddTask({
+      id: 't' + Date.now(), playerId: 'general', title: a.titulo, description: '',
+      assigneeId: a.assigneeId ?? profile.id, watchers: [], priority: a.prioridadAlta ? 'alta' : 'media',
+      status: 'pendiente', label: a.label, dueDate: a.dueDate ?? hoyInicio,
+      createdAt: new Date().toISOString(), comments: [],
+    })
+  }
+  const inicioNode = (
+    <Inicio
+      profile={profile}
+      profiles={profiles}
+      hoy={hoyInicio}
+      items={agendaInicio}
+      miEstado={memberStatuses.find(s => s.profileId === profile.id)}
+      contadores={contadoresDeInicio}
+      onAbrir={abrirDesdeInicio}
+      onIr={irDesdeInicio}
+      onCrear={crearDesdeInicio}
+      onBuscar={() => setSearchOpen(true)}
+      onLogout={signOut}
+      onAdmin={profile.is_admin ? abrirAdmin : undefined}
+    />
+  )
+
   // «Mi día»: agenda personal de hoy. También para la cuenta solo-Captación.
   const miDiaNode = (
     <MiDia
@@ -2344,6 +2431,7 @@ export default function App() {
     if (mainSection === 'captacion') return (captacionNode)
     if (mainSection === 'pipeline') return (pipelineNode)
 
+    if (mainSection === 'inicio') return (inicioNode)
     if (mainSection === 'mi-dia') return (miDiaNode)
 
     if (mainSection === 'distribucion' || selectedClub) {

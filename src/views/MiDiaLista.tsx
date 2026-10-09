@@ -369,8 +369,10 @@ export function MiDiaLista({
         {(s.bandeja.length > 0 || vista === 'bandeja') && (
           <button onClick={() => setVista(v => v === 'dia' ? 'bandeja' : 'dia')}
             title={vista === 'dia' ? 'Lo que no tiene fecha («algún día»): no sale en el día ni en el calendario' : 'Volver al día'}
-            className={`ml-auto inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${vista === 'bandeja' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
-            {vista === 'bandeja' ? <><Sun className="w-3.5 h-3.5" /> Volver al día</> : <><Inbox className="w-3.5 h-3.5" /> Bandeja <span className="font-semibold">{s.bandeja.length}</span></>}
+            className={`ml-auto inline-flex items-center gap-2 text-sm font-semibold px-3.5 py-2 rounded-xl border-2 shadow-sm transition-colors ${vista === 'bandeja' ? 'bg-slate-800 text-white border-slate-800 hover:bg-slate-700' : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'}`}>
+            {vista === 'bandeja'
+              ? <><Sun className="w-4 h-4" /> Volver al día</>
+              : <><Inbox className="w-4 h-4" /> Tareas pendientes <span className="inline-flex items-center justify-center min-w-[1.5rem] h-6 px-1.5 rounded-full bg-amber-500 text-white text-xs font-bold">{s.bandeja.length}</span></>}
           </button>
         )}
       </div>
@@ -387,12 +389,12 @@ export function MiDiaLista({
       {vista === 'bandeja' && (
         <section className="mb-3">
           <p className="mb-2 text-[11px] text-slate-500">
-            <b className="font-bold uppercase tracking-wider text-slate-500">Bandeja</b> · {esYo ? 'tus' : 'sus'} tareas sin fecha («algún día»). No salen en el día ni en el calendario:
+            <b className="font-bold uppercase tracking-wider text-slate-500">Tareas pendientes</b> · {esYo ? 'tus' : 'sus'} tareas sin fecha («algún día»). No salen en el día ni en el calendario:
             ponles fecha desde la fila (<CalendarClock className="inline w-3 h-3 align-text-bottom" />) cuando toque, o márcalas hechas si ya no hacen falta.
           </p>
           {s.bandeja.length === 0 ? (
             <div className="bg-white border border-slate-200 rounded-lg">
-              <EmptyState icon={<Inbox className="w-10 h-10" />} title="Bandeja vacía" subtitle="Todo lo que tienes lleva fecha." />
+              <EmptyState icon={<Inbox className="w-10 h-10" />} title="Sin tareas pendientes" subtitle="Todo lo que tienes lleva fecha." />
             </div>
           ) : lista(s.bandeja, 'bandeja')}
         </section>

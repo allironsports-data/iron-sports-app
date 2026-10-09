@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { Search, X, Home, TrendingUp, Eye, Inbox, Bell, PenLine, Menu } from 'lucide-react'
+import { Search, X, Home, TrendingUp, Eye, Inbox, Bell, PenLine, Menu, ListTodo } from 'lucide-react'
 import type { Player, ScoutingPlayer, FirmasEntry, Club, Task } from '../types'
 import { onSavingChange } from '../lib/supabase'
 import { norm } from '../lib/texto'
@@ -71,7 +71,8 @@ export function BottomNav({ current, onGo, onSearch }: {
   // Lo menos usado en el móvil (Boulema, buscar) va en «Más».
   const [mas, setMas] = useState(false)
   const items: { id: MainSection; label: string; icon: React.ReactNode; match: MainSection[] }[] = [
-    { id: 'tareas', label: 'Tareas', icon: <Home className="w-5 h-5" />, match: ['tareas', 'jugadores', 'mi-dia'] },
+    { id: 'inicio', label: 'Inicio', icon: <Home className="w-5 h-5" />, match: ['inicio'] },
+    { id: 'tareas', label: 'Tareas', icon: <ListTodo className="w-5 h-5" />, match: ['tareas', 'jugadores', 'mi-dia'] },
     { id: 'captacion', label: 'Captación', icon: <Eye className="w-5 h-5" />, match: ['captacion'] },
     { id: 'pipeline', label: 'Pipeline', icon: <PenLine className="w-5 h-5" />, match: ['pipeline'] },
     { id: 'distribucion', label: 'Distribución', icon: <TrendingUp className="w-5 h-5" />, match: ['distribucion'] },

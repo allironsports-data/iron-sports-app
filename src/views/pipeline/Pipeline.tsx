@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { LogOut, TrendingUp, Eye, Inbox, PenLine, Activity, MapPin, UserCog, Bell } from 'lucide-react'
+import { LogOut, TrendingUp, Eye, Inbox, PenLine, Activity, MapPin, UserCog, Bell, Home } from 'lucide-react'
 import logoImg from '../../assets/logo.jpeg'
 import type { Player, Task, FirmasEntry, ScoutingPlayer, ScoutingReport, ScoutingMatch, ScoutingMatchPlayer, Ofrecimiento, AgendaEvento } from '../../types'
 import type { Profile } from '../../contexts/AuthContext'
@@ -55,7 +55,7 @@ export interface PipelineProps {
   /** Abrir una tarjeta concreta al entrar (desde el Dashboard, el buscador…) */
   openEntryId?: string | null
   onOpenEntryConsumed?: () => void
-  onGoToSection: (s: 'tareas' | 'jugadores' | 'distribucion' | 'captacion' | 'boulema') => void
+  onGoToSection: (s: 'inicio' | 'tareas' | 'jugadores' | 'distribucion' | 'captacion' | 'boulema') => void
   onLogout: () => void
   onAdmin?: () => void
   /** Pestaña activa, si la lleva App (va en el hash: «atrás» cambia de pestaña) */
@@ -129,6 +129,7 @@ export function Pipeline(props: PipelineProps) {
 
         {/* Nivel 1 */}
         <div className="max-w-6xl mx-auto px-3 sm:px-6 hidden sm:flex items-center border-t border-slate-100 overflow-x-auto scrollbar-none">
+          <button onClick={() => onGoToSection('inicio')} className={nav1}><Home className="w-3.5 h-3.5" /> Inicio</button>
           <button onClick={() => onGoToSection('tareas')} className={nav1}>Mantenimiento</button>
           <button onClick={() => onGoToSection('distribucion')} className={nav1}>
             <TrendingUp className="w-3.5 h-3.5" /> Distribución

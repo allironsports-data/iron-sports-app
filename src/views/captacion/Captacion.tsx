@@ -1,7 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react'
-import {
-  LogOut, FileText, Calendar, CalendarDays, TrendingUp, Eye, ClipboardList, Users, Inbox, Target, PenLine, Shield, Wifi,
-} from 'lucide-react'
+import { LogOut, FileText, Calendar, CalendarDays, TrendingUp, Eye, ClipboardList, Users, Inbox, Target, PenLine, Shield, Wifi, Home } from 'lucide-react'
 import logoImg from '../../assets/logo.jpeg'
 import type { ScoutingPlayer, ScoutingReport, ScoutingAssessment, ScoutingMatch, FirmasEntry } from '../../types'
 import * as db from '../../lib/db'
@@ -1429,6 +1427,10 @@ export function Captacion({
         {/* Level 1: main sections (oculto para cuentas solo-Captación) */}
         {!restricted && (
         <div className="max-w-6xl mx-auto px-3 sm:px-6 hidden sm:flex items-center border-t border-slate-100 overflow-x-auto scrollbar-none">
+          <button onClick={() => onGoToSection('inicio')} className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors">
+            <Home className="w-3.5 h-3.5" />
+            Inicio
+          </button>
           <button
             onClick={() => onGoToSection('tareas')}
             className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 transition-colors"

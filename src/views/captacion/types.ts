@@ -12,7 +12,7 @@ export interface Props {
   profiles: Profile[]
   currentProfile: Profile
   onBack: () => void
-  onGoToSection: (s: 'tareas' | 'jugadores' | 'distribucion' | 'pipeline' | 'boulema') => void
+  onGoToSection: (s: 'inicio' | 'tareas' | 'jugadores' | 'distribucion' | 'pipeline' | 'boulema') => void
   onLogout: () => void
   onAdmin?: () => void
   onAddPlayer: (p: ScoutingPlayer) => void
