@@ -15,6 +15,7 @@ import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { norm } from '../../lib/texto'
 import { ZONAS } from '../../lib/zonas'
 import { CIUDADES_CONOCIDAS, zonaDeCiudad } from '../../lib/viajes'
+import { CompeticionSelect } from '../../views/captacion/partidos/CompeticionSelect'
 
 export type EventoBorrador = Omit<AgendaEvento, 'id' | 'createdAt' | 'activityRef'> & {
   /**
@@ -153,7 +154,7 @@ export function EventoModal({ players, scoutingPlayers, profiles, currentProfile
             {esPartido ? (
               <div className="space-y-1">
                 <label className="text-xs font-medium text-slate-600">Competición <span className="text-slate-400 font-normal">(opcional)</span></label>
-                <input value={competicion} onChange={e => setCompeticion(e.target.value)} placeholder="Ej. División de Honor" className={CAMPO} />
+                <CompeticionSelect value={competicion} onChange={setCompeticion} className={CAMPO} placeholder="— Sin competición —" />
               </div>
             ) : (
               <div className="space-y-1">

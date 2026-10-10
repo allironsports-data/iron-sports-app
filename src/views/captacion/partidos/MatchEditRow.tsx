@@ -9,7 +9,7 @@ import { Check, X } from 'lucide-react'
 import type { ScoutingMatch } from '../../../types'
 import type { Profile } from '../../../contexts/AuthContext'
 import { useEscapeKey } from '../../../hooks/useEscapeKey'
-import { COMPETITION_OPTIONS } from '../helpers'
+import { CompeticionSelect } from './CompeticionSelect'
 import { Spinner } from '../comun'
 import { EquipoInput } from '../../../components/EquipoInput'
 import type { MatchFormState } from './MatchFormPanel'
@@ -55,8 +55,7 @@ export function MatchEditRow({ match, profiles, onSave, onCancel }: {
         <EquipoInput value={form.awayTeam} onChange={v => set('awayTeam', v)} onKeyDown={alIntro} className={campo} placeholder="Visitante" aria-label="Visitante" />
       </td>
       <td className="px-2 py-1.5 align-top">
-        <input value={form.competition} onChange={e => set('competition', e.target.value)} onKeyDown={alIntro} list="competition-options-fila" className={campo} placeholder="Competición" aria-label="Competición" />
-        <datalist id="competition-options-fila">{COMPETITION_OPTIONS.map(c => <option key={c} value={c} />)}</datalist>
+        <CompeticionSelect value={form.competition} onChange={v => set('competition', v)} onKeyDown={alIntro} className={campo} placeholder="Competición" />
       </td>
       <td className="px-2 py-1.5 align-top">
         <select value={form.viewMode} onChange={e => set('viewMode', e.target.value as 'video' | 'campo')} className={campo} aria-label="Visualización">

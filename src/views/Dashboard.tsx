@@ -43,6 +43,7 @@ import { opcionesPartner, jugadorEsDePartner, PARTNER_TODOS } from "../lib/partn
 import { estadoDe, jugadorEsDeEstado, contarPorEstado, ESTADO_META, ESTADO_TODOS, type FiltroEstado } from "../lib/estadoJugador";
 import { jugadorEsDePrioridad, SIN_PRIORIDAD } from "../lib/prioridadJugador";
 import { PrioridadBadge } from "../components/PrioridadBadge";
+import { CompeticionSelect } from "./captacion/partidos/CompeticionSelect";
 import { PLAYER_PRIORIDADES } from "../types";
 
 const PRIMARY = "hsl(220,72%,26%)";
@@ -3139,7 +3140,7 @@ export function Dashboard({
                     <div className="grid grid-cols-2 gap-2">
                       <input type="date" value={ppNewMatch.date} onChange={e => setPpNewMatch(f => ({ ...f, date: e.target.value }))}
                         className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white" />
-                      <input placeholder="Competición (opc.)" value={ppNewMatch.competition} onChange={e => setPpNewMatch(f => ({ ...f, competition: e.target.value }))}
+                      <CompeticionSelect value={ppNewMatch.competition} onChange={v => setPpNewMatch(f => ({ ...f, competition: v }))} placeholder="— Competición (opc.) —"
                         className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white" />
                     </div>
                     <div className="grid grid-cols-2 gap-2">

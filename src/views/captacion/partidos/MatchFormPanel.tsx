@@ -5,7 +5,8 @@ import { buscarPartidosParecidos } from '../../../lib/duplicados'
 import { useDebounce } from '../../../hooks/useDebounce'
 import { EquipoInput } from '../../../components/EquipoInput'
 import { FormRow, Spinner } from '../comun'
-import { type ShowToast, COMPETITION_OPTIONS, fmtDate } from '../helpers'
+import { type ShowToast, fmtDate } from '../helpers'
+import { CompeticionSelect } from './CompeticionSelect'
 // ── MatchFormPanel — isolated so keystrokes don't re-render the whole list ──
 export type MatchFormState = { date: string; time: string; homeTeam: string; awayTeam: string; competition: string; assignedTo: string; viewMode: 'video' | 'campo'; notes: string }
 function emptyMatchForm(fecha = ''): MatchFormState {
@@ -57,8 +58,7 @@ export function MatchFormPanel({ initial, fechaInicial, profiles, onSave, onCanc
         <FormRow label="Fecha"><input type="date" value={form.date} onChange={e => set('date', e.target.value)} className="field" /></FormRow>
         <FormRow label="Hora (opcional)"><input type="time" value={form.time} onChange={e => set('time', e.target.value)} className="field" /></FormRow>
         <FormRow label="Competición">
-          <input value={form.competition} onChange={e => set('competition', e.target.value)} list="competition-options" className="field" placeholder="Liga, Copa..." />
-          <datalist id="competition-options">{COMPETITION_OPTIONS.map(c => <option key={c} value={c} />)}</datalist>
+          <CompeticionSelect value={form.competition} onChange={v => set('competition', v)} className="field" />
         </FormRow>
         <FormRow label="Visualización">
           <select value={form.viewMode} onChange={e => set('viewMode', e.target.value as 'video' | 'campo')} className="field">
