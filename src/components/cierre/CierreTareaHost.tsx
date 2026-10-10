@@ -21,7 +21,7 @@ import * as db from '../../lib/db'
 import { crearActividadesDeEvento, apuntarEventoEnPipeline, tarjetaDeScouting } from '../../lib/eventosAgenda'
 import {
   cierreRequerido, eventoDeCierre, contactoOcurrio, conCierre, tareaSiguiente, notaDeNegociacion,
-  jugadorDeTarea, ASSESSMENT_DE_CONCLUSION, type DatosCierre, type TipoCierre,
+  jugadorDeTarea, ASSESSMENT_DE_CONCLUSION, etiquetaResultado, type DatosCierre, type TipoCierre,
 } from '../../lib/cierreTarea'
 import { aplicarCierreLlamada, aplicarCierreEnTarjeta, conSiguientePaso, type DatosLlamada, type DatosCierre as DatosCierrePipeline } from '../../views/captacion/firmas/cierreReunion'
 import { CerrarTareaModal } from './CerrarTareaModal'
@@ -84,7 +84,20 @@ export function CierreTareaHost({
     const jugador = jugadorDeTarea(task, players)
     const autor = { id: currentProfile.id, name: currentProfile.name }
     try {
-      if ((t.tipo === 'llamada' || t.tipo === 'reunion' || t.tipo === 'visita') && contactoOcurrio(t.tipo, d)) {
+      const cita = task.eventoId ? eventos.find(e => e.id === task.eventoId) : undefined
+      if ((t.tipo === 'llamada' || t.tipo === 'reunion' || t.tipo === 'visita') && cita) {
+        // La tarea ya tenía su cita en la agenda: lo que pasó se apunta en ella (y en la ficha), no en un evento nuevo
+        const notas = [cita.notas, [etiquetaResultado(d.resultado), d.nota].filter(Boolean).join(' — ')].filter(Boolean).join('\n') || undefined
+        const cerrada: AgendaEvento = { ...cita, notas, recap: d.nota || cita.recap, cerradoAt: new Date().toISOString(), cerradoPor: currentProfile.id }
+        await db.updateAgendaEvento(cerrada)
+        setEventos(prev => prev.map(e => e.id === cerrada.id ? cerrada : e))
+        if (cerrada.activityRef && cerrada.playerIds.length > 0) {
+          const fila = { id: cerrada.activityRef, groupId: cerrada.playerIds.length > 1 ? cerrada.activityRef : undefined, playerId: cerrada.playerIds[0], date: cerrada.fecha, type: cerrada.tipo, createdAt: '', notes: [cerrada.titulo, notas].filter(Boolean).join(' — ') }
+          await (fila.groupId ? db.updateGroupActivity(fila) : db.updatePlayerActivity(fila)).catch(err => console.error(err))
+          ref.activityId = cerrada.activityRef
+        }
+        ref.eventoId = cerrada.id
+      } else if ((t.tipo === 'llamada' || t.tipo === 'reunion' || t.tipo === 'visita') && contactoOcurrio(t.tipo, d)) {
         const e = eventoDeCierre(task, t.tipo, d, { hoy, authorId: currentProfile.id, players })
         const activityRef = await crearActividadesDeEvento(e, currentProfile.id)
         if (activityRef) ref.activityId = activityRef
@@ -109,9 +122,11 @@ export function CierreTareaHost({
       if (t.tipo === 'video') {
         const vs: VideoSession = {
           id: 'vs' + Date.now(), tipo: d.subtipo ?? 'sesion', titulo: task.title, description: d.nota ?? '',
-          date: d.fecha || hoy, videoUrl: d.enlace ?? '',
-          participantes: d.participantes && d.participantes.length > 0 ? d.participantes : [task.assigneeId || currentProfile.id],
+          date: d.fecha || cita?.fecha || hoy, time: cita?.hora, lugar: cita?.lugar, videoUrl: d.enlace ?? '',
+          participantes: d.participantes && d.participantes.length > 0 ? d.participantes : (cita?.participantIds.length ? cita.participantIds : [task.assigneeId || currentProfile.id]),
+          eventoId: cita?.id,
         }
+        if (cita) ref.eventoId = cita.id
         await Promise.resolve(onUpdatePlayer({ ...t.player, videoSessions: [vs, ...(t.player.videoSessions ?? [])] }))
         ref.videoSessionId = vs.id
       }
@@ -258,11 +273,13 @@ export function CierreTareaHost({
   const task = pendiente.task
   const conQuien = jugadorDeTarea(task, players)?.name
     ?? (task.scoutingPlayerId ? scoutingPlayers.find(p => p.id === task.scoutingPlayerId)?.fullName : undefined)
+  const citaTarea = task.eventoId ? eventos.find(e => e.id === task.eventoId) : undefined
   return (
     <CerrarTareaModal
       key={task.id}
       task={task}
       tipo={tipo}
+      cita={citaTarea ? { fecha: citaTarea.fecha, participantIds: citaTarea.participantIds } : undefined}
       conQuien={conQuien}
       profiles={profiles}
       currentProfile={currentProfile}

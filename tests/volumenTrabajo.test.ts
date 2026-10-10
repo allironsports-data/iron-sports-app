@@ -33,10 +33,10 @@ describe('volumenTrabajo · extracción', () => {
   it('con tipo, el peso es el del tipo (+1 si es alta) y el subtipo lleva el resultado del cierre', () => {
     const a = extraerAcciones(datos({ tasks: [
       tarea('t1', { label: 'Llamada', cierre: { resultado: 'contesto' } }),
-      tarea('t2', { label: 'Videoanálisis', priority: 'alta' }),
+      tarea('t2', { label: 'Análisis', priority: 'alta' }),
       tarea('t3', { label: 'Comida/Visita', cierre: { resultado: 'hecha' } }),
     ] as never }))
-    expect(a.map(x => [x.sub, x.puntos])).toEqual([['Llamada · Contestó', 1], ['Videoanálisis (alta)', 4], ['Comida/Visita', 4]])
+    expect(a.map(x => [x.sub, x.puntos])).toEqual([['Llamada · Contestó', 1], ['Análisis (alta)', 4], ['Comida/Visita', 4]])
   })
 
   it('el evento que nace de completar una tarea no cuenta (la tarea ya cuenta)', () => {

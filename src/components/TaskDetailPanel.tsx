@@ -29,11 +29,13 @@ interface Props {
   onComment?: (task: Task, texto: string) => void;
   /** Si la tarea nace de una próxima acción del pipeline: su tarjeta (se enseña el historial) y cómo abrirla */
   firmar?: { entry: FirmasEntry; onAbrir: () => void };
+  /** La cita de la tarea (su evento de agenda), si la tiene, y cómo abrirla para cambiar hora o lugar */
+  cita?: { fecha: string; hora?: string; lugar?: string; tipo: string; onAbrir?: () => void };
 }
 
 export function TaskDetailPanel({
   task, player, players, profiles, currentProfile,
-  onClose, onUpdate, onSaveAndClose, onDelete, onGoToPlayer, onComment, firmar,
+  onClose, onUpdate, onSaveAndClose, onDelete, onGoToPlayer, onComment, firmar, cita,
 }: Props) {
   const canEdit = currentProfile.is_admin || task.assigneeId === currentProfile.id
     || (task.watchers ?? []).includes(currentProfile.id);
@@ -296,6 +298,22 @@ export function TaskDetailPanel({
                   </div>
                 </div>
 
+                {/* Cita: el evento de agenda enlazado */}
+                {cita && (
+                  <div className="bg-sky-50 border border-sky-100 rounded-xl p-3 flex items-center gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-sky-700">Cita · {cita.tipo}</p>
+                      <p className="text-xs text-slate-800 truncate">
+                        {parseDia(cita.fecha).toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" })}
+                        {cita.hora ? ` · ${cita.hora}` : ""}{cita.lugar ? ` · ${cita.lugar}` : ""}
+                      </p>
+                    </div>
+                    {cita.onAbrir && (
+                      <button onClick={cita.onAbrir} className="text-[11px] font-semibold text-sky-700 hover:underline flex-shrink-0">Cambiar hora o lugar →</button>
+                    )}
+                  </div>
+                )}
+
                 {/* Cierre: qué pasó al completarla y qué dejó */}
                 {task.status === "completada" && task.cierre && (task.cierre.resultado || task.cierre.nota || task.cierre.ref) && (
                   <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 space-y-1.5">
@@ -442,7 +460,7 @@ export function TaskDetailPanel({
                         onChange={e => setLabel(e.target.value as TaskLabel | "")}
                         className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
                       >
-                        <option value="">— Sin tipo —</option>
+                        {!task.label && <option value="" disabled>— Elegir tipo —</option>}
                         {TASK_LABELS.map(l => (
                           <option key={l} value={l}>{l}</option>
                         ))}
@@ -452,7 +470,7 @@ export function TaskDetailPanel({
                         {task.label}{etiquetaSubtipo(subtipoValido(task.label, task.subtipo)) ? ` · ${etiquetaSubtipo(task.subtipo)}` : ""}
                       </span>
                     ) : (
-                      <p className="text-xs text-slate-400">Sin tipo</p>
+                      <p className="text-xs text-slate-400">Sin tipo (antigua)</p>
                     )}
                     {canEdit && subtiposDe(label).length > 0 && (
                       <select
@@ -461,7 +479,7 @@ export function TaskDetailPanel({
                         aria-label="Subtipo"
                         className="mt-1.5 w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
                       >
-                        <option value="">— {label === "Negociación" ? "De qué va" : label === "Informe" ? "Qué informe" : label === "Videoanálisis" ? "Qué servicio" : "Cuál"} —</option>
+                        <option value="">— {label === "Negociación" ? "De qué va" : label === "Informe" ? "Qué informe" : label === "Análisis" ? "Qué servicio" : "Cuál"} —</option>
                         {subtiposDe(label).map(s => <option key={s} value={s}>{etiquetaSubtipo(s)}</option>)}
                       </select>
                     )}

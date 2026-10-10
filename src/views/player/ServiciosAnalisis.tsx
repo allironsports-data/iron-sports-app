@@ -25,7 +25,7 @@ export function ServiciosAnalisis({ player, profiles, currentProfile, tareas, on
   player: Player
   profiles: Profile[]
   currentProfile: Profile
-  /** Tareas de tipo «Videoanálisis» de este jugador: lo pendiente, encima de la lista */
+  /** Tareas de tipo «Análisis» de este jugador: lo pendiente, encima de la lista */
   tareas: Task[]
   onUpdate: (p: Player) => void | Promise<void>
 }) {

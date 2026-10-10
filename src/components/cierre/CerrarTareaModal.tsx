@@ -36,6 +36,8 @@ interface Props {
   tipo: Exclude<TipoCierre, { tipo: 'pipeline-llamada' | 'pipeline-reunion' }>
   /** Nombre del jugador (nuestro o de Captación) de la tarea, si lo hay */
   conQuien?: string
+  /** La cita de la tarea, si la tenía: día y asistentes ya puestos */
+  cita?: { fecha: string; participantIds: string[] }
   profiles: Profile[]
   currentProfile: Profile
   onGuardar: (datos: DatosCierre) => Promise<void>
@@ -58,7 +60,7 @@ function Chips<T extends string>({ opciones, valor, onChange, activo = 'bg-slate
   )
 }
 
-export function CerrarTareaModal({ task, tipo, conQuien, profiles, currentProfile, onGuardar, onClose }: Props) {
+export function CerrarTareaModal({ task, tipo, conQuien, cita, profiles, currentProfile, onGuardar, onClose }: Props) {
   const hoy = hoyISO()
   // Informe de Captación: el subtipo elegido al crear la tarea es el resultado por defecto
   const subtipoInicial = subtipoValido(task.label, task.subtipo)
@@ -69,8 +71,8 @@ export function CerrarTareaModal({ task, tipo, conQuien, profiles, currentProfil
   const [enlace, setEnlace] = useState('')
   const [urlError, setUrlError] = useState(false)
   const [subtipo, setSubtipo] = useState<string>(subtipoInicial ?? (tipo.tipo === 'video' ? SERVICIO_VIDEO_DEFECTO : 'Visita presencial'))
-  const [fecha, setFecha] = useState(hoy)
-  const [participantes, setParticipantes] = useState<string[]>([task.assigneeId || currentProfile.id])
+  const [fecha, setFecha] = useState(cita?.fecha && cita.fecha <= hoy ? cita.fecha : hoy)
+  const [participantes, setParticipantes] = useState<string[]>(cita?.participantIds.length ? cita.participantIds : [task.assigneeId || currentProfile.id])
   // Llamada: siguiente paso
   const [conSiguiente, setConSiguiente] = useState(false)
   const [sigTitulo, setSigTitulo] = useState('')

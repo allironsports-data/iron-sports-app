@@ -31,11 +31,11 @@ describe('qué cierre toca', () => {
     expect(cierreRequerido(tarea({ label: 'Reunión' }), ctx()).tipo).toBe('reunion')
     expect(cierreRequerido(tarea({ label: 'Comida/Visita' }), ctx()).tipo).toBe('visita')
   })
-  it('informe y videoanálisis solo tienen cierre propio con jugador nuestro', () => {
+  it('informe y análisis solo tienen cierre propio con jugador nuestro', () => {
     expect(cierreRequerido(tarea({ label: 'Informe', playerId: 'j1' }), ctx())).toMatchObject({ tipo: 'informe', player: jugador })
     expect(cierreRequerido(tarea({ label: 'Informe' }), ctx()).tipo).toBe('nota')
-    expect(cierreRequerido(tarea({ label: 'Videoanálisis', playerId: 'j1' }), ctx())).toMatchObject({ tipo: 'video' })
-    expect(cierreRequerido(tarea({ label: 'Videoanálisis' }), ctx()).tipo).toBe('nota')
+    expect(cierreRequerido(tarea({ label: 'Análisis', playerId: 'j1' }), ctx())).toMatchObject({ tipo: 'video' })
+    expect(cierreRequerido(tarea({ label: 'Análisis' }), ctx()).tipo).toBe('nota')
   })
   it('negociación y scouting llevan su resultado; el resto, una nota', () => {
     expect(cierreRequerido(tarea({ label: 'Negociación', playerId: 'j1' }), ctx())).toMatchObject({ tipo: 'negociacion', player: jugador })

@@ -9,6 +9,8 @@ import { idApunteEvento } from './lib/reuniones'
 import { leerCopia, guardarCopia, limpiarCopias } from './lib/cacheLocal'
 import * as db from './lib/db'
 import { CierreTareaHost, type CierrePendiente } from './components/cierre/CierreTareaHost'
+import type { CitaTarea } from './components/agenda/TareaModal'
+import { crearActividadesDeEvento, borrarActividadesDeEvento, apuntarEventoEnPipeline } from './lib/eventosAgenda'
 import { supabase } from './lib/supabase'
 import type { Profile } from './contexts/AuthContext'
 import { LoginScreen } from './views/LoginScreen'
@@ -1228,7 +1230,41 @@ export default function App() {
     )
   }
 
-  const handleAddTask = async (task: Task): Promise<Task> => {
+  /**
+   * Crea la tarea y, si trae cita (hora, lugar, quién va), el evento de agenda
+   * enlazado: la tarea es lo que hay que hacer y el evento la cita. Si el
+   * evento falla, la tarea queda igual (sin cita) y se avisa.
+   */
+  const handleAddTask = async (task: Task, cita?: CitaTarea): Promise<Task> => {
+    const saved = await crearTarea(task)
+    if (!cita || !saved.dueDate || !profile) return saved
+    try {
+      const jugador = saved.playerId && saved.playerId !== 'general' ? saved.playerId : undefined
+      const borrador = {
+        titulo: saved.title, tipo: cita.tipoEvento, fecha: saved.dueDate, hora: cita.hora, lugar: cita.lugar,
+        ambito: (jugador ? 'mantenimiento' : saved.scoutingPlayerId ? 'captacion' : 'general') as AgendaEvento['ambito'],
+        playerIds: jugador ? [jugador] : [],
+        scoutingPlayerId: jugador ? undefined : saved.scoutingPlayerId,
+        participantIds: cita.participantIds,
+        authorId: profile.id,
+        taskId: saved.id,
+      }
+      const activityRef = await crearActividadesDeEvento(borrador, profile.id)
+      const creado = await db.createAgendaEvento({ ...borrador, activityRef })
+      setEventos(prev => [creado, ...prev])
+      await apuntarEventoEnPipeline(creado, { firmasEntries: firmasEntriesRef.current, autor: profile, hoy: hoyISO(), patch: handlePatchFirmasEntry })
+      const conCita = { ...saved, eventoId: creado.id }
+      await db.updateTask(conCita)
+      setTasks(prev => prev.map(t => t.id === saved.id ? conCita : t))
+      return conCita
+    } catch (err) {
+      console.error('No se pudo crear la cita de la tarea:', err)
+      showToast('Tarea creada, pero no se pudo apuntar la cita en el calendario.', 'error')
+      return saved
+    }
+  }
+
+  const crearTarea = async (task: Task): Promise<Task> => {
     // Tarea de un jugador sin adjuntos: entran por defecto sus encargados
     // (menos el responsable, que ya la tiene). Luego se pueden quitar.
     const jugador = task.playerId && task.playerId !== 'general' ? playersRef.current.find(p => p.id === task.playerId) : undefined
@@ -1270,6 +1306,20 @@ export default function App() {
       : { ...updated, completedAt: undefined }
     await db.updateTask(withCompleted)
     setTasks((prev) => prev.map((t) => (t.id === withCompleted.id ? withCompleted : t)))
+
+    // Tarea con cita: si cambia el día, la cita se mueve con ella (y su apunte en la ficha)
+    const cita = withCompleted.eventoId ? eventosRef.current.find(e => e.id === withCompleted.eventoId) : undefined
+    if (cita && withCompleted.dueDate && cita.fecha !== withCompleted.dueDate) {
+      const movida: AgendaEvento = { ...cita, fecha: withCompleted.dueDate }
+      try {
+        await db.updateAgendaEvento(movida)
+        setEventos(prev => prev.map(e => e.id === movida.id ? movida : e))
+        if (movida.activityRef && movida.playerIds.length > 0) {
+          const fila = { id: movida.activityRef, groupId: movida.playerIds.length > 1 ? movida.activityRef : undefined, playerId: movida.playerIds[0], date: movida.fecha, type: movida.tipo, createdAt: '', notes: [movida.titulo, movida.notas].filter(Boolean).join(' — ') || undefined }
+          await (fila.groupId ? db.updateGroupActivity(fila) : db.updatePlayerActivity(fila))
+        }
+      } catch (err) { console.error('No se pudo mover la cita de la tarea:', err) }
+    }
 
     // Tarea recurrente: al completarla nace la siguiente, con la fecha calculada
     if (withCompleted.recurrence && withCompleted.status === 'completada' && previous?.status !== 'completada') {
@@ -1316,8 +1366,18 @@ export default function App() {
   }
 
   const handleDeleteTask = async (taskId: string) => {
+    const tarea = tasksRef.current.find(t => t.id === taskId)
     await db.deleteTask(taskId)
     setTasks((prev) => prev.filter((t) => t.id !== taskId))
+    // Su cita se va con ella (el evento y su apunte en la ficha)
+    const cita = tarea?.eventoId ? eventosRef.current.find(e => e.id === tarea.eventoId) : undefined
+    if (cita) {
+      try {
+        await db.deleteAgendaEvento(cita.id)
+        await borrarActividadesDeEvento(cita.activityRef)
+        setEventos(prev => prev.filter(e => e.id !== cita.id))
+      } catch (err) { console.error('No se pudo borrar la cita de la tarea:', err) }
+    }
   }
 
   const handleRefreshProfiles = async () => {

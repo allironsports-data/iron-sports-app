@@ -258,7 +258,7 @@ describe('construirAgenda · eventos de agenda', () => {
   })
 })
 
-describe('construirAgenda · sesiones de videoanálisis del jugador', () => {
+describe('construirAgenda · sesiones de análisis del jugador', () => {
   it('salen como evento del día, a nombre de sus encargados, y abren la ficha', () => {
     const p = { ...jugador('j1', 'Iker'), managedBy: [OTRO, YO], videoSessions: [
       { id: 'v1', date: HOY, videoUrl: '', description: 'Salida de balón' },
@@ -267,7 +267,7 @@ describe('construirAgenda · sesiones de videoanálisis del jugador', () => {
     const items = construirAgenda(base({ players: [p] }))
     expect(items).toHaveLength(1)
     expect(items[0]).toMatchObject({
-      id: 'video:j1:v1', tipo: 'evento', origen: 'evento', categoria: 'Sesión de videoanálisis', titulo: 'Sesión de videoanálisis — Salida de balón',
+      id: 'video:j1:v1', tipo: 'evento', origen: 'evento', categoria: 'Sesión de análisis', titulo: 'Sesión de análisis — Salida de balón',
       personId: OTRO, otrosIds: [YO], playerId: 'j1', abrir: { tipo: 'jugador', playerId: 'j1' }, estado: 'pendiente',
     })  })
 
@@ -522,5 +522,33 @@ describe('lunesSiguiente', () => {
     expect(lunesSiguiente('2026-10-01')).toBe('2026-10-05') // jueves
     expect(lunesSiguiente('2026-10-05')).toBe('2026-10-12') // lunes
     expect(lunesSiguiente('2026-10-04')).toBe('2026-10-05') // domingo
+  })
+})
+
+describe('construirAgenda · tarea con cita', () => {
+  const ev = (o: Partial<AgendaEvento> & { id: string }): AgendaEvento => ({
+    titulo: 'Sesión de análisis · Iker', tipo: 'Sesión de análisis', fecha: HOY, ambito: 'mantenimiento', playerIds: ['j1'],
+    participantIds: [YO, OTRO], createdAt: '', ...o,
+  })
+  it('la tarea y su cita salen como una sola fila: la tarea, con la hora, el lugar y quién va', () => {
+    const items = construirAgenda(base({
+      players: [jugador('j1', 'Iker')],
+      tasks: [task({ id: 't1', playerId: 'j1', label: 'Análisis', dueDate: HOY, eventoId: 'e1' })],
+      eventos: [ev({ id: 'e1', taskId: 't1', hora: '17:00', lugar: 'Oficina' })],
+    }))
+    expect(items.map(i => i.id)).toEqual(['tarea:t1'])
+    expect(items[0]).toMatchObject({ hora: '17:00', lugar: 'Oficina', otrosIds: [OTRO], ref: { taskId: 't1', eventoId: 'e1' } })
+  })
+  it('si la tarea ya no existe, la cita sale como evento normal', () => {
+    const items = construirAgenda(base({ eventos: [ev({ id: 'e1', taskId: 'borrada', hora: '17:00' })] }))
+    expect(items.map(i => i.id)).toEqual(['evento:e1'])
+  })
+  it('el registro de Rendimiento que nace de cerrar la tarea no se repite mientras exista la cita', () => {
+    const p = { ...jugador('j1', 'Iker'), managedBy: [YO], videoSessions: [
+      { id: 'v1', date: HOY, videoUrl: '', description: 'x', eventoId: 'e1' },
+      { id: 'v2', date: HOY, videoUrl: '', description: 'y', eventoId: 'no-existe' },
+    ] } as Player
+    const items = construirAgenda(base({ players: [p], eventos: [ev({ id: 'e1' })] }))
+    expect(items.map(i => i.id).sort()).toEqual(['evento:e1', 'video:j1:v2'])
   })
 })

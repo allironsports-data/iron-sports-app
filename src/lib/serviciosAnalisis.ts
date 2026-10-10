@@ -10,7 +10,7 @@ export const SERVICIO_TIPOS = ['sesion', 'video', 'recurso', 'entrenamiento', 'i
 export type ServicioTipo = typeof SERVICIO_TIPOS[number]
 
 export const SERVICIO_META: Record<ServicioTipo, { label: string; ayuda: string; punto: string; chip: string; borde: string }> = {
-  sesion:        { label: 'Sesión de videoanálisis', ayuda: 'Nos sentamos con el jugador a repasar acciones',
+  sesion:        { label: 'Sesión de análisis', ayuda: 'Nos sentamos con el jugador a repasar acciones',
                    punto: 'bg-blue-500',    chip: 'bg-blue-50 text-blue-700 border-blue-200',          borde: 'border-l-blue-500' },
   video:         { label: 'Vídeo',                   ayuda: 'Un vídeo preparado expresamente para él, con o sin sesión',
                    punto: 'bg-violet-500',  chip: 'bg-violet-50 text-violet-700 border-violet-200',    borde: 'border-l-violet-500' },

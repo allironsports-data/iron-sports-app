@@ -18,7 +18,7 @@ import { uploadContractPdf, urlDocumento, fetchNotes, createNote, updateNote, de
   updatePlayerActivity, updateGroupActivity, deletePlayerActivity, deleteGroupActivity,
 } from "../lib/db";
 import { TaskDetailPanel } from "../components/TaskDetailPanel";
-import { TareaModal } from "../components/agenda/TareaModal";
+import { TareaModal, type CitaTarea } from "../components/agenda/TareaModal";
 import { ManagerSelect } from '../components/ManagerSelect';
 import { useToastContext } from "../hooks/useToastContext";
 import { HistorialCambios } from "../components/HistorialCambios";
@@ -91,7 +91,7 @@ interface Props {
   profiles: Profile[];
   currentProfile: Profile;
   onBack: () => void;
-  onAddTask: (task: Task) => void;
+  onAddTask: (task: Task, cita?: CitaTarea) => void;
   /** Devuelve false si completar la tarea ha abierto su cierre (la app la guarda desde allí) */
   onUpdateTask: (task: Task) => void | boolean | Promise<void | boolean>;
   onDeleteTask: (taskId: string) => void | Promise<void>;
@@ -511,7 +511,7 @@ function ClubsDisplay({ clubs }: { clubs: Player["clubs"] }) {
 /* ========== TASKS TAB ========== */
 function TasksTab({ tasks, profiles, player, currentProfile, onAddTask, onUpdateTask, onDeleteTask }: {
   tasks: Task[]; allTasks: Task[]; profiles: Profile[]; player: Player;
-  currentProfile: Profile; onAddTask: (task: Task) => void;
+  currentProfile: Profile; onAddTask: (task: Task, cita?: CitaTarea) => void;
   onUpdateTask: (task: Task) => void | boolean | Promise<void | boolean>; onDeleteTask: (taskId: string) => void | Promise<void>;
 }) {
   const [showAdd, setShowAdd] = useState(false);
@@ -621,7 +621,7 @@ function TasksTab({ tasks, profiles, player, currentProfile, onAddTask, onUpdate
           currentProfileId={currentProfile.id}
           inicial={{ playerId: player.id }}
           onClose={() => setShowAdd(false)}
-          onAdd={(t) => { onAddTask(t); setShowAdd(false); }}
+          onAdd={(t, cita) => { onAddTask(t, cita); setShowAdd(false); }}
         />
       )}
 
@@ -903,7 +903,7 @@ function PerformanceTab({ player, profiles, currentProfile, onUpdate, postpartid
       .catch(() => setNotesLoadedFor(player.id));
   }, [player.id]);
 
-  const tareasVideo = allTasks.filter(t => t.playerId === player.id && t.label === 'Videoanálisis')
+  const tareasVideo = allTasks.filter(t => t.playerId === player.id && t.label === 'Análisis')
     .sort((a, b) => Number(a.status === 'completada') - Number(b.status === 'completada') || (a.dueDate ?? '9').localeCompare(b.dueDate ?? '9'));
   const notes = [...dbNotes].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -2456,7 +2456,7 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
 function ResumenTab({ player, tasks, profiles, currentProfile, onNavigate, distributionEntry, playerNegotiations = [], clubs = [], onAddTask }: {
   player: Player; tasks: Task[]; profiles: Profile[]; currentProfile: Profile; onNavigate: (tab: TabId) => void;
   distributionEntry?: DistributionEntry; playerNegotiations?: ClubNegotiation[]; clubs?: Club[];
-  onAddTask?: (task: Task) => void;
+  onAddTask?: (task: Task, cita?: CitaTarea) => void;
 }) {
   const [activities, setActivities] = useState<PlayerActivity[]>([]);
   const [showForm, setShowForm]     = useState(false);
@@ -2910,7 +2910,7 @@ function ResumenTab({ player, tasks, profiles, currentProfile, onNavigate, distr
           currentProfileId={currentProfile.id}
           inicial={{ playerId: player.id }}
           onClose={() => setShowAddTask(false)}
-          onAdd={(t) => { onAddTask(t); setShowAddTask(false); }}
+          onAdd={(t, cita) => { onAddTask(t, cita); setShowAddTask(false); }}
         />
       )}
 

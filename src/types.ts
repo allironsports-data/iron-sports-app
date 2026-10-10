@@ -43,7 +43,7 @@ export interface TaskComment {
  * ver lib/cierreTarea.ts. «General» y «Visita» se llaman ahora «Otra» y
  * «Comida/Visita»; las filas antiguas se leen ya con el nombre nuevo (db.ts).
  */
-export const TASK_LABELS = ['Otra', 'Llamada', 'Reunión', 'Comida/Visita', 'Scouting', 'Distribución', 'Negociación', 'Administrativa', 'Seguimiento', 'Informe', 'Marketing', 'Comunicación', 'Videoanálisis', 'Postpartido'] as const
+export const TASK_LABELS = ['Otra', 'Llamada', 'Reunión', 'Comida/Visita', 'Scouting', 'Distribución', 'Negociación', 'Administrativa', 'Seguimiento', 'Informe', 'Marketing', 'Comunicación', 'Análisis', 'Postpartido'] as const
 export type TaskLabel = typeof TASK_LABELS[number]
 
 /**
@@ -102,6 +102,12 @@ export interface Task {
   subtipo?: string;
   /** Ofrecimiento al que se refiere (tareas Informe sobre un jugador ofrecido). Opcional hasta migrar. */
   ofrecimientoId?: string;
+  /**
+   * Cita de la tarea: el evento de agenda (día, hora, lugar, asistentes) que se creó con ella.
+   * Una llamada o sesión programada es tarea (lo que hay que hacer) y evento (la cita) a la vez;
+   * en la agenda salen como una sola fila. Opcional hasta migrar.
+   */
+  eventoId?: string;
 }
 
 // ---- Contracts ----
@@ -199,6 +205,8 @@ export interface VideoSession {
   titulo?: string;
   /** profiles.id de las personas del equipo que han participado */
   participantes?: string[];
+  /** Evento de agenda (la cita) del que nace, si viene de cerrar una tarea con cita: no se enseña dos veces */
+  eventoId?: string;
 }
 
 // ---- Club interest / market info ----

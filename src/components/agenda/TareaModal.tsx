@@ -9,6 +9,11 @@
 //
 // Reunión y Comida/Visita no son tareas sino eventos: al elegirlas se
 // pasa al formulario de evento con ese tipo puesto (onEvento).
+//
+// Una tarea puede llevar CITA (hora, lugar, quién asiste): entonces se crea
+// con ella un evento de agenda enlazado, y en la agenda salen como una sola
+// fila. Una sesión de análisis la lleva por defecto; una llamada, si se
+// quiere; un recurso o una negociación, nunca (lib/tiposTarea.ts).
 
 import { useMemo, useState, type ReactNode } from 'react'
 import { X, Plus } from 'lucide-react'
@@ -20,8 +25,18 @@ import { hoyISO, sumarDias } from '../../lib/fechas'
 import { lunesSiguiente, viernesSemana } from '../../lib/agendaItems'
 import { RECURRENCIAS, RECURRENCIA_LABEL, type Recurrencia } from '../../lib/recurrencia'
 import {
-  metaTipo, subtiposDe, subtipoValido, etiquetaSubtipo, tituloAuto, queHaraAlCerrar, EVENTO_EN_VEZ_DE_TAREA, type SujetoTarea,
+  metaTipo, subtiposDe, subtipoValido, etiquetaSubtipo, tituloAuto, queHaraAlCerrar, citaDeTipo, EVENTO_EN_VEZ_DE_TAREA, type SujetoTarea,
 } from '../../lib/tiposTarea'
+
+/** La cita de una tarea nueva: con ella App crea el evento de agenda enlazado */
+export interface CitaTarea {
+  /** Tipo de evento (Llamada, Sesión de análisis, Cita…) */
+  tipoEvento: string
+  hora?: string
+  lugar?: string
+  /** profiles.id de quienes asisten */
+  participantIds: string[]
+}
 import { estadoVisible } from '../../lib/ofrecidos'
 
 interface Props {
@@ -42,7 +57,7 @@ interface Props {
   /** Alta rápida de un jugador de Captación desde aquí (Informe, Scouting). Sin esto no se ofrece. */
   onCreateScoutingPlayer?: (p: { fullName: string; team?: string }) => Promise<ScoutingPlayer>
   onClose: () => void
-  onAdd: (task: Task) => void | Promise<void>
+  onAdd: (task: Task, cita?: CitaTarea) => void | Promise<void>
 }
 
 type Sujeto = { kind: 'nuestro'; id: string } | { kind: 'captacion'; id: string } | { kind: 'ofrecimiento'; id: string }
@@ -69,6 +84,12 @@ export function TareaModal({
   const [assigneeId, setAssigneeId] = useState(inicial?.assigneeId ?? currentProfileId)
   // Toda tarea lleva fecha, aunque sea blanda: por defecto hoy. «Algún día» = sin fecha (bandeja).
   const [dueDate, setDueDate] = useState(inicial?.dueDate ?? hoy)
+  // cita: hora, lugar y asistentes (el día es «para cuándo»)
+  const [conCita, setConCita] = useState(false)
+  const [citaTocada, setCitaTocada] = useState(false)
+  const [hora, setHora] = useState('')
+  const [lugar, setLugar] = useState('')
+  const [asisten, setAsisten] = useState<string[]>([inicial?.assigneeId ?? currentProfileId])
   const [mas, setMas] = useState(false)
   const [alta, setAlta] = useState(false)
   const [recurrence, setRecurrence] = useState<Recurrencia | ''>('')
@@ -85,6 +106,8 @@ export function TareaModal({
   const sujetosPermitidos = useMemo<readonly SujetoTarea[]>(() => (label ? metaTipo(label).sujetos : ['nuestro', 'captacion']), [label])
   const subtipos = subtiposDe(label)
   const esProceso = label === 'Negociación'
+  const cita = citaDeTipo(label || undefined, subtipo)
+  const citaActiva = cita.cita !== 'no' && (citaTocada ? conCita : cita.cita === 'defecto')
 
   // Tipos que se ofrecen: Postpartido tiene su propia alta; Reunión y Comida/Visita son eventos (solo si hay a dónde ir);
   // con jugador nuestro fijo no tiene sentido Scouting
@@ -129,12 +152,14 @@ export function TareaModal({
     setLabel(l)
     const sub = subtipoValido(l, subtipo) ?? ''
     setSubtipo(sub)
+    setCitaTocada(false)
     // El sujeto se conserva si el tipo nuevo lo admite
     if (sujeto && !metaTipo(l || undefined).sujetos.includes(sujeto.kind) && !(l === '' && sujeto.kind !== 'ofrecimiento')) setSujeto(jugadorFijo ? sujeto : null)
     if (!tituloTocado) setTitle(tituloAuto(l, nombreSujeto, sub))
   }
   const cambiarSubtipo = (s: string) => {
     setSubtipo(s)
+    setCitaTocada(false)
     if (!tituloTocado) setTitle(tituloAuto(label, nombreSujeto, s))
   }
   const elegirSujeto = (s: Sujeto | null, nombre?: string) => {
@@ -155,7 +180,8 @@ export function TareaModal({
 
   async function crear(e: React.FormEvent) {
     e.preventDefault()
-    if (!title.trim() || guardando || faltaSujeto) return
+    if (!title.trim() || guardando || faltaSujeto || !label) return
+    if (citaActiva && !dueDate) return
     setGuardando(true)
     try {
       const sp = jugadorScouting ?? (ofrecido?.scoutingPlayerId ? scoutingPlayers.find(p => p.id === ofrecido.scoutingPlayerId) : undefined)
@@ -173,7 +199,7 @@ export function TareaModal({
         ofrecimientoId: ofrecido?.id,
         assigneeId,
         priority: alta ? 'alta' : 'media',
-        label: label || undefined,
+        label: label || 'Otra',
         subtipo: subtipoValido(label, subtipo),
         // Una negociación es un proceso: nace en curso y sin fecha (pide nota semanal)
         status: esProceso ? 'en_progreso' : 'pendiente',
@@ -182,7 +208,10 @@ export function TareaModal({
         comments: [],
         adminOnly,
         recurrence: recurrence || undefined,
-      })
+      }, citaActiva && dueDate ? {
+        tipoEvento: cita.tipoEvento, hora: hora || undefined, lugar: lugar.trim() || undefined,
+        participantIds: asisten.length > 0 ? asisten : [assigneeId || currentProfileId],
+      } : undefined)
     } finally {
       setGuardando(false)
     }
@@ -213,16 +242,16 @@ export function TareaModal({
           {/* 1. Tipo: decide el resto */}
           <div className={`grid gap-3 ${subtipos.length > 0 || meta?.subtipoLibre ? 'grid-cols-2' : 'grid-cols-1'}`}>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Tipo</label>
+              <label className="text-xs font-medium text-slate-600">Tipo <span className="text-red-500">*</span></label>
               <select autoFocus value={label} onChange={e => cambiarTipo(e.target.value as TaskLabel | '')} className={CAMPO}>
-                <option value="">— Sin tipo —</option>
+                <option value="" disabled>— Elegir tipo —</option>
                 {tipos.map(l => <option key={l} value={l}>{l}{EVENTO_EN_VEZ_DE_TAREA[l] ? ' (evento)' : ''}</option>)}
               </select>
             </div>
             {subtipos.length > 0 && (
               <div className="space-y-1">
                 <label className="text-xs font-medium text-slate-600">
-                  {label === 'Informe' ? 'Qué informe' : label === 'Videoanálisis' ? 'Qué servicio' : label === 'Scouting' ? 'Qué hacer' : 'Cuál'}
+                  {label === 'Informe' ? 'Qué informe' : label === 'Análisis' ? 'Qué servicio' : label === 'Scouting' ? 'Qué hacer' : 'Cuál'}
                 </label>
                 <select value={subtipo} onChange={e => cambiarSubtipo(e.target.value)} className={CAMPO}>
                   <option value="">— Elegir —</option>
@@ -326,6 +355,42 @@ export function TareaModal({
               </div>
             )}
           </div>
+          {!esProceso && cita.cita !== 'no' && (
+            <div className="space-y-2 -mt-1">
+              <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-slate-600">
+                <input type="checkbox" checked={citaActiva} onChange={e => { setCitaTocada(true); setConCita(e.target.checked) }} className="w-3.5 h-3.5 rounded" />
+                {cita.cita === 'defecto' ? 'Con cita: hora, lugar y quién va' : 'Programar hora y lugar (sale como cita en el calendario)'}
+              </label>
+              {citaActiva && (
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium text-slate-500">Hora</label>
+                      <input type="time" value={hora} onChange={e => setHora(e.target.value)} className={CAMPO} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium text-slate-500">Lugar</label>
+                      <input value={lugar} onChange={e => setLugar(e.target.value)} placeholder="Oficina, Lezama…" className={CAMPO} />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-slate-500">Quién va</label>
+                    <div className="flex flex-wrap gap-1">
+                      {profiles.map(m => (
+                        <button key={m.id} type="button" title={m.name}
+                          onClick={() => setAsisten(prev => prev.includes(m.id) ? prev.filter(x => x !== m.id) : [...prev, m.id])}
+                          className={`w-7 h-7 rounded-full text-[10px] font-bold border transition-colors ${asisten.includes(m.id) ? 'bg-primary text-white border-primary' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>
+                          {m.avatar}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {!dueDate && <p className="text-[11px] text-red-600">Una cita necesita día: elige «para cuándo».</p>}
+                  <p className="text-[11px] text-slate-400">Queda como «{cita.tipoEvento}» en el calendario{nombreSujeto ? ` y en la ficha de ${nombreSujeto.split(' ')[0]}` : ''}, enlazada a la tarea.</p>
+                </div>
+              )}
+            </div>
+          )}
           {!esProceso && (
             <div className="flex items-center gap-1.5 flex-wrap -mt-1">
               {([['Hoy', hoy], ['Mañana', sumarDias(hoy, 1)], ['Esta semana', viernesSemana(hoy)], ['Próxima semana', lunesSiguiente(hoy)], ['Algún día', '']] as const).map(([txt, f]) => (
@@ -379,7 +444,7 @@ export function TareaModal({
 
           <div className="flex gap-2 pt-1 safe-area-bottom">
             <button type="button" onClick={onClose} className="flex-1 py-2.5 sm:py-2 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">Cancelar</button>
-            <button type="submit" disabled={!title.trim() || guardando || faltaSujeto}
+            <button type="submit" disabled={!title.trim() || guardando || faltaSujeto || !label || (citaActiva && !dueDate)}
               className="flex-1 py-2.5 sm:py-2 text-xs rounded-lg text-white disabled:opacity-50 transition-colors bg-primary hover:bg-primary/90">
               {guardando ? 'Creando…' : esProceso ? 'Abrir negociación' : 'Crear tarea'}
             </button>

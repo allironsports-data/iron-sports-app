@@ -38,7 +38,7 @@ export type TipoCierre =
   | { tipo: 'informe-captacion'; scoutingPlayer: ScoutingPlayer }
   /** Informe sobre un jugador ofrecido: qué informe → abre el ofrecimiento para registrarlo */
   | { tipo: 'informe-ofrecido'; ofrecimientoId: string }
-  /** Videoanálisis de un jugador nuestro: servicio + vídeo → sesión en Rendimiento → Análisis */
+  /** Análisis de un jugador nuestro: servicio + vídeo → registro en Rendimiento → Análisis */
   | { tipo: 'video'; player: Player }
   /** Negociación: resultado + nota (→ actividad en la ficha si hay jugador) */
   | { tipo: 'negociacion'; player?: Player }
@@ -85,7 +85,7 @@ export function cierreRequerido(t: Task, ctx: ContextoCierre): TipoCierre {
       const sp = t.scoutingPlayerId ? ctx.scoutingPlayers.find(p => p.id === t.scoutingPlayerId) : undefined
       return sp ? { tipo: 'informe-captacion', scoutingPlayer: sp } : { tipo: 'nota' }
     }
-    case 'Videoanálisis': return player ? { tipo: 'video', player } : { tipo: 'nota' }
+    case 'Análisis': return player ? { tipo: 'video', player } : { tipo: 'nota' }
     case 'Negociación': return { tipo: 'negociacion', player }
     case 'Scouting': return { tipo: 'scouting', scoutingPlayer: t.scoutingPlayerId ? ctx.scoutingPlayers.find(p => p.id === t.scoutingPlayerId) : undefined }
     default: return { tipo: 'nota' }
@@ -123,7 +123,7 @@ export interface DatosCierre {
   nota?: string
   /** Informe, vídeo, postpartido: enlace */
   enlace?: string
-  /** Comida/Visita: 'Comida' | 'Visita presencial'. Videoanálisis: ServicioTipo */
+  /** Comida/Visita: 'Comida' | 'Visita presencial'. Análisis: ServicioTipo */
   subtipo?: string
   /** Día real (AAAA-MM-DD). Sin valor = hoy */
   fecha?: string
@@ -215,5 +215,5 @@ export function loQueDejo(c: TaskCierre | undefined): string[] {
   return out
 }
 
-/** Tipo de servicio por defecto para un videoanálisis (lo normal es una sesión) */
+/** Tipo de servicio por defecto para un análisis (lo normal es una sesión) */
 export const SERVICIO_VIDEO_DEFECTO: ServicioTipo = 'sesion'

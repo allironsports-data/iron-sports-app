@@ -28,7 +28,7 @@ import { esAccionDeLlamada } from "./captacion/firmas/cierreReunion";
 import { crearActividadesDeEvento, borrarActividadesDeEvento, apuntarEventoEnPipeline, tarjetaDeScouting } from "../lib/eventosAgenda";
 import type { CierrePendiente } from "../components/cierre/CierreTareaHost";
 import { ViajeModal } from "../components/agenda/ViajeModal";
-import { TareaModal } from "../components/agenda/TareaModal";
+import { TareaModal, type CitaTarea } from "../components/agenda/TareaModal";
 import { TipoNuevo } from "../components/agenda/TipoNuevo";
 import { useActividadesRango } from "../hooks/useActividadesRango";
 import {
@@ -113,7 +113,7 @@ interface Props {
   onBulkAssignManager?: (playerIds: string[], managerId: string) => Promise<void>;
   notifications?: AppNotification[];
   onDismissNotification?: (id: string) => void;
-  onAddGeneralTask?: (task: Task) => void | Task | Promise<void | Task>;
+  onAddGeneralTask?: (task: Task, cita?: CitaTarea) => void | Task | Promise<void | Task>;
   /** Devuelven false si completar la tarea ha abierto su cierre (App la guarda desde allí) */
   onUpdateGeneralTask?: (task: Task) => void | boolean | Promise<void | boolean>;
   onUpdateTask?: (task: Task) => void | boolean | Promise<void | boolean>;
@@ -525,6 +525,11 @@ export function Dashboard({
         await updateAgendaEvento(actualizado);
         setEventos(prev => prev.map(x => x.id === actualizado.id ? actualizado : x));
         await apuntarEnPipeline(actualizado, original);
+        // La cita de una tarea: si se mueve de día, la tarea se mueve con ella
+        const tareaCita = original.taskId ? tasks.find(t => t.id === original.taskId) : undefined;
+        if (tareaCita && actualizado.fecha !== tareaCita.dueDate && guardarTarea) {
+          await Promise.resolve(guardarTarea({ ...tareaCita, dueDate: actualizado.fecha })).catch(console.error);
+        }
         showToast('Evento actualizado', 'success');
       } else {
         const activityRef = await crearActividades(e);
@@ -562,6 +567,9 @@ export function Dashboard({
         await onPatchFirmasEntry(tarjeta.id, f => ({ ...f, comments: f.comments.filter(c => c.id !== idApunteEvento(original.id)) })).catch(console.error);
       }
       setEventos(prev => prev.filter(x => x.id !== original.id));
+      // Era la cita de una tarea: la tarea sigue, sin cita
+      const tareaCita = original.taskId ? tasks.find(t => t.id === original.taskId) : undefined;
+      if (tareaCita && guardarTarea) await Promise.resolve(guardarTarea({ ...tareaCita, eventoId: undefined })).catch(console.error);
       setActsVersion(v => v + 1);
       setEventoModal(null);
       showToast('Evento eliminado', 'info');
@@ -1079,7 +1087,8 @@ export function Dashboard({
         watchers: [],
         priority: a.prioridadAlta ? 'alta' : 'media',
         status: 'pendiente',
-        label: a.label,
+        // Toda tarea tiene tipo: sin #tipo en el texto, es «Otra»
+        label: a.label ?? 'Otra',
         // Desde «Mi día» lo normal es que sea para hoy; a la bandeja se manda desde la fila
         dueDate: a.dueDate ?? todayStr,
         createdAt: new Date().toISOString(),
@@ -2946,9 +2955,9 @@ export function Dashboard({
             openAddEvent({ fecha: tareaInicial.dueDate || hoyISO(), participantIds: [tareaInicial.assigneeId ?? currentProfile.id] });
           }} />}
           onClose={() => setShowAddGeneralTask(false)}
-          onAdd={async (t) => {
+          onAdd={async (t, cita) => {
             try {
-              await Promise.resolve(onAddGeneralTask(t));
+              await Promise.resolve(onAddGeneralTask(t, cita));
               setShowAddGeneralTask(false);
               showToast("Tarea creada", "success");
               // Tarea de un jugador de Captación que está en el pipeline: queda apuntada en su tarjeta
@@ -3056,6 +3065,7 @@ export function Dashboard({
             // La tarjeta se abre flotante; el panel de la tarea se cierra para que no la tape
             return entry ? { entry, onAbrir: () => { setDetailTask(null); onOpenFirmar?.(entry.id); } } : undefined;
           })()}
+          cita={(() => { const e = detailTask.eventoId ? eventos.find(x => x.id === detailTask.eventoId) : undefined; return e ? { fecha: e.fecha, hora: e.hora, lugar: e.lugar, tipo: e.tipo, onAbrir: () => { setDetailTask(null); setEventoModal({ inicial: e, original: e }); } } : undefined; })()}
           onClose={() => setDetailTask(null)}
           onUpdate={async (updated) => {
             try {

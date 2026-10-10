@@ -135,6 +135,7 @@ const EMOJI_TIPO: [string, AgendaTipo][] = [['📞', 'llamada'], ['💬', 'llama
 
 function tipoDeTarea(t: Task): AgendaTipo {
   if (t.label === 'Postpartido') return 'postpartido'
+  if (t.label === 'Análisis') return 'evento'
   if (t.label === 'Scouting') {
     const hit = EMOJI_TIPO.find(([e]) => t.title.startsWith(e))
     if (hit) return hit[1]
@@ -201,6 +202,11 @@ export function construirAgenda(input: AgendaInput): AgendaItem[] {
   const jugadoresPorId = new Map(players.map(p => [p.id, p]))
   const perfilPorAvatar = new Map(profiles.filter(p => p.avatar).map(p => [p.avatar, p.id]))
   const usadas = new Set<string>() // tareas que ya salen como acción de Firmar o postpartido
+  // Tarea con cita: su evento (día, hora, lugar) y ella son la misma cosa. Sale
+  // la tarea (se hace, se reprograma…) con la hora y el lugar del evento; el
+  // evento no se repite como fila aparte.
+  const citaDeTarea = new Map<string, AgendaEvento>()
+  for (const e of eventos) if (e.taskId && tareasPorId.has(e.taskId)) citaDeTarea.set(e.taskId, e)
 
   // ── Próximas acciones de Firmar ──
   const eventosPorId = new Map(eventos.map(e => [e.id, e]))
@@ -264,13 +270,16 @@ export function construirAgenda(input: AgendaInput): AgendaItem[] {
   for (const t of tasks) {
     if (usadas.has(t.id)) continue
     const jugador = t.playerId && t.playerId !== 'general' ? jugadoresPorId.get(t.playerId) : undefined
+    const cita = citaDeTarea.get(t.id)
     items.push({
       id: `tarea:${t.id}`,
       tipo: tipoDeTarea(t),
       titulo: t.title,
       personId: t.assigneeId ?? '',
-      otrosIds: t.watchers ?? [],
+      otrosIds: Array.from(new Set([...(t.watchers ?? []), ...(cita?.participantIds ?? []).filter(id => id !== t.assigneeId)])),
       fecha: t.dueDate?.slice(0, 10),
+      hora: cita?.hora,
+      lugar: cita?.lugar,
       playerId: jugador?.id,
       scoutingPlayerId: jugador ? undefined : t.scoutingPlayerId,
       playerNombre: jugador?.name ?? (t.scoutingPlayerId ? input.nombreScouting?.(t.scoutingPlayerId) : undefined),
@@ -282,7 +291,7 @@ export function construirAgenda(input: AgendaInput): AgendaItem[] {
       prioridadAlta: t.priority === 'alta',
       origen: 'tarea',
       abrir: { tipo: 'tarea', taskId: t.id },
-      ref: { taskId: t.id },
+      ref: { taskId: t.id, eventoId: cita?.id },
     })
   }
 
@@ -429,10 +438,13 @@ export function construirAgenda(input: AgendaInput): AgendaItem[] {
 
   // ── Sesiones de videoanálisis de la ficha del jugador (Rendimiento → Vídeo) ──
   // Viven dentro del jugador; aquí salen como evento, a nombre de sus encargados.
+  const eventosPorIdTodos = new Set(eventos.map(e => e.id))
   for (const p of players) {
     for (const v of p.videoSessions ?? []) {
       const dia = v.date?.slice(0, 10)
       if (!dia || dia < rango.desde || dia > rango.hasta) continue
+      // Nació de cerrar una tarea con cita: la cita (o su tarea) ya sale
+      if (v.eventoId && eventosPorIdTodos.has(v.eventoId)) continue
       // Es de quienes han participado (analistas…); los antiguos, sin nadie puesto, de los gestores del jugador
       const quienes = participantesDeServicio(v)
       const tipoServicio = SERVICIO_META[tipoDeServicio(v)].label
@@ -459,6 +471,8 @@ export function construirAgenda(input: AgendaInput): AgendaItem[] {
 
   // ── Eventos de agenda (con o sin jugador) ──
   for (const e of eventos) {
+    // La cita de una tarea: ya sale como tarea (con hora y lugar)
+    if (e.taskId && tareasPorId.has(e.taskId)) continue
     // Un viaje dura varios días: sale en cada uno, a nombre de quienes viajan
     if (norm(e.tipo) === 'viaje') {
       const dias = diasDeViaje(e.fecha, e.fechaFin)

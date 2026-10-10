@@ -7,7 +7,7 @@
 //
 // Familias:
 //   contacto    → dejan un evento (Llamada, Reunión, Comida/Visita)
-//   entregable  → dejan un artefacto (Informe, Videoanálisis, Postpartido)
+//   entregable  → dejan un artefacto (Informe, Análisis, Postpartido)
 //   proceso     → se cierran con un resultado (Negociación, Scouting)
 //   generica    → una nota opcional (Otra, Administrativa, Seguimiento, Distribución, Marketing, Comunicación)
 //
@@ -31,7 +31,7 @@ export const SUBTIPOS_INFORME = ['datos', 'tecnico', 'entorno', 'mercado', 'pers
 export const SUBTIPOS_VISITA = ['Comida', 'Visita presencial'] as const
 /** Subtipos de Scouting: qué hay que hacer con el jugador de Captación */
 export const SUBTIPOS_SCOUTING = ['seguir', 'ver_partido', 'info'] as const
-/** Servicios de videoanálisis (los mismos de Rendimiento → Análisis, sin el informe de datos) */
+/** Servicios de análisis (los mismos de Rendimiento → Análisis, sin el informe de datos) */
 export const SUBTIPOS_VIDEO = (Object.keys(SERVICIO_META) as ServicioTipo[]).filter(s => s !== 'informe_datos')
 
 export const SUBTIPO_LABEL: Record<string, string> = {
@@ -73,7 +73,7 @@ const META: Record<TaskLabel, MetaTipo> = {
   'Reunión':        { familia: 'contacto',   subtipos: [],                   sujetos: TODOS,                                   jugador: 'recomendado', peso: 2 },
   'Comida/Visita':  { familia: 'contacto',   subtipos: SUBTIPOS_VISITA,      sujetos: TODOS,                                   jugador: 'recomendado', peso: 4 },
   'Informe':        { familia: 'entregable', subtipos: SUBTIPOS_INFORME,     sujetos: ['nuestro', 'captacion', 'ofrecimiento'], jugador: 'si',          peso: 3 },
-  'Videoanálisis':  { familia: 'entregable', subtipos: SUBTIPOS_VIDEO,       sujetos: ['nuestro'],                             jugador: 'si',          peso: 3 },
+  'Análisis':       { familia: 'entregable', subtipos: SUBTIPOS_VIDEO,       sujetos: ['nuestro'],                             jugador: 'si',          peso: 3 },
   'Postpartido':    { familia: 'entregable', subtipos: [],                   sujetos: ['nuestro'],                             jugador: 'si',          peso: 5 },
   'Negociación':    { familia: 'proceso',    subtipos: [], subtipoLibre: true, sujetos: ['nuestro'],                           jugador: 'si',          peso: 3 },
   'Scouting':       { familia: 'proceso',    subtipos: SUBTIPOS_SCOUTING,    sujetos: ['captacion'],                           jugador: 'recomendado', peso: 1 },
@@ -109,6 +109,29 @@ export function subtipoValido(label: TaskLabel | string | undefined, subtipo?: s
   return subtiposDe(label).includes(s) ? s : undefined
 }
 
+/**
+ * Cita de una tarea: una tarea puede llevar día, hora y lugar, y entonces se crea
+ * con ella un evento de agenda enlazado (la cita). Según el tipo y el subtipo:
+ *   · no       → sin cita (Negociación es un proceso; un vídeo o un recurso se preparan, no se citan)
+ *   · posible  → se ofrece («Programar hora y lugar»)
+ *   · defecto  → viene marcada (una sesión o un entrenamiento se hacen con el jugador)
+ */
+export type Cita = 'no' | 'posible' | 'defecto'
+export function citaDeTipo(label: TaskLabel | string | undefined, subtipo?: string): { cita: Cita; tipoEvento: string } {
+  switch (label) {
+    case 'Negociación': return { cita: 'no', tipoEvento: 'Cita' }
+    case 'Llamada': return { cita: 'posible', tipoEvento: 'Llamada' }
+    case 'Análisis': {
+      const s = subtipoValido(label, subtipo)
+      if (s === 'sesion' || s === 'entrenamiento') return { cita: 'defecto', tipoEvento: 'Sesión de análisis' }
+      return { cita: s ? 'no' : 'posible', tipoEvento: 'Sesión de análisis' }
+    }
+    case 'Reunión': return { cita: 'defecto', tipoEvento: 'Reunión' }
+    case 'Comida/Visita': return { cita: 'defecto', tipoEvento: subtipo === 'Comida' ? 'Comida' : 'Visita presencial' }
+    default: return { cita: 'posible', tipoEvento: 'Cita' }
+  }
+}
+
 /** Reunión y Comida/Visita son eventos de agenda, no tareas: tipo de evento que les corresponde al crear */
 export const EVENTO_EN_VEZ_DE_TAREA: Partial<Record<TaskLabel, string>> = { 'Reunión': 'Reunión', 'Comida/Visita': 'Visita presencial' }
 
@@ -119,7 +142,7 @@ export function tituloAuto(label: TaskLabel | string | undefined, nombre?: strin
   switch (label) {
     case 'Llamada': return n ? `Llamar a ${n}` : ''
     case 'Informe': return n ? `${etiquetaSubtipo(sub) ?? 'Informe'} · ${n}` : ''
-    case 'Videoanálisis': return n ? `${etiquetaSubtipo(sub) ?? 'Videoanálisis'} · ${n}` : ''
+    case 'Análisis': return n ? `${etiquetaSubtipo(sub) ?? 'Análisis'} · ${n}` : ''
     case 'Negociación': return n ? `Negociación${sub ? ` ${sub}` : ''} · ${n}` : ''
     case 'Scouting': return n ? (sub === 'ver_partido' ? `Ver partido de ${n}` : sub === 'info' ? `Recabar información de ${n}` : `Seguir a ${n}`) : ''
     default: return ''
@@ -132,7 +155,7 @@ export function queHaraAlCerrar(label: TaskLabel | string | undefined, nombre?: 
   switch (label) {
     case 'Llamada': return `Al completarla se preguntará si contestó y quedará como llamada en el calendario${en}.`
     case 'Informe': return nombre ? `Al completarla se pedirá el enlace o se abrirá el formulario del informe, y quedará${en}.` : 'Al completarla se pedirá el enlace al informe.'
-    case 'Videoanálisis': return `Al completarla se pedirá el vídeo y quedará como servicio${en} (Rendimiento → Análisis).`
+    case 'Análisis': return `Al completarla se pedirá el vídeo y quedará como servicio${en} (Rendimiento → Análisis).`
     case 'Negociación': return `Es un proceso: nace en curso, sin fecha, y pide una nota cada semana. Al cerrarla se apunta el resultado${en}.`
     case 'Scouting': return 'Al completarla se pedirá la conclusión (seguir, llamar, descartar), que puede cambiar la valoración del jugador.'
     case 'Administrativa': case 'Otra': case 'Seguimiento': case 'Distribución': case 'Marketing': case 'Comunicación':

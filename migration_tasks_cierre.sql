@@ -24,8 +24,9 @@
 -- agenda_eventos.task_id → el evento que nace de completar una tarea
 -- apunta de vuelta a ella.
 --
--- También renombra dos etiquetas: «General» → «Otra», «Visita» →
--- «Comida/Visita» (la app ya lee las antiguas con el nombre nuevo).
+-- También renombra tres etiquetas: «General» → «Otra», «Visita» →
+-- «Comida/Visita», «Videoanálisis» → «Análisis» (la app ya lee las
+-- antiguas con el nombre nuevo).
 --
 -- Ejecutar en el SQL Editor de Supabase. Es idempotente. Mientras no se
 -- ejecute, la app funciona igual: el cierre se hace (evento, actividad…)
@@ -37,7 +38,9 @@ alter table public.tasks
   add column if not exists cierre_nota      text,
   add column if not exists cierre_ref       jsonb,
   add column if not exists subtipo          text,
-  add column if not exists ofrecimiento_id  uuid references public.ofrecimientos(id) on delete set null;
+  add column if not exists ofrecimiento_id  uuid references public.ofrecimientos(id) on delete set null,
+  -- la cita de la tarea: el evento de agenda (día, hora, lugar) creado con ella
+  add column if not exists evento_id        uuid references public.agenda_eventos(id) on delete set null;
 
 alter table public.agenda_eventos
   add column if not exists task_id uuid references public.tasks(id) on delete set null;
@@ -48,5 +51,6 @@ create index if not exists agenda_eventos_task_id_idx
 
 update public.tasks set label = 'Otra'          where label = 'General';
 update public.tasks set label = 'Comida/Visita' where label = 'Visita';
+update public.tasks set label = 'Análisis'      where label = 'Videoanálisis';
 
 select label, status, count(*) from public.tasks group by 1, 2 order by 1, 2;
