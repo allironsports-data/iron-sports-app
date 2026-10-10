@@ -231,7 +231,7 @@ export default function App() {
   const [altaDesdeInicio, setAltaDesdeInicio] = useState(false)
   // Ficha flotante abierta encima de la pantalla actual (partido, tarjeta de
   // Firmar o jugador de Captación): se abre sin sacar al usuario de donde está.
-  const [flotante, setFlotante] = useState<{ tipo: 'partido' | 'firmar' | 'scouting'; id: string } | null>(null)
+  const [flotante, setFlotante] = useState<{ tipo: 'partido' | 'firmar' | 'scouting'; id: string; informe?: 'tecnico' | 'entorno' | 'mercado' | 'personalidad' } | null>(null)
   // Cierre de tarea (o de una llamada/reunión del pipeline) en marcha: lo pinta CierreTareaHost encima de todo
   const [cierrePendiente, setCierrePendiente] = useState<CierrePendiente | null>(null)
 
@@ -1965,6 +1965,7 @@ export default function App() {
           onUpdatePlayer={handleUpdatePlayer}
           onUpdatePostpartido={handleUpdatePostpartido}
           onScoutingPlayerActualizado={handleUpdateScoutingPlayer}
+          onAbrirInformeScouting={(id, informe) => setFlotante({ tipo: 'scouting', id, informe })}
         />
       )}
       {/* Con una ficha flotante abierta el botón se quita: tapaba el pie del panel */}
@@ -2143,7 +2144,7 @@ export default function App() {
         />
       ) : cloneElement(captacionNode, {
         key: `solo-${flotante.tipo}-${flotante.id}`,
-        solo: flotante.tipo === 'partido' ? { partidoId: flotante.id } : { jugadorId: flotante.id },
+        solo: flotante.tipo === 'partido' ? { partidoId: flotante.id } : { jugadorId: flotante.id, informe: flotante.informe },
         onCerrarSolo: () => setFlotante(null),
         onOpenFirmas: (id: string) => setFlotante({ tipo: 'firmar', id }),
         // nada de navegación de sección: ni pestaña en el hash ni aperturas pendientes

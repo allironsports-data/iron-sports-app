@@ -12,7 +12,7 @@ const task = (o: Partial<Task> & { id: string }): Task => ({
 
 describe('resumenSemanal', () => {
   const tasks = [
-    task({ id: 'hecha-esta', status: 'completada', completedAt: en('2026-09-29') }),
+    task({ id: 'hecha-esta', status: 'completada', completedAt: en('2026-09-29'), label: 'Llamada', cierre: { resultado: 'contesto' } }),
     task({ id: 'hecha-anterior', status: 'completada', completedAt: en('2026-09-24') }),
     task({ id: 'hecha-anterior-2', status: 'completada', completedAt: en('2026-09-22') }),
     task({ id: 'creada-esta', createdAt: en('2026-09-30') }),
@@ -25,7 +25,8 @@ describe('resumenSemanal', () => {
   it('cuenta la semana y la anterior solo con lo de esa persona', () => {
     expect(resumenSemanal(tasks, 'yo', LUNES, HOY)).toEqual({
       hechas: 2, vencidas: 1, creadas: 1,
-      antes: { hechas: 2, vencidas: 1, creadas: 0 },
+      tipos: [{ label: 'Llamada', n: 1, resultados: [{ resultado: 'contesto', n: 1 }] }, { label: 'Otra', n: 1, resultados: [] }],
+      antes: { hechas: 2, vencidas: 1, creadas: 0, tipos: [{ label: 'Otra', n: 2, resultados: [] }] },
     })
   })
   it('una semana futura no tiene vencidas', () => {

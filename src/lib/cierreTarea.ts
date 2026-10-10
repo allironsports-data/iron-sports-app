@@ -34,6 +34,8 @@ export type TipoCierre =
   | { tipo: 'visita' }
   /** Informe de un jugador nuestro: enlace + nota → informe de datos en su ficha */
   | { tipo: 'informe'; player: Player }
+  /** Informe de un jugador de Captación: qué informe (partido / entorno / mercado / personalidad) → abre su ficha para escribirlo */
+  | { tipo: 'informe-captacion'; scoutingPlayer: ScoutingPlayer }
   /** Videoanálisis de un jugador nuestro: servicio + vídeo → sesión en Rendimiento → Análisis */
   | { tipo: 'video'; player: Player }
   /** Negociación: resultado + nota (→ actividad en la ficha si hay jugador) */
@@ -75,7 +77,11 @@ export function cierreRequerido(t: Task, ctx: ContextoCierre): TipoCierre {
     case 'Llamada': return { tipo: 'llamada' }
     case 'Reunión': return { tipo: 'reunion' }
     case 'Comida/Visita': return { tipo: 'visita' }
-    case 'Informe': return player ? { tipo: 'informe', player } : { tipo: 'nota' }
+    case 'Informe': {
+      if (player) return { tipo: 'informe', player }
+      const sp = t.scoutingPlayerId ? ctx.scoutingPlayers.find(p => p.id === t.scoutingPlayerId) : undefined
+      return sp ? { tipo: 'informe-captacion', scoutingPlayer: sp } : { tipo: 'nota' }
+    }
     case 'Videoanálisis': return player ? { tipo: 'video', player } : { tipo: 'nota' }
     case 'Negociación': return { tipo: 'negociacion', player }
     case 'Scouting': return { tipo: 'scouting', scoutingPlayer: t.scoutingPlayerId ? ctx.scoutingPlayers.find(p => p.id === t.scoutingPlayerId) : undefined }
@@ -95,6 +101,7 @@ export const RESULTADO_LABEL: Record<string, string> = {
   acordado: 'Acordado', rechazado: 'Rechazado', aplazado: 'Aplazado', descartado: 'Descartado',
   seguir: 'Seguir', llamar: 'Llamar', descartar: 'Descartar', sin_novedad: 'Sin novedad',
   informe: 'Informe enviado', video: 'Sesión registrada', postpartido: 'Vídeo entregado', hecha: 'Hecha',
+  tecnico: 'Informe de partido', entorno: 'Informe de entorno', mercado: 'Informe de mercado', personalidad: 'Informe de personalidad',
 }
 
 /** Conclusión de Scouting → assessment del jugador de Captación (sin_novedad no toca nada) */

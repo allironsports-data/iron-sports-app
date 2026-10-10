@@ -109,6 +109,7 @@ export function PlayerPanel({
   matchPlayers, onRemoveMatchPlayer,
   // informes que no son de partido (personalidad / contractual / mercado)
   panelInfos, onAddScoutingInfo, onUpdateScoutingInfo, onDeleteScoutingInfo, handleQuickContract,
+  infoInicial,
 }: {
   fullscreen: boolean
   setFullscreen: React.Dispatch<React.SetStateAction<boolean>>
@@ -196,11 +197,13 @@ export function PlayerPanel({
   onUpdateScoutingInfo: (i: ScoutingInfo) => void
   onDeleteScoutingInfo: (id: string) => void
   handleQuickContract: (p: ScoutingPlayer, value: string) => Promise<void>
+  /** Abrir ya el formulario de este informe «no de partido» (desde el cierre de una tarea Informe) */
+  infoInicial?: ScoutingInfoTipo
 }) {
   const [exportandoInforme, setExportandoInforme] = useState(false)
   // Tipo de informe «no de partido» que se está creando (lo abre el menú ▾)
-  const [nuevoInfoTipo, setNuevoInfoTipo] = useState<ScoutingInfoTipo | null>(null)
-  useEffect(() => { setNuevoInfoTipo(null) }, [panelPlayerId])
+  const [nuevoInfoTipo, setNuevoInfoTipo] = useState<ScoutingInfoTipo | null>(infoInicial ?? null)
+  useEffect(() => { setNuevoInfoTipo(infoInicial ?? null) }, [panelPlayerId, infoInicial])
 
   async function handleExportarInforme() {
     if (!panelPlayer || exportandoInforme) return

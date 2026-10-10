@@ -18,6 +18,7 @@ import { uploadContractPdf, urlDocumento, fetchNotes, createNote, updateNote, de
   updatePlayerActivity, updateGroupActivity, deletePlayerActivity, deleteGroupActivity,
 } from "../lib/db";
 import { TaskDetailPanel } from "../components/TaskDetailPanel";
+import { TareaModal } from "../components/agenda/TareaModal";
 import { ManagerSelect } from '../components/ManagerSelect';
 import { useToastContext } from "../hooks/useToastContext";
 import { HistorialCambios } from "../components/HistorialCambios";
@@ -387,7 +388,7 @@ export function PlayerDetail({
                 distributionEntry={distributionEntry}
                 playerNegotiations={playerNegotiations}
                 clubs={clubs}
-                onAddTask={onAddTask} allTasks={allTasks} />
+                onAddTask={onAddTask} />
             )}
             {activeTab === "tareas" && (
               <TasksTab tasks={tasks} allTasks={allTasks} profiles={profiles} player={player}
@@ -506,6 +507,7 @@ function ClubsDisplay({ clubs }: { clubs: Player["clubs"] }) {
   );
 }
 
+// Alta de tarea desde la ficha: el mismo formulario que el tablero (TareaModal), con el jugador fijo
 /* ========== TASKS TAB ========== */
 function TasksTab({ tasks, profiles, player, currentProfile, onAddTask, onUpdateTask, onDeleteTask }: {
   tasks: Task[]; allTasks: Task[]; profiles: Profile[]; player: Player;
@@ -614,8 +616,10 @@ function TasksTab({ tasks, profiles, player, currentProfile, onAddTask, onUpdate
       )}
 
       {showAdd && (
-        <AddTaskModal profiles={profiles} tasks={tasks} playerId={player.id} player={player}
-          isAdmin={currentProfile.is_admin}
+        <TareaModal
+          profiles={profiles} players={[player]} scoutingPlayers={[]}
+          currentProfileId={currentProfile.id}
+          inicial={{ playerId: player.id }}
           onClose={() => setShowAdd(false)}
           onAdd={(t) => { onAddTask(t); setShowAdd(false); }}
         />
@@ -659,135 +663,6 @@ function TasksTab({ tasks, profiles, player, currentProfile, onAddTask, onUpdate
   );
 }
 
-function AddTaskModal({ profiles, tasks, playerId, player, isAdmin, onClose, onAdd }: {
-  profiles: Profile[]; tasks: Task[]; playerId: string; player: Player;
-  isAdmin: boolean; onClose: () => void; onAdd: (t: Task) => void;
-}) {
-  const [title, setTitle] = useState("");
-  const [desc, setDesc] = useState("");
-  const [assignee, setAssignee] = useState("");
-  const [extraWatcher, setExtraWatcher] = useState("");
-  const [priority, setPriority] = useState<"alta" | "media" | "baja">("media");
-  const [dueDate, setDueDate] = useState("");
-  const [depends, setDepends] = useState("");
-  const [adminOnly, setAdminOnly] = useState(false);
-  const [showMore, setShowMore] = useState(false);
-
-  useEscapeKey(onClose);
-
-  const playerManagers = player.managedBy.map((id) => profiles.find((m) => m.id === id)).filter(Boolean) as Profile[];
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-0 sm:p-4">
-      <div className="bg-white rounded-t-2xl sm:rounded-lg border border-slate-200 shadow-lg w-full sm:max-w-md max-h-[92vh] overflow-y-auto safe-area-bottom">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white">
-          <h2 className="text-sm font-semibold text-slate-800">Nueva tarea</h2>
-          <button onClick={onClose} aria-label="Cerrar" className="p-2 -m-2 sm:p-1 sm:-m-1 text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
-        </div>
-        <form onSubmit={(e) => {
-          e.preventDefault();
-          const watchers = [...player.managedBy];
-          if (extraWatcher && !watchers.includes(extraWatcher)) watchers.push(extraWatcher);
-          onAdd({ id: "t" + Date.now(), playerId, title, description: desc, assigneeId: assignee,
-            watchers,
-            dependsOnId: depends || undefined, status: "pendiente", priority, dueDate: dueDate || undefined,
-            createdAt: new Date().toISOString(), comments: [], adminOnly });
-        }} className="p-4 space-y-3 pb-8">
-          <TF label="Título" value={title} onChange={setTitle} required />
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Responsable</label>
-            <select value={assignee} onChange={(e) => setAssignee(e.target.value)} required
-              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
-              <option value="">—</option>
-              {profiles.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
-          </div>
-
-          {/* Más opciones — plegado por defecto */}
-          <button
-            type="button"
-            onClick={() => setShowMore(v => !v)}
-            className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 font-medium"
-          >
-            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showMore ? 'rotate-180' : ''}`} />
-            Más opciones {!showMore && '(descripción, prioridad, fecha…)'}
-          </button>
-
-          {showMore && (<>
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Descripción</label>
-            <textarea value={desc} onChange={(e) => setDesc(e.target.value)} rows={2}
-              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 resize-none" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <TF label="Fecha límite (opcional)" value={dueDate} onChange={setDueDate} type="date" />
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Prioridad</label>
-              <select value={priority} onChange={(e) => setPriority(e.target.value as "alta" | "media" | "baja")}
-                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
-                <option value="alta">Alta</option>
-                <option value="media">Media</option>
-                <option value="baja">Baja</option>
-              </select>
-            </div>
-          </div>
-          {/* Auto-notified managers */}
-          <div className="bg-slate-50 rounded-md p-2.5">
-            <p className="text-xs font-medium text-slate-500 mb-1">Se notificará automáticamente a:</p>
-            <div className="flex items-center gap-2 flex-wrap">
-              {playerManagers.length > 0 ? playerManagers.map((m) => (
-                <span key={m.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-slate-200 text-xs text-slate-600">
-                  {m.avatar} {m.name}
-                </span>
-              )) : <span className="text-xs text-slate-400">Sin managers asignados</span>}
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Notificar también a (opcional)</label>
-            <select value={extraWatcher} onChange={(e) => setExtraWatcher(e.target.value)}
-              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
-              <option value="">— Nadie más —</option>
-              {profiles.filter((m) => !player.managedBy.includes(m.id)).map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Depende de</label>
-            <select value={depends} onChange={(e) => setDepends(e.target.value)}
-              className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2">
-              <option value="">Ninguna</option>
-              {tasks.filter((t) => t.status !== "completada").map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
-            </select>
-          </div>
-          {isAdmin && (
-            <label className="flex items-center gap-2.5 cursor-pointer select-none py-1">
-              <input
-                type="checkbox"
-                checked={adminOnly}
-                onChange={(e) => setAdminOnly(e.target.checked)}
-                className="w-4 h-4 rounded accent-blue-600 cursor-pointer"
-              />
-              <span className="text-sm text-slate-700 font-medium">Solo para admins</span>
-              {adminOnly && (
-                <span className="ml-auto text-[11px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 border border-amber-200 rounded px-1.5 py-0.5">
-                  Admin
-                </span>
-              )}
-            </label>
-          )}
-          </>)}
-          <div className="pt-2">
-            <button type="submit" disabled={!title || !assignee}
-              className="w-full rounded-md text-white text-sm font-medium py-2 disabled:opacity-40 transition-colors bg-primary hover:bg-primary/90">
-              Crear tarea
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
 
 /* ========== CONTRACT TAB ========== */
 function ContractTab({ player, onUpdate, isAdmin }: { player: Player; onUpdate: (p: Player) => void | Promise<void>; isAdmin: boolean }) {
@@ -2578,8 +2453,8 @@ function ActivityTab({ player, players = [], tasks, profiles, currentProfile }: 
 
 // ── RESUMEN TAB ───────────────────────────────────────────────
 
-function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, onNavigate, distributionEntry, playerNegotiations = [], clubs = [], onAddTask }: {
-  player: Player; tasks: Task[]; allTasks?: Task[]; profiles: Profile[]; currentProfile: Profile; onNavigate: (tab: TabId) => void;
+function ResumenTab({ player, tasks, profiles, currentProfile, onNavigate, distributionEntry, playerNegotiations = [], clubs = [], onAddTask }: {
+  player: Player; tasks: Task[]; profiles: Profile[]; currentProfile: Profile; onNavigate: (tab: TabId) => void;
   distributionEntry?: DistributionEntry; playerNegotiations?: ClubNegotiation[]; clubs?: Club[];
   onAddTask?: (task: Task) => void;
 }) {
@@ -3030,12 +2905,10 @@ function ResumenTab({ player, tasks, allTasks = [], profiles, currentProfile, on
 
       {/* Add task modal */}
       {showAddTask && onAddTask && (
-        <AddTaskModal
-          profiles={profiles}
-          tasks={[...tasks, ...allTasks].filter((t, i, arr) => arr.findIndex(x => x.id === t.id) === i)}
-          playerId={player.id}
-          player={player}
-          isAdmin={currentProfile.is_admin}
+        <TareaModal
+          profiles={profiles} players={[player]} scoutingPlayers={[]}
+          currentProfileId={currentProfile.id}
+          inicial={{ playerId: player.id }}
           onClose={() => setShowAddTask(false)}
           onAdd={(t) => { onAddTask(t); setShowAddTask(false); }}
         />

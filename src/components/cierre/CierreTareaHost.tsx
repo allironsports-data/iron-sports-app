@@ -54,11 +54,13 @@ interface Props {
   onUpdatePostpartido: (p: Postpartido) => Promise<void>
   /** Solo estado: la fila ya se ha escrito con db.updateScoutingPlayer */
   onScoutingPlayerActualizado: (p: ScoutingPlayer) => void
+  /** Abre la ficha flotante de un jugador de Captación con el formulario del informe pedido */
+  onAbrirInformeScouting: (scoutingPlayerId: string, informe: 'tecnico' | 'entorno' | 'mercado' | 'personalidad') => void
 }
 
 export function CierreTareaHost({
   pendiente, onCerrar, tasks, players, scoutingPlayers, profiles, currentProfile, firmasEntries, eventos, setEventos, postpartidos,
-  guardarTarea, crearTarea, onPatchFirmasEntry, onUpdatePlayer, onUpdatePostpartido, onScoutingPlayerActualizado,
+  guardarTarea, crearTarea, onPatchFirmasEntry, onUpdatePlayer, onUpdatePostpartido, onScoutingPlayerActualizado, onAbrirInformeScouting,
 }: Props) {
   const { showToast } = useToastContext()
   const hoy = hoyISO()
@@ -135,6 +137,12 @@ export function CierreTareaHost({
       }
       await guardarTarea(conCierre(task, d, ref))
       onCerrar()
+      if (t.tipo === 'informe-captacion') {
+        const informe = (d.resultado === 'entorno' || d.resultado === 'mercado' || d.resultado === 'personalidad') ? d.resultado : 'tecnico'
+        onAbrirInformeScouting(t.scoutingPlayer.id, informe)
+        showToast(`Tarea hecha · escribe el informe de ${t.scoutingPlayer.fullName.split(' ')[0]}`, 'success')
+        return
+      }
       const quien = jugador?.name.split(' ')[0]
       showToast(
         t.tipo === 'llamada' && d.resultado === 'no_contesto' ? 'Apuntado: no contestó'

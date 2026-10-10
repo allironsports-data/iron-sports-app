@@ -28,7 +28,9 @@
 alter table public.tasks
   add column if not exists cierre_resultado text,
   add column if not exists cierre_nota      text,
-  add column if not exists cierre_ref       jsonb;
+  add column if not exists cierre_ref       jsonb,
+  -- subtipo al crear (lib/tiposTarea.ts): renovacion | traspaso | … | datos | tecnico | … | sesion | video | …
+  add column if not exists subtipo          text;
 
 alter table public.agenda_eventos
   add column if not exists task_id uuid references public.tasks(id) on delete set null;

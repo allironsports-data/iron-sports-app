@@ -6,6 +6,8 @@ import { hoyISO, esVencida, parseDia } from "../lib/fechas";
 import { ListSkeleton } from "../components/Skeleton";
 import { EmptyState } from "../components/EmptyState";
 import { useToastContext } from "../hooks/useToastContext";
+import { completadasPorTipo, textoCompletadasPorTipo } from "../lib/tiposTarea";
+import { etiquetaResultado } from "../lib/cierreTarea";
 import {
   ArrowLeft, CheckCircle2, Clock, Activity,
   Calendar, AlertCircle, Users, ChevronDown, ChevronUp, ListTodo,
@@ -38,6 +40,8 @@ interface TimelineItem {
   kind: 'event' | 'task';
   title: string;
   subtitle?: string;
+  /** Tareas: nota de cierre */
+  nota?: string;
   icon: string;
   statusColor?: string;
   player?: Player;
@@ -147,14 +151,17 @@ export function TeamMemberDetail({ profile, tasks, players, onBack, onSelectPlay
       });
     });
 
+  const porTipo = completadasPorTipo(completedInPeriod);
   completedInPeriod.forEach(t => {
     const taskPlayer = players.find(p => p.id === t.playerId);
+    const resultado = t.cierre?.resultado && t.cierre.resultado !== 'hecha' ? etiquetaResultado(t.cierre.resultado) : undefined;
     timelineItems.push({
       id:          `task-${t.id}`,
       date:        (t.completedAt ?? t.createdAt).slice(0, 10),
       kind:        'task',
       title:       t.title,
-      subtitle:    'Completada',
+      subtitle:    [t.label, resultado].filter(Boolean).join(' · ') || 'Completada',
+      nota:        t.cierre?.nota,
       icon:        '✅',
       statusColor: '#1D9E75',
       player:      taskPlayer,
@@ -329,6 +336,24 @@ export function TeamMemberDetail({ profile, tasks, players, onBack, onSelectPlay
           </div>
         </div>
 
+        {/* ── Completadas por tipo en el período ─────────────── */}
+        {porTipo.length > 0 && (
+          <div className="bg-white rounded-xl border border-slate-100 px-3.5 py-2.5 flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Qué hizo</span>
+            {porTipo.map(c => (
+              <span key={c.label} className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100" title={textoCompletadasPorTipo([c], 1)}>
+                {c.label} <span className="font-bold">{c.n}</span>
+                {c.resultados.length > 0 && c.resultados[0].n < c.n && (
+                  <span className="text-emerald-600/70">· {c.resultados[0].n} {etiquetaResultado(c.resultados[0].resultado)?.toLowerCase()}</span>
+                )}
+                {c.resultados.length > 0 && c.resultados[0].n === c.n && c.resultados[0].resultado !== 'hecha' && (
+                  <span className="text-emerald-600/70">· {etiquetaResultado(c.resultados[0].resultado)?.toLowerCase()}</span>
+                )}
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* ── Tabs: Actividad | Tareas abiertas ──────────────── */}
         <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5 w-fit">
           <button
@@ -500,6 +525,9 @@ export function TeamMemberDetail({ profile, tasks, players, onBack, onSelectPlay
                                       <p className="text-xs font-medium text-slate-700 leading-snug">{item.title}</p>
                                       {item.subtitle && item.kind === 'event' && (
                                         <p className="text-[11px] text-slate-400 mt-0.5 leading-snug line-clamp-2">{item.subtitle}</p>
+                                      )}
+                                      {item.nota && item.kind === 'task' && (
+                                        <p className="text-[11px] text-slate-500 mt-0.5 leading-snug line-clamp-2">{item.nota}</p>
                                       )}
                                     </div>
                                     <span className="text-[11px] text-slate-400 flex-shrink-0 mt-0.5">

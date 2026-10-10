@@ -20,6 +20,7 @@ import { MiDiaLista } from "./MiDiaLista";
 import { AgendaRow } from "../components/agenda/AgendaRow";
 import { itemEsDe, seccionesDelDia, DIAS_POSTPARTIDO } from "../lib/agendaItems";
 import { resumenSemanal } from "../lib/resumenSemanal";
+import { textoCompletadasPorTipo } from "../lib/tiposTarea";
 import { CalendarioSemanal } from "./CalendarioSemanal";
 import { EventoModal, type EventoBorrador } from "../components/agenda/EventoModal";
 import { esReunionCerrable, horaActual, idApunteEvento } from "../lib/reuniones";
@@ -2399,6 +2400,7 @@ export function Dashboard({
                       <th className="text-center px-2 py-1.5 font-semibold">Hechas</th>
                       <th className="text-center px-2 py-1.5 font-semibold">Vencidas</th>
                       <th className="text-center px-2 py-1.5 font-semibold">Creadas</th>
+                      <th className="hidden md:table-cell text-left px-2 py-1.5 font-semibold">Qué</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
@@ -2413,6 +2415,9 @@ export function Dashboard({
                         {dato(r.hechas, r.antes.hechas, 'sube')}
                         {dato(r.vencidas, r.antes.vencidas, 'baja')}
                         {dato(r.creadas, r.antes.creadas, null)}
+                        <td className="hidden md:table-cell px-2 py-1.5 text-[11px] text-slate-500 max-w-[22rem] truncate" title={textoCompletadasPorTipo(r.tipos, 20) || undefined}>
+                          {textoCompletadasPorTipo(r.tipos, 3) || <span className="text-slate-300">—</span>}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

@@ -18,6 +18,7 @@ import {
   type AgendaItem, type AgendaEstado,
 } from '../../lib/agendaItems'
 import { AGENDA_TIPO_META } from './tipoMeta'
+import { etiquetaResultado } from '../../lib/cierreTarea'
 
 const UMBRAL_SWIPE = 72
 
@@ -164,6 +165,12 @@ export function AgendaRow({
           {item.titulo}
           {item.conInforme && <Check className="inline w-3 h-3 ml-1 text-emerald-500" aria-label="Informe hecho" />}
         </span>
+        {hecha && item.cierre && (() => {
+          const texto = [item.cierre.resultado && item.cierre.resultado !== 'hecha' ? etiquetaResultado(item.cierre.resultado) : undefined, item.cierre.nota].filter(Boolean).join(' — ')
+          return texto ? (
+            <span className="hidden sm:inline flex-shrink-0 max-w-[14rem] truncate text-[11px] text-emerald-700" title={texto}>{texto}</span>
+          ) : null
+        })()}
         {item.cierreEventoId && onCerrarReunion && (
           <button
             onClick={e => { e.stopPropagation(); onCerrarReunion(item.cierreEventoId!) }}

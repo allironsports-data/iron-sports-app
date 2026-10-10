@@ -5,6 +5,7 @@ import { parseDia, esVencida, hoyISO, sumarDias } from '../lib/fechas'
 import { viernesSemana } from '../lib/agendaItems';
 import { RECURRENCIAS, RECURRENCIA_LABEL, type Recurrencia } from "../lib/recurrencia";
 import { etiquetaResultado, loQueDejo } from "../lib/cierreTarea";
+import { subtiposDe, subtipoValido, etiquetaSubtipo } from "../lib/tiposTarea";
 import type { Profile } from "../contexts/AuthContext";
 import * as db from "../lib/db";
 import { ConfirmModal } from "./ConfirmModal";
@@ -43,6 +44,7 @@ export function TaskDetailPanel({
   const [assigneeId, setAssigneeId] = useState(task.assigneeId);
   const [playerId, setPlayerId]     = useState(task.playerId === "general" ? "" : task.playerId);
   const [label, setLabel]           = useState<TaskLabel | "">(task.label ?? "");
+  const [subtipo, setSubtipo]       = useState(task.subtipo ?? "");
   const [watchers, setWatchers]     = useState<string[]>(task.watchers ?? []);
   const [dueDate, setDueDate]       = useState(task.dueDate?.slice(0, 10) ?? "");
   // Prioridad simple: alta o normal (las antiguas «media» y «baja» son normal)
@@ -86,6 +88,7 @@ export function TaskDetailPanel({
     // Sin esto, al saltar de una tarea a otra se arrastraba el jugador de la anterior
     setPlayerId(task.playerId === "general" ? "" : task.playerId);
     setLabel(task.label ?? "");
+    setSubtipo(task.subtipo ?? "");
     setWatchers(task.watchers ?? []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task.id, task.status]);
@@ -95,6 +98,7 @@ export function TaskDetailPanel({
   /** La tarea con lo que hay ahora en el formulario */
   const editada = (): Task => ({
     ...task, playerId: effectivePlayerId, title, description, assigneeId, label: label || undefined, watchers,
+    subtipo: subtipoValido(label, subtipo),
     dueDate: dueDate || undefined,
     // No se pisa «baja» con «media» si nadie ha tocado la prioridad
     priority: alta ? "alta" : task.priority === "alta" ? "media" : task.priority,
@@ -445,10 +449,21 @@ export function TaskDetailPanel({
                       </select>
                     ) : task.label ? (
                       <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200">
-                        {task.label}
+                        {task.label}{etiquetaSubtipo(subtipoValido(task.label, task.subtipo)) ? ` · ${etiquetaSubtipo(task.subtipo)}` : ""}
                       </span>
                     ) : (
                       <p className="text-xs text-slate-400">Sin tipo</p>
+                    )}
+                    {canEdit && subtiposDe(label).length > 0 && (
+                      <select
+                        value={subtiposDe(label).includes(subtipo) ? subtipo : ""}
+                        onChange={e => setSubtipo(e.target.value)}
+                        aria-label="Subtipo"
+                        className="mt-1.5 w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+                      >
+                        <option value="">— {label === "Negociación" ? "De qué va" : label === "Informe" ? "Qué informe" : label === "Videoanálisis" ? "Qué servicio" : "Cuál"} —</option>
+                        {subtiposDe(label).map(s => <option key={s} value={s}>{etiquetaSubtipo(s)}</option>)}
+                      </select>
                     )}
                   </div>
 

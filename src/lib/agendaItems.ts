@@ -63,6 +63,8 @@ export interface AgendaItem {
   estado: AgendaEstado
   /** Día (AAAA-MM-DD local) en que se completó, si se sabe */
   hechaEl?: string
+  /** Tareas hechas: qué pasó (resultado legible y nota), para la fila */
+  cierre?: { resultado?: string; nota?: string }
   /**
    * Tarea en curso («proceso», como una renovación): no tiene fecha de fin
    * porque depende de muchas cosas, pero exige una nota cada semana.
@@ -276,6 +278,7 @@ export function construirAgenda(input: AgendaInput): AgendaItem[] {
       estado: t.status,
       proceso: procesoDe(t),
       hechaEl: diaDe(t.completedAt),
+      cierre: t.cierre && (t.cierre.resultado || t.cierre.nota) ? { resultado: t.cierre.resultado, nota: t.cierre.nota } : undefined,
       prioridadAlta: t.priority === 'alta',
       origen: 'tarea',
       abrir: { tipo: 'tarea', taskId: t.id },

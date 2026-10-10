@@ -98,6 +98,8 @@ export interface Task {
   recurrence?: 'semanal' | 'mensual';
   /** Qué pasó al completarla y qué dejó (solo en completadas). Opcional hasta migrar. */
   cierre?: TaskCierre;
+  /** Subtipo según el tipo (lib/tiposTarea.ts): renovación, informe de partido, sesión… Opcional hasta migrar. */
+  subtipo?: string;
 }
 
 // ---- Contracts ----

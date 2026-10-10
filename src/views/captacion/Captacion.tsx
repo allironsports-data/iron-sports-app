@@ -251,7 +251,7 @@ export function Captacion({
   const [reportTitle, setReportTitle] = useState('')
   const [reportConclusion, setReportConclusion] = useState<ConclusionOption>('')
   const [reportMatchId, setReportMatchId] = useState<string>('')
-  const [showAddReportForm, setShowAddReportForm] = useState(false)
+  const [showAddReportForm, setShowAddReportForm] = useState(solo?.informe === 'tecnico')
   const [matchSearchInput, setMatchSearchInput] = useState('')
   const [matchSearchOpen, setMatchSearchOpen] = useState(false)
   const [savingReport, setSavingReport] = useState(false)
@@ -1327,6 +1327,7 @@ export function Captacion({
           panelReports={panelReports}
           panelSortedMatches={panelSortedMatches}
           showAddReportForm={showAddReportForm} setShowAddReportForm={setShowAddReportForm}
+          infoInicial={solo?.informe && solo.informe !== 'tecnico' ? solo.informe : undefined}
           reportTitle={reportTitle} setReportTitle={setReportTitle}
           reportText={reportText} setReportText={setReportText}
           reportConclusion={reportConclusion} setReportConclusion={setReportConclusion}

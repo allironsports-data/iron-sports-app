@@ -14,6 +14,7 @@ import { norm } from '../../lib/texto'
 import { hoyISO, sumarDias } from '../../lib/fechas'
 import { lunesSiguiente, viernesSemana } from '../../lib/agendaItems'
 import { RECURRENCIAS, RECURRENCIA_LABEL, type Recurrencia } from '../../lib/recurrencia'
+import { metaTipo, subtiposDe, subtipoValido, etiquetaSubtipo } from '../../lib/tiposTarea'
 
 type Ambito = 'general' | 'mantenimiento' | 'captacion'
 
@@ -22,8 +23,8 @@ interface Props {
   players: Player[]
   scoutingPlayers: ScoutingPlayer[]
   currentProfileId: string
-  /** Persona y fecha ya puestas (alta desde el calendario) */
-  inicial?: { assigneeId?: string; dueDate?: string }
+  /** Persona y fecha ya puestas (alta desde el calendario). `playerId`: tarea de ese jugador nuestro (alta desde su ficha) */
+  inicial?: { assigneeId?: string; dueDate?: string; playerId?: string }
   /** Selector Tarea / Evento, encima del formulario */
   cabecera?: ReactNode
   /** Estatus en el pipeline del jugador de Captación elegido, si está en él */
@@ -38,14 +39,16 @@ const SEG = (on: boolean) => `px-2.5 py-1 rounded text-[11px] font-semibold tran
 export function TareaModal({ profiles, players, scoutingPlayers, currentProfileId, inicial, cabecera, estatusPipeline, onClose, onAdd }: Props) {
   const hoy = hoyISO()
   const [title, setTitle] = useState('')
-  const [ambito, setAmbito] = useState<Ambito>('general')
-  const [playerId, setPlayerId] = useState('')
+  const jugadorFijo = !!inicial?.playerId
+  const [ambito, setAmbito] = useState<Ambito>(jugadorFijo ? 'mantenimiento' : 'general')
+  const [playerId, setPlayerId] = useState(inicial?.playerId ?? '')
   const [scoutingPlayerId, setScoutingPlayerId] = useState('')
   const [q, setQ] = useState('')
   const [assigneeId, setAssigneeId] = useState(inicial?.assigneeId ?? currentProfileId)
   // Toda tarea lleva fecha, aunque sea blanda: por defecto hoy. «Algún día» = sin fecha (bandeja).
   const [dueDate, setDueDate] = useState(inicial?.dueDate ?? hoy)
   const [label, setLabel] = useState<TaskLabel | ''>('')
+  const [subtipo, setSubtipo] = useState('')
   const [alta, setAlta] = useState(false)
   const [recurrence, setRecurrence] = useState<Recurrencia | ''>('')
   const [description, setDescription] = useState('')
@@ -75,9 +78,16 @@ export function TareaModal({ profiles, players, scoutingPlayers, currentProfileI
     if (a === 'captacion' && !label) setLabel('Scouting')
   }
 
+  // Jugador según el tipo: obligatorio (Informe, Videoanálisis, Postpartido), recomendado o da igual
+  const meta = label ? metaTipo(label) : undefined
+  const sinJugador = !jugador && !jugadorScouting
+  const faltaJugador = meta?.jugador === 'si' && sinJugador
+  const subtipos = subtiposDe(label)
+  const cambiarTipo = (l: TaskLabel | '') => { setLabel(l); setSubtipo(subtipoValido(l, subtipo) ?? '') }
+
   async function crear(e: React.FormEvent) {
     e.preventDefault()
-    if (!title.trim() || guardando) return
+    if (!title.trim() || guardando || faltaJugador) return
     setGuardando(true)
     try {
       const deCaptacion = ambito === 'captacion' && jugadorScouting
@@ -92,6 +102,7 @@ export function TareaModal({ profiles, players, scoutingPlayers, currentProfileI
         assigneeId,
         priority: alta ? 'alta' : 'media',
         label: label || undefined,
+        subtipo: subtipoValido(label, subtipo),
         status: 'pendiente',
         dueDate: dueDate || undefined,
         createdAt: new Date().toISOString(),
@@ -125,15 +136,15 @@ export function TareaModal({ profiles, players, scoutingPlayers, currentProfileI
           {/* De quién es la tarea: decide a qué ficha queda ligada */}
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-slate-600">Relacionada con</label>
-            <div className="flex items-center gap-0 bg-slate-100 rounded-lg p-0.5 w-fit">
+            {!jugadorFijo && <div className="flex items-center gap-0 bg-slate-100 rounded-lg p-0.5 w-fit">
               <button type="button" onClick={() => cambiarAmbito('general')} className={SEG(ambito === 'general')}>General</button>
               <button type="button" onClick={() => cambiarAmbito('mantenimiento')} className={SEG(ambito === 'mantenimiento')}>Jugador nuestro</button>
               <button type="button" onClick={() => cambiarAmbito('captacion')} className={SEG(ambito === 'captacion')}>Jugador de Captación</button>
-            </div>
+            </div>}
             {ambito !== 'general' && (elegido ? (
               <div className={`flex items-center gap-2 px-3 py-2 border rounded-lg ${ambito === 'captacion' ? 'border-emerald-300 bg-emerald-50' : 'border-blue-300 bg-blue-50'}`}>
                 <span className="flex-1 text-xs font-medium text-slate-800 truncate">{elegido}</span>
-                <button type="button" onClick={() => { setPlayerId(''); setScoutingPlayerId('') }} aria-label="Quitar jugador" className="text-slate-500 hover:text-slate-700 leading-none text-sm">×</button>
+                {!jugadorFijo && <button type="button" onClick={() => { setPlayerId(''); setScoutingPlayerId('') }} aria-label="Quitar jugador" className="text-slate-500 hover:text-slate-700 leading-none text-sm">×</button>}
               </div>
             ) : (
               <div className="relative">
@@ -159,6 +170,12 @@ export function TareaModal({ profiles, players, scoutingPlayers, currentProfileI
               <p className={`text-[11px] ${pipeline ? 'text-violet-600' : 'text-slate-400'}`}>
                 {pipeline ? `Está en el pipeline (${pipeline}): la tarea queda apuntada también en el historial de su tarjeta de Firmar.` : 'Queda ligada a su ficha de Captación.'}
               </p>
+            )}
+            {faltaJugador && (
+              <p className="text-[11px] text-red-600">Una tarea de tipo {label} necesita jugador: al completarla deja algo en su ficha.</p>
+            )}
+            {!faltaJugador && meta?.jugador === 'recomendado' && sinJugador && (
+              <p className="text-[11px] text-amber-600">Sin jugador, al completarla quedará solo en el calendario, no en ninguna ficha.</p>
             )}
           </div>
 
@@ -188,11 +205,22 @@ export function TareaModal({ profiles, players, scoutingPlayers, currentProfileI
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-medium text-slate-600">Tipo</label>
-              <select value={label} onChange={e => setLabel(e.target.value as TaskLabel | '')} className={CAMPO}>
+              <select value={label} onChange={e => cambiarTipo(e.target.value as TaskLabel | '')} className={CAMPO}>
                 <option value="">— Sin tipo —</option>
                 {TASK_LABELS.map(l => <option key={l} value={l}>{l}</option>)}
               </select>
             </div>
+            {subtipos.length > 0 && (
+              <div className="space-y-1 col-span-2">
+                <label className="text-xs font-medium text-slate-600">
+                  {label === 'Negociación' ? 'De qué va' : label === 'Informe' ? 'Qué informe' : label === 'Videoanálisis' ? 'Qué servicio' : 'Cuál'}
+                </label>
+                <select value={subtipo} onChange={e => setSubtipo(e.target.value)} className={CAMPO}>
+                  <option value="">— Elegir —</option>
+                  {subtipos.map(s => <option key={s} value={s}>{etiquetaSubtipo(s)}</option>)}
+                </select>
+              </div>
+            )}
             <div className="space-y-1">
               <label className="text-xs font-medium text-slate-600">Prioridad</label>
               <select value={alta ? 'alta' : 'normal'} onChange={e => setAlta(e.target.value === 'alta')} className={CAMPO}>
@@ -221,7 +249,7 @@ export function TareaModal({ profiles, players, scoutingPlayers, currentProfileI
 
           <div className="flex gap-2 pt-1 safe-area-bottom">
             <button type="button" onClick={onClose} className="flex-1 py-2.5 sm:py-2 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">Cancelar</button>
-            <button type="submit" disabled={!title.trim() || guardando}
+            <button type="submit" disabled={!title.trim() || guardando || faltaJugador}
               className="flex-1 py-2.5 sm:py-2 text-xs rounded-lg text-white disabled:opacity-50 transition-colors bg-primary hover:bg-primary/90">
               {guardando ? 'Creando…' : 'Crear tarea'}
             </button>

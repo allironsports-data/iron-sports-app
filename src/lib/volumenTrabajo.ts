@@ -12,6 +12,8 @@
 //
 // Reglas para no contar dos veces la misma cosa:
 //   · La tarea de un postpartido cuenta solo como postpartido.
+//   · El evento que nace de completar una tarea (agenda_eventos.task_id) no
+//     cuenta: la tarea ya cuenta, con el peso de su tipo (lib/tiposTarea.ts).
 //   · El apunte automático «✓ Hecho: …» que deja Firmar al completar la tarea
 //     de una próxima acción NO cuenta (la tarea ya cuenta como tarea).
 //   · Los apuntes de estatus (automáticos) no cuentan.
@@ -26,6 +28,8 @@ import type {
 } from '../types'
 import type { Profile } from '../contexts/AuthContext'
 import { fechaLocal, lunesDe, parseDia } from './fechas'
+import { metaTipo } from './tiposTarea'
+import { etiquetaResultado } from './cierreTarea'
 
 export type Fuente = 'tareas' | 'eventos' | 'partidos' | 'informes' | 'postpartidos' | 'pipeline' | 'distribucion'
 
@@ -43,8 +47,8 @@ export const FUENTE_META: Record<Fuente, { label: string; corto: string; color: 
 
 /** Pesos por esfuerzo. Cambiar aquí = cambia en toda la pestaña (y en el glosario). */
 export const PESOS = {
-  tarea: 1,
-  tareaAlta: 2,
+  tarea: 1,               // tarea sin tipo; con tipo, el peso del tipo (lib/tiposTarea.ts)
+  tareaAlta: 2,           // prioridad alta: +1 sobre el peso que toque
   evento: 2,
   eventoLigero: 1,        // Llamada, Email, Nota general
   eventoPesado: 4,        // Viaje, Visita presencial
@@ -139,15 +143,21 @@ export function extraerAcciones(d: DatosVolumen): Accion[] {
     if (t.status !== 'completada' || tareasPostpartido.has(t.id)) continue
     const dia = diaDe(t.completedAt)
     if (!dia) continue
+    const extraAlta = t.priority === 'alta' ? PESOS.tareaAlta - PESOS.tarea : 0
+    const resultado = etiquetaResultado(t.cierre?.resultado)
+    const sub = t.label
+      ? `${t.label}${resultado && resultado !== 'Hecha' ? ` · ${resultado}` : ''}${t.priority === 'alta' ? ' (alta)' : ''}`
+      : t.priority === 'alta' ? 'Tarea (alta)' : 'Tarea'
     add({
-      fuente: 'tareas', sub: t.priority === 'alta' ? 'Tarea (alta)' : 'Tarea', dia,
-      profileId: t.assigneeId, puntos: t.priority === 'alta' ? PESOS.tareaAlta : PESOS.tarea,
+      fuente: 'tareas', sub, dia,
+      profileId: t.assigneeId, puntos: (t.label ? metaTipo(t.label).peso : PESOS.tarea) + extraAlta,
       clave: `t:${t.id}`, texto: t.title,
     })
   }
 
   // ── Eventos de agenda: autor + asistentes ──
   for (const e of d.eventos) {
+    if (e.taskId) continue   // nació de completar una tarea: ya cuenta como tarea
     const dia = diaDe(e.fecha)
     if (!dia) continue
     const peso = EVENTO_PESADO.has(e.tipo) ? PESOS.eventoPesado : EVENTO_LIGERO.has(e.tipo) ? PESOS.eventoLigero : PESOS.evento

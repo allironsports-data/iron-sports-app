@@ -30,6 +30,25 @@ describe('volumenTrabajo · extracción', () => {
     expect(a[0].dia).toBe('2026-10-07')
   })
 
+  it('con tipo, el peso es el del tipo (+1 si es alta) y el subtipo lleva el resultado del cierre', () => {
+    const a = extraerAcciones(datos({ tasks: [
+      tarea('t1', { label: 'Llamada', cierre: { resultado: 'contesto' } }),
+      tarea('t2', { label: 'Videoanálisis', priority: 'alta' }),
+      tarea('t3', { label: 'Comida/Visita', cierre: { resultado: 'hecha' } }),
+    ] as never }))
+    expect(a.map(x => [x.sub, x.puntos])).toEqual([['Llamada · Contestó', 1], ['Videoanálisis (alta)', 4], ['Comida/Visita', 4]])
+  })
+
+  it('el evento que nace de completar una tarea no cuenta (la tarea ya cuenta)', () => {
+    const a = extraerAcciones(datos({
+      eventos: [
+        { id: 'e1', titulo: 'Llamada', tipo: 'Llamada', fecha: '2026-10-06', ambito: 'general', playerIds: [], participantIds: ['p1'], authorId: 'p1', taskId: 't1', createdAt: '' },
+        { id: 'e2', titulo: 'Reunión', tipo: 'Reunión', fecha: '2026-10-06', ambito: 'general', playerIds: [], participantIds: ['p1'], createdAt: '' },
+      ],
+    }))
+    expect(a.map(x => x.clave)).toEqual(['e:e2'])
+  })
+
   it('la tarea de un postpartido cuenta como postpartido y no como tarea', () => {
     const a = extraerAcciones(datos({
       tasks: [tarea('t1')] as never,

@@ -56,7 +56,8 @@ export interface Props {
    * ese jugador encima de la pantalla en la que esté el usuario (calendario,
    * tareas, pipeline…). Al cerrarla se llama a onCerrarSolo.
    */
-  solo?: { partidoId?: string; jugadorId?: string }
+  /** `informe`: abrir la ficha con el formulario de ese informe ya desplegado (desde el cierre de una tarea Informe) */
+  solo?: { partidoId?: string; jugadorId?: string; informe?: 'tecnico' | 'entorno' | 'mercado' | 'personalidad' }
   onCerrarSolo?: () => void
   /** Pestaña activa, si la lleva App (va en el hash: «atrás» cambia de pestaña) */
   tab?: string
