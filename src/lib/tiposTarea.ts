@@ -136,11 +136,13 @@ export function citaDeTipo(label: TaskLabel | string | undefined, subtipo?: stri
 export const EVENTO_EN_VEZ_DE_TAREA: Partial<Record<TaskLabel, string>> = { 'Reunión': 'Reunión', 'Comida/Visita': 'Visita presencial' }
 
 /** Título que se rellena solo al elegir tipo y sujeto (editable después). Vacío si no hay nada que proponer. */
-export function tituloAuto(label: TaskLabel | string | undefined, nombre?: string, subtipo?: string): string {
+/** `conQuien`: en llamadas, la persona (texto libre); `nombre` es el jugador al que se refiere */
+export function tituloAuto(label: TaskLabel | string | undefined, nombre?: string, subtipo?: string, conQuien?: string): string {
   const n = nombre?.trim()
+  const cq = conQuien?.trim()
   const sub = subtipoValido(label, subtipo)
   switch (label) {
-    case 'Llamada': return n ? `Llamar a ${n}` : ''
+    case 'Llamada': return cq ? `Llamar a ${cq}${n ? ` · ${n}` : ''}` : n ? `Llamar a ${n}` : ''
     case 'Informe': return n ? `${etiquetaSubtipo(sub) ?? 'Informe'} · ${n}` : ''
     case 'Análisis': return n ? `${etiquetaSubtipo(sub) ?? 'Análisis'} · ${n}` : ''
     case 'Negociación': return n ? `Negociación${sub ? ` ${sub}` : ''} · ${n}` : ''

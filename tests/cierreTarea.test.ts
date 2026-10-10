@@ -65,6 +65,9 @@ describe('el evento que deja un contacto', () => {
   it('una llamada a un jugador nuestro: evento de Mantenimiento con él, hoy, con quien la hizo', () => {
     const e = eventoDeCierre(tarea({ label: 'Llamada', playerId: 'j1' }), 'llamada', { resultado: 'contesto', nota: 'Todo bien' }, { hoy: HOY, authorId: 'p-pp', players: [jugador] })
     expect(e).toMatchObject({ tipo: 'Llamada', fecha: HOY, ambito: 'mantenimiento', playerIds: ['j1'], participantIds: ['p-pp'], notas: 'Contestó — Todo bien', taskId: 't1' })
+    // llamada a otra persona sobre el jugador: queda con quién en las notas
+    const e2 = eventoDeCierre(tarea({ label: 'Llamada', playerId: 'j1', conQuien: 'el padre' }), 'llamada', { resultado: 'contesto' }, { hoy: HOY, authorId: 'p-pp', players: [jugador] })
+    expect(e2.notas).toBe('Con el padre — Contestó')
   })
   it('con jugador de Captación es de Captación; sin nadie, general', () => {
     expect(eventoDeCierre(tarea({ label: 'Reunión', scoutingPlayerId: 'sp1' }), 'reunion', {}, { hoy: HOY, authorId: 'p-pp', players: [] }))

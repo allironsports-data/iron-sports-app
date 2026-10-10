@@ -37,6 +37,9 @@ describe('al crear: título automático y qué pasará', () => {
   it('el título sale del tipo, el sujeto y el subtipo', () => {
     expect(tituloAuto('Llamada', 'Perico')).toBe('Llamar a Perico')
     expect(tituloAuto('Llamada')).toBe('')
+    // con quién (persona) + sobre qué jugador
+    expect(tituloAuto('Llamada', 'Jakub Dobias', undefined, 'director deportivo del Valencia')).toBe('Llamar a director deportivo del Valencia · Jakub Dobias')
+    expect(tituloAuto('Llamada', undefined, undefined, 'el padre')).toBe('Llamar a el padre')
     expect(tituloAuto('Informe', 'Joshua', 'tecnico')).toBe('Informe de partido · Joshua')
     expect(tituloAuto('Informe', 'Joshua')).toBe('Informe · Joshua')
     expect(tituloAuto('Análisis', 'Perico', 'sesion')).toBe('Sesión de análisis · Perico')

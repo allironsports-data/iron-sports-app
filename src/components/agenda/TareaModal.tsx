@@ -78,6 +78,8 @@ export function TareaModal({
   const [label, setLabel] = useState<TaskLabel | ''>('')
   const [subtipo, setSubtipo] = useState('')
   const [sujeto, setSujeto] = useState<Sujeto | null>(inicial?.playerId ? { kind: 'nuestro', id: inicial.playerId } : null)
+  // Llamadas: con quién se habla (texto libre), aparte del jugador al que se refiere
+  const [conQuien, setConQuien] = useState('')
   const [q, setQ] = useState('')
   const [title, setTitle] = useState('')
   const [tituloTocado, setTituloTocado] = useState(false)
@@ -103,6 +105,7 @@ export function TareaModal({
   useEscapeKey(onClose)
 
   const meta = label ? metaTipo(label) : undefined
+  const esLlamada = label === 'Llamada'
   const sujetosPermitidos = useMemo<readonly SujetoTarea[]>(() => (label ? metaTipo(label).sujetos : ['nuestro', 'captacion']), [label])
   const subtipos = subtiposDe(label)
   const esProceso = label === 'Negociación'
@@ -155,16 +158,20 @@ export function TareaModal({
     setCitaTocada(false)
     // El sujeto se conserva si el tipo nuevo lo admite
     if (sujeto && !metaTipo(l || undefined).sujetos.includes(sujeto.kind) && !(l === '' && sujeto.kind !== 'ofrecimiento')) setSujeto(jugadorFijo ? sujeto : null)
-    if (!tituloTocado) setTitle(tituloAuto(l, nombreSujeto, sub))
+    if (!tituloTocado) setTitle(tituloAuto(l, nombreSujeto, sub, l === 'Llamada' ? conQuien : undefined))
+  }
+  const cambiarConQuien = (v: string) => {
+    setConQuien(v)
+    if (!tituloTocado) setTitle(tituloAuto(label, nombreSujeto, subtipo, v))
   }
   const cambiarSubtipo = (s: string) => {
     setSubtipo(s)
     setCitaTocada(false)
-    if (!tituloTocado) setTitle(tituloAuto(label, nombreSujeto, s))
+    if (!tituloTocado) setTitle(tituloAuto(label, nombreSujeto, s, esLlamada ? conQuien : undefined))
   }
   const elegirSujeto = (s: Sujeto | null, nombre?: string) => {
     setSujeto(s); setQ(''); setNuevo(null)
-    if (!tituloTocado) setTitle(tituloAuto(label, nombre, subtipo))
+    if (!tituloTocado) setTitle(tituloAuto(label, nombre, subtipo, esLlamada ? conQuien : undefined))
   }
 
   async function crearJugadorScouting() {
@@ -197,6 +204,7 @@ export function TareaModal({
         playerId: jugador ? jugador.id : 'general',
         scoutingPlayerId: sp?.id,
         ofrecimientoId: ofrecido?.id,
+        conQuien: esLlamada && conQuien.trim() ? conQuien.trim() : undefined,
         assigneeId,
         priority: alta ? 'alta' : 'media',
         label: label || 'Otra',
@@ -218,7 +226,7 @@ export function TareaModal({
   }
 
   const etiquetaSujeto = !meta ? 'Relacionada con'
-    : label === 'Llamada' ? 'A quién'
+    : label === 'Llamada' ? 'Sobre qué jugador'
     : label === 'Scouting' ? 'Jugador de Captación'
     : label === 'Informe' ? 'De quién'
     : 'Jugador'
@@ -267,7 +275,16 @@ export function TareaModal({
             )}
           </div>
 
-          {/* 2. Con quién: decide a qué ficha queda ligada */}
+          {/* Llamada: con quién se habla (texto libre). No siempre es un jugador:
+              puede ser alguien del club, un agente, el padre… */}
+          {esLlamada && (
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Con quién <span className="text-slate-400 font-normal">(opcional si es al propio jugador)</span></label>
+              <input value={conQuien} onChange={e => cambiarConQuien(e.target.value)} placeholder="Ej. director deportivo del Valencia, su padre, el agente…" className={CAMPO} />
+            </div>
+          )}
+
+          {/* 2. Con quién / sobre qué jugador: decide a qué ficha queda ligada */}
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-slate-600">
               {etiquetaSujeto}
@@ -329,6 +346,9 @@ export function TareaModal({
             {faltaSujeto && <p className="text-[11px] text-red-600">Una tarea de tipo {label} necesita jugador: al completarla deja algo en su ficha.</p>}
             {!faltaSujeto && meta?.jugador === 'recomendado' && sinSujeto && (
               <p className="text-[11px] text-amber-600">Sin jugador, al completarla quedará solo en el calendario, no en ninguna ficha.</p>
+            )}
+            {esLlamada && conQuien.trim() && jugador && (
+              <p className="text-[11px] text-slate-400">Llamada a {conQuien.trim()} sobre {jugador.name.split(' ')[0]}: queda en la ficha del jugador como llamada con esa persona.</p>
             )}
           </div>
 

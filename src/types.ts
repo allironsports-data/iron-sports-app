@@ -102,6 +102,8 @@ export interface Task {
   subtipo?: string;
   /** Ofrecimiento al que se refiere (tareas Informe sobre un jugador ofrecido). Opcional hasta migrar. */
   ofrecimientoId?: string;
+  /** Llamadas: con quién se habla (texto libre), aparte del jugador al que se refiere. Opcional hasta migrar. */
+  conQuien?: string;
   /**
    * Cita de la tarea: el evento de agenda (día, hora, lugar, asistentes) que se creó con ella.
    * Una llamada o sesión programada es tarea (lo que hay que hacer) y evento (la cita) a la vez;

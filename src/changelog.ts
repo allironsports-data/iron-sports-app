@@ -69,6 +69,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-08',
     items: [
+      'Tareas de tipo Llamada: campo «Con quién» en texto libre (el director deportivo de un club, el padre, un agente…) separado de «Sobre qué jugador», que sigue siendo el selector de jugador nuestro o de Captación y ahora es opcional. Antes solo se podía apuntar una llamada a un jugador. El título se rellena solo («Llamar a director deportivo del Valencia · Jakub Dobias»), y al completarla la llamada queda en la ficha del jugador con esa persona',
       'Partidos: la competición se elige de la lista predefinida (desplegable) en vez de escribirse a mano, en el alta y edición de partidos, en el partido creado como evento y en el partido nuevo de un postpartido. «Otra…» deja escribir una que no esté. Las que ya estaban grabadas con un nombre fuera de la lista se enseñan como «Otra» con su texto, sin perderse',
       'Partidos: marcar un partido como visto ya no genera la tarea «Informe de …» en Para hacer y Mi día. Al marcarlo visto, si no tienes informe en ese partido, solo sale un aviso «¿Se te ha olvidado el informe?» con un botón para escribirlo, y en el widget de partidos el scout sale sin la ✓ hasta que lo escribe',
       'Vista ampliada del partido: si la ficha de un jugador vinculado pone un equipo que no juega ese partido («Otros equipos»), sale el mismo aviso que en la ficha normal, con el cambio de equipo a un toque. Y al pulsar el nombre de un jugador se cierra la vista ampliada antes de abrir su ficha, que antes quedaba tapada',
@@ -88,6 +89,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Boulema: las «Peticiones» pasan a Captación → Ofrecidos con origen Boulema (las que había se migran, con sus informes ya enlazados contados como OK). Boulema se queda con Mantenimiento y un acceso directo a sus ofrecimientos. Los avisos del Pipeline que decían «petición en Boulema» ahora dicen «ofrecimiento abierto»',
     ],
     adminItems: [
+      'Requiere ejecutar migration_tasks_con_quien.sql (columna con_quien en tasks). Sin ella la persona va solo en el título de la tarea',
       'Requiere ejecutar migration_player_prioridad.sql (columna prioridad en players). Sin ella la prioridad no se guarda',
       'Requiere ejecutar migration_firmas_next_action_evento.sql (columna next_action_evento_id en captacion_firmas). Sin ella, las acciones de tipo Reunión siguen siendo solo tarea, como hasta ahora',
       'Requiere ejecutar migration_agenda_eventos_cierre.sql (recap y fecha de cierre en agenda_eventos, y realtime de esa tabla). Sin ella, el cierre queda solo en el historial de la tarjeta y la reunión sigue saliendo como pendiente',

@@ -158,7 +158,8 @@ export function eventoDeCierre(
     playerIds: jugador ? [jugador.id] : [],
     scoutingPlayerId: jugador ? undefined : t.scoutingPlayerId,
     participantIds: participantes,
-    notas: [etiquetaResultado(d.resultado), d.nota].filter(Boolean).join(' — ') || undefined,
+    // Llamada a alguien que no es el jugador (su padre, el club…): queda dicho con quién
+    notas: [t.conQuien ? `Con ${t.conQuien}` : undefined, etiquetaResultado(d.resultado), d.nota].filter(Boolean).join(' — ') || undefined,
     authorId: ctx.authorId,
     taskId: t.id,
   }

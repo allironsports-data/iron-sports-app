@@ -521,7 +521,7 @@ export async function assignManagerToPlayers(playerIds: string[], managerId: str
 // y si la base la rechaza (42703), se guarda la tarea sin ella.
 // Lo mismo vale para tasks.scouting_player_id (migration_tasks_scouting_player.sql)
 // y para el cierre (migration_tasks_cierre.sql: cierre_resultado, cierre_nota, cierre_ref).
-const COLUMNAS_OPCIONALES_TAREA = ['recurrence', 'scouting_player_id', 'cierre_resultado', 'cierre_nota', 'cierre_ref', 'subtipo', 'ofrecimiento_id', 'evento_id'] as const
+const COLUMNAS_OPCIONALES_TAREA = ['recurrence', 'scouting_player_id', 'cierre_resultado', 'cierre_nota', 'cierre_ref', 'subtipo', 'ofrecimiento_id', 'evento_id', 'con_quien'] as const
 const columnasTarea = new Set<string>()
 
 /** Etiquetas renombradas: las filas antiguas se leen ya con el nombre nuevo */
@@ -562,6 +562,7 @@ function dbToTask(row: Record<string, unknown>): Task {
     subtipo: (row.subtipo as string) ?? undefined,
     ofrecimientoId: (row.ofrecimiento_id as string) ?? undefined,
     eventoId: (row.evento_id as string) ?? undefined,
+    conQuien: (row.con_quien as string) || undefined,
   }
 }
 
@@ -588,6 +589,7 @@ function taskToDb(t: Task): Record<string, unknown> {
     subtipo: t.subtipo,
     ofrecimiento_id: t.ofrecimientoId,
     evento_id: t.eventoId,
+    con_quien: t.conQuien,
   }
   for (const c of COLUMNAS_OPCIONALES_TAREA) {
     if (columnasTarea.has(c) || opcionales[c]) fila[c] = opcionales[c] ?? null
