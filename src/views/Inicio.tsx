@@ -101,7 +101,8 @@ function Bloque({ titulo, Icon, extra, children }: { titulo: string; Icon: Icono
         <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{titulo}</h3>
         {extra}
       </div>
-      {children}
+      {/* Seis filas a la vista (54,5 px cada una); el resto, con scroll */}
+      <div className="max-h-[327px] overflow-y-auto scrollbar-thin">{children}</div>
       <div className="h-1.5" />
     </section>
   )
@@ -240,7 +241,7 @@ export function Inicio({ profile, profiles, hoy, items, players, contadores, onA
             {s.vencidas.length > 0 && <span className="ml-auto text-[10.5px] font-semibold px-1.5 py-px rounded bg-red-50 text-red-700">{s.vencidas.length} con retraso</span>}
             <Enlace texto="Mi día" onClick={() => onIr({ tipo: 'mi-dia' })} />
           </>}>
-            {s.hoy.length === 0 ? <Vacio texto="Nada para hoy." /> : s.hoy.slice(0, 6).map(it => {
+            {s.hoy.length === 0 ? <Vacio texto="Nada para hoy." /> : s.hoy.map(it => {
               const retraso = !!it.fecha && it.fecha < hoy
               return (
                 <button key={it.id} onClick={() => onAbrir(it)} className={ROW}>
@@ -251,7 +252,6 @@ export function Inicio({ profile, profiles, hoy, items, players, contadores, onA
                 </button>
               )
             })}
-            {s.hoy.length > 6 && <button onClick={() => onIr({ tipo: 'mi-dia' })} className="w-full text-left px-3.5 py-1.5 text-[11.5px] text-slate-400 hover:text-slate-700 border-t border-slate-100">+{s.hoy.length - 6} más</button>}
           </Bloque>
 
           <Bloque titulo="En curso" Icon={RefreshCw} extra={<span className="ml-auto text-[11px] text-slate-400">nota cada {DIAS_ACTUALIZACION_PROCESO} días</span>}>
