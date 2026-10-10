@@ -29,6 +29,8 @@ export const SUBTIPOS_NEGOCIACION = ['renovacion', 'traspaso', 'representacion',
 /** Subtipos de Informe: datos (jugador nuestro) o los de Captación (técnico = de partido) */
 export const SUBTIPOS_INFORME = ['datos', 'tecnico', 'entorno', 'mercado', 'personalidad'] as const
 export const SUBTIPOS_VISITA = ['Comida', 'Visita presencial'] as const
+/** Subtipos de Scouting: qué hay que hacer con el jugador de Captación */
+export const SUBTIPOS_SCOUTING = ['seguir', 'ver_partido', 'info'] as const
 /** Servicios de videoanálisis (los mismos de Rendimiento → Análisis, sin el informe de datos) */
 export const SUBTIPOS_VIDEO = (Object.keys(SERVICIO_META) as ServicioTipo[]).filter(s => s !== 'informe_datos')
 
@@ -36,6 +38,7 @@ export const SUBTIPO_LABEL: Record<string, string> = {
   renovacion: 'Renovación', traspaso: 'Traspaso / cesión', representacion: 'Contrato de representación', comision: 'Comisión', otro: 'Otro',
   datos: 'Informe de datos', tecnico: 'Informe de partido', entorno: 'Entorno', mercado: 'Mercado', personalidad: 'Personalidad',
   Comida: 'Comida', 'Visita presencial': 'Visita presencial',
+  seguir: 'Seguir', ver_partido: 'Ver partido', info: 'Recabar información',
   ...Object.fromEntries(SUBTIPOS_VIDEO.map(s => [s, SERVICIO_META[s].label])),
 }
 
@@ -43,10 +46,17 @@ export function etiquetaSubtipo(subtipo?: string): string | undefined {
   return subtipo ? (SUBTIPO_LABEL[subtipo] ?? subtipo) : undefined
 }
 
+/** Con qué puede ir ligada una tarea de ese tipo */
+export type SujetoTarea = 'nuestro' | 'captacion' | 'ofrecimiento'
+
 export interface MetaTipo {
   familia: FamiliaTarea
   /** Subtipos que se eligen al crear la tarea (vacío = no tiene) */
   subtipos: readonly string[]
+  /** El subtipo es texto libre («De qué va» en Negociación) */
+  subtipoLibre?: boolean
+  /** Qué sujetos admite (jugador nuestro, de Captación, ofrecimiento) */
+  sujetos: readonly SujetoTarea[]
   /**
    * si          → sin jugador no se puede crear (el cierre no tendría dónde dejar nada)
    * recomendado → se avisa, pero se permite (una llamada a un club, una reunión interna…)
@@ -57,21 +67,22 @@ export interface MetaTipo {
   peso: number
 }
 
+const TODOS: readonly SujetoTarea[] = ['nuestro', 'captacion']
 const META: Record<TaskLabel, MetaTipo> = {
-  'Llamada':        { familia: 'contacto',   subtipos: [],                    jugador: 'recomendado', peso: 1 },
-  'Reunión':        { familia: 'contacto',   subtipos: [],                    jugador: 'recomendado', peso: 2 },
-  'Comida/Visita':  { familia: 'contacto',   subtipos: SUBTIPOS_VISITA,       jugador: 'recomendado', peso: 4 },
-  'Informe':        { familia: 'entregable', subtipos: SUBTIPOS_INFORME,      jugador: 'si',          peso: 3 },
-  'Videoanálisis':  { familia: 'entregable', subtipos: SUBTIPOS_VIDEO,        jugador: 'si',          peso: 3 },
-  'Postpartido':    { familia: 'entregable', subtipos: [],                    jugador: 'si',          peso: 5 },
-  'Negociación':    { familia: 'proceso',    subtipos: SUBTIPOS_NEGOCIACION,  jugador: 'no',          peso: 3 },
-  'Scouting':       { familia: 'proceso',    subtipos: [],                    jugador: 'recomendado', peso: 1 },
-  'Otra':           { familia: 'generica',   subtipos: [],                    jugador: 'no',          peso: 1 },
-  'Administrativa': { familia: 'generica',   subtipos: [],                    jugador: 'no',          peso: 1 },
-  'Seguimiento':    { familia: 'generica',   subtipos: [],                    jugador: 'no',          peso: 1 },
-  'Distribución':   { familia: 'generica',   subtipos: [],                    jugador: 'no',          peso: 1 },
-  'Marketing':      { familia: 'generica',   subtipos: [],                    jugador: 'no',          peso: 1 },
-  'Comunicación':   { familia: 'generica',   subtipos: [],                    jugador: 'no',          peso: 1 },
+  'Llamada':        { familia: 'contacto',   subtipos: [],                   sujetos: TODOS,                                   jugador: 'recomendado', peso: 1 },
+  'Reunión':        { familia: 'contacto',   subtipos: [],                   sujetos: TODOS,                                   jugador: 'recomendado', peso: 2 },
+  'Comida/Visita':  { familia: 'contacto',   subtipos: SUBTIPOS_VISITA,      sujetos: TODOS,                                   jugador: 'recomendado', peso: 4 },
+  'Informe':        { familia: 'entregable', subtipos: SUBTIPOS_INFORME,     sujetos: ['nuestro', 'captacion', 'ofrecimiento'], jugador: 'si',          peso: 3 },
+  'Videoanálisis':  { familia: 'entregable', subtipos: SUBTIPOS_VIDEO,       sujetos: ['nuestro'],                             jugador: 'si',          peso: 3 },
+  'Postpartido':    { familia: 'entregable', subtipos: [],                   sujetos: ['nuestro'],                             jugador: 'si',          peso: 5 },
+  'Negociación':    { familia: 'proceso',    subtipos: [], subtipoLibre: true, sujetos: ['nuestro'],                           jugador: 'si',          peso: 3 },
+  'Scouting':       { familia: 'proceso',    subtipos: SUBTIPOS_SCOUTING,    sujetos: ['captacion'],                           jugador: 'recomendado', peso: 1 },
+  'Otra':           { familia: 'generica',   subtipos: [],                   sujetos: TODOS,                                   jugador: 'no',          peso: 1 },
+  'Administrativa': { familia: 'generica',   subtipos: [],                   sujetos: TODOS,                                   jugador: 'no',          peso: 1 },
+  'Seguimiento':    { familia: 'generica',   subtipos: [],                   sujetos: TODOS,                                   jugador: 'no',          peso: 1 },
+  'Distribución':   { familia: 'generica',   subtipos: [],                   sujetos: TODOS,                                   jugador: 'no',          peso: 1 },
+  'Marketing':      { familia: 'generica',   subtipos: [],                   sujetos: TODOS,                                   jugador: 'no',          peso: 1 },
+  'Comunicación':   { familia: 'generica',   subtipos: [],                   sujetos: TODOS,                                   jugador: 'no',          peso: 1 },
 }
 
 const GENERICA: MetaTipo = META['Otra']
@@ -90,9 +101,44 @@ export function subtiposDe(label?: TaskLabel | string): readonly string[] {
   return metaTipo(label).subtipos
 }
 
-/** Si el subtipo no es de ese tipo, se descarta (p. ej. al cambiar el tipo en el panel) */
+/** Si el subtipo no es de ese tipo, se descarta (p. ej. al cambiar el tipo en el panel). Con subtipo libre vale cualquier texto. */
 export function subtipoValido(label: TaskLabel | string | undefined, subtipo?: string): string | undefined {
-  return subtipo && subtiposDe(label).includes(subtipo) ? subtipo : undefined
+  const s = subtipo?.trim()
+  if (!s) return undefined
+  if (metaTipo(label).subtipoLibre) return s
+  return subtiposDe(label).includes(s) ? s : undefined
+}
+
+/** Reunión y Comida/Visita son eventos de agenda, no tareas: tipo de evento que les corresponde al crear */
+export const EVENTO_EN_VEZ_DE_TAREA: Partial<Record<TaskLabel, string>> = { 'Reunión': 'Reunión', 'Comida/Visita': 'Visita presencial' }
+
+/** Título que se rellena solo al elegir tipo y sujeto (editable después). Vacío si no hay nada que proponer. */
+export function tituloAuto(label: TaskLabel | string | undefined, nombre?: string, subtipo?: string): string {
+  const n = nombre?.trim()
+  const sub = subtipoValido(label, subtipo)
+  switch (label) {
+    case 'Llamada': return n ? `Llamar a ${n}` : ''
+    case 'Informe': return n ? `${etiquetaSubtipo(sub) ?? 'Informe'} · ${n}` : ''
+    case 'Videoanálisis': return n ? `${etiquetaSubtipo(sub) ?? 'Videoanálisis'} · ${n}` : ''
+    case 'Negociación': return n ? `Negociación${sub ? ` ${sub}` : ''} · ${n}` : ''
+    case 'Scouting': return n ? (sub === 'ver_partido' ? `Ver partido de ${n}` : sub === 'info' ? `Recabar información de ${n}` : `Seguir a ${n}`) : ''
+    default: return ''
+  }
+}
+
+/** Qué pasará al completarla, para decirlo al crearla */
+export function queHaraAlCerrar(label: TaskLabel | string | undefined, nombre?: string): string | undefined {
+  const en = nombre ? ` en la ficha de ${nombre}` : ''
+  switch (label) {
+    case 'Llamada': return `Al completarla se preguntará si contestó y quedará como llamada en el calendario${en}.`
+    case 'Informe': return nombre ? `Al completarla se pedirá el enlace o se abrirá el formulario del informe, y quedará${en}.` : 'Al completarla se pedirá el enlace al informe.'
+    case 'Videoanálisis': return `Al completarla se pedirá el vídeo y quedará como servicio${en} (Rendimiento → Análisis).`
+    case 'Negociación': return `Es un proceso: nace en curso, sin fecha, y pide una nota cada semana. Al cerrarla se apunta el resultado${en}.`
+    case 'Scouting': return 'Al completarla se pedirá la conclusión (seguir, llamar, descartar), que puede cambiar la valoración del jugador.'
+    case 'Administrativa': case 'Otra': case 'Seguimiento': case 'Distribución': case 'Marketing': case 'Comunicación':
+      return 'Al completarla se puede dejar una nota.'
+    default: return undefined
+  }
 }
 
 export const esTipo = (s: string): s is TaskLabel => (TASK_LABELS as readonly string[]).includes(s)

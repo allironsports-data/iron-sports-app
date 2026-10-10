@@ -36,6 +36,8 @@ export type TipoCierre =
   | { tipo: 'informe'; player: Player }
   /** Informe de un jugador de Captación: qué informe (partido / entorno / mercado / personalidad) → abre su ficha para escribirlo */
   | { tipo: 'informe-captacion'; scoutingPlayer: ScoutingPlayer }
+  /** Informe sobre un jugador ofrecido: qué informe → abre el ofrecimiento para registrarlo */
+  | { tipo: 'informe-ofrecido'; ofrecimientoId: string }
   /** Videoanálisis de un jugador nuestro: servicio + vídeo → sesión en Rendimiento → Análisis */
   | { tipo: 'video'; player: Player }
   /** Negociación: resultado + nota (→ actividad en la ficha si hay jugador) */
@@ -79,6 +81,7 @@ export function cierreRequerido(t: Task, ctx: ContextoCierre): TipoCierre {
     case 'Comida/Visita': return { tipo: 'visita' }
     case 'Informe': {
       if (player) return { tipo: 'informe', player }
+      if (t.ofrecimientoId) return { tipo: 'informe-ofrecido', ofrecimientoId: t.ofrecimientoId }
       const sp = t.scoutingPlayerId ? ctx.scoutingPlayers.find(p => p.id === t.scoutingPlayerId) : undefined
       return sp ? { tipo: 'informe-captacion', scoutingPlayer: sp } : { tipo: 'nota' }
     }

@@ -56,11 +56,13 @@ interface Props {
   onScoutingPlayerActualizado: (p: ScoutingPlayer) => void
   /** Abre la ficha flotante de un jugador de Captación con el formulario del informe pedido */
   onAbrirInformeScouting: (scoutingPlayerId: string, informe: 'tecnico' | 'entorno' | 'mercado' | 'personalidad') => void
+  /** Abre la ficha de un ofrecimiento (Captación → Ofrecidos) */
+  onAbrirOfrecido: (ofrecimientoId: string) => void
 }
 
 export function CierreTareaHost({
   pendiente, onCerrar, tasks, players, scoutingPlayers, profiles, currentProfile, firmasEntries, eventos, setEventos, postpartidos,
-  guardarTarea, crearTarea, onPatchFirmasEntry, onUpdatePlayer, onUpdatePostpartido, onScoutingPlayerActualizado, onAbrirInformeScouting,
+  guardarTarea, crearTarea, onPatchFirmasEntry, onUpdatePlayer, onUpdatePostpartido, onScoutingPlayerActualizado, onAbrirInformeScouting, onAbrirOfrecido,
 }: Props) {
   const { showToast } = useToastContext()
   const hoy = hoyISO()
@@ -137,6 +139,11 @@ export function CierreTareaHost({
       }
       await guardarTarea(conCierre(task, d, ref))
       onCerrar()
+      if (t.tipo === 'informe-ofrecido') {
+        onAbrirOfrecido(t.ofrecimientoId)
+        showToast('Tarea hecha · registra el informe en el ofrecimiento', 'success')
+        return
+      }
       if (t.tipo === 'informe-captacion') {
         const informe = (d.resultado === 'entorno' || d.resultado === 'mercado' || d.resultado === 'personalidad') ? d.resultado : 'tecnico'
         onAbrirInformeScouting(t.scoutingPlayer.id, informe)
@@ -187,6 +194,15 @@ export function CierreTareaHost({
     try {
       await db.updateAgendaEvento(cerrado)
       setEventos(prev => prev.map(x => x.id === cerrado.id ? cerrado : x))
+      // Con jugadores nuestros, el recap queda también en su actividad (la fila que creó el evento)
+      if (ev.activityRef && ev.playerIds.length > 0) {
+        const fila = {
+          id: ev.activityRef, groupId: ev.playerIds.length > 1 ? ev.activityRef : undefined, playerId: ev.playerIds[0],
+          date: ev.fecha, type: ev.tipo, createdAt: '',
+          notes: [ev.titulo, ev.notas, `Recap: ${datos.recap}`].filter(Boolean).join(' — '),
+        }
+        await (fila.groupId ? db.updateGroupActivity(fila) : db.updatePlayerActivity(fila)).catch(err => console.error('No se pudo apuntar el recap en la ficha:', err))
+      }
       const tarjeta = tarjetaDeScouting(firmasEntries, ev.scoutingPlayerId)
       if (tarjeta) {
         await onPatchFirmasEntry(tarjeta.id, f => aplicarCierreEnTarjeta(f, cerrado, datos, currentProfile, hoy, ahora))
@@ -224,11 +240,12 @@ export function CierreTareaHost({
     : tipo?.tipo === 'pipeline-reunion' ? tipo.evento : undefined
   if (eventoReunion) {
     const sp = eventoReunion.scoutingPlayerId ? scoutingPlayers.find(p => p.id === eventoReunion.scoutingPlayerId) : undefined
+    const nuestro = eventoReunion.playerIds.length > 0 ? players.find(p => p.id === eventoReunion.playerIds[0]) : undefined
     return (
       <CerrarReunionModal
         evento={eventoReunion}
         tarjeta={tarjetaDeScouting(firmasEntries, eventoReunion.scoutingPlayerId)}
-        playerName={sp?.fullName || eventoReunion.titulo || eventoReunion.tipo}
+        playerName={sp?.fullName || nuestro?.name || eventoReunion.titulo || eventoReunion.tipo}
         profiles={profiles}
         currentProfile={currentProfile}
         onClose={onCerrar}

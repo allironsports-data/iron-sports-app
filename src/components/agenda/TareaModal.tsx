@@ -1,27 +1,35 @@
 // ── Nueva tarea ──────────────────────────────────────────────────────
 //
 // Una tarea es algo que hay que hacer: tiene responsable, puede tener
-// fecha y se marca como hecha. Puede ser general, de un jugador de
-// Mantenimiento o de un jugador de Captación (queda ligada a su ficha y,
-// si está en el pipeline, apuntada en su tarjeta de Firmar).
+// fecha y se marca como hecha. El TIPO va primero y decide el resto del
+// formulario (lib/tiposTarea.ts): con quién va ligada (jugador nuestro,
+// de Captación, ofrecimiento), qué subtipo tiene, si lleva fecha y qué
+// pasará al completarla (lib/cierreTarea.ts). Elegir tipo y jugador
+// rellena el título solo.
+//
+// Reunión y Comida/Visita no son tareas sino eventos: al elegirlas se
+// pasa al formulario de evento con ese tipo puesto (onEvento).
 
 import { useMemo, useState, type ReactNode } from 'react'
-import { X } from 'lucide-react'
-import { TASK_LABELS, type Player, type ScoutingPlayer, type Task, type TaskLabel } from '../../types'
+import { X, Plus } from 'lucide-react'
+import { TASK_LABELS, type Player, type ScoutingPlayer, type Ofrecimiento, type Task, type TaskLabel } from '../../types'
 import type { Profile } from '../../contexts/AuthContext'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { norm } from '../../lib/texto'
 import { hoyISO, sumarDias } from '../../lib/fechas'
 import { lunesSiguiente, viernesSemana } from '../../lib/agendaItems'
 import { RECURRENCIAS, RECURRENCIA_LABEL, type Recurrencia } from '../../lib/recurrencia'
-import { metaTipo, subtiposDe, subtipoValido, etiquetaSubtipo } from '../../lib/tiposTarea'
-
-type Ambito = 'general' | 'mantenimiento' | 'captacion'
+import {
+  metaTipo, subtiposDe, subtipoValido, etiquetaSubtipo, tituloAuto, queHaraAlCerrar, EVENTO_EN_VEZ_DE_TAREA, type SujetoTarea,
+} from '../../lib/tiposTarea'
+import { estadoVisible } from '../../lib/ofrecidos'
 
 interface Props {
   profiles: Profile[]
   players: Player[]
   scoutingPlayers: ScoutingPlayer[]
+  /** Ofrecimientos (Captación → Ofrecidos), para tareas Informe sobre un jugador ofrecido */
+  ofrecimientos?: Ofrecimiento[]
   currentProfileId: string
   /** Persona y fecha ya puestas (alta desde el calendario). `playerId`: tarea de ese jugador nuestro (alta desde su ficha) */
   inicial?: { assigneeId?: string; dueDate?: string; playerId?: string }
@@ -29,82 +37,147 @@ interface Props {
   cabecera?: ReactNode
   /** Estatus en el pipeline del jugador de Captación elegido, si está en él */
   estatusPipeline?: (scoutingPlayerId: string) => string | undefined
+  /** Reunión y Comida/Visita son eventos: al elegirlas se abre el formulario de evento con ese tipo. Sin esto no se ofrecen. */
+  onEvento?: (tipoEvento: string) => void
+  /** Alta rápida de un jugador de Captación desde aquí (Informe, Scouting). Sin esto no se ofrece. */
+  onCreateScoutingPlayer?: (p: { fullName: string; team?: string }) => Promise<ScoutingPlayer>
   onClose: () => void
   onAdd: (task: Task) => void | Promise<void>
 }
 
-const CAMPO = 'w-full text-xs border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-blue-200'
-const SEG = (on: boolean) => `px-2.5 py-1 rounded text-[11px] font-semibold transition-colors ${on ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`
+type Sujeto = { kind: 'nuestro'; id: string } | { kind: 'captacion'; id: string } | { kind: 'ofrecimiento'; id: string }
 
-export function TareaModal({ profiles, players, scoutingPlayers, currentProfileId, inicial, cabecera, estatusPipeline, onClose, onAdd }: Props) {
+const CAMPO = 'w-full text-xs border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-blue-200'
+const BADGE: Record<SujetoTarea, { txt: string; cls: string }> = {
+  nuestro:      { txt: 'Nuestro',      cls: 'bg-blue-50 text-blue-700 border-blue-100' },
+  captacion:    { txt: 'Captación',    cls: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
+  ofrecimiento: { txt: 'Ofrecimiento', cls: 'bg-amber-50 text-amber-700 border-amber-100' },
+}
+
+export function TareaModal({
+  profiles, players, scoutingPlayers, ofrecimientos = [], currentProfileId, inicial, cabecera, estatusPipeline,
+  onEvento, onCreateScoutingPlayer, onClose, onAdd,
+}: Props) {
   const hoy = hoyISO()
-  const [title, setTitle] = useState('')
   const jugadorFijo = !!inicial?.playerId
-  const [ambito, setAmbito] = useState<Ambito>(jugadorFijo ? 'mantenimiento' : 'general')
-  const [playerId, setPlayerId] = useState(inicial?.playerId ?? '')
-  const [scoutingPlayerId, setScoutingPlayerId] = useState('')
+  const [label, setLabel] = useState<TaskLabel | ''>('')
+  const [subtipo, setSubtipo] = useState('')
+  const [sujeto, setSujeto] = useState<Sujeto | null>(inicial?.playerId ? { kind: 'nuestro', id: inicial.playerId } : null)
   const [q, setQ] = useState('')
+  const [title, setTitle] = useState('')
+  const [tituloTocado, setTituloTocado] = useState(false)
   const [assigneeId, setAssigneeId] = useState(inicial?.assigneeId ?? currentProfileId)
   // Toda tarea lleva fecha, aunque sea blanda: por defecto hoy. «Algún día» = sin fecha (bandeja).
   const [dueDate, setDueDate] = useState(inicial?.dueDate ?? hoy)
-  const [label, setLabel] = useState<TaskLabel | ''>('')
-  const [subtipo, setSubtipo] = useState('')
+  const [mas, setMas] = useState(false)
   const [alta, setAlta] = useState(false)
   const [recurrence, setRecurrence] = useState<Recurrencia | ''>('')
   const [description, setDescription] = useState('')
   const [adminOnly, setAdminOnly] = useState(false)
+  // alta rápida de jugador de Captación
+  const [nuevo, setNuevo] = useState<{ nombre: string; equipo: string } | null>(null)
+  const [creando, setCreando] = useState(false)
   const [guardando, setGuardando] = useState(false)
 
   useEscapeKey(onClose)
 
-  const jugador = playerId ? players.find(p => p.id === playerId) : undefined
-  const jugadorScouting = scoutingPlayerId ? scoutingPlayers.find(p => p.id === scoutingPlayerId) : undefined
+  const meta = label ? metaTipo(label) : undefined
+  const sujetosPermitidos = useMemo<readonly SujetoTarea[]>(() => (label ? metaTipo(label).sujetos : ['nuestro', 'captacion']), [label])
+  const subtipos = subtiposDe(label)
+  const esProceso = label === 'Negociación'
 
-  // Buscador: solo con texto, que en Captación hay miles
+  // Tipos que se ofrecen: Postpartido tiene su propia alta; Reunión y Comida/Visita son eventos (solo si hay a dónde ir);
+  // con jugador nuestro fijo no tiene sentido Scouting
+  const tipos = TASK_LABELS.filter(l =>
+    l !== 'Postpartido' &&
+    (!EVENTO_EN_VEZ_DE_TAREA[l] || !!onEvento) &&
+    !(jugadorFijo && !metaTipo(l).sujetos.includes('nuestro')),
+  )
+
+  const jugador = sujeto?.kind === 'nuestro' ? players.find(p => p.id === sujeto.id) : undefined
+  const jugadorScouting = sujeto?.kind === 'captacion' ? scoutingPlayers.find(p => p.id === sujeto.id) : undefined
+  const ofrecido = sujeto?.kind === 'ofrecimiento' ? ofrecimientos.find(o => o.id === sujeto.id) : undefined
+  const nombreSujeto = jugador?.name ?? jugadorScouting?.fullName ?? ofrecido?.playerName
+  const extraSujeto = jugador ? jugador.clubs[0]?.name : jugadorScouting ? jugadorScouting.team : ofrecido ? `${ofrecido.team ?? ''}${ofrecido.ofreceNombre ? ` · ofrece ${ofrecido.ofreceNombre}` : ''}` : undefined
+  const sinSujeto = !sujeto
+  const faltaSujeto = meta?.jugador === 'si' && sinSujeto
+  const pipeline = jugadorScouting ? estatusPipeline?.(jugadorScouting.id) : undefined
+
+  // Buscador unificado: jugadores nuestros, de Captación y ofrecimientos abiertos, según lo que admita el tipo
   const nq = norm(q)
   const sugeridos = useMemo(() => {
-    if (nq.length < 2) return []
-    if (ambito === 'mantenimiento') {
-      return players.filter(p => !p.hiddenFromManagement && norm(p.name).includes(nq))
-        .slice(0, 8).map(p => ({ id: p.id, nombre: p.name, extra: p.clubs[0]?.name }))
+    if (nq.length < 2) return [] as { s: Sujeto; nombre: string; extra?: string }[]
+    const out: { s: Sujeto; nombre: string; extra?: string }[] = []
+    if (sujetosPermitidos.includes('nuestro')) {
+      for (const p of players) if (!p.hiddenFromManagement && norm(p.name).includes(nq)) out.push({ s: { kind: 'nuestro', id: p.id }, nombre: p.name, extra: p.clubs[0]?.name })
     }
-    return scoutingPlayers.filter(p => norm(p.fullName).includes(nq))
-      .slice(0, 8).map(p => ({ id: p.id, nombre: p.fullName, extra: p.team }))
-  }, [nq, ambito, players, scoutingPlayers])
+    if (sujetosPermitidos.includes('ofrecimiento')) {
+      for (const o of ofrecimientos) {
+        const e = estadoVisible(o, hoy).clave
+        if ((e === 'nuevo' || e === 'informes' || e === 'decidir') && norm(o.playerName).includes(nq)) out.push({ s: { kind: 'ofrecimiento', id: o.id }, nombre: o.playerName, extra: o.team })
+      }
+    }
+    if (sujetosPermitidos.includes('captacion')) {
+      for (const p of scoutingPlayers) if (norm(p.fullName).includes(nq)) out.push({ s: { kind: 'captacion', id: p.id }, nombre: p.fullName, extra: p.team })
+    }
+    return out.slice(0, 8)
+  }, [nq, sujetosPermitidos, players, scoutingPlayers, ofrecimientos, hoy])
 
-  const cambiarAmbito = (a: Ambito) => {
-    setAmbito(a); setQ('')
-    // Una tarea de Captación nace con el tipo «Scouting» (se puede cambiar)
-    if (a === 'captacion' && !label) setLabel('Scouting')
+  const cambiarTipo = (l: TaskLabel | '') => {
+    const ev = l ? EVENTO_EN_VEZ_DE_TAREA[l] : undefined
+    if (ev && onEvento) { onEvento(ev); return }
+    setLabel(l)
+    const sub = subtipoValido(l, subtipo) ?? ''
+    setSubtipo(sub)
+    // El sujeto se conserva si el tipo nuevo lo admite
+    if (sujeto && !metaTipo(l || undefined).sujetos.includes(sujeto.kind) && !(l === '' && sujeto.kind !== 'ofrecimiento')) setSujeto(jugadorFijo ? sujeto : null)
+    if (!tituloTocado) setTitle(tituloAuto(l, nombreSujeto, sub))
+  }
+  const cambiarSubtipo = (s: string) => {
+    setSubtipo(s)
+    if (!tituloTocado) setTitle(tituloAuto(label, nombreSujeto, s))
+  }
+  const elegirSujeto = (s: Sujeto | null, nombre?: string) => {
+    setSujeto(s); setQ(''); setNuevo(null)
+    if (!tituloTocado) setTitle(tituloAuto(label, nombre, subtipo))
   }
 
-  // Jugador según el tipo: obligatorio (Informe, Videoanálisis, Postpartido), recomendado o da igual
-  const meta = label ? metaTipo(label) : undefined
-  const sinJugador = !jugador && !jugadorScouting
-  const faltaJugador = meta?.jugador === 'si' && sinJugador
-  const subtipos = subtiposDe(label)
-  const cambiarTipo = (l: TaskLabel | '') => { setLabel(l); setSubtipo(subtipoValido(l, subtipo) ?? '') }
+  async function crearJugadorScouting() {
+    if (!onCreateScoutingPlayer || !nuevo || !nuevo.nombre.trim() || creando) return
+    setCreando(true)
+    try {
+      const p = await onCreateScoutingPlayer({ fullName: nuevo.nombre.trim(), team: nuevo.equipo.trim() || undefined })
+      elegirSujeto({ kind: 'captacion', id: p.id }, p.fullName)
+    } finally {
+      setCreando(false)
+    }
+  }
 
   async function crear(e: React.FormEvent) {
     e.preventDefault()
-    if (!title.trim() || guardando || faltaJugador) return
+    if (!title.trim() || guardando || faltaSujeto) return
     setGuardando(true)
     try {
-      const deCaptacion = ambito === 'captacion' && jugadorScouting
+      const sp = jugadorScouting ?? (ofrecido?.scoutingPlayerId ? scoutingPlayers.find(p => p.id === ofrecido.scoutingPlayerId) : undefined)
       await onAdd({
         id: 't' + Date.now(),
         title: title.trim(),
         // El nombre va también en la descripción: si la base aún no tiene la columna del vínculo, no se pierde de quién es
-        description: [description.trim(), deCaptacion ? `Jugador de Captación: ${jugadorScouting.fullName}${jugadorScouting.team ? ` (${jugadorScouting.team})` : ''}` : '']
-          .filter(Boolean).join('\n'),
-        playerId: ambito === 'mantenimiento' && playerId ? playerId : 'general',
-        scoutingPlayerId: deCaptacion ? jugadorScouting.id : undefined,
+        description: [
+          description.trim(),
+          jugadorScouting ? `Jugador de Captación: ${jugadorScouting.fullName}${jugadorScouting.team ? ` (${jugadorScouting.team})` : ''}` : '',
+          ofrecido ? `Ofrecimiento: ${ofrecido.playerName}${ofrecido.team ? ` (${ofrecido.team})` : ''}${ofrecido.ofreceNombre ? ` · ofrece ${ofrecido.ofreceNombre}` : ''}` : '',
+        ].filter(Boolean).join('\n'),
+        playerId: jugador ? jugador.id : 'general',
+        scoutingPlayerId: sp?.id,
+        ofrecimientoId: ofrecido?.id,
         assigneeId,
         priority: alta ? 'alta' : 'media',
         label: label || undefined,
         subtipo: subtipoValido(label, subtipo),
-        status: 'pendiente',
-        dueDate: dueDate || undefined,
+        // Una negociación es un proceso: nace en curso y sin fecha (pide nota semanal)
+        status: esProceso ? 'en_progreso' : 'pendiente',
+        dueDate: esProceso ? undefined : (dueDate || undefined),
         createdAt: new Date().toISOString(),
         comments: [],
         adminOnly,
@@ -115,8 +188,17 @@ export function TareaModal({ profiles, players, scoutingPlayers, currentProfileI
     }
   }
 
-  const elegido = ambito === 'mantenimiento' ? jugador?.name : ambito === 'captacion' ? jugadorScouting && `${jugadorScouting.fullName}${jugadorScouting.team ? ` · ${jugadorScouting.team}` : ''}` : undefined
-  const pipeline = ambito === 'captacion' && scoutingPlayerId ? estatusPipeline?.(scoutingPlayerId) : undefined
+  const etiquetaSujeto = !meta ? 'Relacionada con'
+    : label === 'Llamada' ? 'A quién'
+    : label === 'Scouting' ? 'Jugador de Captación'
+    : label === 'Informe' ? 'De quién'
+    : 'Jugador'
+  const placeholderBuscar = sujetosPermitidos.length === 1 && sujetosPermitidos[0] === 'nuestro' ? 'Buscar jugador nuestro…'
+    : sujetosPermitidos.length === 1 && sujetosPermitidos[0] === 'captacion' ? 'Buscar en Captación…'
+    : sujetosPermitidos.includes('ofrecimiento') ? 'Jugador nuestro, de Captación u ofrecido…'
+    : 'Jugador nuestro o de Captación…'
+  const puedeCrearScouting = !!onCreateScoutingPlayer && sujetosPermitidos.includes('captacion')
+  const pie = queHaraAlCerrar(label || undefined, nombreSujeto?.split(' ')[0])
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-0 sm:p-4" onClick={onClose}>
@@ -128,57 +210,107 @@ export function TareaModal({ profiles, players, scoutingPlayers, currentProfileI
         <form onSubmit={crear} className="p-4 space-y-3">
           {cabecera}
 
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-600">Qué hay que hacer</label>
-            <input autoFocus value={title} onChange={e => setTitle(e.target.value)} placeholder="Ej. Enviar propuesta al padre" className={CAMPO} />
+          {/* 1. Tipo: decide el resto */}
+          <div className={`grid gap-3 ${subtipos.length > 0 || meta?.subtipoLibre ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Tipo</label>
+              <select autoFocus value={label} onChange={e => cambiarTipo(e.target.value as TaskLabel | '')} className={CAMPO}>
+                <option value="">— Sin tipo —</option>
+                {tipos.map(l => <option key={l} value={l}>{l}{EVENTO_EN_VEZ_DE_TAREA[l] ? ' (evento)' : ''}</option>)}
+              </select>
+            </div>
+            {subtipos.length > 0 && (
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">
+                  {label === 'Informe' ? 'Qué informe' : label === 'Videoanálisis' ? 'Qué servicio' : label === 'Scouting' ? 'Qué hacer' : 'Cuál'}
+                </label>
+                <select value={subtipo} onChange={e => cambiarSubtipo(e.target.value)} className={CAMPO}>
+                  <option value="">— Elegir —</option>
+                  {subtipos.map(s => <option key={s} value={s}>{etiquetaSubtipo(s)}</option>)}
+                </select>
+              </div>
+            )}
+            {meta?.subtipoLibre && (
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">De qué va</label>
+                <input value={subtipo} onChange={e => cambiarSubtipo(e.target.value)} placeholder="Renovación, traspaso, comisión…" className={CAMPO} />
+              </div>
+            )}
           </div>
 
-          {/* De quién es la tarea: decide a qué ficha queda ligada */}
+          {/* 2. Con quién: decide a qué ficha queda ligada */}
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-slate-600">Relacionada con</label>
-            {!jugadorFijo && <div className="flex items-center gap-0 bg-slate-100 rounded-lg p-0.5 w-fit">
-              <button type="button" onClick={() => cambiarAmbito('general')} className={SEG(ambito === 'general')}>General</button>
-              <button type="button" onClick={() => cambiarAmbito('mantenimiento')} className={SEG(ambito === 'mantenimiento')}>Jugador nuestro</button>
-              <button type="button" onClick={() => cambiarAmbito('captacion')} className={SEG(ambito === 'captacion')}>Jugador de Captación</button>
-            </div>}
-            {ambito !== 'general' && (elegido ? (
-              <div className={`flex items-center gap-2 px-3 py-2 border rounded-lg ${ambito === 'captacion' ? 'border-emerald-300 bg-emerald-50' : 'border-blue-300 bg-blue-50'}`}>
-                <span className="flex-1 text-xs font-medium text-slate-800 truncate">{elegido}</span>
-                {!jugadorFijo && <button type="button" onClick={() => { setPlayerId(''); setScoutingPlayerId('') }} aria-label="Quitar jugador" className="text-slate-500 hover:text-slate-700 leading-none text-sm">×</button>}
+            <label className="text-xs font-medium text-slate-600">
+              {etiquetaSujeto}
+              {meta?.jugador === 'si' ? <span className="text-red-500"> *</span> : <span className="text-slate-400 font-normal"> (opcional)</span>}
+            </label>
+            {sujeto && nombreSujeto ? (
+              <div className={`flex items-center gap-2 px-3 py-2 border rounded-lg ${sujeto.kind === 'captacion' ? 'border-emerald-300 bg-emerald-50' : sujeto.kind === 'ofrecimiento' ? 'border-amber-300 bg-amber-50' : 'border-blue-300 bg-blue-50'}`}>
+                <span className="flex-1 min-w-0 text-xs font-medium text-slate-800 truncate">
+                  {nombreSujeto}{extraSujeto ? <span className="text-slate-500 font-normal"> · {extraSujeto}</span> : null}
+                </span>
+                <span className={`flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded border ${BADGE[sujeto.kind].cls}`}>{BADGE[sujeto.kind].txt}</span>
+                {!jugadorFijo && <button type="button" onClick={() => elegirSujeto(null)} aria-label="Quitar" className="text-slate-500 hover:text-slate-700 leading-none text-sm">×</button>}
+              </div>
+            ) : nuevo ? (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-2.5 space-y-2">
+                <p className="text-[11px] text-emerald-800 font-medium">Nuevo jugador de Captación</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <input autoFocus value={nuevo.nombre} onChange={e => setNuevo({ ...nuevo, nombre: e.target.value })} placeholder="Nombre" className={CAMPO} />
+                  <input value={nuevo.equipo} onChange={e => setNuevo({ ...nuevo, equipo: e.target.value })} placeholder="Equipo (opcional)" className={CAMPO} />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button type="button" onClick={() => setNuevo(null)} className="px-2.5 py-1.5 text-[11px] text-slate-500 hover:text-slate-700">Cancelar</button>
+                  <button type="button" onClick={() => void crearJugadorScouting()} disabled={!nuevo.nombre.trim() || creando}
+                    className="px-3 py-1.5 text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg disabled:opacity-50">
+                    {creando ? 'Creando…' : 'Crear y usar'}
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="relative">
-                <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar jugador…" className={CAMPO} />
-                {sugeridos.length > 0 && (
-                  <div className="absolute left-0 top-full mt-1 z-20 w-full bg-white border border-slate-200 rounded-xl shadow-lg py-1 max-h-48 overflow-y-auto">
-                    {sugeridos.map(p => (
-                      <button key={p.id} type="button"
-                        onMouseDown={e => { e.preventDefault(); if (ambito === 'mantenimiento') setPlayerId(p.id); else setScoutingPlayerId(p.id); setQ('') }}
-                        className="w-full text-left flex items-center justify-between gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50">
-                        <span className="truncate">{p.nombre}</span>
-                        {p.extra && <span className="text-slate-400 truncate">{p.extra}</span>}
+                <input value={q} onChange={e => setQ(e.target.value)} placeholder={placeholderBuscar} className={CAMPO} />
+                {(sugeridos.length > 0 || (puedeCrearScouting && nq.length >= 2)) && (
+                  <div className="absolute left-0 top-full mt-1 z-20 w-full bg-white border border-slate-200 rounded-xl shadow-lg py-1 max-h-56 overflow-y-auto">
+                    {sugeridos.map(({ s, nombre, extra }) => (
+                      <button key={`${s.kind}:${s.id}`} type="button"
+                        onMouseDown={e => { e.preventDefault(); elegirSujeto(s, nombre) }}
+                        className="w-full text-left flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50">
+                        <span className="flex-1 min-w-0 truncate">{nombre}{extra && <span className="text-slate-400"> · {extra}</span>}</span>
+                        {sujetosPermitidos.length > 1 && <span className={`flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded border ${BADGE[s.kind].cls}`}>{BADGE[s.kind].txt}</span>}
                       </button>
                     ))}
+                    {puedeCrearScouting && nq.length >= 2 && (
+                      <button type="button" onMouseDown={e => { e.preventDefault(); setNuevo({ nombre: q.trim(), equipo: '' }) }}
+                        className="w-full text-left flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 border-t border-slate-100">
+                        <Plus className="w-3 h-3" /> «{q.trim()}» no está: añadirlo a Captación
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
-            ))}
-            {ambito === 'mantenimiento' && jugador && (
-              <p className="text-[11px] text-slate-400">Sale en su ficha, y sus encargados quedan como adjuntos.</p>
             )}
-            {ambito === 'captacion' && jugadorScouting && (
+            {jugador && !jugadorFijo && <p className="text-[11px] text-slate-400">Sale en su ficha, y sus encargados quedan como adjuntos.</p>}
+            {jugadorScouting && (
               <p className={`text-[11px] ${pipeline ? 'text-violet-600' : 'text-slate-400'}`}>
                 {pipeline ? `Está en el pipeline (${pipeline}): la tarea queda apuntada también en el historial de su tarjeta de Firmar.` : 'Queda ligada a su ficha de Captación.'}
               </p>
             )}
-            {faltaJugador && (
-              <p className="text-[11px] text-red-600">Una tarea de tipo {label} necesita jugador: al completarla deja algo en su ficha.</p>
-            )}
-            {!faltaJugador && meta?.jugador === 'recomendado' && sinJugador && (
+            {ofrecido && <p className="text-[11px] text-slate-400">Al completarla se abrirá el ofrecimiento para registrar el informe.</p>}
+            {faltaSujeto && <p className="text-[11px] text-red-600">Una tarea de tipo {label} necesita jugador: al completarla deja algo en su ficha.</p>}
+            {!faltaSujeto && meta?.jugador === 'recomendado' && sinSujeto && (
               <p className="text-[11px] text-amber-600">Sin jugador, al completarla quedará solo en el calendario, no en ninguna ficha.</p>
             )}
           </div>
 
+          {/* 3. Qué hay que hacer: se rellena solo con tipo y jugador */}
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-600">Qué hay que hacer</label>
+            <input value={title} onChange={e => { setTitle(e.target.value); setTituloTocado(e.target.value.trim() !== '') }}
+              placeholder={label ? 'Se rellena al elegir con quién' : 'Ej. Enviar propuesta al padre'} className={CAMPO} />
+          </div>
+
+          {/* 4. Quién y cuándo */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-medium text-slate-600">Quién la hace</label>
@@ -187,71 +319,69 @@ export function TareaModal({ profiles, players, scoutingPlayers, currentProfileI
                 {profiles.map(m => <option key={m.id} value={m.id}>{m.avatar} {m.name}</option>)}
               </select>
             </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Para cuándo</label>
-              <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={CAMPO} />
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5 flex-wrap -mt-1">
-            {([['Hoy', hoy], ['Mañana', sumarDias(hoy, 1)], ['Esta semana', viernesSemana(hoy)], ['Próxima semana', lunesSiguiente(hoy)], ['Algún día', '']] as const).map(([txt, f]) => (
-              <button key={txt} type="button" onClick={() => setDueDate(f)}
-                title={txt === 'Algún día' ? 'Sin fecha: va a la bandeja, no sale en Mi día ni en el calendario' : txt === 'Esta semana' ? 'El viernes' : undefined}
-                className={`text-[11px] px-2 py-0.5 rounded border transition-colors ${dueDate === f ? 'border-primary text-primary bg-blue-50 font-semibold' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>
-                {txt}
-              </button>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Tipo</label>
-              <select value={label} onChange={e => cambiarTipo(e.target.value as TaskLabel | '')} className={CAMPO}>
-                <option value="">— Sin tipo —</option>
-                {TASK_LABELS.map(l => <option key={l} value={l}>{l}</option>)}
-              </select>
-            </div>
-            {subtipos.length > 0 && (
-              <div className="space-y-1 col-span-2">
-                <label className="text-xs font-medium text-slate-600">
-                  {label === 'Negociación' ? 'De qué va' : label === 'Informe' ? 'Qué informe' : label === 'Videoanálisis' ? 'Qué servicio' : 'Cuál'}
-                </label>
-                <select value={subtipo} onChange={e => setSubtipo(e.target.value)} className={CAMPO}>
-                  <option value="">— Elegir —</option>
-                  {subtipos.map(s => <option key={s} value={s}>{etiquetaSubtipo(s)}</option>)}
-                </select>
+            {!esProceso && (
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Para cuándo</label>
+                <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={CAMPO} />
               </div>
             )}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Prioridad</label>
-              <select value={alta ? 'alta' : 'normal'} onChange={e => setAlta(e.target.value === 'alta')} className={CAMPO}>
-                <option value="normal">Normal</option>
-                <option value="alta">Alta</option>
-              </select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Repetir</label>
-              <select value={recurrence} onChange={e => setRecurrence(e.target.value as Recurrencia | '')} className={CAMPO}
-                title="Al completarla se crea la siguiente con la fecha que toque">
-                <option value="">No</option>
-                {RECURRENCIAS.map(r => <option key={r} value={r}>{RECURRENCIA_LABEL[r]}</option>)}
-              </select>
-            </div>
           </div>
+          {!esProceso && (
+            <div className="flex items-center gap-1.5 flex-wrap -mt-1">
+              {([['Hoy', hoy], ['Mañana', sumarDias(hoy, 1)], ['Esta semana', viernesSemana(hoy)], ['Próxima semana', lunesSiguiente(hoy)], ['Algún día', '']] as const).map(([txt, f]) => (
+                <button key={txt} type="button" onClick={() => setDueDate(f)}
+                  title={txt === 'Algún día' ? 'Sin fecha: va a la bandeja, no sale en Mi día ni en el calendario' : txt === 'Esta semana' ? 'El viernes' : undefined}
+                  className={`text-[11px] px-2 py-0.5 rounded border transition-colors ${dueDate === f ? 'border-primary text-primary bg-blue-50 font-semibold' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>
+                  {txt}
+                </button>
+              ))}
+            </div>
+          )}
 
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-600">Detalles <span className="text-slate-400 font-normal">(opcional)</span></label>
-            <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} className={`${CAMPO} resize-none`} />
-          </div>
-          <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-slate-600">
-            <input type="checkbox" checked={adminOnly} onChange={e => setAdminOnly(e.target.checked)} className="w-3.5 h-3.5 rounded" />
-            Solo para admins
-          </label>
+          {/* 5. Lo secundario, plegado */}
+          <button type="button" onClick={() => setMas(v => !v)} className="text-[11px] font-semibold text-slate-500 hover:text-slate-700">
+            {mas ? '− Menos opciones' : '+ Más opciones'}{!mas && <span className="font-normal text-slate-400"> (prioridad, repetir, detalles, solo admins)</span>}
+          </button>
+          {mas && (
+            <div className="space-y-3 border-t border-slate-100 pt-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-600">Prioridad</label>
+                  <select value={alta ? 'alta' : 'normal'} onChange={e => setAlta(e.target.value === 'alta')} className={CAMPO}>
+                    <option value="normal">Normal</option>
+                    <option value="alta">Alta</option>
+                  </select>
+                </div>
+                {!esProceso && (
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-600">Repetir</label>
+                    <select value={recurrence} onChange={e => setRecurrence(e.target.value as Recurrencia | '')} className={CAMPO}
+                      title="Al completarla se crea la siguiente con la fecha que toque">
+                      <option value="">No</option>
+                      {RECURRENCIAS.map(r => <option key={r} value={r}>{RECURRENCIA_LABEL[r]}</option>)}
+                    </select>
+                  </div>
+                )}
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Detalles</label>
+                <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} className={`${CAMPO} resize-none`} />
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-slate-600">
+                <input type="checkbox" checked={adminOnly} onChange={e => setAdminOnly(e.target.checked)} className="w-3.5 h-3.5 rounded" />
+                Solo para admins
+              </label>
+            </div>
+          )}
+
+          {/* 6. Qué pasará al completarla */}
+          {pie && <p className="text-[11px] text-slate-400 border-t border-slate-100 pt-2">{pie}</p>}
 
           <div className="flex gap-2 pt-1 safe-area-bottom">
             <button type="button" onClick={onClose} className="flex-1 py-2.5 sm:py-2 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">Cancelar</button>
-            <button type="submit" disabled={!title.trim() || guardando || faltaJugador}
+            <button type="submit" disabled={!title.trim() || guardando || faltaSujeto}
               className="flex-1 py-2.5 sm:py-2 text-xs rounded-lg text-white disabled:opacity-50 transition-colors bg-primary hover:bg-primary/90">
-              {guardando ? 'Creando…' : 'Crear tarea'}
+              {guardando ? 'Creando…' : esProceso ? 'Abrir negociación' : 'Crear tarea'}
             </button>
           </div>
         </form>

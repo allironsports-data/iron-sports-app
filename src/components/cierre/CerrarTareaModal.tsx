@@ -63,7 +63,7 @@ export function CerrarTareaModal({ task, tipo, conQuien, profiles, currentProfil
   // Informe de Captación: el subtipo elegido al crear la tarea es el resultado por defecto
   const subtipoInicial = subtipoValido(task.label, task.subtipo)
   const [resultado, setResultado] = useState<string | undefined>(
-    tipo.tipo === 'informe-captacion' ? (subtipoInicial && subtipoInicial !== 'datos' ? subtipoInicial : 'tecnico') : undefined,
+    tipo.tipo === 'informe-captacion' || tipo.tipo === 'informe-ofrecido' ? (subtipoInicial && subtipoInicial !== 'datos' ? subtipoInicial : 'tecnico') : undefined,
   )
   const [nota, setNota] = useState('')
   const [enlace, setEnlace] = useState('')
@@ -86,6 +86,7 @@ export function CerrarTareaModal({ task, tipo, conQuien, profiles, currentProfil
     visita: 'Hecha. ¿Qué salió?',
     informe: 'Hecha. ¿Se le ha enviado el informe?',
     'informe-captacion': 'Hecha. ¿Qué informe toca escribir?',
+    'informe-ofrecido': 'Hecha. ¿Qué informe es?',
     video: 'Hecha. ¿Qué se le ha hecho?',
     postpartido: 'Completar postpartido',
     negociacion: 'Negociación cerrada. ¿Cómo ha quedado?',
@@ -95,7 +96,7 @@ export function CerrarTareaModal({ task, tipo, conQuien, profiles, currentProfil
 
   const notaObligatoria =
     (k === 'reunion' && resultado !== 'no_celebrada') || k === 'visita'
-  const resultadoObligatorio = k === 'llamada' || k === 'reunion' || k === 'negociacion' || k === 'scouting' || k === 'informe-captacion'
+  const resultadoObligatorio = k === 'llamada' || k === 'reunion' || k === 'negociacion' || k === 'scouting' || k === 'informe-captacion' || k === 'informe-ofrecido'
   const valido =
     !ocupado &&
     (!resultadoObligatorio || !!resultado) &&
@@ -163,6 +164,7 @@ export function CerrarTareaModal({ task, tipo, conQuien, profiles, currentProfil
     visita: 'Recap: qué salió y qué se acordó',
     informe: 'Qué contenía, cómo se le envió… (opcional)',
     'informe-captacion': 'Nota para quien lo lea (opcional)',
+    'informe-ofrecido': 'Nota para quien lo lea (opcional)',
     video: 'Qué se trabajó (opcional)',
     postpartido: 'Nota (opcional)',
     negociacion: 'Condiciones, por qué, qué queda pendiente… (opcional)',
@@ -176,6 +178,7 @@ export function CerrarTareaModal({ task, tipo, conQuien, profiles, currentProfil
     visita: `Queda registrada en el calendario${conQuien ? ` y en la ficha de ${conQuien}` : ''}.`,
     informe: conQuien ? `Con enlace, queda en la ficha de ${conQuien} (Rendimiento → Análisis) como «Informe de datos».` : undefined,
     'informe-captacion': `Al completar se abre la ficha de ${conQuien ?? 'Captación'} con el formulario del informe listo para escribirlo.`,
+    'informe-ofrecido': 'Al completar se abre el ofrecimiento para registrar ahí el informe.',
     video: conQuien ? `Queda en la ficha de ${conQuien}, en Rendimiento → Análisis.` : undefined,
     postpartido: 'El link quedará visible en la lista y en la ficha del jugador (Rendimiento → Postpartidos).',
     negociacion: conQuien ? `El resultado queda en la actividad de ${conQuien}.` : undefined,
@@ -214,7 +217,7 @@ export function CerrarTareaModal({ task, tipo, conQuien, profiles, currentProfil
               ))}
             </div>
           )}
-          {k === 'informe-captacion' && (
+          {(k === 'informe-captacion' || k === 'informe-ofrecido') && (
             <Chips opciones={SUBTIPOS_INFORME.filter(s => s !== 'datos')} valor={resultado as typeof SUBTIPOS_INFORME[number] | undefined} onChange={setResultado} />
           )}
           {k === 'negociacion' && <Chips opciones={RESULTADOS_NEGOCIACION} valor={resultado as typeof RESULTADOS_NEGOCIACION[number] | undefined} onChange={setResultado} />}
@@ -291,7 +294,7 @@ export function CerrarTareaModal({ task, tipo, conQuien, profiles, currentProfil
             </button>
             <button onClick={() => void guardar()} disabled={!valido}
               className="flex-1 py-2.5 sm:py-2 text-xs font-semibold rounded-lg text-white bg-primary hover:bg-primary/90 transition-colors disabled:opacity-50">
-              {ocupado ? 'Guardando…' : k === 'nota' ? 'Completar' : k === 'informe-captacion' ? 'Completar y escribir el informe' : 'Completar y registrar'}
+              {ocupado ? 'Guardando…' : k === 'nota' ? 'Completar' : k === 'informe-captacion' ? 'Completar y escribir el informe' : k === 'informe-ofrecido' ? 'Completar y abrir el ofrecimiento' : 'Completar y registrar'}
             </button>
           </div>
         </div>

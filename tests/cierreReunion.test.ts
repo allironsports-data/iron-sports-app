@@ -16,14 +16,16 @@ const tarjeta = (o: Partial<FirmasEntry> = {}): FirmasEntry => ({
 })
 
 describe('qué reuniones se cierran', () => {
-  it('reuniones, visitas, citas con jugador de Captación sí; partidos, viajes, llamadas y sin jugador no', () => {
+  it('reuniones, visitas, citas sí (con quien sea); partidos, viajes y llamadas no', () => {
     expect(esReunionCerrable(evento())).toBe(true)
     expect(esReunionCerrable(evento({ tipo: 'Reunión' }))).toBe(true)
     expect(esReunionCerrable(evento({ tipo: 'Videollamada' }))).toBe(true)
+    expect(esReunionCerrable(evento({ tipo: 'Comida' }))).toBe(true)
     expect(esReunionCerrable(evento({ tipo: 'Partido' }))).toBe(false)
     expect(esReunionCerrable(evento({ tipo: 'Viaje' }))).toBe(false)
     expect(esReunionCerrable(evento({ tipo: 'Llamada' }))).toBe(false)
-    expect(esReunionCerrable(evento({ scoutingPlayerId: undefined }))).toBe(false)
+    // Sin jugador de Captación también: con jugador nuestro el recap va a su ficha; sin nadie, al evento
+    expect(esReunionCerrable(evento({ scoutingPlayerId: undefined }))).toBe(true)
   })
   it('pasada: ayer sí; hoy solo con hora ya pasada; mañana no', () => {
     expect(reunionPasada({ fecha: '2026-10-07' }, HOY)).toBe(true)

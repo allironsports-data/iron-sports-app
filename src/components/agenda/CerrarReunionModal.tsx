@@ -241,7 +241,7 @@ export function CerrarReunionModal({ evento, tarjeta, playerName, profiles, curr
             />
           ) : (
             <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-              {playerName} no está en el pipeline de Firmar: el recap queda en el evento, pero no hay tarjeta donde apuntar el siguiente paso.
+              {playerName} no está en el pipeline de Firmar: el recap queda en el evento (y en la actividad del jugador si es nuestro); el siguiente paso se crea como tarea aparte.
             </p>
           )}
 

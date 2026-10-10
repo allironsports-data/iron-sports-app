@@ -1966,6 +1966,7 @@ export default function App() {
           onUpdatePostpartido={handleUpdatePostpartido}
           onScoutingPlayerActualizado={handleUpdateScoutingPlayer}
           onAbrirInformeScouting={(id, informe) => setFlotante({ tipo: 'scouting', id, informe })}
+          onAbrirOfrecido={irAOfrecido}
         />
       )}
       {/* Con una ficha flotante abierta el botón se quita: tapaba el pie del panel */}
@@ -2606,6 +2607,8 @@ export default function App() {
         onActualizarProceso={handleActualizarProceso}
         onNotaTarea={anotarNotaTarea}
         onOpenOfrecido={irAOfrecido}
+        ofrecimientos={ofrecimientos}
+        onCreateScoutingPlayer={async (datos) => { const saved = await db.createScoutingPlayer(datos); handleAddScoutingPlayer(saved); return saved }}
         eventos={eventos}
         setEventos={setEventos}
         onAddMatchScout={handleAddMatchScout}

@@ -10,7 +10,7 @@ import { useEscapeKey } from "../hooks/useEscapeKey";
 import { useAtras } from "../hooks/useAtras";
 import { isValidName, isValidBirthDate } from "../lib/validate";
 import logoImg from '../assets/logo.jpeg';
-import type { Player, Task, PlayerActivity, ScoutingMatch, ScoutingMatchScout, ScoutingPlayer, MemberStatus, Postpartido, FirmasEntry, AgendaEvento } from "../types";
+import type { Player, Task, PlayerActivity, ScoutingMatch, ScoutingMatchScout, ScoutingPlayer, MemberStatus, Postpartido, FirmasEntry, AgendaEvento, Ofrecimiento } from "../types";
 import { calcAge, clubsLabel, PLAYER_ESTADOS } from "../types";
 import { fechaLocal, hoyISO, lunesDe, esVencida, parseDia, sumarDias } from "../lib/fechas";
 import { construirAgenda, estaArchivada, type AgendaItem, type AgendaEstado } from "../lib/agendaItems";
@@ -77,6 +77,10 @@ interface Props {
   onNotaTarea?: (taskId: string, iso: string) => void;
   /** Abre la ficha de un ofrecimiento (Captación → Ofrecidos) */
   onOpenOfrecido?: (ofrecimientoId: string) => void;
+  /** Ofrecimientos, para tareas Informe sobre un jugador ofrecido */
+  ofrecimientos?: Ofrecimiento[];
+  /** Alta rápida de un jugador de Captación desde el formulario de tarea */
+  onCreateScoutingPlayer?: (p: { fullName: string; team?: string }) => Promise<ScoutingPlayer>;
   /** Eventos de agenda: los carga App (y los refresca por realtime); aquí se crean, editan y cierran */
   eventos: AgendaEvento[];
   setEventos: Dispatch<SetStateAction<AgendaEvento[]>>;
@@ -171,6 +175,8 @@ export function Dashboard({
   onActualizarProceso,
   onNotaTarea,
   onOpenOfrecido,
+  ofrecimientos,
+  onCreateScoutingPlayer,
   eventos,
   setEventos,
   onAddMatchScout,
@@ -2925,9 +2931,15 @@ export function Dashboard({
 
       {showAddGeneralTask && onAddGeneralTask && (
         <TareaModal
-          profiles={profiles} players={players} scoutingPlayers={scoutingPlayers} currentProfileId={currentProfile.id}
+          profiles={profiles} players={players} scoutingPlayers={scoutingPlayers} ofrecimientos={ofrecimientos} currentProfileId={currentProfile.id}
           inicial={tareaInicial}
           estatusPipeline={(id) => tarjetaDe(id)?.status}
+          onCreateScoutingPlayer={onCreateScoutingPlayer}
+          // Reunión y Comida/Visita son eventos: se pasa al formulario de evento con ese tipo
+          onEvento={(tipo) => {
+            setShowAddGeneralTask(false);
+            openAddEvent({ tipo, fecha: tareaInicial.dueDate || hoyISO(), participantIds: [tareaInicial.assigneeId ?? currentProfile.id] });
+          }}
           // Tarea y evento comparten ventana: arriba se elige cuál es
           cabecera={<TipoNuevo valor="tarea" onCambiar={() => {
             setShowAddGeneralTask(false);

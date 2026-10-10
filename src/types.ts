@@ -100,6 +100,8 @@ export interface Task {
   cierre?: TaskCierre;
   /** Subtipo según el tipo (lib/tiposTarea.ts): renovación, informe de partido, sesión… Opcional hasta migrar. */
   subtipo?: string;
+  /** Ofrecimiento al que se refiere (tareas Informe sobre un jugador ofrecido). Opcional hasta migrar. */
+  ofrecimientoId?: string;
 }
 
 // ---- Contracts ----

@@ -521,7 +521,7 @@ export async function assignManagerToPlayers(playerIds: string[], managerId: str
 // y si la base la rechaza (42703), se guarda la tarea sin ella.
 // Lo mismo vale para tasks.scouting_player_id (migration_tasks_scouting_player.sql)
 // y para el cierre (migration_tasks_cierre.sql: cierre_resultado, cierre_nota, cierre_ref).
-const COLUMNAS_OPCIONALES_TAREA = ['recurrence', 'scouting_player_id', 'cierre_resultado', 'cierre_nota', 'cierre_ref', 'subtipo'] as const
+const COLUMNAS_OPCIONALES_TAREA = ['recurrence', 'scouting_player_id', 'cierre_resultado', 'cierre_nota', 'cierre_ref', 'subtipo', 'ofrecimiento_id'] as const
 const columnasTarea = new Set<string>()
 
 /** Etiquetas renombradas: las filas antiguas se leen ya con el nombre nuevo */
@@ -560,6 +560,7 @@ function dbToTask(row: Record<string, unknown>): Task {
     scoutingPlayerId: (row.scouting_player_id as string) ?? undefined,
     cierre: cierreDeFila(row),
     subtipo: (row.subtipo as string) ?? undefined,
+    ofrecimientoId: (row.ofrecimiento_id as string) ?? undefined,
   }
 }
 
@@ -584,6 +585,7 @@ function taskToDb(t: Task): Record<string, unknown> {
     cierre_resultado: t.cierre?.resultado, cierre_nota: t.cierre?.nota,
     cierre_ref: t.cierre?.ref && Object.keys(t.cierre.ref).length > 0 ? t.cierre.ref : undefined,
     subtipo: t.subtipo,
+    ofrecimiento_id: t.ofrecimientoId,
   }
   for (const c of COLUMNAS_OPCIONALES_TAREA) {
     if (columnasTarea.has(c) || opcionales[c]) fila[c] = opcionales[c] ?? null
@@ -593,7 +595,7 @@ function taskToDb(t: Task): Record<string, unknown> {
 
 function faltaColumnaRecurrence(error: unknown, fila: Record<string, unknown>): boolean {
   if (!esColumnaInexistente(error) || !COLUMNAS_OPCIONALES_TAREA.some(c => c in fila)) return false
-  console.warn('[db] a tasks le falta alguna columna (recurrence, scouting_player_id, cierre_*, subtipo): se guarda sin ellas. Ejecuta migration_tasks_recurrence.sql, migration_tasks_scouting_player.sql y migration_tasks_cierre.sql')
+  console.warn('[db] a tasks le falta alguna columna (recurrence, scouting_player_id, cierre_*, subtipo, ofrecimiento_id): se guarda sin ellas. Ejecuta migration_tasks_recurrence.sql, migration_tasks_scouting_player.sql y migration_tasks_cierre.sql')
   for (const c of COLUMNAS_OPCIONALES_TAREA) { columnasTarea.delete(c); delete fila[c] }
   return true
 }

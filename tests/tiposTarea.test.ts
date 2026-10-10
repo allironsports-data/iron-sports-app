@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   metaTipo, familiaDe, subtiposDe, subtipoValido, completadasPorTipo, textoCompletadasPorTipo, etiquetaSubtipo, esTipo,
+  tituloAuto, queHaraAlCerrar, EVENTO_EN_VEZ_DE_TAREA,
 } from '../src/lib/tiposTarea'
 import { TASK_LABELS } from '../src/types'
 
@@ -11,20 +12,46 @@ describe('metadatos por tipo', () => {
     expect(familiaDe('Inventado')).toBe('generica')
     expect(metaTipo('Llamada').familia).toBe('contacto')
     expect(metaTipo('Videoanálisis')).toMatchObject({ familia: 'entregable', jugador: 'si' })
-    expect(metaTipo('Negociación')).toMatchObject({ familia: 'proceso', jugador: 'no' })
+    expect(metaTipo('Negociación')).toMatchObject({ familia: 'proceso', jugador: 'si', subtipoLibre: true })
   })
   it('subtipos: Negociación, Informe, Comida/Visita y Videoanálisis los tienen; el resto no', () => {
-    expect(subtiposDe('Negociación')).toContain('renovacion')
+    expect(subtiposDe('Negociación')).toEqual([])
+    expect(metaTipo('Negociación').subtipoLibre).toBe(true)
+    expect(subtiposDe('Scouting')).toEqual(['seguir', 'ver_partido', 'info'])
     expect(subtiposDe('Informe')).toEqual(['datos', 'tecnico', 'entorno', 'mercado', 'personalidad'])
     expect(subtiposDe('Videoanálisis')).toEqual(['sesion', 'video', 'recurso', 'entrenamiento'])
     expect(subtiposDe('Llamada')).toEqual([])
-    expect(subtipoValido('Negociación', 'renovacion')).toBe('renovacion')
+    expect(subtipoValido('Negociación', ' renovación 2 años ')).toBe('renovación 2 años')   // texto libre
+    expect(subtipoValido('Negociación', '  ')).toBeUndefined()
+    expect(subtipoValido('Scouting', 'ver_partido')).toBe('ver_partido')
     expect(subtipoValido('Llamada', 'renovacion')).toBeUndefined()
     expect(subtipoValido('Negociación', undefined)).toBeUndefined()
     expect(etiquetaSubtipo('traspaso')).toBe('Traspaso / cesión')
     expect(etiquetaSubtipo('sesion')).toBe('Sesión de videoanálisis')
     expect(esTipo('Llamada')).toBe(true)
     expect(esTipo('General')).toBe(false)
+  })
+})
+
+describe('al crear: título automático y qué pasará', () => {
+  it('el título sale del tipo, el sujeto y el subtipo', () => {
+    expect(tituloAuto('Llamada', 'Perico')).toBe('Llamar a Perico')
+    expect(tituloAuto('Llamada')).toBe('')
+    expect(tituloAuto('Informe', 'Joshua', 'tecnico')).toBe('Informe de partido · Joshua')
+    expect(tituloAuto('Informe', 'Joshua')).toBe('Informe · Joshua')
+    expect(tituloAuto('Videoanálisis', 'Perico', 'sesion')).toBe('Sesión de videoanálisis · Perico')
+    expect(tituloAuto('Negociación', 'Perico', 'renovación')).toBe('Negociación renovación · Perico')
+    expect(tituloAuto('Scouting', 'Joshua', 'ver_partido')).toBe('Ver partido de Joshua')
+    expect(tituloAuto('Scouting', 'Joshua')).toBe('Seguir a Joshua')
+    expect(tituloAuto('Administrativa', 'Perico')).toBe('')
+  })
+  it('Reunión y Comida/Visita se crean como evento; el pie cuenta qué pasará al cerrar', () => {
+    expect(EVENTO_EN_VEZ_DE_TAREA['Reunión']).toBe('Reunión')
+    expect(EVENTO_EN_VEZ_DE_TAREA['Comida/Visita']).toBe('Visita presencial')
+    expect(EVENTO_EN_VEZ_DE_TAREA['Llamada']).toBeUndefined()
+    expect(queHaraAlCerrar('Llamada', 'Perico')).toContain('ficha de Perico')
+    expect(queHaraAlCerrar('Negociación')).toContain('proceso')
+    expect(queHaraAlCerrar(undefined)).toBeUndefined()
   })
 })
 
