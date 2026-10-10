@@ -8,6 +8,7 @@ import { apunteDeEvento } from './views/captacion/firmas/cierreReunion'
 import { idApunteEvento } from './lib/reuniones'
 import { leerCopia, guardarCopia, limpiarCopias } from './lib/cacheLocal'
 import * as db from './lib/db'
+import { CierreTareaHost, type CierrePendiente } from './components/cierre/CierreTareaHost'
 import { supabase } from './lib/supabase'
 import type { Profile } from './contexts/AuthContext'
 import { LoginScreen } from './views/LoginScreen'
@@ -231,6 +232,8 @@ export default function App() {
   // Ficha flotante abierta encima de la pantalla actual (partido, tarjeta de
   // Firmar o jugador de Captación): se abre sin sacar al usuario de donde está.
   const [flotante, setFlotante] = useState<{ tipo: 'partido' | 'firmar' | 'scouting'; id: string } | null>(null)
+  // Cierre de tarea (o de una llamada/reunión del pipeline) en marcha: lo pinta CierreTareaHost encima de todo
+  const [cierrePendiente, setCierrePendiente] = useState<CierrePendiente | null>(null)
 
   // Captación state
   const [scoutingPlayers, setScoutingPlayers] = useState<ScoutingPlayer[]>([])
@@ -1240,10 +1243,28 @@ export default function App() {
     return saved
   }
 
-  const handleUpdateTask = async (updated: Task) => {
+  /**
+   * ÚNICO camino para completar una tarea. Si pasa a «completada», en vez de
+   * guardarla se abre su cierre (CierreTareaHost): la app pregunta qué pasó
+   * según el tipo y es el cierre quien la guarda, con lo que dejó. Devuelve
+   * false en ese caso (la vista no debe dar la tarea por hecha todavía).
+   * Cualquier otro cambio se guarda tal cual.
+   */
+  const handleUpdateTask = async (updated: Task): Promise<boolean> => {
+    const previous = tasksRef.current.find((t) => t.id === updated.id)
+    if (updated.status === 'completada' && previous?.status !== 'completada') {
+      setCierrePendiente({ tipo: 'tarea', task: updated })
+      return false
+    }
+    await guardarTareaDirecta(updated)
+    return true
+  }
+
+  /** Escribe la tarea tal cual. Solo para App y el cierre: las vistas usan handleUpdateTask. */
+  const guardarTareaDirecta = async (updated: Task) => {
     // completedAt se gestiona centralmente: se fija al pasar a "completada"
     // y se limpia si la tarea se reabre.
-    const previous = tasks.find((t) => t.id === updated.id)
+    const previous = tasksRef.current.find((t) => t.id === updated.id)
     const withCompleted: Task = updated.status === 'completada'
       ? { ...updated, completedAt: updated.completedAt ?? previous?.completedAt ?? new Date().toISOString() }
       : { ...updated, completedAt: undefined }
@@ -1273,7 +1294,7 @@ export default function App() {
       if (fe && profile) {
         const log = {
           id: crypto.randomUUID(),
-          text: `✓ Hecho: ${fe.nextAction ?? 'próxima acción'}`,
+          text: `✓ Hecho: ${fe.nextAction ?? 'próxima acción'}${withCompleted.cierre?.nota ? ` — ${withCompleted.cierre.nota}` : ''}`,
           date: new Date().toISOString(),
           author: profile.name,
           authorId: profile.id,
@@ -1586,7 +1607,7 @@ export default function App() {
       if (has && (changed || !existing)) {
         const draft = firmasActionTaskDraft(next)
         if (existing) {
-          await handleUpdateTask({
+          await guardarTareaDirecta({
             ...existing,
             title: draft.title,
             description: draft.description,
@@ -1602,7 +1623,7 @@ export default function App() {
       }
       if (!has && had && existing && existing.status !== 'completada') {
         // acción hecha o retirada desde Firmar → la tarea se completa
-        await handleUpdateTask({ ...existing, status: 'completada' })
+        await guardarTareaDirecta({ ...existing, status: 'completada' })
         return { ...next, nextActionTaskId: undefined }
       }
       if (!has && taskId) return { ...next, nextActionTaskId: undefined }
@@ -1925,6 +1946,27 @@ export default function App() {
     <>
       {node}
       {flotanteNode}
+      {profile && (
+        <CierreTareaHost
+          pendiente={cierrePendiente}
+          onCerrar={() => setCierrePendiente(null)}
+          tasks={tasks}
+          players={players}
+          scoutingPlayers={scoutingPlayers}
+          profiles={profiles}
+          currentProfile={profile}
+          firmasEntries={firmasEntries}
+          eventos={eventos}
+          setEventos={setEventos}
+          postpartidos={postpartidos}
+          guardarTarea={guardarTareaDirecta}
+          crearTarea={handleAddTask}
+          onPatchFirmasEntry={handlePatchFirmasEntry}
+          onUpdatePlayer={handleUpdatePlayer}
+          onUpdatePostpartido={handleUpdatePostpartido}
+          onScoutingPlayerActualizado={handleUpdateScoutingPlayer}
+        />
+      )}
       {/* Con una ficha flotante abierta el botón se quita: tapaba el pie del panel */}
       {!flotante && planificacionFab}
       <SavingIndicator />
@@ -2529,7 +2571,6 @@ export default function App() {
         onSelectPlayer={(id) => navigateToPlayer(id, false)}
         onLogout={signOut}
         onAddPlayer={handleAddPlayer}
-        onUpdatePlayer={handleUpdatePlayer}
         onAdmin={profile.is_admin ? abrirAdmin : undefined}
         onBulkDelete={profile.is_admin ? handleBulkDelete : undefined}
         onBulkAssignManager={profile.is_admin ? handleBulkAssignManager : undefined}
@@ -2553,6 +2594,7 @@ export default function App() {
         firmasEntries={firmasEntries}
         onOpenFirmar={(id) => setFlotante({ tipo: 'firmar', id })}
         onPatchFirmasEntry={handlePatchFirmasEntry}
+        onCerrarPipeline={setCierrePendiente}
         matchScouts={matchScouts}
         scoutingPlayers={scoutingPlayers}
         onOpenSearch={() => setSearchOpen(true)}

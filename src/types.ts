@@ -37,16 +37,43 @@ export interface TaskComment {
   attachments: TaskAttachment[];
 }
 
-/** Tipos de tarea. ÚNICA lista: los <select> de tipo deben iterar TASK_LABELS, no copiarla. */
-export const TASK_LABELS = ['General', 'Llamada', 'Reunión', 'Visita', 'Scouting', 'Distribución', 'Negociación', 'Administrativa', 'Seguimiento', 'Informe', 'Marketing', 'Comunicación', 'Videoanálisis', 'Postpartido'] as const
+/**
+ * Tipos de tarea. ÚNICA lista: los <select> de tipo deben iterar TASK_LABELS, no copiarla.
+ * Cada tipo tiene su propio cierre (qué se pregunta al completarla y qué deja):
+ * ver lib/cierreTarea.ts. «General» y «Visita» se llaman ahora «Otra» y
+ * «Comida/Visita»; las filas antiguas se leen ya con el nombre nuevo (db.ts).
+ */
+export const TASK_LABELS = ['Otra', 'Llamada', 'Reunión', 'Comida/Visita', 'Scouting', 'Distribución', 'Negociación', 'Administrativa', 'Seguimiento', 'Informe', 'Marketing', 'Comunicación', 'Videoanálisis', 'Postpartido'] as const
 export type TaskLabel = typeof TASK_LABELS[number]
 
 /**
  * Tareas «de contacto»: al completarlas la app pregunta qué pasó y lo deja
- * registrado como evento. A qué tipo de evento corresponde cada una.
+ * registrado como evento. A qué tipo de evento corresponde cada una
+ * (Comida/Visita elige entre «Comida» y «Visita presencial» al cerrar).
  */
 export const EVENTO_DE_TAREA: Partial<Record<TaskLabel, string>> = {
-  'Llamada': 'Llamada', 'Reunión': 'Reunión', 'Visita': 'Visita presencial',
+  'Llamada': 'Llamada', 'Reunión': 'Reunión', 'Comida/Visita': 'Visita presencial',
+}
+
+/**
+ * Cierre de una tarea: lo que se contó al completarla y lo que dejó.
+ * Lo escribe App.completarTarea (único camino para completar); las vistas
+ * nunca ponen status = completada por su cuenta. Ver migration_tasks_cierre.sql.
+ */
+export interface TaskCierre {
+  /** Resultado tipado según el tipo: contesto | no_contesto | celebrada | no_celebrada | acordado | seguir | … */
+  resultado?: string
+  /** Nota de cierre (recap, lo que se acordó, enlace…) */
+  nota?: string
+  /** ids de lo que el cierre dejó, para enlazarlo desde la tarea */
+  ref?: {
+    eventoId?: string
+    activityId?: string
+    videoSessionId?: string
+    postpartidoId?: string
+    /** Tarea creada como siguiente paso */
+    siguienteTaskId?: string
+  }
 }
 
 export interface Task {
@@ -69,6 +96,8 @@ export interface Task {
   scoutingPlayerId?: string;
   /** Se repite: al completarla se crea la siguiente (ver lib/recurrencia.ts). Opcional hasta migrar. */
   recurrence?: 'semanal' | 'mensual';
+  /** Qué pasó al completarla y qué dejó (solo en completadas). Opcional hasta migrar. */
+  cierre?: TaskCierre;
 }
 
 // ---- Contracts ----
@@ -598,6 +627,8 @@ export interface AgendaEvento {
   authorId?: string
   /** id (o group_id) de las filas de player_activities que generó, para no contarlo dos veces */
   activityRef?: string
+  /** Tarea de la que nace (una llamada o reunión que era tarea y se completó). Opcional hasta migrar. */
+  taskId?: string
   /** Cierre de la reunión (migration_agenda_eventos_cierre.sql): qué salió y quién lo apuntó */
   recap?: string
   cerradoAt?: string           // ISO

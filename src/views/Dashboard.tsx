@@ -11,7 +11,7 @@ import { useAtras } from "../hooks/useAtras";
 import { isValidName, isValidBirthDate } from "../lib/validate";
 import logoImg from '../assets/logo.jpeg';
 import type { Player, Task, PlayerActivity, ScoutingMatch, ScoutingMatchScout, ScoutingPlayer, MemberStatus, Postpartido, FirmasEntry, AgendaEvento } from "../types";
-import { calcAge, clubsLabel, PLAYER_ESTADOS, EVENTO_DE_TAREA } from "../types";
+import { calcAge, clubsLabel, PLAYER_ESTADOS } from "../types";
 import { fechaLocal, hoyISO, lunesDe, esVencida, parseDia, sumarDias } from "../lib/fechas";
 import { construirAgenda, estaArchivada, type AgendaItem, type AgendaEstado } from "../lib/agendaItems";
 import type { AltaRapida } from "../lib/altaRapida";
@@ -22,18 +22,16 @@ import { itemEsDe, seccionesDelDia, DIAS_POSTPARTIDO } from "../lib/agendaItems"
 import { resumenSemanal } from "../lib/resumenSemanal";
 import { CalendarioSemanal } from "./CalendarioSemanal";
 import { EventoModal, type EventoBorrador } from "../components/agenda/EventoModal";
-import { CerrarReunionModal } from "../components/agenda/CerrarReunionModal";
-import { CerrarLlamadaModal } from "../components/agenda/CerrarLlamadaModal";
-import { esReunionCerrable, horaActual } from "../lib/reuniones";
-import { apunteDeEvento, aplicarCierreEnTarjeta, aplicarCierreLlamada, conSiguientePaso, esAccionDeLlamada, type DatosCierre, type DatosLlamada } from "./captacion/firmas/cierreReunion";
+import { esReunionCerrable, horaActual, idApunteEvento } from "../lib/reuniones";
+import { esAccionDeLlamada } from "./captacion/firmas/cierreReunion";
+import { crearActividadesDeEvento, borrarActividadesDeEvento, apuntarEventoEnPipeline, tarjetaDeScouting } from "../lib/eventosAgenda";
+import type { CierrePendiente } from "../components/cierre/CierreTareaHost";
 import { ViajeModal } from "../components/agenda/ViajeModal";
 import { TareaModal } from "../components/agenda/TareaModal";
-import { RegistroContactoModal, type RegistroContacto } from "../components/agenda/RegistroContactoModal";
-import { InformeDatosModal } from "../components/agenda/InformeDatosModal";
 import { TipoNuevo } from "../components/agenda/TipoNuevo";
 import { useActividadesRango } from "../hooks/useActividadesRango";
 import {
-  createPlayerActivity, createGroupActivity, deletePlayerActivity, deleteGroupActivity, fetchActivitiesByAuthor, createScoutingMatch,
+  fetchActivitiesByAuthor, createScoutingMatch,
   createAgendaEvento, updateAgendaEvento, deleteAgendaEvento, esMigracionPendiente,
 } from "../lib/db";
 import type { Profile } from "../contexts/AuthContext";
@@ -62,6 +60,8 @@ interface Props {
   onOpenFirmar?: (entryId: string) => void;
   /** Cambia la próxima acción de una tarjeta de Firmar (y, con ella, su tarea vinculada) */
   onPatchFirmasEntry?: (id: string, changes: Partial<FirmasEntry> | ((e: FirmasEntry) => FirmasEntry)) => Promise<void>;
+  /** Abre en App el cierre de una llamada o reunión del pipeline que no viene de una tarea (CierreTareaHost) */
+  onCerrarPipeline?: (p: CierrePendiente) => void;
   /** Scouts asignados a cada partido — para los partidos de «Mi día» */
   matchScouts?: ScoutingMatchScout[];
   /** «partido|iniciales» de cada informe de partido ya escrito */
@@ -103,16 +103,15 @@ interface Props {
   onSelectPlayer: (id: string) => void;
   onLogout: () => void;
   onAddPlayer: (player: Player) => void;
-  /** Guarda la ficha de un jugador (p. ej. para registrarle un informe de datos enviado) */
-  onUpdatePlayer?: (player: Player) => void | Promise<void>;
   onAdmin?: () => void;
   onBulkDelete?: (ids: string[]) => Promise<void>;
   onBulkAssignManager?: (playerIds: string[], managerId: string) => Promise<void>;
   notifications?: AppNotification[];
   onDismissNotification?: (id: string) => void;
   onAddGeneralTask?: (task: Task) => void | Task | Promise<void | Task>;
-  onUpdateGeneralTask?: (task: Task) => void;
-  onUpdateTask?: (task: Task) => void;
+  /** Devuelven false si completar la tarea ha abierto su cierre (App la guarda desde allí) */
+  onUpdateGeneralTask?: (task: Task) => void | boolean | Promise<void | boolean>;
+  onUpdateTask?: (task: Task) => void | boolean | Promise<void | boolean>;
   onDeleteGeneralTask?: (taskId: string) => void;
   onOverview?: () => void;
   onSelectProfile?: (profileId: string) => void;
@@ -160,6 +159,7 @@ export function Dashboard({
   firmasEntries,
   onOpenFirmar,
   onPatchFirmasEntry,
+  onCerrarPipeline,
   matchScouts = [],
   scoutingPlayers = [],
   onOpenSearch,
@@ -185,7 +185,6 @@ export function Dashboard({
   onSelectPlayer,
   onLogout,
   onAddPlayer,
-  onUpdatePlayer,
   onAdmin,
   onBulkDelete,
   onBulkAssignManager,
@@ -237,36 +236,15 @@ export function Dashboard({
   const [ppNotes, setPpNotes] = useState('');
   const [ppSaving, setPpSaving] = useState(false);
   const [ppShowDone, setPpShowDone] = useState(true);   // completados visibles (solo cambian de color)
+  // Filtros de la lista: jugador, encargado, estado, competición y texto libre
+  type PpEstadoFiltro = 'todos' | 'pendientes' | 'vencidos' | 'en_progreso' | 'completados';
+  const [ppFiltro, setPpFiltro] = useState<{ jugador: string; encargado: string; estado: PpEstadoFiltro; competicion: string; texto: string }>({
+    jugador: '', encargado: '', estado: 'todos', competicion: '', texto: '',
+  });
+  const ppHayFiltros = !!(ppFiltro.jugador || ppFiltro.encargado || ppFiltro.estado !== 'todos' || ppFiltro.competicion || ppFiltro.texto.trim());
   const [ppDeleteConfirm, setPpDeleteConfirm] = useState<Postpartido | null>(null);
   const [ppDeleting, setPpDeleting] = useState(false);
-  // Completar exige link de vídeo (Streamable)
-  const [ppCompleteTarget, setPpCompleteTarget] = useState<{ pp: Postpartido; task: Task } | null>(null);
-  const [ppVideoUrl, setPpVideoUrl] = useState('');
-  const [ppCompleting, setPpCompleting] = useState(false);
-
-  async function completePostpartido() {
-    if (!ppCompleteTarget || !onUpdatePostpartido || !onUpdateTask || ppCompleting) return;
-    const url = ppVideoUrl.trim();
-    if (!/^https?:\/\/.+/.test(url)) {
-      showToast('Pega el link del vídeo (debe empezar por http…).', 'error');
-      return;
-    }
-    setPpCompleting(true);
-    try {
-      await onUpdatePostpartido({ ...ppCompleteTarget.pp, videoUrl: url });
-      await Promise.resolve(onUpdateTask({ ...ppCompleteTarget.task, status: 'completada' }));
-      setPpCompleteTarget(null);
-      setPpVideoUrl('');
-      showToast('Postpartido completado ✓');
-    } catch (err) {
-      // Mostramos el motivo real (p. ej. "column video_url does not exist"
-      // si falta la migración migration_postpartidos_video_url.sql)
-      const msg = err instanceof Error ? err.message : '';
-      showToast(msg ? `No se pudo guardar: ${msg}` : 'No se pudo guardar. Inténtalo de nuevo.', 'error');
-    } finally {
-      setPpCompleting(false);
-    }
-  }
+  // Completar (exige el link del vídeo): lo pide el cierre de la tarea, en App
 
   function openAddPostpartido() {
     setPpEditing(null);
@@ -424,14 +402,8 @@ export function Dashboard({
   const [actsVersion, setActsVersion] = useState(0);
   // Modal de evento: valores de partida y, si se edita, el evento original
   const [eventoModal, setEventoModal] = useState<{ inicial: Partial<EventoBorrador>; original?: AgendaEvento } | null>(null);
-  // Tarea de contacto que se está completando: antes de cerrarla se pregunta qué pasó
-  const [registro, setRegistro] = useState<Task | null>(null);
-  // Tarea de tipo «Informe» de un jugador que se está completando: se pregunta si registrar el informe de datos
-  const [informeDatos, setInformeDatos] = useState<Task | null>(null);
-  // Reunión del pipeline que se está cerrando (recap + siguiente paso)
-  const [cierre, setCierre] = useState<AgendaEvento | null>(null);
-  // Llamada del pipeline que se está marcando hecha (¿contestó?)
-  const [llamada, setLlamada] = useState<FirmasEntry | null>(null);
+  // El cierre de tareas y de llamadas/reuniones del pipeline vive en App (CierreTareaHost):
+  // aquí solo se pide con onCerrarPipeline o completando la tarea.
   // "HH:MM" de ahora, cada 5 minutos: una reunión de hoy pasa a «sin cerrar» cuando llega su hora
   const [ahoraHora, setAhoraHora] = useState(() => horaActual());
   useEffect(() => {
@@ -448,52 +420,16 @@ export function Dashboard({
   }
 
   // Los eventos con jugadores de Mantenimiento se apuntan además en su
-  // actividad (player_activities), que es lo que lee la ficha del jugador.
-  async function crearActividades(e: EventoBorrador): Promise<string | undefined> {
-    if (e.playerIds.length === 0) return undefined;
-    const input = {
-      date: e.fecha, type: e.tipo,
-      notes: [e.titulo, e.notas].filter(Boolean).join(' — ') || undefined,
-      authorId: e.authorId ?? currentProfile.id,
-      participantProfileIds: e.participantIds.length > 0 ? e.participantIds : undefined,
-    };
-    if (e.playerIds.length > 1) {
-      const filas = await createGroupActivity(e.playerIds, input);
-      return filas[0]?.groupId;
-    }
-    return (await createPlayerActivity(e.playerIds[0], input)).id;
-  }
-  async function borrarActividades(ref?: string) {
-    if (!ref) return;
-    // activity_ref es el id de una fila o el group_id de varias: se prueba con los dos
-    await deleteGroupActivity(ref).catch(() => {});
-    await deletePlayerActivity(ref).catch(() => {});
-  }
-
-  // ── Evento ⇄ pipeline Firmar ──
-  // Un evento ligado a un jugador de Captación que está en el pipeline queda
-  // apuntado en el historial de su tarjeta (y se quita si el evento se borra).
-  // Al revés ya ocurre: la próxima acción de la tarjeta sale en Mi día y en el
-  // calendario como llamada o reunión.
-  const tarjetaDe = (scoutingPlayerId?: string) =>
-    scoutingPlayerId ? (firmasEntries ?? []).find(f => f.scoutingPlayerId === scoutingPlayerId) : undefined;
-  const idApunte = (eventoId: string) => `evento-${eventoId}`;
-
-  async function apuntarEnPipeline(ev: AgendaEvento, anterior?: AgendaEvento) {
-    if (!onPatchFirmasEntry) return;
-    const antes = tarjetaDe(anterior?.scoutingPlayerId);
-    const ahora = tarjetaDe(ev.scoutingPlayerId);
-    try {
-      if (antes && antes.id !== ahora?.id) {
-        await onPatchFirmasEntry(antes.id, f => ({ ...f, comments: f.comments.filter(c => c.id !== idApunte(ev.id)) }));
-      }
-      if (!ahora) return;
-      // Mismo apunte que usa el cierre (views/captacion/firmas/cierreReunion):
-      // una reunión queda marcada «pendiente de cerrar» hasta que se cierra
-      const apunte = apunteDeEvento(ev, currentProfile, hoyISO());
-      await onPatchFirmasEntry(ahora.id, f => ({ ...f, comments: [...f.comments.filter(c => c.id !== apunte.id), apunte] }));
-    } catch (err) { console.error('No se pudo apuntar el evento en la tarjeta de Firmar:', err); }
-  }
+  // actividad (player_activities), y los ligados a un jugador del pipeline
+  // Firmar quedan en su tarjeta. La lógica está en lib/eventosAgenda.ts
+  // (la comparte el cierre de tareas, en App).
+  const crearActividades = (e: EventoBorrador) => crearActividadesDeEvento(e, currentProfile.id);
+  const borrarActividades = borrarActividadesDeEvento;
+  const tarjetaDe = (scoutingPlayerId?: string) => tarjetaDeScouting(firmasEntries ?? [], scoutingPlayerId);
+  const apuntarEnPipeline = (ev: AgendaEvento, anterior?: AgendaEvento) =>
+    onPatchFirmasEntry
+      ? apuntarEventoEnPipeline(ev, { firmasEntries: firmasEntries ?? [], autor: currentProfile, hoy: hoyISO(), patch: onPatchFirmasEntry }, anterior)
+      : Promise.resolve();
 
   // Tarea ⇄ pipeline: un comentario en la tarea de una próxima acción de Firmar
   // («conseguir el contacto»…) queda también en el historial de su tarjeta.
@@ -538,117 +474,10 @@ export function Dashboard({
     }
   }
 
-  // ── Tarea de contacto → evento ──
-  // «Llamar a X» es tarea mientras está pendiente; hecha, lo que queda es el
-  // evento (se le llamó ese día y qué dijo). Las tareas que nacen de Firmar ya
-  // dejan su apunte en la tarjeta: a esas no se les pregunta.
-  const pideRegistro = (antes: Task, despues: Task) =>
-    despues.status === 'completada' && antes.status !== 'completada' &&
-    !!antes.label && !!EVENTO_DE_TAREA[antes.label] &&
-    !(firmasEntries ?? []).some(f => f.nextActionTaskId === antes.id);
-
-  // Tarea «Informe» de un jugador nuestro → al completarla se ofrece registrarla como
-  // «Informe de datos» enviado, en su ficha (Rendimiento → Análisis).
-  const jugadorDe = (t: Task) => t.playerId && t.playerId !== 'general' ? players.find(p => p.id === t.playerId) : undefined;
-  const pideInformeDatos = (antes: Task, despues: Task) =>
-    despues.status === 'completada' && antes.status !== 'completada' &&
-    antes.label === 'Informe' && !!jugadorDe(antes) && !!onUpdatePlayer;
-
-  async function completarInforme(task: Task, r: { enlace: string; nota: string } | null) {
-    try {
-      if (guardarTarea) await Promise.resolve(guardarTarea(task));
-      setInformeDatos(null);
-      if (detailTask?.id === task.id) setDetailTask(null);
-      const jugador = jugadorDe(task);
-      if (!r || !jugador || !onUpdatePlayer) { showToast('Tarea hecha', 'success'); return; }
-      await Promise.resolve(onUpdatePlayer({
-        ...jugador,
-        videoSessions: [{
-          id: 'vs' + Date.now(), tipo: 'informe_datos', titulo: task.title, description: r.nota,
-          date: hoyISO(), videoUrl: r.enlace, participantes: [task.assigneeId || currentProfile.id],
-        }, ...(jugador.videoSessions ?? [])],
-      }));
-      showToast(`Tarea hecha e informe registrado en la ficha de ${jugador.name.split(' ')[0]}`, 'success');
-    } catch {
-      showToast('No se pudo guardar. Inténtalo de nuevo.', 'error');
-    }
-  }
-
-  // Tarea de una llamada o WhatsApp del pipeline que se está completando:
-  // se pregunta si contestó; la tarea la completa App al retirar la acción.
-  const llamadaDeFirmar = (antes: Task, despues: Task) =>
-    despues.status === 'completada' && antes.status !== 'completada'
-      ? (firmasEntries ?? []).find(f => f.nextActionTaskId === antes.id && esAccionDeLlamada(f.nextActionKind))
-      : undefined;
-
-  async function guardarLlamada(tarjeta: FirmasEntry, datos: DatosLlamada) {
-    if (!onPatchFirmasEntry) return;
-    try {
-      const ahora = new Date().toISOString();
-      await onPatchFirmasEntry(tarjeta.id, f => aplicarCierreLlamada(f, datos, currentProfile, ahora));
-      // Segundo guardado: así la tarea de la llamada se completa antes de crear la del paso nuevo
-      if (datos.contesto && datos.siguiente) {
-        const s = datos.siguiente;
-        await onPatchFirmasEntry(tarjeta.id, f => conSiguientePaso(f, s));
-      }
-      setLlamada(null);
-      if (detailTask && tarjeta.nextActionTaskId === detailTask.id) setDetailTask(null);
-      showToast(!datos.contesto ? 'Apuntado: no contestó' : datos.siguiente ? 'Llamada cerrada · siguiente paso programado' : 'Llamada cerrada', 'success');
-    } catch {
-      showToast('No se pudo guardar. Inténtalo de nuevo.', 'error');
-    }
-  }
-
-  /** Guarda la tarea; si es de contacto y se está completando, antes pregunta qué pasó. true = guardada ya. */
-  async function guardarTareaOPreguntar(antes: Task, despues: Task): Promise<boolean> {
-    const tarjetaLlamada = llamadaDeFirmar(antes, despues);
-    if (tarjetaLlamada) { setLlamada(tarjetaLlamada); return false; }
-    // Tarea de una reunión del pipeline con evento: completarla es cerrar la reunión
-    if (despues.status === 'completada' && antes.status !== 'completada') {
-      const tarjetaReunion = (firmasEntries ?? []).find(f => f.nextActionTaskId === antes.id && f.nextActionEventoId);
-      if (tarjetaReunion?.nextActionEventoId && eventos.some(e => e.id === tarjetaReunion.nextActionEventoId)) {
-        abrirCierre(tarjetaReunion.nextActionEventoId); return false;
-      }
-    }
-    if (pideRegistro(antes, despues)) { setRegistro(despues); return false; }
-    if (pideInformeDatos(antes, despues)) { setInformeDatos(despues); return false; }
-    if (guardarTarea) await Promise.resolve(guardarTarea(despues));
-    return true;
-  }
-
-  async function completarRegistrando(task: Task, r: RegistroContacto | null) {
-    try {
-      if (guardarTarea) await Promise.resolve(guardarTarea(task));
-      setRegistro(null);
-      if (detailTask?.id === task.id) setDetailTask(null);
-      if (!r) { showToast('Tarea hecha', 'success'); return; }
-      const jugador = task.playerId && task.playerId !== 'general' ? players.find(p => p.id === task.playerId) : undefined;
-      const e: EventoBorrador = {
-        titulo: task.title,
-        tipo: EVENTO_DE_TAREA[task.label!] ?? 'Nota general',
-        fecha: hoyISO(),
-        ambito: jugador ? 'mantenimiento' : task.scoutingPlayerId ? 'captacion' : 'general',
-        playerIds: jugador ? [jugador.id] : [],
-        scoutingPlayerId: jugador ? undefined : task.scoutingPlayerId,
-        participantIds: [task.assigneeId || currentProfile.id],
-        notas: [r.contesto === undefined ? '' : r.contesto ? 'Contestó' : 'No contestó', r.texto].filter(Boolean).join(' — ') || undefined,
-        authorId: currentProfile.id,
-      };
-      const activityRef = await crearActividades(e);
-      try {
-        const creado = await createAgendaEvento({ ...e, activityRef });
-        setEventos(prev => [creado, ...prev]);
-        await apuntarEnPipeline(creado);
-      } catch (err) {
-        // Sin la tabla de eventos, el contacto con un jugador nuestro queda igualmente en su actividad
-        if (!(esMigracionPendiente(err) && activityRef)) throw err;
-      }
-      setActsVersion(v => v + 1);
-      showToast('Tarea hecha y registrada', 'success');
-    } catch {
-      showToast('No se pudo guardar. Inténtalo de nuevo.', 'error');
-    }
-  }
+  // ── Completar una tarea ──
+  // No se pregunta nada aquí: onUpdateTask (App) intercepta el paso a
+  // «completada» y abre el cierre que toque según el tipo. Devuelve false
+  // mientras el cierre está abierto; la tarea la guarda el propio cierre.
 
   async function guardarEvento(e: EventoBorrador) {
     const original = eventoModal?.original;
@@ -723,7 +552,7 @@ export function Dashboard({
       await borrarActividades(original.activityRef);
       const tarjeta = tarjetaDe(original.scoutingPlayerId);
       if (tarjeta && onPatchFirmasEntry) {
-        await onPatchFirmasEntry(tarjeta.id, f => ({ ...f, comments: f.comments.filter(c => c.id !== idApunte(original.id)) })).catch(console.error);
+        await onPatchFirmasEntry(tarjeta.id, f => ({ ...f, comments: f.comments.filter(c => c.id !== idApunteEvento(original.id)) })).catch(console.error);
       }
       setEventos(prev => prev.filter(x => x.id !== original.id));
       setActsVersion(v => v + 1);
@@ -734,33 +563,11 @@ export function Dashboard({
     }
   }
 
-  // ── Cerrar una reunión del pipeline: recap en el evento y en la tarjeta,
-  // siguiente paso como próxima acción (que crea su tarea), estatus si cambia.
+  // ── Cerrar una reunión del pipeline (recap + siguiente paso): lo hace App ──
   function abrirCierre(eventoId: string) {
-    const ev = eventos.find(x => x.id === eventoId);
-    if (ev) { setEventoModal(null); setCierre(ev); }
-  }
-  async function guardarCierre(ev: AgendaEvento, datos: DatosCierre, participantIds: string[]) {
-    const ahora = new Date().toISOString();
-    const cerrado: AgendaEvento = { ...ev, participantIds, recap: datos.recap, cerradoAt: ahora, cerradoPor: currentProfile.id };
-    try {
-      await updateAgendaEvento(cerrado);
-      setEventos(prev => prev.map(x => x.id === cerrado.id ? cerrado : x));
-      const tarjeta = tarjetaDe(ev.scoutingPlayerId);
-      if (tarjeta && onPatchFirmasEntry) {
-        await onPatchFirmasEntry(tarjeta.id, f => aplicarCierreEnTarjeta(f, cerrado, datos, currentProfile, hoyISO(), ahora));
-        // Segundo guardado: si la reunión era la próxima acción, su tarea se completa antes de crear la del paso nuevo
-        if (datos.siguiente) {
-          const s = datos.siguiente;
-          await onPatchFirmasEntry(tarjeta.id, f => conSiguientePaso(f, s));
-        }
-      }
-      setCierre(null);
-      showToast(datos.siguiente ? 'Reunión cerrada · siguiente paso programado' : 'Reunión cerrada', 'success');
-    } catch (err) {
-      console.error(err);
-      showToast('No se pudo cerrar la reunión. Inténtalo de nuevo.', 'error');
-    }
+    if (!eventos.some(x => x.id === eventoId)) return;
+    setEventoModal(null);
+    onCerrarPipeline?.({ tipo: 'pipeline-reunion', eventoId });
   }
   const [managerFilter, setManagerFilter] = useState<string>("all");
   // Partner del jugador. Se recuerda entre pantallas: si estás revisando la
@@ -1176,7 +983,7 @@ export function Dashboard({
     };
     const updated = { ...task, status: next[task.status] ?? "pendiente" };
     try {
-      await guardarTareaOPreguntar(task, updated);
+      await Promise.resolve(guardarTarea?.(updated));
     } catch {
       showToast("No se pudo guardar. Inténtalo de nuevo.", "error");
     }
@@ -1222,30 +1029,18 @@ export function Dashboard({
         return;
       }
       const task = tareaDeItem(it);
-      // Completar un postpartido sigue pidiendo el link del vídeo
-      if (it.origen === 'postpartido' && estado === 'completada') {
-        const pp = postpartidos.find(p => p.id === it.ref.postpartidoId);
-        if (pp && task) { setPpVideoUrl(pp.videoUrl ?? ''); setPpCompleteTarget({ pp, task }); }
-        return;
-      }
       if (task) {
-        // Si es la tarea de una acción de Firmar, App la marca hecha también allí
-        if (!(await guardarTareaOPreguntar(task, { ...task, status: estado }))) return;
-        // Completar es un gesto fácil de hacer sin querer (deslizar, un toque): se puede deshacer.
-        // Solo en tareas normales: una acción de Firmar o una tarea que se repite ya han hecho más cosas.
-        if (estado === 'completada' && it.origen === 'tarea' && !task.recurrence && guardarTarea) {
-          showToast('Tarea hecha', 'success', {
-            label: 'Deshacer',
-            fn: () => { Promise.resolve(guardarTarea({ ...task, completedAt: undefined })).catch(fallo); },
-          });
-        }
+        // Completar abre el cierre en App (un postpartido pide el vídeo, una
+        // llamada si contestó…); si es la tarea de una acción de Firmar, App
+        // la marca hecha también allí.
+        await Promise.resolve(guardarTarea?.({ ...task, status: estado }));
         return;
       }
       // Acción de Firmar sin tarea vinculada: hecha = retirarla de la tarjeta, con su apunte
       if (it.origen === 'firmar' && it.ref.firmasEntryId && estado === 'completada') {
         const tarjeta = (firmasEntries ?? []).find(f => f.id === it.ref.firmasEntryId);
         // Una llamada o WhatsApp pregunta antes si contestó
-        if (tarjeta && esAccionDeLlamada(tarjeta.nextActionKind)) { setLlamada(tarjeta); return; }
+        if (tarjeta && esAccionDeLlamada(tarjeta.nextActionKind)) { onCerrarPipeline?.({ tipo: 'pipeline-llamada', entryId: tarjeta.id }); return; }
         // Una reunión con evento se cierra (recap + siguiente paso)
         if (tarjeta?.nextActionEventoId && eventos.some(e => e.id === tarjeta.nextActionEventoId)) { abrirCierre(tarjeta.nextActionEventoId); return; }
         await onPatchFirmasEntry?.(it.ref.firmasEntryId, e => ({
@@ -2829,7 +2624,37 @@ export function Dashboard({
           }));
           const pending = rows.filter(r => !r.task || r.task.status !== 'completada');
           const done = rows.filter(r => r.task && r.task.status === 'completada');
-          const shown = ppShowDone ? [...pending, ...done] : pending;
+          const esDone = (r: typeof rows[number]) => r.task?.status === 'completada';
+          const esVencido = (r: typeof rows[number]) => !!(r.task?.dueDate && r.task.dueDate < todayStr && !esDone(r));
+          // Opciones de los desplegables: solo lo que aparece en algún postpartido
+          const jugadoresOpc = Array.from(new Map(rows.filter(r => r.player).map(r => [r.player!.id, r.player!.name])).entries())
+            .sort((a, b) => a[1].localeCompare(b[1]));
+          const hayExternos = rows.some(r => !r.player && r.pp.playerName);
+          const encargadosOpc = Array.from(new Map(rows.filter(r => r.assignee).map(r => [r.assignee!.id, r.assignee!.name])).entries())
+            .sort((a, b) => a[1].localeCompare(b[1]));
+          const competicionesOpc = Array.from(new Set(rows.map(r => r.match?.competition?.trim()).filter((c): c is string => !!c))).sort((a, b) => a.localeCompare(b));
+          const texto = ppFiltro.texto.trim().toLowerCase();
+          const pasaFiltro = (r: typeof rows[number]) => {
+            if (ppFiltro.jugador === '__otro__' ? !!r.player : ppFiltro.jugador && r.player?.id !== ppFiltro.jugador) return false;
+            if (ppFiltro.encargado === '__sin__' ? !!r.assignee : ppFiltro.encargado && r.assignee?.id !== ppFiltro.encargado) return false;
+            if (ppFiltro.competicion && (r.match?.competition?.trim() ?? '') !== ppFiltro.competicion) return false;
+            if (ppFiltro.estado === 'pendientes' && esDone(r)) return false;
+            if (ppFiltro.estado === 'vencidos' && !esVencido(r)) return false;
+            if (ppFiltro.estado === 'en_progreso' && r.task?.status !== 'en_progreso') return false;
+            if (ppFiltro.estado === 'completados' && !esDone(r)) return false;
+            if (texto) {
+              const blob = [
+                r.match ? `${r.match.homeTeam} ${r.match.awayTeam} ${r.match.competition ?? ''}` : '',
+                r.player?.name ?? r.pp.playerName ?? '', r.assignee?.name ?? '', r.pp.notes ?? '',
+              ].join(' ').toLowerCase();
+              if (!blob.includes(texto)) return false;
+            }
+            return true;
+          };
+          const base = ppShowDone || ppFiltro.estado === 'completados' ? [...pending, ...done] : pending;
+          const shown = base.filter(pasaFiltro);
+          const nPend = pending.filter(pasaFiltro).length;
+          const nFilas = pending.length + done.length;
           const statusBadge = (t?: Task) => {
             if (!t) return <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-400">sin tarea</span>;
             if (t.status === 'completada') return <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600">✓ Completado</span>;
@@ -2864,14 +2689,68 @@ export function Dashboard({
               </div>
             </div>
 
+            {nFilas > 0 && (
+              <div className="flex items-center gap-2 mb-4 flex-wrap">
+                <input
+                  value={ppFiltro.texto}
+                  onChange={e => setPpFiltro(f => ({ ...f, texto: e.target.value }))}
+                  placeholder="Buscar partido, jugador, notas…"
+                  aria-label="Buscar postpartidos"
+                  className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30 w-52"
+                />
+                <select value={ppFiltro.jugador} onChange={e => setPpFiltro(f => ({ ...f, jugador: e.target.value }))} aria-label="Jugador" className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+                  <option value="">Todos los jugadores</option>
+                  {jugadoresOpc.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+                  {hayExternos && <option value="__otro__">Jugadores externos</option>}
+                </select>
+                <select value={ppFiltro.encargado} onChange={e => setPpFiltro(f => ({ ...f, encargado: e.target.value }))} aria-label="Encargado" className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+                  <option value="">Todos los encargados</option>
+                  {encargadosOpc.map(([id, name]) => <option key={id} value={id}>{name.split(' ')[0]}</option>)}
+                  {rows.some(r => !r.assignee) && <option value="__sin__">Sin encargado</option>}
+                </select>
+                <select value={ppFiltro.estado} onChange={e => setPpFiltro(f => ({ ...f, estado: e.target.value as PpEstadoFiltro }))} aria-label="Estado" className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+                  <option value="todos">Cualquier estado</option>
+                  <option value="pendientes">Pendientes ({pending.length})</option>
+                  <option value="vencidos">Vencidos ({rows.filter(esVencido).length})</option>
+                  <option value="en_progreso">En progreso ({rows.filter(r => r.task?.status === 'en_progreso').length})</option>
+                  <option value="completados">Completados ({done.length})</option>
+                </select>
+                {competicionesOpc.length > 1 && (
+                  <select value={ppFiltro.competicion} onChange={e => setPpFiltro(f => ({ ...f, competicion: e.target.value }))} aria-label="Competición" className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+                    <option value="">Todas las competiciones</option>
+                    {competicionesOpc.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                )}
+                {ppHayFiltros && (
+                  <button
+                    onClick={() => setPpFiltro({ jugador: '', encargado: '', estado: 'todos', competicion: '', texto: '' })}
+                    className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800 px-2 py-1.5"
+                  >
+                    <X className="w-3.5 h-3.5" /> Quitar filtros
+                  </button>
+                )}
+                <span className="text-[11px] text-slate-400 ml-auto">
+                  {shown.length} de {nFilas}{nPend !== shown.length ? ` · ${nPend} pendientes` : ''}
+                </span>
+              </div>
+            )}
+
             {shown.length === 0 ? (
-              <EmptyState
-                icon={<Calendar className="w-10 h-10" />}
-                title={pending.length === 0 && done.length > 0 ? 'Todo al día' : 'No hay postpartidos'}
-                subtitle={pending.length === 0 && done.length > 0
-                  ? `Los ${done.length} postpartidos están completados.`
-                  : 'Crea el primero con "Nuevo postpartido".'}
-              />
+              ppHayFiltros && nFilas > 0 ? (
+                <EmptyState
+                  icon={<Search className="w-10 h-10" />}
+                  title="Nada con esos filtros"
+                  subtitle="Prueba a quitar alguno o a cambiar el texto de búsqueda."
+                />
+              ) : (
+                <EmptyState
+                  icon={<Calendar className="w-10 h-10" />}
+                  title={pending.length === 0 && done.length > 0 ? 'Todo al día' : 'No hay postpartidos'}
+                  subtitle={pending.length === 0 && done.length > 0
+                    ? `Los ${done.length} postpartidos están completados.`
+                    : 'Crea el primero con "Nuevo postpartido".'}
+                />
+              )
             ) : (
               <div className="bg-white border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-50">
                 {shown.map(({ pp, match, player, task, assignee }) => {
@@ -2946,7 +2825,7 @@ export function Dashboard({
                       )}
                       {task && !isDone && onUpdateTask && onUpdatePostpartido && (
                         <button
-                          onClick={() => { setPpVideoUrl(pp.videoUrl ?? ''); setPpCompleteTarget({ pp, task }); }}
+                          onClick={() => { Promise.resolve(onUpdateTask({ ...task, status: 'completada' })).catch(fallo); }}
                           title="Completar (pide el link del vídeo)"
                           className="flex-shrink-0 p-1 rounded-full text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
                         >
@@ -3097,30 +2976,6 @@ export function Dashboard({
       )}
 
 
-      {/* ── Tarea de contacto completada: ¿qué pasó? ── */}
-      {registro && (
-        <RegistroContactoModal
-          task={registro}
-          conQuien={registro.playerId && registro.playerId !== 'general'
-            ? players.find(p => p.id === registro.playerId)?.name
-            : registro.scoutingPlayerId ? scoutingPlayers.find(p => p.id === registro.scoutingPlayerId)?.fullName : undefined}
-          onRegistrar={(r) => completarRegistrando(registro, r)}
-          onSoloCompletar={() => completarRegistrando(registro, null)}
-          onClose={() => setRegistro(null)}
-        />
-      )}
-
-      {/* ── Tarea «Informe» de un jugador completada: ¿informe de datos enviado? ── */}
-      {informeDatos && (
-        <InformeDatosModal
-          task={informeDatos}
-          jugador={jugadorDe(informeDatos)?.name ?? 'el jugador'}
-          onRegistrar={(r) => completarInforme(informeDatos, r)}
-          onSoloCompletar={() => completarInforme(informeDatos, null)}
-          onClose={() => setInformeDatos(null)}
-        />
-      )}
-
       {/* ── Viaje: a quién visitar ── */}
       {(() => {
         const viaje = viajeId ? eventos.find(x => x.id === viajeId) : undefined;
@@ -3170,28 +3025,6 @@ export function Dashboard({
         />
       )}
 
-      {llamada && (
-        <CerrarLlamadaModal
-          tarjeta={(firmasEntries ?? []).find(f => f.id === llamada.id) ?? llamada}
-          profiles={profiles}
-          currentProfile={currentProfile}
-          onClose={() => setLlamada(null)}
-          onGuardar={(datos) => guardarLlamada(llamada, datos)}
-        />
-      )}
-
-      {cierre && (
-        <CerrarReunionModal
-          evento={cierre}
-          tarjeta={tarjetaDe(cierre.scoutingPlayerId)}
-          playerName={(cierre.scoutingPlayerId && scoutingPlayers.find(p => p.id === cierre.scoutingPlayerId)?.fullName) || cierre.titulo || cierre.tipo}
-          profiles={profiles}
-          currentProfile={currentProfile}
-          onClose={() => setCierre(null)}
-          onGuardar={(datos, _nueva, participantIds) => guardarCierre(cierre, datos, participantIds)}
-        />
-      )}
-
       {detailTask && (
         <TaskDetailPanel
           task={detailTask}
@@ -3211,7 +3044,7 @@ export function Dashboard({
             try {
               // Un único handler: ambos props apuntan al mismo updater en App;
               // llamar a los dos provocaba una doble escritura en la BD.
-              await guardarTareaOPreguntar(detailTask, updated);
+              await Promise.resolve(guardarTarea?.(updated));
             } catch {
               showToast("No se pudo guardar. Inténtalo de nuevo.", "error");
             }
@@ -3360,42 +3193,6 @@ export function Dashboard({
                 className="px-5 py-2 text-xs font-bold text-white bg-primary hover:bg-primary/90 rounded-lg transition-colors disabled:opacity-60"
               >
                 {ppEditing ? (ppSaving ? 'Guardando…' : 'Guardar cambios') : (ppSaving ? 'Creando…' : 'Crear postpartido')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Completar postpartido — exige link del vídeo */}
-      {ppCompleteTarget && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setPpCompleteTarget(null)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
-              <h3 className="text-sm font-bold text-slate-800">Completar postpartido</h3>
-              <button onClick={() => setPpCompleteTarget(null)} aria-label="Cerrar" className="text-slate-400 hover:text-slate-600 p-1">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="px-5 py-4 space-y-2">
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">🎬 Link del vídeo (obligatorio)</label>
-              <input
-                autoFocus
-                value={ppVideoUrl}
-                onChange={e => setPpVideoUrl(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') completePostpartido(); }}
-                placeholder="https://streamable.com/…"
-                className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200"
-              />
-              <p className="text-[11px] text-slate-400">El link quedará visible en la lista y en la ficha del jugador (Rendimiento → Postpartidos).</p>
-            </div>
-            <div className="flex justify-end gap-2 px-5 py-3.5 border-t border-slate-100">
-              <button onClick={() => setPpCompleteTarget(null)} className="px-4 py-2 text-xs text-slate-500 hover:text-slate-700 rounded-lg">Cancelar</button>
-              <button
-                onClick={completePostpartido}
-                disabled={ppCompleting || !ppVideoUrl.trim()}
-                className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors disabled:opacity-50"
-              >
-                {ppCompleting ? 'Guardando…' : '✓ Completar'}
               </button>
             </div>
           </div>

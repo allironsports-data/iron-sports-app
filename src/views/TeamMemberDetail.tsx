@@ -51,7 +51,8 @@ interface Props {
   players: Player[];
   onBack: () => void;
   onSelectPlayer?: (id: string) => void;
-  onUpdateTask?: (t: Task) => Promise<void> | void;
+  /** Devuelve false si completar la tarea ha abierto su cierre (la app la guardará desde allí) */
+  onUpdateTask?: (t: Task) => Promise<void | boolean> | void | boolean;
 }
 
 export function TeamMemberDetail({ profile, tasks, players, onBack, onSelectPlayer, onUpdateTask }: Props) {
@@ -204,7 +205,8 @@ export function TeamMemberDetail({ profile, tasks, players, onBack, onSelectPlay
   async function setTaskStatus(t: Task, next: Task['status']) {
     if (!onUpdateTask) return;
     try {
-      await Promise.resolve(onUpdateTask({ ...t, status: next }));
+      const guardada = await Promise.resolve(onUpdateTask({ ...t, status: next }));
+      if (guardada === false) return;   // se está cerrando en su modal
       showToast(
         next === 'completada' ? `«${t.title}» completada ✓`
           : next === 'en_progreso' ? `«${t.title}» en progreso`

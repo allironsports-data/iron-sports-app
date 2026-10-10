@@ -138,7 +138,7 @@ function tipoDeTarea(t: Task): AgendaTipo {
     if (hit) return hit[1]
   }
   if (t.label === 'Llamada') return 'llamada'
-  if (t.label === 'Reunión' || t.label === 'Visita') return 'reunion'
+  if (t.label === 'Reunión' || t.label === 'Comida/Visita') return 'reunion'
   return 'tarea'
 }
 

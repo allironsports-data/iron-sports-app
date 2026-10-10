@@ -91,7 +91,8 @@ interface Props {
   currentProfile: Profile;
   onBack: () => void;
   onAddTask: (task: Task) => void;
-  onUpdateTask: (task: Task) => void | Promise<void>;
+  /** Devuelve false si completar la tarea ha abierto su cierre (la app la guarda desde allí) */
+  onUpdateTask: (task: Task) => void | boolean | Promise<void | boolean>;
   onDeleteTask: (taskId: string) => void | Promise<void>;
   onUpdatePlayer: (player: Player) => void | Promise<void>;
   onLogout: () => void;
@@ -509,7 +510,7 @@ function ClubsDisplay({ clubs }: { clubs: Player["clubs"] }) {
 function TasksTab({ tasks, profiles, player, currentProfile, onAddTask, onUpdateTask, onDeleteTask }: {
   tasks: Task[]; allTasks: Task[]; profiles: Profile[]; player: Player;
   currentProfile: Profile; onAddTask: (task: Task) => void;
-  onUpdateTask: (task: Task) => void | Promise<void>; onDeleteTask: (taskId: string) => void | Promise<void>;
+  onUpdateTask: (task: Task) => void | boolean | Promise<void | boolean>; onDeleteTask: (taskId: string) => void | Promise<void>;
 }) {
   const [showAdd, setShowAdd] = useState(false);
   const [detailTask, setDetailTask] = useState<Task | null>(null);

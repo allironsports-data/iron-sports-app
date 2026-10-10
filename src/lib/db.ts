@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 import { dedupePorId } from './coleccion'
-import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation, ScoutingPlayer, ScoutingReport, ScoutingInfo, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchOurPlayer, ScoutingMatchScout, Ofrecimiento, ClubLog, PlayerMeeting, PlayerActivity, MemberStatus, Postpartido, FirmasEntry, BoulemaPlayer, AgendaEvento } from '../types'
+import type { Player, Task, TaskComment, PerformanceNote, ClubInterest, PlayerLink, MatchReport, VideoSession, Club, DistributionEntry, ClubNegotiation, ScoutingPlayer, ScoutingReport, ScoutingInfo, ScoutingMatch, ScoutingMatchPlayer, ScoutingMatchOurPlayer, ScoutingMatchScout, Ofrecimiento, ClubLog, PlayerMeeting, PlayerActivity, MemberStatus, Postpartido, FirmasEntry, BoulemaPlayer, AgendaEvento, TaskCierre } from '../types'
 
 // ── helpers ──────────────────────────────────────────────────
 
@@ -519,9 +519,23 @@ export async function assignManagerToPlayers(playerIds: string[], managerId: str
 // Si la fila leída trae la columna, existe y se escribe siempre (también
 // para quitar la repetición). Si no, solo se manda cuando alguien la pone;
 // y si la base la rechaza (42703), se guarda la tarea sin ella.
-// Lo mismo vale para tasks.scouting_player_id (migration_tasks_scouting_player.sql).
-const COLUMNAS_OPCIONALES_TAREA = ['recurrence', 'scouting_player_id'] as const
+// Lo mismo vale para tasks.scouting_player_id (migration_tasks_scouting_player.sql)
+// y para el cierre (migration_tasks_cierre.sql: cierre_resultado, cierre_nota, cierre_ref).
+const COLUMNAS_OPCIONALES_TAREA = ['recurrence', 'scouting_player_id', 'cierre_resultado', 'cierre_nota', 'cierre_ref'] as const
 const columnasTarea = new Set<string>()
+
+/** Etiquetas renombradas: las filas antiguas se leen ya con el nombre nuevo */
+const LABEL_RENOMBRADO: Record<string, Task['label']> = {
+  'Reunión/Comida': 'Reunión', 'General': 'Otra', 'Visita': 'Comida/Visita',
+}
+
+function cierreDeFila(row: Record<string, unknown>): Task['cierre'] {
+  const resultado = (row.cierre_resultado as string) ?? undefined
+  const nota = (row.cierre_nota as string) ?? undefined
+  const ref = (row.cierre_ref as TaskCierre['ref'] | null) ?? undefined
+  if (!resultado && !nota && !ref) return undefined
+  return { resultado, nota, ref }
+}
 
 function dbToTask(row: Record<string, unknown>): Task {
   for (const c of COLUMNAS_OPCIONALES_TAREA) if (c in row) columnasTarea.add(c)
@@ -536,8 +550,7 @@ function dbToTask(row: Record<string, unknown>): Task {
     dependsOnId: row.depends_on_id as string | undefined,
     status: row.status as Task['status'],
     priority: row.priority as Task['priority'],
-    // «Reunión/Comida» pasó a llamarse «Reunión»: las antiguas se leen ya con el nombre nuevo
-    label: (row.label === 'Reunión/Comida' ? 'Reunión' : (row.label as Task['label'])) ?? undefined,
+    label: (LABEL_RENOMBRADO[row.label as string] ?? (row.label as Task['label'])) ?? undefined,
     dueDate: (row.due_date as string) ?? undefined,
     createdAt: row.created_at as string,
     completedAt: (row.completed_at as string) ?? undefined,
@@ -545,6 +558,7 @@ function dbToTask(row: Record<string, unknown>): Task {
     adminOnly: (row.admin_only as boolean) ?? false,
     recurrence: (row.recurrence as Task['recurrence']) ?? undefined,
     scoutingPlayerId: (row.scouting_player_id as string) ?? undefined,
+    cierre: cierreDeFila(row),
   }
 }
 
@@ -564,7 +578,11 @@ function taskToDb(t: Task): Record<string, unknown> {
     completed_at: t.completedAt ?? null,
     admin_only: t.adminOnly ?? false,
   }
-  const opcionales: Record<string, unknown> = { recurrence: t.recurrence, scouting_player_id: t.scoutingPlayerId }
+  const opcionales: Record<string, unknown> = {
+    recurrence: t.recurrence, scouting_player_id: t.scoutingPlayerId,
+    cierre_resultado: t.cierre?.resultado, cierre_nota: t.cierre?.nota,
+    cierre_ref: t.cierre?.ref && Object.keys(t.cierre.ref).length > 0 ? t.cierre.ref : undefined,
+  }
   for (const c of COLUMNAS_OPCIONALES_TAREA) {
     if (columnasTarea.has(c) || opcionales[c]) fila[c] = opcionales[c] ?? null
   }
@@ -573,7 +591,7 @@ function taskToDb(t: Task): Record<string, unknown> {
 
 function faltaColumnaRecurrence(error: unknown, fila: Record<string, unknown>): boolean {
   if (!esColumnaInexistente(error) || !COLUMNAS_OPCIONALES_TAREA.some(c => c in fila)) return false
-  console.warn('[db] a tasks le falta alguna columna (recurrence, scouting_player_id): se guarda sin ellas. Ejecuta migration_tasks_recurrence.sql y migration_tasks_scouting_player.sql')
+  console.warn('[db] a tasks le falta alguna columna (recurrence, scouting_player_id, cierre_*): se guarda sin ellas. Ejecuta migration_tasks_recurrence.sql, migration_tasks_scouting_player.sql y migration_tasks_cierre.sql')
   for (const c of COLUMNAS_OPCIONALES_TAREA) { columnasTarea.delete(c); delete fila[c] }
   return true
 }
@@ -2186,6 +2204,7 @@ function dbToAgendaEvento(row: Record<string, unknown>): AgendaEvento {
     recap: (row.recap as string) ?? undefined,
     cerradoAt: (row.cerrado_at as string) ?? undefined,
     cerradoPor: (row.cerrado_por as string) ?? undefined,
+    taskId: (row.task_id as string) ?? undefined,
     createdAt: row.created_at as string,
   }
 }
@@ -2195,18 +2214,18 @@ function dbToAgendaEvento(row: Record<string, unknown>): AgendaEvento {
 // Cada una se manda solo si existe (se ve al leer) o si trae valor; y si la
 // base rechaza alguna (42703), el evento se guarda sin ellas.
 // recap, cerrado_at y cerrado_por: migration_agenda_eventos_cierre.sql.
-const COLUMNAS_OPCIONALES_EVENTO = ['lugar', 'fecha_fin', 'zona', 'recap', 'cerrado_at', 'cerrado_por'] as const
+const COLUMNAS_OPCIONALES_EVENTO = ['lugar', 'fecha_fin', 'zona', 'recap', 'cerrado_at', 'cerrado_por', 'task_id'] as const
 const columnasEvento = new Set<string>()
 
 function faltaColumnaEvento(error: unknown, fila: Record<string, unknown>): boolean {
   if (!esColumnaInexistente(error) || !COLUMNAS_OPCIONALES_EVENTO.some(c => c in fila)) return false
-  console.warn('[db] a agenda_eventos le falta alguna columna (lugar, fecha_fin, zona, recap, cerrado_at, cerrado_por): se guarda sin ellas. Ejecuta migration_agenda_eventos_lugar.sql, migration_agenda_viajes.sql y migration_agenda_eventos_cierre.sql')
+  console.warn('[db] a agenda_eventos le falta alguna columna (lugar, fecha_fin, zona, recap, cerrado_at, cerrado_por, task_id): se guarda sin ellas. Ejecuta migration_agenda_eventos_lugar.sql, migration_agenda_viajes.sql, migration_agenda_eventos_cierre.sql y migration_tasks_cierre.sql')
   for (const c of COLUMNAS_OPCIONALES_EVENTO) { columnasEvento.delete(c); delete fila[c] }
   return true
 }
 
 function agendaEventoToDb(e: Omit<AgendaEvento, 'id' | 'createdAt'>): Record<string, unknown> {
-  const opcionales: Record<string, unknown> = { lugar: e.lugar, fecha_fin: e.fechaFin, zona: e.zona, recap: e.recap, cerrado_at: e.cerradoAt, cerrado_por: e.cerradoPor }
+  const opcionales: Record<string, unknown> = { lugar: e.lugar, fecha_fin: e.fechaFin, zona: e.zona, recap: e.recap, cerrado_at: e.cerradoAt, cerrado_por: e.cerradoPor, task_id: e.taskId }
   const fila: Record<string, unknown> = {
     titulo: e.titulo,
     tipo: e.tipo,

@@ -4,6 +4,7 @@ import { TASK_LABELS, type Task, type Player, type TaskLabel, type FirmasEntry }
 import { parseDia, esVencida, hoyISO, sumarDias } from '../lib/fechas'
 import { viernesSemana } from '../lib/agendaItems';
 import { RECURRENCIAS, RECURRENCIA_LABEL, type Recurrencia } from "../lib/recurrencia";
+import { etiquetaResultado, loQueDejo } from "../lib/cierreTarea";
 import type { Profile } from "../contexts/AuthContext";
 import * as db from "../lib/db";
 import { ConfirmModal } from "./ConfirmModal";
@@ -18,8 +19,9 @@ interface Props {
   profiles: Profile[];
   currentProfile: Profile;
   onClose: () => void;
-  onUpdate: (task: Task) => void;
-  onSaveAndClose: (task: Task) => void;
+  /** Devuelve false si completar la tarea ha abierto su cierre (App la guarda desde allí) */
+  onUpdate: (task: Task) => void | boolean | Promise<void | boolean>;
+  onSaveAndClose: (task: Task) => void | boolean | Promise<void | boolean>;
   onDelete: (taskId: string) => void;
   onGoToPlayer?: (playerId: string) => void;
   /** Se llama tras guardar un comentario (p. ej. para apuntarlo también en la tarjeta de Firmar de la que nace la tarea) */
@@ -115,9 +117,11 @@ export function TaskDetailPanel({
     }
   };
 
-  const handleStatusChange = (newStatus: Task["status"]) => {
+  const handleStatusChange = async (newStatus: Task["status"]) => {
     setStatus(newStatus);
-    onUpdate({ ...editada(), status: newStatus });
+    // Completar abre el cierre en App: hasta que se guarde, la tarea sigue como estaba
+    const guardada = await Promise.resolve(onUpdate({ ...editada(), status: newStatus }));
+    if (guardada === false) setStatus(task.status);
   };
 
   const toggleWatcher = (profileId: string) => {
@@ -287,6 +291,22 @@ export function TaskDetailPanel({
                     })}
                   </div>
                 </div>
+
+                {/* Cierre: qué pasó al completarla y qué dejó */}
+                {task.status === "completada" && task.cierre && (task.cierre.resultado || task.cierre.nota || task.cierre.ref) && (
+                  <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 space-y-1.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700">
+                      Cierre{task.completedAt ? ` · ${new Date(task.completedAt).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}` : ""}
+                    </p>
+                    {etiquetaResultado(task.cierre.resultado) && (
+                      <p className="text-xs font-semibold text-slate-800">{etiquetaResultado(task.cierre.resultado)}</p>
+                    )}
+                    {task.cierre.nota && <p className="text-xs text-slate-700 whitespace-pre-wrap break-words">{task.cierre.nota}</p>}
+                    {loQueDejo(task.cierre).length > 0 && (
+                      <p className="text-[11px] text-emerald-700">Dejó: {loQueDejo(task.cierre).join(" · ")}</p>
+                    )}
+                  </div>
+                )}
 
                 {/* Description */}
                 <div>

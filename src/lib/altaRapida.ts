@@ -59,10 +59,15 @@ function perfilDe(texto: string, profiles: { id: string; name: string; avatar: s
   return porNombre.length === 1 ? porNombre[0].id : undefined
 }
 
+/** Nombres antiguos o cortos de un tipo: #general → Otra, #visita / #comida → Comida/Visita */
+const ALIAS_TIPO: Record<string, TaskLabel> = { general: 'Otra', visita: 'Comida/Visita', comida: 'Comida/Visita' }
+
 function categoriaDe(texto: string): TaskLabel | undefined {
   const t = norm(texto)
   if (!t) return undefined
-  return TASK_LABELS.find(l => norm(l) === t) ?? TASK_LABELS.find(l => norm(l).startsWith(t))
+  return TASK_LABELS.find(l => norm(l) === t)
+    ?? Object.entries(ALIAS_TIPO).find(([a]) => a === t || a.startsWith(t))?.[1]
+    ?? TASK_LABELS.find(l => norm(l).startsWith(t))
 }
 
 export function parsearAltaRapida(
