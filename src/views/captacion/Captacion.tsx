@@ -1,3 +1,4 @@
+import { INFO_TIPO_DE } from '../../lib/ofrecidos'
 import React, { useState, useMemo, useEffect, useCallback } from 'react'
 import { LogOut, FileText, Calendar, CalendarDays, TrendingUp, Eye, ClipboardList, Users, Inbox, Target, PenLine, Shield, Wifi, Home } from 'lucide-react'
 import logoImg from '../../assets/logo.jpeg'
@@ -1327,7 +1328,7 @@ export function Captacion({
           panelReports={panelReports}
           panelSortedMatches={panelSortedMatches}
           showAddReportForm={showAddReportForm} setShowAddReportForm={setShowAddReportForm}
-          infoInicial={solo?.informe && solo.informe !== 'tecnico' ? solo.informe : undefined}
+          infoInicial={solo?.informe && solo.informe !== 'tecnico' ? INFO_TIPO_DE[solo.informe] : undefined}
           reportTitle={reportTitle} setReportTitle={setReportTitle}
           reportText={reportText} setReportText={setReportText}
           reportConclusion={reportConclusion} setReportConclusion={setReportConclusion}
