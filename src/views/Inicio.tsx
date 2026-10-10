@@ -6,10 +6,10 @@
 // dato al lado solo cuando aporta. Diseño aséptico: blanco, gris y el azul
 // de la app como único acento; el rojo solo para lo que pide atención.
 //
-// No cambia estado: cada fila abre su pantalla (App decide cuál). Lo único
-// que crea es la tarea de la alta rápida.
+// No cambia estado: cada fila abre su pantalla (App decide cuál). No crea
+// nada: el botón «Tarea/evento» abre la ventana de alta de Mantenimiento.
 
-import { useMemo, useState, type ComponentType } from 'react'
+import { useMemo, type ComponentType } from 'react'
 import {
   Home, Eye, PenLine, TrendingUp, CalendarDays, Shield, Users, Calendar,
   Trophy, ListTodo, RefreshCw, Handshake, Phone, Smartphone, ClipboardList, Plane, Search, Plus, ChevronRight, LogOut, Inbox, Cake,
@@ -19,7 +19,6 @@ import type { Profile } from '../contexts/AuthContext'
 import type { Player } from '../types'
 import { seccionesDelDia, DIAS_ACTUALIZACION_PROCESO, type AgendaItem, type AgendaTipo } from '../lib/agendaItems'
 import { ACCESOS, fraseDelDia, partidosDeHoy, esMioEnInicio, cumpleanos, type Contador, type DestinoInicio } from '../lib/inicio'
-import { parsearAltaRapida, type AltaRapida } from '../lib/altaRapida'
 import { parseDia } from '../lib/fechas'
 
 type Icono = ComponentType<{ className?: string }>
@@ -45,7 +44,8 @@ export interface InicioProps {
   contadores: Record<string, Contador>
   onAbrir: (item: AgendaItem) => void
   onIr: (destino: DestinoInicio) => void
-  onCrear: (alta: AltaRapida) => Promise<void>
+  /** Abre la ventana de alta (tarea o evento) en Mantenimiento */
+  onNuevo: () => void
   onBuscar: () => void
   onLogout: () => void
   onAdmin?: () => void
@@ -113,26 +113,15 @@ const Enlace = ({ texto, onClick }: { texto: string; onClick: () => void }) => (
   <button onClick={onClick} className="ml-auto text-[11.5px] font-semibold text-primary hover:underline">{texto} →</button>
 )
 
-export function Inicio({ profile, profiles, hoy, items, players, contadores, onAbrir, onIr, onCrear, onBuscar, onLogout, onAdmin, onOpenPlayer }: InicioProps) {
+export function Inicio({ profile, profiles, hoy, items, players, contadores, onAbrir, onIr, onNuevo, onBuscar, onLogout, onAdmin, onOpenPlayer }: InicioProps) {
   // Solo lo que llevo yo (lo que sigo como adjunto no es trabajo mío); las citas, si asisto
   const mios = useMemo(() => items.filter(it => esMioEnInicio(it, profile.id)), [items, profile.id])
   const s = useMemo(() => seccionesDelDia(mios, hoy), [mios, hoy])
-  const avatarDe = (id: string) => profiles.find(p => p.id === id)?.avatar
-  const partidos = useMemo(() => partidosDeHoy(items, hoy, avatarDe), [items, hoy, profiles]) // eslint-disable-line react-hooks/exhaustive-deps
+  const partidos = useMemo(() => partidosDeHoy(items, hoy, id => profiles.find(p => p.id === id)?.avatar), [items, hoy, profiles])
   const frase = fraseDelDia(s)
   const cumples = useMemo(() => cumpleanos(players, hoy), [players, hoy])
   const cumplesHoy = cumples.filter(c => c.en === 0)
   const cumplesProximos = cumples.filter(c => c.en > 0)
-
-  // Alta rápida (misma sintaxis que en Mi día: @persona #categoría fecha !)
-  const [nueva, setNueva] = useState('')
-  const [creando, setCreando] = useState(false)
-  const alta = useMemo(() => parsearAltaRapida(nueva, { hoy, profiles }), [nueva, hoy, profiles])
-  async function crear() {
-    if (!alta.titulo || creando) return
-    setCreando(true)
-    try { await onCrear(alta); setNueva('') } catch { /* quien crea avisa; el texto se queda */ } finally { setCreando(false) }
-  }
 
   const fecha = parseDia(hoy)
   const diaSemana = fecha.toLocaleDateString('es-ES', { weekday: 'long' })
@@ -167,7 +156,7 @@ export function Inicio({ profile, profiles, hoy, items, players, contadores, onA
       </header>
 
       <main className="max-w-6xl mx-auto w-full px-3 sm:px-6 py-5 sm:py-7 pb-24 sm:pb-10">
-        {/* Fecha, frase del día, alta rápida y buscador */}
+        {/* Fecha, frase del día, tarea/evento y buscador */}
         <div className="flex items-end gap-4 flex-wrap">
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 first-letter:uppercase">{mesAnio}</div>
@@ -175,28 +164,14 @@ export function Inicio({ profile, profiles, hoy, items, players, contadores, onA
           </div>
           <p className="text-[13.5px] text-slate-500 max-w-xl mb-0.5">{frase}</p>
           <div className="sm:ml-auto flex items-center gap-2 w-full sm:w-auto">
-            <div className="relative flex-1 sm:flex-none">
-              <Plus className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
-              <input
-                value={nueva} onChange={e => setNueva(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') void crear(); if (e.key === 'Escape') setNueva('') }}
-                disabled={creando}
-                placeholder="Nueva tarea para hoy…  @persona  mañana"
-                aria-label="Alta rápida de tarea"
-                className="w-full sm:w-64 pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-60"
-              />
-            </div>
+            <button onClick={onNuevo} className="inline-flex items-center gap-1.5 text-xs font-medium text-primary border border-primary bg-white rounded-lg px-3 py-1.5 hover:bg-blue-50">
+              <Plus className="w-3.5 h-3.5" /> Tarea/evento
+            </button>
             <button onClick={onBuscar} className="inline-flex items-center gap-1.5 text-xs text-slate-500 border border-slate-200 bg-white rounded-lg px-3 py-1.5 hover:bg-slate-50">
               <Search className="w-3.5 h-3.5" /> Buscar
             </button>
           </div>
         </div>
-        {nueva.trim() && (
-          <p className="mt-1.5 text-[11px] text-slate-500">
-            Se creará «{alta.titulo || '(falta el título)'}»{alta.assigneeId ? ` para ${profiles.find(p => p.id === alta.assigneeId)?.name.split(' ')[0]}` : ''} · {parseDia(alta.dueDate ?? hoy).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short' })}
-            {alta.sinResolver.length > 0 && <span className="text-amber-600"> · no reconozco {alta.sinResolver.join(', ')}</span>}
-          </p>
-        )}
 
         {/* El día */}
         <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">

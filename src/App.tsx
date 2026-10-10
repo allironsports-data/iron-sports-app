@@ -32,7 +32,6 @@ import { construirAgenda, seccionesDelDia, type AgendaItem } from './lib/agendaI
 import { contadoresInicio, esMioEnInicio, type DestinoInicio } from './lib/inicio'
 import { useActividadesRango } from './hooks/useActividadesRango'
 import { horaActual } from './lib/reuniones'
-import type { AltaRapida } from './lib/altaRapida'
 import { siguienteFecha } from './lib/recurrencia'
 import { reconciliarFirmas } from './lib/firmasMerge'
 import { BajoCapa } from './components/BajoCapa'
@@ -227,6 +226,8 @@ export default function App() {
   const [captacionOpenMatchId, setCaptacionOpenMatchId] = useState<string | null>(null)
   // Abrir una tarea concreta en el tablero (desde «Mi día»)
   const [openTaskId, setOpenTaskId] = useState<string | null>(null)
+  // «Tarea/evento» desde Inicio: Mantenimiento abre la ventana de alta al entrar
+  const [altaDesdeInicio, setAltaDesdeInicio] = useState(false)
   // Ficha flotante abierta encima de la pantalla actual (partido, tarjeta de
   // Firmar o jugador de Captación): se abre sin sacar al usuario de donde está.
   const [flotante, setFlotante] = useState<{ tipo: 'partido' | 'firmar' | 'scouting'; id: string } | null>(null)
@@ -2133,14 +2134,6 @@ export default function App() {
     if (d.tab !== undefined) setSubTab(d.seccion, d.tab)
     irA(d.seccion, d.tab || undefined)
   }
-  const crearDesdeInicio = async (a: AltaRapida) => {
-    await handleAddTask({
-      id: 't' + Date.now(), playerId: 'general', title: a.titulo, description: '',
-      assigneeId: a.assigneeId ?? profile.id, watchers: [], priority: a.prioridadAlta ? 'alta' : 'media',
-      status: 'pendiente', label: a.label, dueDate: a.dueDate ?? hoyInicio,
-      createdAt: new Date().toISOString(), comments: [],
-    })
-  }
   const inicioNode = (
     <Inicio
       profile={profile}
@@ -2152,7 +2145,7 @@ export default function App() {
       contadores={contadoresDeInicio}
       onAbrir={abrirDesdeInicio}
       onIr={irDesdeInicio}
-      onCrear={crearDesdeInicio}
+      onNuevo={() => { setAltaDesdeInicio(true); irDesdeInicio({ tipo: 'mi-dia' }) }}
       onBuscar={() => setSearchOpen(true)}
       onLogout={signOut}
       onAdmin={profile.is_admin ? abrirAdmin : undefined}
@@ -2586,6 +2579,8 @@ export default function App() {
         }}
         openTaskId={openTaskId}
         onOpenTaskConsumed={() => setOpenTaskId(null)}
+        abrirAlta={altaDesdeInicio}
+        onAbrirAltaConsumed={() => setAltaDesdeInicio(false)}
         updateAvailable={updateAvailable}
       />
     )

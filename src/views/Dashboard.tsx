@@ -38,7 +38,7 @@ import {
 } from "../lib/db";
 import type { Profile } from "../contexts/AuthContext";
 import type { AppNotification } from "../App";
-import { LogOut, Users, AlertTriangle, Plus, Search, X, Trash2, UserPlus, CheckSquare, Square, Bell, Cake, Calendar, BarChart3, ChevronLeft, ChevronRight, ChevronDown, LayoutList, LayoutGrid, Table, Zap, TrendingUp, Eye, EyeOff, Activity, ExternalLink, RotateCcw, Check, Inbox, Sun, Trophy, PenLine, Home } from 'lucide-react';
+import { LogOut, Users, AlertTriangle, Plus, Search, X, Trash2, UserPlus, CheckSquare, Square, Bell, Cake, Calendar, BarChart3, ChevronLeft, ChevronRight, ChevronDown, LayoutList, LayoutGrid, Table, Zap, TrendingUp, Eye, EyeOff, ExternalLink, RotateCcw, Check, Inbox, Sun, Trophy, PenLine, Home } from 'lucide-react';
 import { POSITIONS, POSITION_CODES, positionLabel } from "../lib/positions";
 import { opcionesPartner, jugadorEsDePartner, PARTNER_TODOS } from "../lib/partners";
 import { estadoDe, jugadorEsDeEstado, contarPorEstado, ESTADO_META, ESTADO_TODOS, type FiltroEstado } from "../lib/estadoJugador";
@@ -54,6 +54,9 @@ interface Props {
   /** Abrir una tarea concreta al entrar (p. ej. desde «Mi día»); se consume una vez abierta */
   openTaskId?: string | null;
   onOpenTaskConsumed?: () => void;
+  /** Abrir la ventana de alta (tarea o evento) al entrar (desde Inicio); se consume una vez abierta */
+  abrirAlta?: boolean;
+  onAbrirAltaConsumed?: () => void;
   /** Pipeline de firmas — para el aviso de próximas acciones de hoy */
   firmasEntries?: FirmasEntry[];
   onOpenFirmar?: (entryId: string) => void;
@@ -152,6 +155,8 @@ export function Dashboard({
   onViewChange,
   openTaskId,
   onOpenTaskConsumed,
+  abrirAlta,
+  onAbrirAltaConsumed,
   firmasEntries,
   onOpenFirmar,
   onPatchFirmasEntry,
@@ -219,6 +224,8 @@ export function Dashboard({
 
   // ── Postpartidos ──
   const [showAddPostpartido, setShowAddPostpartido] = useState(false);
+  // Postpartido que se está editando en el mismo modal (null = creando uno nuevo)
+  const [ppEditing, setPpEditing] = useState<Postpartido | null>(null);
   const [ppMatchId, setPpMatchId] = useState('');
   const [ppNewMatchOpen, setPpNewMatchOpen] = useState(false);
   const [ppNewMatch, setPpNewMatch] = useState({ date: '', home: '', away: '', competition: '' });
@@ -262,12 +269,80 @@ export function Dashboard({
   }
 
   function openAddPostpartido() {
+    setPpEditing(null);
     setPpMatchId(''); setPpNewMatchOpen(false);
     setPpNewMatch({ date: '', home: '', away: '', competition: '' });
     setPpPlayerId(''); setPpPlayerName('');
     setPpAssigneeId(currentProfile.id);
     setPpDue(''); setPpNotes('');
     setShowAddPostpartido(true);
+  }
+
+  // Editar una petición ya creada: partido, jugador, responsable, fecha límite y notas.
+  // La fecha límite vive en la tarea asociada; el resto en el propio postpartido.
+  function openEditPostpartido(pp: Postpartido, task?: Task) {
+    setPpEditing(pp);
+    setPpMatchId(pp.matchId ?? ''); setPpNewMatchOpen(false);
+    setPpNewMatch({ date: '', home: '', away: '', competition: '' });
+    if (pp.playerId) { setPpPlayerId(pp.playerId); setPpPlayerName(''); }
+    else if (pp.playerName) { setPpPlayerId('__otro__'); setPpPlayerName(pp.playerName); }
+    else { setPpPlayerId(''); setPpPlayerName(''); }
+    setPpAssigneeId(pp.assigneeId ?? task?.assigneeId ?? currentProfile.id);
+    setPpDue(task?.dueDate ?? '');
+    setPpNotes(pp.notes ?? '');
+    setShowAddPostpartido(true);
+  }
+
+  async function saveEditPostpartido() {
+    if (!ppEditing || !onUpdatePostpartido || ppSaving) return;
+    const match = scoutingMatches.find(m => m.id === ppMatchId);
+    if (!match) { showToast('Elige un partido (o añade uno nuevo).', 'error'); return; }
+    const player = ppPlayerId && ppPlayerId !== '__otro__' ? players.find(p => p.id === ppPlayerId) : undefined;
+    const playerLabel = player ? player.name : ppPlayerName.trim();
+    if (!playerLabel) { showToast('Elige un jugador o escríbelo en texto libre.', 'error'); return; }
+    if (!ppAssigneeId) { showToast('Elige un responsable.', 'error'); return; }
+    const guardar = onUpdateTask ?? onUpdateGeneralTask;
+    const task = ppEditing.taskId ? tasks.find(t => t.id === ppEditing.taskId) : undefined;
+    const notes = ppNotes.trim() || undefined;
+    setPpSaving(true);
+    try {
+      // 1) La tarea asociada: título, descripción, responsable, fecha y jugador siguen al postpartido
+      if (task && guardar) {
+        const prevPlayer = ppEditing.playerId ? players.find(p => p.id === ppEditing.playerId) : undefined;
+        const prevLabel = prevPlayer?.name ?? ppEditing.playerName ?? '';
+        const prevDesc = [ppEditing.notes?.trim() ?? '', prevPlayer ? '' : `Jugador: ${prevLabel}`].filter(Boolean).join('\n');
+        // Solo se regenera la descripción si la generó el propio postpartido (o estaba vacía):
+        // si alguien la editó a mano en la tarea, se respeta
+        const descAuto = !task.description || task.description === prevDesc;
+        await Promise.resolve(guardar({
+          ...task,
+          playerId: player ? player.id : 'general',
+          title: `Postpartido ${match.homeTeam} vs ${match.awayTeam} — ${playerLabel}`,
+          description: descAuto
+            ? [notes ?? '', player ? '' : `Jugador: ${playerLabel}`].filter(Boolean).join('\n')
+            : task.description,
+          assigneeId: ppAssigneeId,
+          dueDate: ppDue || sumarDias(match.date, DIAS_POSTPARTIDO),
+        }));
+      }
+      // 2) El propio registro
+      await onUpdatePostpartido({
+        ...ppEditing,
+        matchId: match.id,
+        playerId: player?.id,
+        playerName: player ? undefined : playerLabel,
+        assigneeId: ppAssigneeId,
+        notes,
+      });
+      setShowAddPostpartido(false);
+      setPpEditing(null);
+      showToast('Postpartido actualizado ✓');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      showToast(msg ? `No se pudo guardar: ${msg}` : 'No se pudo guardar. Inténtalo de nuevo.', 'error');
+    } finally {
+      setPpSaving(false);
+    }
   }
 
   // Crear un partido nuevo desde el formulario — aparece también en Captación → Partidos
@@ -741,6 +816,14 @@ export function Dashboard({
     onOpenTaskConsumed?.();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openTaskId, tasks]);
+  // Alta externa (botón «Tarea/evento» de Inicio)
+  useEffect(() => {
+    if (!abrirAlta) return;
+    setTareaInicial({});
+    setShowAddGeneralTask(true);
+    onAbrirAltaConsumed?.();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abrirAlta]);
 
   // Bulk select state
   const [selectMode, setSelectMode] = useState(false);
@@ -1665,18 +1748,20 @@ export function Dashboard({
                 </button>
               ))}
             </div>
-            <button
-              onClick={() => openAddEvent()}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
-            >
-              <Activity className="w-3 h-3" /> Evento
-            </button>
-            {onAddGeneralTask && (
+            {/* Una sola puerta: la ventana deja elegir arriba si es tarea o evento */}
+            {onAddGeneralTask ? (
               <button
                 onClick={() => { setTareaInicial({}); setShowAddGeneralTask(true); }}
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-primary text-primary hover:bg-blue-50 transition-colors"
               >
-                <Plus className="w-3 h-3" /> Nueva tarea
+                <Plus className="w-3 h-3" /> Tarea/evento
+              </button>
+            ) : (
+              <button
+                onClick={() => openAddEvent()}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-primary text-primary hover:bg-blue-50 transition-colors"
+              >
+                <Plus className="w-3 h-3" /> Evento
               </button>
             )}
           </div>
@@ -1966,7 +2051,8 @@ export function Dashboard({
             onGuardarMiNota={onUpdateMemberStatus ? guardarMiNota : undefined}
             onNuevo={(que, personId, fecha) => {
               if (que === 'viaje') return openAddEvent({ tipo: 'Viaje', fecha, participantIds: [personId] });
-              if (que === 'evento') return openAddEvent({ fecha, participantIds: [personId] });
+              // Tarea o evento: se abre como tarea y arriba se cambia a evento
+              if (!onAddGeneralTask) return openAddEvent({ fecha, participantIds: [personId] });
               setTareaInicial({ assigneeId: personId, dueDate: fecha });
               setShowAddGeneralTask(true);
             }}
@@ -2849,6 +2935,15 @@ export function Dashboard({
                         )}
                       </div>
                       {/* Acciones */}
+                      {onUpdatePostpartido && (
+                        <button
+                          onClick={() => openEditPostpartido(pp, task)}
+                          title="Editar (partido, jugador, responsable, fecha límite, notas)"
+                          className="flex-shrink-0 p-1 rounded-full text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                        >
+                          <PenLine className="w-4 h-4" />
+                        </button>
+                      )}
                       {task && !isDone && onUpdateTask && onUpdatePostpartido && (
                         <button
                           onClick={() => { setPpVideoUrl(pp.videoUrl ?? ''); setPpCompleteTarget({ pp, task }); }}
@@ -3145,12 +3240,12 @@ export function Dashboard({
         />
       )}
 
-      {/* ── Modal Nuevo postpartido ── */}
-      {showAddPostpartido && onCreatePostpartido && onAddGeneralTask && (
+      {/* ── Modal Nuevo / Editar postpartido ── */}
+      {showAddPostpartido && (ppEditing ? !!onUpdatePostpartido : !!(onCreatePostpartido && onAddGeneralTask)) && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setShowAddPostpartido(false)}>
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
-              <h3 className="text-sm font-bold text-slate-800">Nuevo postpartido</h3>
+              <h3 className="text-sm font-bold text-slate-800">{ppEditing ? 'Editar postpartido' : 'Nuevo postpartido'}</h3>
               <button onClick={() => setShowAddPostpartido(false)} aria-label="Cerrar" className="text-slate-400 hover:text-slate-600 p-1">
                 <X className="w-4 h-4" />
               </button>
@@ -3215,7 +3310,7 @@ export function Dashboard({
                   className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
                 >
                   <option value="">— Elige un jugador —</option>
-                  {players.filter(p => !p.hiddenFromManagement).sort((a, b) => a.name.localeCompare(b.name)).map(p => (
+                  {players.filter(p => !p.hiddenFromManagement || p.id === ppEditing?.playerId).sort((a, b) => a.name.localeCompare(b.name)).map(p => (
                     <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
                   <option value="__otro__">Otro (texto libre)…</option>
@@ -3232,7 +3327,7 @@ export function Dashboard({
               </div>
               {/* Responsable */}
               <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">✍️ Responsable (le aparece como tarea)</label>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">✍️ Responsable {ppEditing ? '(la tarea pasa a esta persona)' : '(le aparece como tarea)'}</label>
                 <select
                   value={ppAssigneeId}
                   onChange={e => setPpAssigneeId(e.target.value)}
@@ -3246,7 +3341,7 @@ export function Dashboard({
               {/* Fecha límite + notas */}
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">📅 Fecha límite (opc.)</label>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">📅 Fecha límite {ppEditing ? '' : '(opc.)'}</label>
                   <input type="date" value={ppDue} onChange={e => setPpDue(e.target.value)}
                     className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200" />
                 </div>
@@ -3260,11 +3355,11 @@ export function Dashboard({
             <div className="flex justify-end gap-2 px-5 py-3.5 border-t border-slate-100">
               <button onClick={() => setShowAddPostpartido(false)} className="px-4 py-2 text-xs text-slate-500 hover:text-slate-700 rounded-lg">Cancelar</button>
               <button
-                onClick={createPostpartido}
+                onClick={ppEditing ? saveEditPostpartido : createPostpartido}
                 disabled={ppSaving}
                 className="px-5 py-2 text-xs font-bold text-white bg-primary hover:bg-primary/90 rounded-lg transition-colors disabled:opacity-60"
               >
-                {ppSaving ? 'Creando…' : 'Crear postpartido'}
+                {ppEditing ? (ppSaving ? 'Guardando…' : 'Guardar cambios') : (ppSaving ? 'Creando…' : 'Crear postpartido')}
               </button>
             </div>
           </div>

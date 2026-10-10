@@ -20,7 +20,11 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-10-10',
-    items: [],
+    items: [
+      'Postpartidos: las peticiones ya se pueden editar. Con el lápiz de cada fila se cambia el partido, el jugador, el responsable, la fecha límite y las notas; la tarea asociada se actualiza sola (pasa al nuevo responsable y a la nueva fecha). Si la descripción de la tarea se había retocado a mano, se respeta',
+      'Un solo botón «Tarea/evento» para dar de alta cualquier cosa, en toda la app: Inicio (sustituye a la casilla de alta rápida), Mantenimiento (antes había «Evento» y «Nueva tarea» por separado) y Calendario (botón de arriba, el de cada día y el menú de cada celda). La ventana es la misma: arriba se elige si es una tarea (algo que hay que hacer) o un evento (algo que ocurre un día). «Viaje» sigue aparte',
+      'Inicio → las cuatro tarjetas del día (Agenda, Partidos del equipo, Para hacer, En curso) enseñan seis filas; si hay más, se ve una barra y se desplaza dentro de la tarjeta',
+    ],
     adminItems: [
       'Admin → nueva pestaña «Volumen»: volumen de trabajo del equipo por semana y por mes, sumando tareas completadas, eventos de agenda, partidos vistos, informes, postpartidos, pipeline (Firmar) y distribución. Dos medidas siempre a la vista: bruto (nº de acciones) y puntos (ponderado por esfuerzo, pesos explicados al pie). Serie de 12 periodos del equipo, tabla por persona con reparto por fuente y variación vs. el periodo anterior, detalle por persona al pulsar, y descarga CSV. Sin migración: todo sale de lo que ya hay',
     ],

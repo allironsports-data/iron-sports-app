@@ -28,7 +28,8 @@ export interface CalendarioSemanalProps {
   profiles: Profile[]
   currentProfile: Profile
   onAbrir: (item: AgendaItem) => void
-  onNuevo: (que: 'tarea' | 'evento' | 'viaje', personId: string, fecha: string) => void
+  /** «tarea» abre la ventana de alta, donde se elige si es tarea o evento; «viaje» abre el evento de viaje */
+  onNuevo: (que: 'tarea' | 'viaje', personId: string, fecha: string) => void
   /** Nota libre de cada persona (profiles.id → texto): se ve en el día de hoy */
   notas?: Record<string, string>
   /** Si llega, la nota propia se puede editar */
@@ -325,9 +326,9 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
           <input type="checkbox" checked={ocultarHechas} onChange={e => setOcultarHechas(e.target.checked)} className="w-3.5 h-3.5 rounded" />
           Ocultar completadas
         </label>
-        <button onClick={() => onNuevo('evento', personaAlta, diaIdx !== null ? dias[diaIdx] : esEstaSemana ? hoy : dias[0])}
+        <button onClick={() => onNuevo('tarea', personaAlta, diaIdx !== null ? dias[diaIdx] : esEstaSemana ? hoy : dias[0])}
           className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-primary text-primary bg-white hover:bg-blue-50 transition-colors">
-          <Plus className="w-3 h-3" /> Evento
+          <Plus className="w-3 h-3" /> Tarea/evento
         </button>
         <button onClick={() => onNuevo('viaje', personaAlta, diaIdx !== null ? dias[diaIdx] : esEstaSemana ? hoy : dias[0])}
           title="Planear un viaje: la app sugiere a qué jugadores del pipeline visitar"
@@ -354,8 +355,7 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
                     <span className="flex items-center gap-1 text-[11px] font-semibold text-amber-600"><AlertTriangle className="w-3 h-3" /> Solape: {textoSolape(i)}</span>
                   )}
                   <div className="ml-auto flex items-center gap-1">
-                    <button onClick={() => onNuevo('tarea', personaAlta, d)} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] text-slate-500 hover:bg-slate-100 hover:text-slate-800"><Plus className="w-3 h-3" /> Tarea</button>
-                    <button onClick={() => onNuevo('evento', personaAlta, d)} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] text-slate-500 hover:bg-slate-100 hover:text-slate-800"><Plus className="w-3 h-3" /> Evento</button>
+                    <button onClick={() => onNuevo('tarea', personaAlta, d)} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] text-slate-500 hover:bg-slate-100 hover:text-slate-800"><Plus className="w-3 h-3" /> Tarea/evento</button>
                   </div>
                 </div>
                 {es.length > 0 && <div className="divide-y divide-slate-100">{es.map(filaDia)}</div>}
@@ -406,12 +406,10 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
                     <div className="fixed inset-0 z-10" onClick={() => setMenuDia(null)} />
                     <div className={`absolute top-8 z-20 w-36 bg-white border border-slate-200 rounded-lg shadow-lg py-1 text-xs text-slate-700 ${i >= 5 ? 'right-1' : 'left-1'}`}>
                       <p className="px-3 py-1 text-[11px] text-slate-400">{corta(d)}</p>
-                      {(['tarea', 'evento'] as const).map(que => (
-                        <button key={que} onClick={() => { setMenuDia(null); onNuevo(que, personaAlta, d) }}
-                          className="w-full flex items-center gap-1.5 px-3 py-1.5 hover:bg-slate-50 text-left">
-                          <Plus className="w-3 h-3" /> {que === 'tarea' ? 'Nueva tarea' : 'Nuevo evento'}
-                        </button>
-                      ))}
+                      <button onClick={() => { setMenuDia(null); onNuevo('tarea', personaAlta, d) }}
+                        className="w-full flex items-center gap-1.5 px-3 py-1.5 hover:bg-slate-50 text-left">
+                        <Plus className="w-3 h-3" /> Tarea/evento
+                      </button>
                     </div>
                   </>
                 )}
@@ -440,7 +438,7 @@ export function CalendarioSemanal({ items, lunes, onLunes, hoy, profiles, curren
             </span>
             <span className="text-[11px]">{carga(porDia[diaIdx])}</span>
             <div className="ml-auto flex items-center gap-1.5">
-              <button onClick={() => onNuevo('tarea', personaAlta, dias[diaIdx])} className={`${BTN} inline-flex items-center gap-1`}><Plus className="w-3 h-3" /> Tarea</button>
+              <button onClick={() => onNuevo('tarea', personaAlta, dias[diaIdx])} className={`${BTN} inline-flex items-center gap-1`}><Plus className="w-3 h-3" /> Tarea/evento</button>
               {esEscritorio && (
                 <button onClick={() => setAmpliado(null)} className={`${BTN} inline-flex items-center gap-1 font-semibold`}>
                   <CalendarDays className="w-3 h-3" /> Ver la semana

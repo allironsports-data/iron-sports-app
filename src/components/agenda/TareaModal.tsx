@@ -111,7 +111,7 @@ export function TareaModal({ profiles, players, scoutingPlayers, currentProfileI
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-0 sm:p-4" onClick={onClose}>
       <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl w-full sm:max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white z-10">
-          <h4 className="text-sm font-semibold text-slate-800">Nueva tarea</h4>
+          <h4 className="text-sm font-semibold text-slate-800">{cabecera ? 'Nueva tarea / evento' : 'Nueva tarea'}</h4>
           <button onClick={onClose} aria-label="Cerrar" className="text-slate-500 hover:text-slate-700 p-1"><X className="w-4 h-4" /></button>
         </div>
         <form onSubmit={crear} className="p-4 space-y-3">
